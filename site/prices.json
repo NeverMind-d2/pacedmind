@@ -1,0 +1,31 @@
+{
+  "checkedOn": "2026-09-24",
+  "fallback": "US",
+  "markets": {
+    "US": {"name":"United States","spotify":"us","currency":"USD","locale":"en-US","amount":12.99},
+    "CA": {"name":"Canada","spotify":"ca-en","currency":"CAD","locale":"en-CA","amount":13.99},
+    "MX": {"name":"Mexico","spotify":"mx","currency":"MXN","locale":"es-MX","amount":139},
+    "BR": {"name":"Brazil","spotify":"br","currency":"BRL","locale":"pt-BR","amount":23.9},
+    "GB": {"name":"United Kingdom","spotify":"uk","currency":"GBP","locale":"en-GB","amount":12.99},
+    "IE": {"name":"Ireland","spotify":"ie","currency":"EUR","locale":"en-IE","amount":12.99},
+    "DE": {"name":"Germany","spotify":"de","currency":"EUR","locale":"de-DE","amount":12.99},
+    "AT": {"name":"Austria","spotify":"at","currency":"EUR","locale":"de-AT","amount":12.99},
+    "CH": {"name":"Switzerland","spotify":"ch-de","currency":"CHF","locale":"de-CH","amount":15.95},
+    "FR": {"name":"France","spotify":"fr","currency":"EUR","locale":"fr-FR","amount":12.14},
+    "BE": {"name":"Belgium","spotify":"be-nl","currency":"EUR","locale":"nl-BE","amount":13.99},
+    "NL": {"name":"Netherlands","spotify":"nl","currency":"EUR","locale":"nl-NL","amount":13.99},
+    "ES": {"name":"Spain","spotify":"es","currency":"EUR","locale":"es-ES","amount":11.99},
+    "PT": {"name":"Portugal","spotify":"pt","currency":"EUR","locale":"pt-PT","amount":8.99},
+    "IT": {"name":"Italy","spotify":"it","currency":"EUR","locale":"it-IT","amount":11.99},
+    "PL": {"name":"Poland","spotify":"pl","currency":"PLN","locale":"pl-PL","amount":26.99},
+    "CZ": {"name":"Czechia","spotify":"cz","currency":"CZK","locale":"cs-CZ","amount":185},
+    "SE": {"name":"Sweden","spotify":"se","currency":"SEK","locale":"sv-SE","amount":129},
+    "NO": {"name":"Norway","spotify":"no","currency":"NOK","locale":"nb-NO","amount":139},
+    "DK": {"name":"Denmark","spotify":"dk","currency":"DKK","locale":"da-DK","amount":119},
+    "FI": {"name":"Finland","spotify":"fi","currency":"EUR","locale":"fi-FI","amount":12.99},
+    "AU": {"name":"Australia","spotify":"au","currency":"AUD","locale":"en-AU","amount":15.99},
+    "NZ": {"name":"New Zealand","spotify":"nz","currency":"NZD","locale":"en-NZ","amount":20.99},
+    "JP": {"name":"Japan","spotify":"jp","currency":"JPY","locale":"ja-JP","amount":1080},
+    "IN": {"name":"India","spotify":"in-en","currency":"INR","locale":"en-IN","amount":139,"plan":"PREMIUM_STANDARD"}
+  }
+}

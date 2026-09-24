@@ -46,6 +46,7 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 - `src/app/actions.ts` holds the Server Actions. Every mutation ends with `refresh()` from `next/cache`, or the page will not re-render.
 - `src/lib/` is shared by client and server: types, dates, colors (`colors.ts`), the quick-add parser (`parse.ts`), the auto-planner (`planner.ts`).
 - `src/components/` holds the UI kit (`ui.tsx`, `icons.tsx`, `popover.tsx`, `dialog.tsx`), task UI (`task-list`, `task-row`, `task-detail`, `quick-add`) and the area/project menus (`entity-menu.tsx`, used by the sidebar and `/projects`). Views live in `src/components/views/`.
+- `site/` is the public website, a separate static Next.js project (own `package.json`, `npm run dev` on port 4330, `npm run build` to `site/out`). Its Cloud price per country matches Spotify Premium Individual: `site/prices.json`, checked with `npm run prices`. See `site/README.md`.
 
 ## Conventions
 

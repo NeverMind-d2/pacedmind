@@ -16,6 +16,10 @@ const eslintConfig = defineConfig([
     "dist/**",
     // Local database, session scripts and backups.
     "data/**",
+    // The website's build output (site/, its own Next.js project).
+    "site/.next/**",
+    "site/out/**",
+    "site/next-env.d.ts",
   ]),
 ]);
 

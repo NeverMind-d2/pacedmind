@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "port": 4320,
       "url": "http://127.0.0.1:4320"
+    },
+    {
+      "name": "site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "site"],
+      "port": 4330,
+      "url": "http://127.0.0.1:4330"
     }
   ]
 }
