@@ -1,19 +1,35 @@
-// Organizer desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
+// PacedMind desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
 // shows it in a window and keeps running in the tray, so agents can still report back after the
 // window is closed. Built and installed by scripts/build-desktop.mjs.
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, screen, session, shell } from "electron";
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeTheme, screen, session, shell } from "electron";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
-const APP_ID = "Organizer.Desktop";
+const APP_ID = "Organizer.Desktop"; // Keep the existing Windows identity and notification grouping.
 const ICON = path.join(import.meta.dirname, "icon.ico");
 const ICON_PNG = path.join(import.meta.dirname, "icon.png");
 const SERVER_DIR = path.join(import.meta.dirname, "server");
-const BACKGROUND = "#010101";
+const THEME_COLORS = {
+  dark: { background: "#010101", symbol: "#a1a1a8", line: "#121214" },
+  light: { background: "#f5f5f6", symbol: "#61616e", line: "#e3e3e8" },
+};
+
+// Preserve the installed app's database, window state and browser session across the rebrand.
+const profile = path.join(app.getPath("appData"), "Organizer");
+fs.mkdirSync(profile, { recursive: true });
+app.setPath("userData", profile);
+app.setPath("sessionData", profile);
+
+// A content-specific path lets Windows refresh icons without clearing its global cache.
+const iconBytes = fs.readFileSync(ICON);
+const shortcutIcon = path.join(profile, "icons", `pacedmind-${createHash("sha256").update(iconBytes).digest("hex").slice(0, 12)}.ico`);
+fs.mkdirSync(path.dirname(shortcutIcon), { recursive: true });
+if (!fs.existsSync(shortcutIcon)) fs.writeFileSync(shortcutIcon, iconBytes);
 
 let win = null;
 let tray = null;
@@ -25,7 +41,7 @@ const notifications = new Set();
 const dataDir = () => path.join(app.getPath("userData"), "data");
 const logFile = () => path.join(app.getPath("logs"), "server.log");
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
-const loginArgs = { path: process.execPath, args: ["--hidden"] };
+const loginArgs = { name: "Organizer", path: process.execPath, args: ["--hidden"] };
 
 /* ---------- small helpers ---------- */
 
@@ -70,9 +86,24 @@ function openOutside(url) {
   if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
 }
 
+let activeTheme = readState().theme === "light" ? "light" : "dark";
+
+ipcMain.on("pacedmind:set-theme", (event, theme) => {
+  if ((theme !== "dark" && theme !== "light") || !win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return;
+  try { if (new URL(event.senderFrame.url).origin !== ORIGIN) return; } catch { return; }
+  activeTheme = theme;
+  const colors = THEME_COLORS[theme];
+  nativeTheme.themeSource = theme;
+  win.setBackgroundColor(colors.background);
+  if (process.platform === "win32") win.setTitleBarOverlay({ color: colors.background, symbolColor: colors.symbol, height: 40 });
+  if (readState().theme !== theme) writeState({ theme });
+});
+
+const wordmark = fs.readFileSync(path.join(SERVER_DIR, "public", "brand", "pacedmind-wordmark.png")).toString("base64");
+const loadingArrows = ["back", "forward"].map((direction) => `<button disabled aria-label="Go ${direction}" style="-webkit-app-region:no-drag;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;background:none;color:inherit;opacity:0.3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${direction === "back" ? 180 : 0}deg)"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`).join("");
 const page = (text) =>
   `data:text/html;charset=utf-8,${encodeURIComponent(
-    `<!doctype html><title>Organizer</title><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:${BACKGROUND};color:#6e6e76;font:13px 'Segoe UI',system-ui,sans-serif">${text}</body>`,
+    `<!doctype html><title>PacedMind</title><body style="margin:0;height:100vh;display:flex;flex-direction:column;background:${THEME_COLORS[activeTheme].background};color:${THEME_COLORS[activeTheme].symbol};font:13px 'Segoe UI',system-ui,sans-serif"><header style="-webkit-app-region:drag;flex-shrink:0;box-sizing:border-box;height:calc(max(40px,env(titlebar-area-height,40px)) + 1px);border-bottom:1px solid ${THEME_COLORS[activeTheme].line};user-select:none"><div style="height:100%;display:flex;align-items:center;box-sizing:border-box;margin-left:env(titlebar-area-x,0px);width:env(titlebar-area-width,100%);padding:0 8px"><div style="display:flex;gap:2px">${loadingArrows}</div><div style="position:relative;margin-left:8px;width:112px;aspect-ratio:1819/298;overflow:hidden;mix-blend-mode:${activeTheme === "light" ? "multiply" : "screen"}"><img alt="PacedMind" src="data:image/png;base64,${wordmark}" style="position:absolute;width:116.8774%;max-width:none;left:-9.5107%;top:-85.5705%;filter:grayscale(1) ${activeTheme === "light" ? "" : "invert(1)"}"></div></div></header><main style="flex:1;display:grid;place-items:center">${text}</main></body>`,
   )}`;
 
 /* ---------- the server ---------- */
@@ -89,7 +120,7 @@ async function startServer() {
     // No log yet.
   }
   const log = fs.openSync(logFile(), "a");
-  fs.writeSync(log, `\n--- ${new Date().toISOString()} starting Organizer ${app.getVersion()}\n`);
+  fs.writeSync(log, `\n--- ${new Date().toISOString()} starting PacedMind ${app.getVersion()}\n`);
 
   const child = spawn(process.execPath, [path.join(SERVER_DIR, "server.js")], {
     cwd: SERVER_DIR,
@@ -133,8 +164,8 @@ async function serverDied(code) {
   serverReady = false;
   const { response } = await dialog.showMessageBox({
     type: "error",
-    title: "Organizer",
-    message: "Organizer's server stopped.",
+    title: "PacedMind",
+    message: "PacedMind's server stopped.",
     detail: `Exit code ${code}. Details are in ${logFile()}`,
     buttons: ["Restart", "Open log", "Quit"],
     defaultId: 0,
@@ -163,14 +194,26 @@ function createWindow() {
     y: bounds?.y,
     minWidth: 960,
     minHeight: 600,
-    title: "Organizer",
+    title: "PacedMind",
     icon: ICON,
-    backgroundColor: BACKGROUND,
+    backgroundColor: THEME_COLORS[activeTheme].background,
+    ...(process.platform === "win32" ? {
+      titleBarStyle: "hidden",
+      titleBarOverlay: { color: THEME_COLORS[activeTheme].background, symbolColor: THEME_COLORS[activeTheme].symbol, height: 40 },
+    } : {}),
     autoHideMenuBar: true,
     show: false,
-    webPreferences: { contextIsolation: true, sandbox: true, spellcheck: true },
+    webPreferences: {
+      contextIsolation: true, sandbox: true, spellcheck: true,
+      preload: path.join(import.meta.dirname, "preload.cjs"),
+      additionalArguments: [`--pacedmind-theme=${activeTheme}`],
+    },
   });
   win.setMenuBarVisibility(false);
+  if (process.platform === "win32") win.setAppDetails({
+    appId: APP_ID, appIconPath: shortcutIcon, appIconIndex: 0,
+    relaunchCommand: `"${process.execPath}"`, relaunchDisplayName: "PacedMind",
+  });
   // maximize() also shows the window, so wait until it should appear (not at all with --hidden).
   win.once("show", () => saved.maximized && win.maximize());
   win.once("ready-to-show", () => {
@@ -185,7 +228,7 @@ function createWindow() {
       writeState({ trayHintShown: true });
       tray?.displayBalloon({
         iconType: "info",
-        title: "Organizer is still running",
+        title: "PacedMind is still running",
         content: "It stays in the tray so agents can report back. Right-click the icon to quit.",
       });
     }
@@ -215,7 +258,7 @@ function createWindow() {
     }
   });
 
-  win.loadURL(serverReady ? `${ORIGIN}/today` : page("Starting Organizer…"));
+  win.loadURL(serverReady ? `${ORIGIN}/today` : page("Starting PacedMind…"));
 }
 
 function showWindow(url) {
@@ -231,7 +274,7 @@ function showWindow(url) {
 function trayMenu() {
   const startsWithWindows = app.getLoginItemSettings(loginArgs).openAtLogin;
   return Menu.buildFromTemplate([
-    { label: "Open Organizer", click: () => showWindow() },
+    { label: "Open PacedMind", click: () => showWindow() },
     { type: "separator" },
     {
       label: "Start with Windows",
@@ -245,13 +288,13 @@ function trayMenu() {
     { label: "Open data folder", click: () => shell.openPath(dataDir()) },
     { label: "Open server log", click: () => shell.openPath(logFile()) },
     { type: "separator" },
-    { label: "Quit Organizer", click: quit },
+    { label: "Quit PacedMind", click: quit },
   ]);
 }
 
 function createTray() {
   tray = new Tray(ICON);
-  tray.setToolTip("Organizer");
+  tray.setToolTip("PacedMind");
   tray.setContextMenu(trayMenu());
   tray.on("click", () => showWindow());
 }
@@ -262,10 +305,10 @@ function appMenu() {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
-        label: "Organizer",
+        label: "PacedMind",
         submenu: [
           { label: "Close window", accelerator: "CmdOrCtrl+W", click: () => win?.close() },
-          { label: "Quit Organizer", accelerator: "CmdOrCtrl+Q", click: quit },
+          { label: "Quit PacedMind", accelerator: "CmdOrCtrl+Q", click: quit },
         ],
       },
       { role: "editMenu" },
@@ -299,7 +342,7 @@ function watchSessions() {
     const waiting = state.waiting ?? [];
     if (known) for (const s of waiting) if (!known.has(s.id)) notify(s);
     known = new Set(waiting.map((s) => s.id));
-    tray?.setToolTip(waiting.length ? `Organizer · ${waiting.length} waiting for you` : "Organizer");
+    tray?.setToolTip(waiting.length ? `PacedMind · ${waiting.length} waiting for you` : "PacedMind");
   };
   check();
   setInterval(check, 5000);
@@ -324,12 +367,17 @@ async function boot() {
   try {
     await startServer();
     serverReady = true;
-    if (win) win.loadURL(`${ORIGIN}/today`);
+    if (win) {
+      const window = win;
+      await window.loadURL(`${ORIGIN}/today`);
+      // The temporary loading page must never become the Back button's destination.
+      if (!window.isDestroyed()) window.webContents.navigationHistory.clear();
+    }
   } catch (e) {
     const { response } = await dialog.showMessageBox({
       type: "error",
-      title: "Organizer",
-      message: "Organizer could not start.",
+      title: "PacedMind",
+      message: "PacedMind could not start.",
       detail: `${e.message}\n\nIs something else using port ${PORT}? Details are in ${logFile()}`,
       buttons: ["Try again", "Open log", "Quit"],
       defaultId: 0,
@@ -351,18 +399,46 @@ function writeShortcuts() {
     target: process.execPath,
     cwd: path.dirname(process.execPath),
     description: "Tasks, time blocks and agent sessions",
-    icon: process.execPath,
+    icon: shortcutIcon,
     iconIndex: 0,
     appUserModelId: APP_ID, // Needed for Windows notifications.
   };
   const programs = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
-  shell.writeShortcutLink(path.join(programs, "Organizer.lnk"), "create", options);
-  shell.writeShortcutLink(path.join(app.getPath("desktop"), "Organizer.lnk"), "create", options);
+  for (const folder of [programs, app.getPath("desktop")]) {
+    const shortcut = path.join(folder, "PacedMind.lnk");
+    if (!shell.writeShortcutLink(shortcut, "create", options)) throw new Error(`Could not create ${shortcut}`);
+  }
+  // Keep existing pins and their arguments; update only pins targeting this app.
+  const pinned = path.join(app.getPath("appData"), "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar");
+  if (fs.existsSync(pinned)) for (const name of fs.readdirSync(pinned)) {
+    if (!name.toLowerCase().endsWith(".lnk")) continue;
+    const file = path.join(pinned, name);
+    try {
+      const current = shell.readShortcutLink(file);
+      if (path.resolve(current.target).toLowerCase() === path.resolve(process.execPath).toLowerCase()) {
+        shell.writeShortcutLink(file, "update", { icon: shortcutIcon, iconIndex: 0, appUserModelId: APP_ID });
+      }
+    } catch {
+      // Leave unreadable or unrelated pins alone.
+    }
+  }
+  // Remove only the old shortcuts that actually belong to this installation.
+  for (const folder of [programs, app.getPath("desktop")]) {
+    const old = path.join(folder, "Organizer.lnk");
+    if (!fs.existsSync(old)) continue;
+    try {
+      if (path.resolve(shell.readShortcutLink(old).target).toLowerCase() === path.resolve(process.execPath).toLowerCase()) {
+        fs.rmSync(old);
+      }
+    } catch {
+      // An unrelated or unreadable shortcut is left alone.
+    }
+  }
 }
 
 function removeShortcuts() {
   const programs = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
-  for (const file of [path.join(programs, "Organizer.lnk"), path.join(app.getPath("desktop"), "Organizer.lnk")]) {
+  for (const file of [path.join(programs, "PacedMind.lnk"), path.join(app.getPath("desktop"), "PacedMind.lnk")]) {
     fs.rmSync(file, { force: true });
   }
   app.setLoginItemSettings({ ...loginArgs, openAtLogin: false });
@@ -371,13 +447,18 @@ function removeShortcuts() {
 app.setAppUserModelId(APP_ID);
 
 if (process.argv.includes("--install")) {
-  writeShortcuts();
-  app.exit(0);
+  app.whenReady().then(() => {
+    writeShortcuts();
+    app.quit();
+  }).catch((error) => {
+    console.error(error);
+    app.exit(1);
+  });
 } else if (process.argv.includes("--uninstall")) {
   removeShortcuts();
   app.exit(0);
 } else if (!app.requestSingleInstanceLock()) {
-  // Organizer is already running: it gets our arguments through "second-instance".
+  // PacedMind is already running: it gets our arguments through "second-instance".
   app.exit(0);
 } else if (process.argv.includes("--quit")) {
   // Asked to quit, but nothing was running.
@@ -392,6 +473,7 @@ if (process.argv.includes("--install")) {
     stopServer();
   });
   app.whenReady().then(() => {
+    nativeTheme.themeSource = activeTheme;
     session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
     appMenu();
     createTray();

@@ -1,4 +1,4 @@
-// Builds the Organizer desktop app and installs it for the current user.
+// Builds the PacedMind desktop app and updates the existing Organizer installation in place.
 //
 //   npm run desktop                 build, package, install to %LOCALAPPDATA%\Programs\Organizer and start it
 //   npm run desktop -- --no-install build and package only (output in dist/package)
@@ -32,6 +32,25 @@ function runningFromInstall() {
   return Number(out.trim()) || 0;
 }
 
+// Validate every recursive-delete target before touching a previous build or installation.
+function assertChildPath(target, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(target));
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Unsafe output path: ${target}`);
+  }
+}
+assertChildPath(stage, root);
+assertChildPath(path.join(dist, "package"), root);
+if (process.platform === "win32") {
+  if (!process.env.LOCALAPPDATA || !path.isAbsolute(process.env.LOCALAPPDATA)) {
+    throw new Error("LOCALAPPDATA must identify the current user's app directory.");
+  }
+  assertChildPath(installDir, path.join(process.env.LOCALAPPDATA, "Programs"));
+}
+
+step("Generating PacedMind icons");
+execFileSync(process.execPath, [path.join(root, "scripts", "make-icons.mjs")], { cwd: root, stdio: "inherit" });
+
 step("Building the Next.js app");
 fs.rmSync(stage, { recursive: true, force: true }); // An old copy would end up in the build's file tracing.
 execSync("npm run build", { cwd: root, stdio: "inherit" });
@@ -51,10 +70,10 @@ if (fs.existsSync(path.join(root, "public"))) fs.cpSync(path.join(root, "public"
 for (const leftover of ["data", "dist"]) {
   if (fs.existsSync(path.join(server, leftover))) throw new Error(`The build unexpectedly contains ${leftover}/. Check outputFileTracingExcludes.`);
 }
-for (const file of ["main.mjs", "icon.ico", "icon.png"]) fs.copyFileSync(path.join(root, "desktop", file), path.join(stage, file));
+for (const file of ["main.mjs", "preload.cjs", "icon.ico", "icon.png"]) fs.copyFileSync(path.join(root, "desktop", file), path.join(stage, file));
 fs.writeFileSync(path.join(stage, "package.json"), JSON.stringify({
   name: "organizer",
-  productName: "Organizer",
+  productName: "PacedMind",
   version: pkg.version,
   description: "Tasks, time blocks and agent sessions",
   main: "main.mjs",
@@ -75,7 +94,7 @@ const [packaged] = await packager({
   asar: false, // The server runs from plain files with Electron's own Node.
   prune: false, // server/node_modules is already exactly what the server needs.
   quiet: true,
-  win32metadata: { CompanyName: "Organizer", FileDescription: "Organizer", ProductName: "Organizer", InternalName: "Organizer" },
+  win32metadata: { CompanyName: "PacedMind", FileDescription: "PacedMind", ProductName: "PacedMind", InternalName: "Organizer" },
 });
 console.log(`  ${packaged}`);
 
@@ -86,18 +105,18 @@ if (flags.has("--no-install") || process.platform !== "win32") {
 
 step(`Installing to ${installDir}`);
 if (fs.existsSync(installedExe) && runningFromInstall()) {
-  console.log("  Closing the running Organizer…");
-  spawn(installedExe, ["--quit"], { stdio: "ignore" });
+  console.log("  Closing the running app…");
+  spawn(installedExe, ["--quit"], { stdio: "ignore", windowsHide: true });
   for (let i = 0; i < 50 && runningFromInstall(); i++) await sleep(200);
   if (runningFromInstall()) throw new Error("Organizer is still running. Quit it from the tray icon and run this again.");
 }
 fs.rmSync(installDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 fs.cpSync(packaged, installDir, { recursive: true });
-execFileSync(installedExe, ["--install"]); // Start Menu and desktop shortcuts.
-console.log("  Added Organizer to the Start Menu and the desktop.");
+execFileSync(installedExe, ["--install"], { windowsHide: true }); // Start Menu and desktop shortcuts.
+console.log("  Added PacedMind to the Start Menu and the desktop.");
 
 if (!flags.has("--no-launch")) {
   spawn(installedExe, [], { detached: true, stdio: "ignore" }).unref();
-  console.log("  Started Organizer.");
+  console.log("  Started PacedMind.");
 }
 console.log(`\nDone. Your data lives in ${path.join(process.env.APPDATA ?? "", "Organizer")}.`);

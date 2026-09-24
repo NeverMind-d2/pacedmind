@@ -28,7 +28,7 @@ const LEFT = 220;
 const ROW = 40;
 const HEAD = 32;
 const AGENT_SHORT: Record<AgentId, string> = { claude: "Claude", codex: "Codex" };
-const AGENT_DOT: Record<AgentId, string> = { claude: "#a1a1a8", codex: "#c4c4ca" };
+const AGENT_DOT: Record<AgentId, string> = { claude: "var(--color-mut)", codex: "var(--color-fg3)" };
 const TONE: Record<StateTone, string> = {
   done: "text-mut2", waiting: "text-fg2", running: "text-fg3", active: "text-fg3", next: "text-mut", queued: "text-mut2", idle: "text-mut2",
 };
@@ -113,7 +113,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
 
         <div className="relative" style={{ height }}>
           <svg width={gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: LEFT }} aria-hidden="true">
-            {lines.map((l) => <line key={l.x} x1={l.x + 0.5} x2={l.x + 0.5} y1={0} y2={height} stroke={l.strong ? "#17171a" : "#0a0a0c"} />)}
+            {lines.map((l) => <line key={l.x} x1={l.x + 0.5} x2={l.x + 0.5} y1={0} y2={height} stroke={l.strong ? "var(--color-line2)" : "var(--color-hover)"} />)}
           </svg>
           {bars.map(({ p, s, e, waiting, label, pct, color }) => {
             const selected = p.id === selectedId;
@@ -125,7 +125,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
             const outLeft = left + barW + (target !== null ? 14 : 8);
             return (
               <Link key={p.id} href={`/roadmap?p=${encodeURIComponent(p.id)}`} scroll={false} aria-current={selected ? "true" : undefined}
-                className={cx("group flex border-b border-[#0a0a0c]", selected ? "bg-sel" : "hover:bg-hover")} style={{ height: ROW }}>
+                className={cx("group flex border-b border-hover", selected ? "bg-sel" : "hover:bg-hover")} style={{ height: ROW }}>
                 <div className={cx("sticky left-0 z-10 flex shrink-0 items-center gap-[9px] border-r border-line pl-5 pr-3", selected ? "bg-sel" : "bg-panel group-hover:bg-hover")}
                   style={{ width: LEFT }}>
                   <Diamond color={color} />
@@ -175,8 +175,8 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
             <svg width={gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: LEFT }} aria-hidden="true">
               {deps.map((dp) => (
                 <g key={dp.id}>
-                  <path d={dp.d} fill="none" stroke="#a1a1a8" strokeWidth="1.4" strokeLinejoin="round" />
-                  <path d={dp.head} fill="#a1a1a8" />
+                  <path d={dp.d} fill="none" stroke="var(--color-mut)" strokeWidth="1.4" strokeLinejoin="round" />
+                  <path d={dp.head} fill="var(--color-mut)" />
                 </g>
               ))}
             </svg>
@@ -380,7 +380,7 @@ function SessionPanel({ project, projects, colorOf, terminal }: {
         </Setting>
       </div>
       <p className="px-5 py-1.5 text-[12px] leading-[1.55] text-mut2">
-        Organizer only tracks state. You work with the agent in its own terminal, and it tells Organizer when it starts and when it’s finished.
+        PacedMind only tracks state. You work with the agent in its own terminal, and it tells PacedMind when it starts and when it’s finished.
       </p>
     </aside>
   );
@@ -431,8 +431,8 @@ export function Roadmap(props: {
         <Icon name="roadmap" className="text-mut" />
         <h1 className="text-[14px] font-semibold text-strong">Roadmap</h1>
         <span className="text-mut2">{range}</span>
-        <div className="ml-1.5 flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-[#030303] p-0.5">
-          <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-[#141416] px-2.5 text-[12px] text-strong">
+        <div className="ml-1.5 flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
+          <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-sel px-2.5 text-[12px] text-strong">
             <Icon name="roadmap" size={12} strokeWidth={2} />Roadmap
           </span>
           <Link href={project ? `/flows?p=${encodeURIComponent(project.id)}` : "/flows"}

@@ -28,7 +28,7 @@ const H0 = 7;
 const H1 = 21;
 const PX = 52;
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const LANE: Record<AgentId, { right: number; color: string }> = { claude: { right: 11, color: "#a1a1a8" }, codex: { right: 3, color: "#c4c4ca" } };
+const LANE: Record<AgentId, { right: number; color: string }> = { claude: { right: 11, color: "var(--color-mut)" }, codex: { right: 3, color: "var(--color-fg3)" } };
 
 const y = (min: number) => Math.round(((min - H0 * 60) / 60) * PX);
 const minutes = (b: { start: string; end: string }) => minutesOf(b.end.slice(11, 16)) - minutesOf(b.start.slice(11, 16));
@@ -136,7 +136,7 @@ export function WeekView({
         </ViewHeader>
 
         <div className="flex h-10 shrink-0 items-center gap-3.5 border-b border-line px-5 text-[12px] text-mut">
-          <Legend swatch="border-[#222225]">Fixed</Legend>
+          <Legend swatch="border-ctl">Fixed</Legend>
           <Legend swatch="border-ctl bg-line">Planned for you</Legend>
           <Legend swatch="border-accent/55 bg-line">Check a finished session</Legend>
           <span className="flex items-center gap-1.5">
@@ -163,7 +163,7 @@ export function WeekView({
                 const late = dues.some((t) => (timeOf(t.dueDate) ? t.dueDate! < now : past));
                 const single = dues.length === 1 ? timeOf(dues[0].dueDate) : null;
                 return (
-                  <div key={day} className="flex min-w-0 flex-1 basis-0 items-center gap-1.5 border-l border-[#0e0e10] px-2">
+                  <div key={day} className="flex min-w-0 flex-1 basis-0 items-center gap-1.5 border-l border-line px-2">
                     <span className={cx("text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
                     <span className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
                       isToday ? "bg-accent text-bg" : past ? "text-mut2" : "text-fg2")}>
@@ -191,11 +191,11 @@ export function WeekView({
                 ))}
               </div>
               {days.map((day, i) => (
-                <div key={day} className="relative min-w-0 flex-1 basis-0 border-l border-[#0e0e10]"
+                <div key={day} className="relative min-w-0 flex-1 basis-0 border-l border-line"
                   style={{
-                    backgroundImage: "linear-gradient(to bottom, #0c0c0e 1px, transparent 1px)",
+                    backgroundImage: "linear-gradient(to bottom, var(--color-line) 1px, transparent 1px)",
                     backgroundSize: `100% ${PX}px`,
-                    backgroundColor: rules.workDays.includes(i + 1) ? undefined : "rgba(0,0,0,0.28)",
+                    backgroundColor: rules.workDays.includes(i + 1) ? undefined : "var(--color-nonwork)",
                   }}>
                   {blocksOn(day).map((b) => (
                     <BlockView key={b.id} block={b} color={areaColor(ctx.areas, b.areaId)} past={b.end <= now}
@@ -255,10 +255,10 @@ function BlockView({ block: b, color, past, selected, onOpen }: {
     left: `calc(3px + (100% - 23px) * ${b.col / b.cols})`,
     width: `calc((100% - 23px) / ${b.cols} - ${b.cols > 1 ? 2 : 0}px)`,
   };
-  const tone = b.kind === "fixed" ? cx("border-[#1e1e21]", past ? "text-mut2" : "text-fg3")
-    : past ? "border-[#141416] bg-[#0a0a0c] text-mut2 hover:bg-hover"
-    : b.kind === "check" ? "border-accent/55 bg-line text-strong hover:bg-[#161618]"
-    : "border-ctl bg-line text-strong hover:bg-[#161618]";
+  const tone = b.kind === "fixed" ? cx("border-ctl", past ? "text-mut2" : "text-fg3")
+    : past ? "border-sel bg-hover text-mut2 hover:bg-hover"
+    : b.kind === "check" ? "border-accent/55 bg-line text-strong hover:bg-sel"
+    : "border-ctl bg-line text-strong hover:bg-sel";
   const cls = cx("absolute block overflow-hidden rounded-[5px] border px-1.5 text-left text-[11px] leading-[1.35]",
     height >= 24 ? "py-[3px]" : "py-0", tone, selected && "ring-1 ring-accent/70");
   const label = `${b.title}, ${fmtTime(b.start)}–${fmtTime(b.end)}`;
@@ -300,17 +300,17 @@ function planNotes(plan: WeekPlan, tasks: Task[], today: string, now: string) {
   const count = new Map<string, number>();
   for (const b of plan.blocks) {
     if (b.kind === "check") {
-      notes.push({ dot: "#8b8ef5", text: `${b.key} finished, so ${minutes(b)} min to check it was added ${when(b.start)}` });
+      notes.push({ dot: "var(--color-accent)", text: `${b.key} finished, so ${minutes(b)} min to check it was added ${when(b.start)}` });
       continue;
     }
     const n = (count.get(b.key) ?? 0) + 1;
     count.set(b.key, n);
     const t = tasks.find((x) => x.id === b.taskId);
     if (n === 1 && t?.dueDate && (timeOf(t.dueDate) ? t.dueDate < now : dateOnly(t.dueDate) < today)) {
-      notes.push({ dot: "#d9776e", text: `${b.key} is overdue, planned ${when(b.start)}` });
+      notes.push({ dot: "var(--color-danger)", text: `${b.key} is overdue, planned ${when(b.start)}` });
     }
   }
-  for (const [key, n] of count) if (n > 1) notes.push({ dot: "#5e5e64", text: `Split ${key} into ${n} blocks` });
+  for (const [key, n] of count) if (n > 1) notes.push({ dot: "var(--color-dim)", text: `Split ${key} into ${n} blocks` });
   return notes.slice(0, 4);
 }
 
@@ -368,7 +368,7 @@ function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today
               <span className="flex-1 text-fg2">{current ? "Rest of this week" : "This week"}</span>
               <span className="text-mut2">{hours(plan.plannedMinutes)} of {hours(plan.capacityMinutes)} h</span>
             </div>
-            <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-[3px] bg-[#0e0e10]">
+            <div className="flex h-1.5 gap-0.5 overflow-hidden rounded-[3px] bg-line">
               {parts.map(([id, m]) => (
                 <span key={id ?? "none"} style={{ width: `${(m / scale) * 100}%`, background: areaColor(areas, id) }} />
               ))}
@@ -382,7 +382,7 @@ function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today
         )}
 
         {plan && plan.unplaced.length > 0 && (
-          <div className="flex flex-col gap-2 rounded-lg border border-white/5 bg-white/5 p-3">
+          <div className="flex flex-col gap-2 rounded-lg border border-ink/5 bg-ink/5 p-3">
             <div className="text-[12.5px] font-medium text-fg2">Didn&apos;t fit this week</div>
             {plan.unplaced.map((u) => (
               <button key={u.taskId} type="button" onClick={() => onOpen(u.key)}

@@ -84,7 +84,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
             const shut = collapsed[a.id];
             return (
               <div key={a.id}>
-                <div className="group flex h-[38px] items-center gap-2 border-b border-[#0e0e10] bg-raised pl-5 pr-3"
+                <div className="group flex h-[38px] items-center gap-2 border-b border-line bg-raised pl-5 pr-3"
                   onContextMenu={(e) => { e.preventDefault(); setMenu({ kind: "area", id: a.id, anchor: atPointer(e) }); }}>
                   <button type="button" aria-expanded={!shut} aria-label={shut ? `Expand ${a.name}` : `Collapse ${a.name}`}
                     onClick={() => setCollapsed((c) => ({ ...c, [a.id]: !shut }))}
@@ -117,7 +117,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
                   const open = menu?.kind === "project" && menu.id === p.id;
                   const late = !!p.targetDate && p.targetDate < today && u.open > 0;
                   return (
-                    <div key={p.id} className={cx("group border-b border-[#0b0b0d] pl-5 pr-3 hover:bg-[#0a0a0c]", open && "bg-[#0a0a0c]")}
+                    <div key={p.id} className={cx("group border-b border-hover pl-5 pr-3 hover:bg-hover", open && "bg-hover")}
                       onContextMenu={(e) => { e.preventDefault(); setMenu({ kind: "project", id: p.id, anchor: atPointer(e) }); }}>
                       <div className={cx(COLS, "h-[42px]")}>
                         <div className="flex min-w-0 items-center gap-2.5 pl-6">
@@ -130,7 +130,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
                           )}
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="h-1 w-14 overflow-hidden rounded-full bg-[#1a1a1d]">
+                          <span className="h-1 w-14 overflow-hidden rounded-full bg-track">
                             <span className="block h-full rounded-full" style={{ width: `${u.pct}%`, background: color }} />
                           </span>
                           <span className="text-[12px] text-mut">{u.pct}%</span>
@@ -154,14 +154,14 @@ export function ProjectsView({ areas, projects, usage, today }: {
                 })}
 
                 {!shut && (draft?.kind === "project" && draft.areaId === a.id ? (
-                  <div className="flex h-[42px] items-center gap-2.5 border-b border-[#0b0b0d] bg-[#0a0a0c] pl-11 pr-3">
+                  <div className="flex h-[42px] items-center gap-2.5 border-b border-hover bg-hover pl-11 pr-3">
                     <ProgressRing pct={0} color={a.color} size={16} />
                     <InlineName initial="" placeholder={`Project in ${a.name}`} className="max-w-80" onCancel={() => setDraft(null)}
                       onSave={(name) => createProject(name, a.id)} />
                   </div>
                 ) : !list.length && (
                   <button type="button" onClick={() => startProject(a.id)}
-                    className="flex h-[38px] w-full items-center gap-2 border-b border-[#0b0b0d] pl-11 text-left text-[12.5px] text-mut2 hover:bg-[#0a0a0c] hover:text-fg3">
+                    className="flex h-[38px] w-full items-center gap-2 border-b border-hover pl-11 text-left text-[12.5px] text-mut2 hover:bg-hover hover:text-fg3">
                     <Icon name="plus" size={13} />New project in {a.name}
                   </button>
                 ))}
@@ -170,7 +170,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
           })}
 
           {draft?.kind === "area" && (
-            <div className="flex h-[38px] items-center gap-2 border-b border-[#0e0e10] bg-raised pl-11 pr-3">
+            <div className="flex h-[38px] items-center gap-2 border-b border-line bg-raised pl-11 pr-3">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: nextColor(areas.map((a) => a.color)) }} />
               <InlineName initial="" placeholder="Area name, like Work or Health" className="max-w-80" onSave={createArea} onCancel={() => setDraft(null)} />
             </div>

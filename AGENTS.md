@@ -10,6 +10,11 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 # Organizer
 
+The user-facing brand is **PacedMind**. Keep the `Organizer` install/data paths, Windows app ID,
+MCP identifier, and environment variables for compatibility. Brand assets are in `public/brand/`;
+the original approved PNG stays unchanged as an archive. `src/lib/brand-geometry.json` defines
+the active wordmark's crop and animation bounds; `npm run icons` exports the solid connected-pd emblem and icons.
+
 A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that also coordinates Claude Code and Codex sessions. Organizer only tracks state: the user talks to agents in their own terminals, and agents report back over MCP.
 
 ## Run
@@ -34,6 +39,6 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 
 - Next 16: `params` and `searchParams` are Promises, so use `PageProps<"/route">` and await them. Pages under `src/app/(app)` are dynamic (`force-dynamic` in the group layout), because SQLite reads would otherwise be frozen at build time.
 - Dates are local strings: `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, and timestamps `YYYY-MM-DDTHH:mm:ss`. Use the helpers in `src/lib/dates.ts`.
-- Visual rules: near-black neutral palette (tokens in `globals.css`). Color means identity (areas and projects). A project's color is its own or its area's: always use `projectColor(p, areas)`. State is grayscale. The indigo accent is only for today or now, selection, the one primary button, and "session finished, waiting for you". Muted red is only for overdue.
+- Visual rules: use semantic tokens in `globals.css` for both the near-black dark palette and neutral light palette; avoid fixed neutral colors in components. Color means identity (areas and projects). A project's color is its own or its area's: always use `projectColor(p, areas)`. State is grayscale. The indigo accent is only for today or now, selection, the one primary button, and "session finished, waiting for you". Muted red is only for overdue.
 - Agent terminals get the server's environment minus its own variables (`agentEnv()` in `launcher.ts`): no PORT, NODE_ENV, ELECTRON_RUN_AS_NODE or NEXT_*. URLs handed to agents use the port the server actually listens on (`process.env.PORT`).
 - Session flow modes on edges: `auto` (starts when the previous task is finished), `manual` (after the user marks it done), `session` (the agent continues in the same terminal), `time` (at `atTime`).

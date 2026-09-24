@@ -12,7 +12,8 @@ const P = {
   roadmap: "M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15 M15 6v15",
   flow: "M4 4h6v6H4z M14 14h6v6h-6z M10 7h2a3 3 0 0 1 3 3v4",
   terminal: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z M7 10l3 2-3 2 M12 15h5",
-  settings: "M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1",
+  settings: "M9.7 3.1l.5-1.1h3.6l.5 1.1.4 1.8 1.6.9 1.8-.5 1.2.2 1.8 3.1-.7 1-1.4 1.3v1.8l1.4 1.3.7 1-1.8 3.1-1.2.2-1.8-.5-1.6.9-.4 1.8-.5 1.1h-3.6l-.5-1.1-.4-1.8-1.6-.9-1.8.5-1.2-.2-1.8-3.1.7-1 1.4-1.3v-1.8L3.1 9.6l-.7-1 1.8-3.1 1.2-.2 1.8.5 1.6-.9z M9 12a3 3 0 1 0 6 0a3 3 0 1 0 -6 0",
+  moon: "M20.9 13.1A9 9 0 0 1 10.9 3.1 9 9 0 1 0 20.9 13.1z",
   search: "M4 11a7 7 0 1 0 14 0a7 7 0 1 0 -14 0 M20 20l-3.5-3.5",
   pen: "M12 20h9 M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z",
   plus: "M12 5v14M5 12h14",
@@ -50,12 +51,12 @@ export function Icon({ name, size = 16, className, strokeWidth = 1.8 }: IconProp
 }
 
 const STATUS_SHAPE: Record<Status, { ring: string; dash?: string; fill?: string; fillD?: string; mark?: string }> = {
-  backlog: { ring: "#7a7a80", dash: "2 2" },
-  todo: { ring: "#bdbdc3" },
-  progress: { ring: "#a1a1a8", fill: "#a1a1a8", fillD: "M7 3 A4 4 0 0 1 7 11 Z" },
-  review: { ring: "#bdbdc3", fill: "#bdbdc3", fillD: "M7 7 L7 3 A4 4 0 1 1 3 7 Z" },
-  done: { ring: "#8b8ef5", fill: "#8b8ef5", fillD: "M1 7 A6 6 0 1 0 13 7 A6 6 0 1 0 1 7 Z", mark: "M4.4 7.2 L6.2 9 L9.7 5.3" },
-  canceled: { ring: "#5e5e64", fill: "#5e5e64", fillD: "M1 7 A6 6 0 1 0 13 7 A6 6 0 1 0 1 7 Z", mark: "M5 5 L9 9 M9 5 L5 9" },
+  backlog: { ring: "var(--color-mut2)", dash: "2 2" },
+  todo: { ring: "var(--color-fg3)" },
+  progress: { ring: "var(--color-mut)", fill: "var(--color-mut)", fillD: "M7 3 A4 4 0 0 1 7 11 Z" },
+  review: { ring: "var(--color-fg3)", fill: "var(--color-fg3)", fillD: "M7 7 L7 3 A4 4 0 1 1 3 7 Z" },
+  done: { ring: "var(--color-accent)", fill: "var(--color-accent)", fillD: "M1 7 A6 6 0 1 0 13 7 A6 6 0 1 0 1 7 Z", mark: "M4.4 7.2 L6.2 9 L9.7 5.3" },
+  canceled: { ring: "var(--color-dim)", fill: "var(--color-dim)", fillD: "M1 7 A6 6 0 1 0 13 7 A6 6 0 1 0 1 7 Z", mark: "M5 5 L9 9 M9 5 L5 9" },
 };
 
 export function StatusIcon({ status, size = 14 }: { status: Status; size?: number }) {
@@ -64,7 +65,7 @@ export function StatusIcon({ status, size = 14 }: { status: Status; size?: numbe
     <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
       <circle cx="7" cy="7" r="6" fill="none" stroke={s.ring} strokeWidth="1.5" strokeDasharray={s.dash} />
       {s.fillD && <path d={s.fillD} fill={s.fill} />}
-      {s.mark && <path d={s.mark} fill="none" stroke="#040405" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />}
+      {s.mark && <path d={s.mark} fill="none" stroke="var(--color-panel)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />}
     </svg>
   );
 }
@@ -73,14 +74,14 @@ export function PriorityIcon({ priority, size = 14 }: { priority: Priority; size
   if (priority === 1) {
     return (
       <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
-        <rect x="0.5" y="0.5" width="13" height="13" rx="3" fill="#c4c4ca" />
-        <rect x="6.1" y="3" width="1.8" height="5" rx="0.9" fill="#040405" />
-        <rect x="6.1" y="9.2" width="1.8" height="1.8" rx="0.9" fill="#040405" />
+        <rect x="0.5" y="0.5" width="13" height="13" rx="3" fill="var(--color-fg3)" />
+        <rect x="6.1" y="3" width="1.8" height="5" rx="0.9" fill="var(--color-panel)" />
+        <rect x="6.1" y="9.2" width="1.8" height="1.8" rx="0.9" fill="var(--color-panel)" />
       </svg>
     );
   }
-  const on = "#bdbdc3";
-  const off = "#252528";
+  const on = "var(--color-fg3)";
+  const off = "var(--color-ctl)";
   const lit = priority === 2 ? 3 : priority === 3 ? 2 : priority === 4 ? 1 : 0;
   return (
     <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
@@ -95,7 +96,7 @@ export function ProgressRing({ pct, color, size = 14 }: { pct: number; color: st
   const c = 34.56;
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="5.5" fill="none" stroke="#1a1a1d" strokeWidth="2" />
+      <circle cx="8" cy="8" r="5.5" fill="none" stroke="var(--color-track)" strokeWidth="2" />
       <circle cx="8" cy="8" r="5.5" fill="none" stroke={color} strokeWidth="2" strokeDasharray={`${(c * pct) / 100} ${c}`} transform="rotate(-90 8 8)" />
     </svg>
   );
@@ -104,7 +105,7 @@ export function ProgressRing({ pct, color, size = 14 }: { pct: number; color: st
 export function Diamond({ color, size = 11, hollow = false }: { color: string; size?: number; hollow?: boolean }) {
   return (
     <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M6 1l5 5-5 5-5-5z" fill={hollow ? "#040405" : color} stroke={color} strokeWidth={hollow ? 1.6 : 0} />
+      <path d="M6 1l5 5-5 5-5-5z" fill={hollow ? "var(--color-panel)" : color} stroke={color} strokeWidth={hollow ? 1.6 : 0} />
     </svg>
   );
 }

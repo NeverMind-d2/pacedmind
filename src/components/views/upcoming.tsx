@@ -97,7 +97,7 @@ export function UpcomingView({ today, tasks, events, targets, ctx, initialKey }:
                 {!collapsed[g.day] && (
                   <>
                     {g.targets.map((p) => (
-                      <Link key={p.id} href={`/project/${p.id}`} className="flex h-[38px] items-center gap-2.5 border-b border-[#0b0b0d] pl-5 pr-4 hover:bg-hover">
+                      <Link key={p.id} href={`/project/${p.id}`} className="flex h-[38px] items-center gap-2.5 border-b border-hover pl-5 pr-4 hover:bg-hover">
                         <span className="flex w-4 shrink-0 justify-center"><Diamond color={projectColor(p, ctx.areas)} size={12} /></span>
                         <span className="min-w-0 flex-1 truncate text-fg">{p.name} target date</span>
                         <span className="shrink-0 text-[11.5px] text-mut">{p.done} of {p.total} tasks done</span>
@@ -109,9 +109,9 @@ export function UpcomingView({ today, tasks, events, targets, ctx, initialKey }:
                     {g.events.map((e) => {
                       const area = ctx.areas.find((a) => a.id === e.areaId);
                       return (
-                        <div key={`${e.eventId}-${e.start}`} className="flex h-[38px] items-center gap-3 border-b border-[#0b0b0d] pl-5 pr-4">
+                        <div key={`${e.eventId}-${e.start}`} className="flex h-[38px] items-center gap-3 border-b border-hover pl-5 pr-4">
                           <span className="w-[96px] shrink-0 font-mono text-[11.5px] text-mut">{fmtTime(e.start)}–{fmtTime(e.end)}</span>
-                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "#85858c" }} />
+                          <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "var(--color-mut2)" }} />
                           <span className="min-w-0 flex-1 truncate">{e.title}</span>
                           <span className="shrink-0 text-[11.5px] text-mut2">{area?.name}</span>
                         </div>
@@ -145,7 +145,7 @@ function GroupHeader({ title, date, count, collapsed, onToggle, onAdd, children 
   title: string; date?: string; count: number; collapsed?: boolean; onToggle: () => void; onAdd?: () => void; children?: ReactNode;
 }) {
   return (
-    <div className="flex h-[34px] items-center gap-2 border-b border-[#0e0e10] bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
+    <div className="flex h-[34px] items-center gap-2 border-b border-line bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
       <button type="button" onClick={onToggle} className="flex items-center gap-2" aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={12} strokeWidth={2.4} className="text-mut2" />
         <span>{title}</span>
@@ -172,7 +172,7 @@ function TargetRow({ target: p, ctx }: { target: ProjectTarget; ctx: TaskContext
   const pos = Math.min(100, Math.max(0, (p.daysLeft / WINDOW) * 100));
   const health = HEALTH[p.health];
   return (
-    <Link href={`/project/${p.id}`} className="flex h-[46px] items-center gap-4 border-b border-[#0b0b0d] pl-5 pr-4 hover:bg-hover">
+    <Link href={`/project/${p.id}`} className="flex h-[46px] items-center gap-4 border-b border-hover pl-5 pr-4 hover:bg-hover">
       <Diamond color={color} size={12} />
       <span className="min-w-0 flex-1 truncate font-medium text-fg @5xl:w-[150px] @5xl:flex-none">{p.name}</span>
       <span className="hidden w-20 shrink-0 items-center gap-[7px] text-[12px] text-mut @3xl:flex">

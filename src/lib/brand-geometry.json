@@ -1,0 +1,17 @@
+{
+  "viewBox": "173 255 1819 298",
+  "imageWidth": 2126,
+  "imageHeight": 740,
+  "strokeWidth": 4.2,
+  "letters": [
+    { "letter": "p", "left": 175, "right": 355 },
+    { "letter": "a", "left": 376, "right": 555 },
+    { "letter": "c", "left": 592, "right": 742 },
+    { "letter": "e", "left": 773, "right": 948 },
+    { "letter": "d", "left": 975, "right": 1150 },
+    { "letter": "m", "left": 1194, "right": 1470 },
+    { "letter": "i", "left": 1526, "right": 1552 },
+    { "letter": "n", "left": 1611, "right": 1775 },
+    { "letter": "d", "left": 1817, "right": 1989 }
+  ]
+}

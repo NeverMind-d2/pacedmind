@@ -34,16 +34,16 @@ export function DateField({
     <div ref={ref} className="relative">
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
       {open && (
-        <div className={cx("absolute top-full z-50 mt-1 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[0_12px_32px_rgba(0,0,0,0.6)]", align === "right" ? "right-0" : "left-0")}>
+        <div className={cx("absolute top-full z-50 mt-1 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]", align === "right" ? "right-0" : "left-0")}>
           {quick("Today", 0)}
           {quick("Tomorrow", 1)}
           {quick("In a week", 7)}
           <div className="my-1 flex gap-1.5">
             <input type="date" aria-label="Date" value={date} onChange={(e) => set(e.target.value, time)}
-              className="h-7 min-w-0 flex-1 rounded-md border border-line2 bg-[#030303] px-1.5 text-[12px]" />
+              className="h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
             {withTime && (
               <input type="time" aria-label="Time" value={time} disabled={!date} onChange={(e) => set(date, e.target.value)}
-                className="h-7 w-[84px] rounded-md border border-line2 bg-[#030303] px-1.5 text-[12px]" />
+                className="h-7 w-[84px] rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
             )}
           </div>
           {value && (

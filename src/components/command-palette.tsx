@@ -69,8 +69,8 @@ export function CommandPalette({ tasks, projects }: { tasks: PaletteTask[]; proj
   const current = Math.min(active, Math.max(entries.length - 1, 0));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-black/60 pt-28" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
-      <div role="dialog" aria-label="Command menu" className="flex h-fit max-h-[460px] w-[600px] flex-col overflow-hidden rounded-xl border border-[#19191c] bg-raised shadow-[0_24px_64px_rgba(0,0,0,0.55)]">
+    <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-28" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+      <div role="dialog" aria-label="Command menu" className="flex h-fit max-h-[460px] w-[600px] flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]">
         <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
           <Icon name="search" size={15} className="text-mut2" />
           <input ref={input} value={q} aria-label="Search tasks, projects and pages" placeholder="Search tasks, projects and pages…"

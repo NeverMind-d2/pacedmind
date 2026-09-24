@@ -170,7 +170,7 @@ function buildRows(input: {
     const open = !collapsed[g.id];
     add({ kind: "area", id: `a-${g.id}`, y, h: ROW_H.area, areaId: g.id, name: g.name, color: g.color, open });
     if (!open) continue;
-    const color = g.color ?? "#85858c";
+    const color = g.color ?? "var(--color-mut2)";
     for (const p of own) {
       const pc = projectColor(p, areas);
       const pts = tasks.filter((t) => t.projectId === p.id && t.status !== "canceled");
@@ -216,9 +216,9 @@ function barLook(t: Task, latest: Session | undefined, color: string): Look {
 
 function sessionColor(x: Session, color: string): string {
   if (isActive(x)) return color;
-  if (x.status === "finished") return "#8b8ef5";
+  if (x.status === "finished") return "var(--color-accent)";
   if (x.status === "done") return tint(color, 50);
-  return "#3a3a3f";
+  return "var(--color-line-strong)";
 }
 
 const SESSION_STATE: Record<SessionStatus, string> = {
@@ -263,7 +263,7 @@ function CapLane({ loads, dayMinutes, sc }: { loads: Record<string, DayLoad>; da
     return (
       <span key={day} title={label} className="absolute inset-y-0" style={{ left: x0, width: cw }}>
         <span className="absolute bottom-1.5 rounded-[2px]"
-          style={{ left: (cw - w) / 2, width: w, height: Math.max(2, Math.round(Math.min(1, min / dayMinutes) * 26)), background: day === sc.today ? "#a1a1a8" : past ? "#252528" : "#3a3a3f" }} />
+          style={{ left: (cw - w) / 2, width: w, height: Math.max(2, Math.round(Math.min(1, min / dayMinutes) * 26)), background: day === sc.today ? "var(--color-mut)" : past ? "var(--color-ctl)" : "var(--color-line-strong)" }} />
         {sc.dayW >= 60 && min > 0 && (
           <span className="absolute bottom-1 text-[11px] text-mut2" style={{ left: (cw + w) / 2 + 6 }}>{hours(min)}</span>
         )}
@@ -550,7 +550,7 @@ export function Timeline(props: {
           {LAYERS.map((l) => (
             <button key={l.id} type="button" aria-pressed={layers[l.id]} onClick={() => setLayers((v) => ({ ...v, [l.id]: !v[l.id] }))}
               className={cx("flex h-[26px] items-center gap-1.5 rounded-full border px-2.5 hover:bg-hover", layers[l.id] ? "border-ctl text-fg2" : "border-line text-dim")}>
-              <span className={cx("h-1.5 w-1.5 rounded-full", layers[l.id] ? "bg-mut" : "bg-[#252528]")} />
+              <span className={cx("h-1.5 w-1.5 rounded-full", layers[l.id] ? "bg-mut" : "bg-ctl")} />
               {l.label}
             </button>
           ))}
@@ -572,7 +572,7 @@ export function Timeline(props: {
             <div className="relative" style={{ height }}>
               {Array.from({ length: days }, (_, i) => i).filter((i) => i % 7 >= 5).map((i) => (
                 <span key={i} className="pointer-events-none absolute inset-y-0"
-                  style={{ left: TREE + X(i), width: X(i + 1) - X(i), background: "rgb(255 255 255 / 0.018)" }} />
+                  style={{ left: TREE + X(i), width: X(i + 1) - X(i), background: "color-mix(in srgb, var(--color-ink) 1.8%, transparent)" }} />
               ))}
 
               {rows.map((r) => {
@@ -580,7 +580,7 @@ export function Timeline(props: {
                 const bg = r.kind === "area" ? "bg-raised" : isSel ? "bg-sel" : "bg-panel group-hover:bg-hover";
                 return (
                   <div key={r.id} className={cx("group flex", r.kind === "area" ? "bg-raised" : isSel ? "bg-sel" : "hover:bg-hover")}
-                    style={{ height: r.h, borderBottom: `1px solid ${r.kind === "task" ? "#0a0a0c" : "#0e0e10"}` }}>
+                    style={{ height: r.h, borderBottom: `1px solid ${r.kind === "task" ? "var(--color-hover)" : "var(--color-line)"}` }}>
                     <div className={cx("sticky left-0 z-10 flex shrink-0 items-center gap-2 overflow-hidden border-r border-line pr-3", bg)}
                       style={{ width: TREE, paddingLeft: r.kind === "task" ? r.indent : r.kind === "proj" ? 26 : 20 }}>
                       {r.kind === "cap" && (
@@ -628,8 +628,8 @@ export function Timeline(props: {
                 <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: TREE }} aria-hidden="true">
                   {deps.map((p) => (
                     <g key={p.id}>
-                      <path d={p.d} fill="none" stroke="#3a3a3f" strokeWidth="1.2" strokeLinejoin="round" />
-                      <path d={p.head} fill="none" stroke="#5e5e64" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d={p.d} fill="none" stroke="var(--color-line-strong)" strokeWidth="1.2" strokeLinejoin="round" />
+                      <path d={p.head} fill="none" stroke="var(--color-dim)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                     </g>
                   ))}
                 </svg>

@@ -25,7 +25,7 @@ export function ColorSwatches({ value, onPick }: { value: string | null; onPick:
         const on = current === c.value.toUpperCase();
         return (
           <button key={c.value} type="button" title={c.name} aria-label={c.name} aria-pressed={on} onClick={() => onPick(c.value)}
-            className={cx("flex h-5 w-5 items-center justify-center rounded-[5px] border", on ? "border-strong" : "border-transparent hover:border-[#3a3a3f]")}>
+            className={cx("flex h-5 w-5 items-center justify-center rounded-[5px] border", on ? "border-strong" : "border-transparent hover:border-line-strong")}>
             <span className="h-3 w-3 rounded-full" style={{ background: c.value }} />
           </button>
         );
@@ -54,7 +54,7 @@ export function InlineName({ initial, placeholder, onSave, onCancel, className }
         if (e.key === "Enter") { e.preventDefault(); finish(true); }
         if (e.key === "Escape") { e.preventDefault(); finish(false); }
       }}
-      className={cx("h-6 min-w-0 flex-1 rounded border border-[#3a3a3f] bg-[#030303] px-1.5 text-[13px] text-strong outline-none", className)} />
+      className={cx("h-6 min-w-0 flex-1 rounded border border-line-strong bg-input px-1.5 text-[13px] text-strong outline-none", className)} />
   );
 }
 

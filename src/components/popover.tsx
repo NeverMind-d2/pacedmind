@@ -59,7 +59,7 @@ export function Popover({ anchor, onClose, children, width = 232, className }: {
 
   return createPortal(
     <div ref={ref} role="menu" style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
-      className={cx("fixed z-[60] rounded-lg border border-line2 bg-raised p-1 shadow-[0_12px_32px_rgba(0,0,0,0.6)]", className)}>
+      className={cx("fixed z-[60] rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]", className)}>
       {children}
     </div>,
     document.body,

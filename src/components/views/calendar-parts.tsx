@@ -36,10 +36,10 @@ export function PeriodNav({ unit, prev, next, today }: { unit: "month" | "week";
 export function ViewSwitch({ value, month, week }: { value: "month" | "week"; month: string; week: string }) {
   const options = [{ value: "month", label: "Month", href: month }, { value: "week", label: "Week", href: week }] as const;
   return (
-    <nav aria-label="Calendar view" className="flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-[#030303] p-0.5">
+    <nav aria-label="Calendar view" className="flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
       {options.map((o) => (
         <Link key={o.value} href={o.href} aria-current={o.value === value ? "page" : undefined}
-          className={cx("flex h-[22px] items-center rounded-[5px] px-2.5 text-[12px]", o.value === value ? "bg-[#141416] text-strong" : "text-mut hover:text-fg2")}>
+          className={cx("flex h-[22px] items-center rounded-[5px] px-2.5 text-[12px]", o.value === value ? "bg-sel text-strong" : "text-mut hover:text-fg2")}>
           {o.label}
         </Link>
       ))}
@@ -87,4 +87,4 @@ export function pressable(onPress: () => void) {
 
 export const isOpenTask = (t: { status: string }) => t.status !== "done" && t.status !== "canceled";
 
-export const areaColor = (areas: { id: string; color: string }[], id: string | null) => areas.find((a) => a.id === id)?.color ?? "#85858c";
+export const areaColor = (areas: { id: string; color: string }[], id: string | null) => areas.find((a) => a.id === id)?.color ?? "var(--color-mut2)";

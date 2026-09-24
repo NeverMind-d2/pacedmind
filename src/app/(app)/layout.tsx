@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
+import { AppHeader } from "@/components/app-header";
 import { QuickAdd } from "@/components/quick-add";
 import { CommandPalette } from "@/components/command-palette";
 import { LiveRefresh } from "@/components/live-refresh";
@@ -27,9 +28,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
   }));
   return (
-    <div className="flex h-full">
-      <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
-      <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel">{children}</main>
+    <div className="flex h-full flex-col">
+      <AppHeader />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
+        <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel">{children}</main>
+      </div>
       <QuickAdd areas={areas} projects={projects} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />

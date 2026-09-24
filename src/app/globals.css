@@ -21,8 +21,58 @@
   --color-accent-strong: #5b5fd6;
   --color-accent-fg: #b3b5fa;
   --color-danger: #d9776e;
+  --color-input: #030303;
+  --color-line-strong: #3a3a3f;
+  --color-track: #1a1a1d;
+  --color-ink: #ffffff;
+  --color-overlay: rgb(0 0 0 / 0.6);
+  --color-nonwork: rgb(0 0 0 / 0.28);
+  --color-danger-bg: #2a1614;
+  --color-danger-hover: #351b18;
+  --color-danger-line: #4a2b28;
+  --color-danger-fg: #e8a39b;
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+  --shadow-popover: 0 24px 64px rgb(0 0 0 / 0.55);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f5f5f6;
+  --color-panel: #ffffff;
+  --color-raised: #fafafb;
+  --color-hover: #eeeeF1;
+  --color-sel: #e6e6ec;
+  --color-line: #e3e3e8;
+  --color-line2: #d6d6de;
+  --color-ctl: #ccccd6;
+  --color-strong: #202026;
+  --color-fg: #303038;
+  --color-fg2: #41414c;
+  --color-fg3: #50505c;
+  --color-mut: #61616e;
+  --color-mut2: #6d6d7a;
+  --color-dim: #777785;
+  --color-faint: #90909c;
+  --color-accent: #5b5fd6;
+  --color-accent-strong: #5356c7;
+  --color-accent-fg: #4548b3;
+  --color-danger: #b5443b;
+  --color-input: #ffffff;
+  --color-line-strong: #ababba;
+  --color-track: #e2e2e8;
+  --color-ink: #18181b;
+  --color-overlay: rgb(24 24 30 / 0.24);
+  --color-nonwork: rgb(24 24 30 / 0.025);
+  --color-danger-bg: #fff0ed;
+  --color-danger-hover: #ffe3dd;
+  --color-danger-line: #e8b9b2;
+  --color-danger-fg: #9e332b;
+  --shadow-popover: 0 16px 48px rgb(24 24 30 / 0.16);
 }
 
 @layer base {
@@ -46,7 +96,7 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: #1b1b1e transparent;
+    scrollbar-color: var(--color-ctl) transparent;
   }
 
   button {
@@ -56,7 +106,7 @@
   input[type="date"],
   input[type="time"],
   input[type="datetime-local"] {
-    color-scheme: dark;
+    color-scheme: inherit;
   }
 
   :focus-visible {
@@ -65,16 +115,105 @@
   }
 }
 
-/* React Flow, restyled for the dark theme. */
+/* A single header replaces Windows' title text and the former sidebar logo row. */
+.app-titlebar {
+  -webkit-app-region: drag;
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  /* The native buttons cover the overlay height; reserve a separate pixel below it. */
+  height: calc(max(40px, env(titlebar-area-height, 40px)) + 1px);
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-bg);
+  user-select: none;
+}
+
+.app-titlebar__content {
+  display: flex;
+  align-items: center;
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, 100%);
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.app-titlebar__home {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  border-radius: 4px;
+}
+
+.app-titlebar__navigation {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.app-titlebar__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  color: var(--color-mut);
+}
+
+.app-titlebar__button:hover:not(:disabled) {
+  background: var(--color-hover);
+  color: var(--color-strong);
+}
+
+.app-titlebar__button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+/* The pd monogram unfolds without moving the header or delaying interaction. */
+.brand-wordmark {
+  display: block;
+  height: auto;
+  color: var(--color-strong);
+}
+
+.brand-wordmark__tail {
+  animation: brand-expand 1100ms cubic-bezier(0.22, 1, 0.36, 1) 320ms both;
+}
+
+.brand-wordmark__letter {
+  animation: brand-letter-in 300ms ease-out var(--letter-delay) both;
+}
+
+@keyframes brand-expand {
+  from { transform: translateX(var(--letter-start)); }
+  to { transform: translateX(0); }
+}
+
+@keyframes brand-letter-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-wordmark__tail,
+  .brand-wordmark__letter {
+    animation: none;
+  }
+}
+
+/* React Flow follows the same theme as the rest of the workspace. */
 .react-flow {
   --xy-background-color: transparent;
-  --xy-edge-stroke: #3a3a3f;
-  --xy-handle-background-color: #040405;
-  --xy-handle-border-color: #3a3a3f;
-  --xy-controls-button-background-color: #08080a;
-  --xy-controls-button-background-color-hover: #101012;
-  --xy-controls-button-color: #a1a1a8;
-  --xy-controls-button-border-color: #17171a;
+  --xy-edge-stroke: var(--color-line-strong);
+  --xy-handle-background-color: var(--color-panel);
+  --xy-handle-border-color: var(--color-line-strong);
+  --xy-controls-button-background-color: var(--color-raised);
+  --xy-controls-button-background-color-hover: var(--color-sel);
+  --xy-controls-button-color: var(--color-mut);
+  --xy-controls-button-border-color: var(--color-line2);
   --xy-selection-background-color: rgb(139 142 245 / 0.08);
   --xy-selection-border: 1px dashed rgb(139 142 245 / 0.6);
 }

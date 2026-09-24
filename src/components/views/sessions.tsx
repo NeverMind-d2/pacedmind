@@ -52,14 +52,14 @@ export interface StartableTask {
 
 /* ---------- helpers ---------- */
 
-const ACCENT = "#8b8ef5";
+const ACCENT = "var(--color-accent)";
 const DOT: Record<SessionStatus, { fill: string; ring: string }> = {
   finished: { fill: ACCENT, ring: ACCENT },
-  starting: { fill: "#bdbdc3", ring: "#bdbdc3" },
-  running: { fill: "#bdbdc3", ring: "#bdbdc3" },
-  done: { fill: "#48484d", ring: "#48484d" },
-  closed: { fill: "transparent", ring: "#5e5e64" },
-  failed: { fill: "transparent", ring: "#5e5e64" },
+  starting: { fill: "var(--color-fg3)", ring: "var(--color-fg3)" },
+  running: { fill: "var(--color-fg3)", ring: "var(--color-fg3)" },
+  done: { fill: "var(--color-faint)", ring: "var(--color-faint)" },
+  closed: { fill: "transparent", ring: "var(--color-dim)" },
+  failed: { fill: "transparent", ring: "var(--color-dim)" },
 };
 
 const isActive = (s: SessionItem) => s.status === "starting" || s.status === "running";
@@ -177,7 +177,7 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="terminal" className="shrink-0 text-mut" />
           <h1 className="text-[14px] font-semibold text-strong">Sessions</h1>
-          <span className="min-w-0 truncate text-mut2">Claude Code and Codex sessions started from Organizer</span>
+          <span className="min-w-0 truncate text-mut2">Claude Code and Codex sessions started from PacedMind</span>
           <span className="flex-1" />
           {startable.length > 0 && (
             <Menu align="right" width={340}
@@ -219,7 +219,7 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
 
 function GroupHeader({ name, count, collapsed, onToggle }: { name: string; count: number; collapsed: boolean; onToggle: () => void }) {
   return (
-    <div className="flex h-[34px] items-center gap-2 border-b border-[#0e0e10] bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
+    <div className="flex h-[34px] items-center gap-2 border-b border-line bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
       <button type="button" onClick={onToggle} className="flex items-center gap-2" aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={12} strokeWidth={2.4} className="text-mut2" />
         <span>{name}</span>
@@ -238,7 +238,7 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
   const live = s.status === "finished" || isActive(s);
   return (
     <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined}
-      className={cx("flex h-[42px] w-full items-center gap-3 border-b border-[#0b0b0d] px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
+      className={cx("flex h-[42px] w-full items-center gap-3 border-b border-hover px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
       <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} /></span>
       <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2">{s.task?.key ?? "—"}</span>
       <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? "Deleted task"}</span>
@@ -257,7 +257,7 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
   const worked = workedFor(s, now);
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
-    s.origin === "outside" ? "outside Organizer" : s.origin === "continued" ? "in the same terminal" : "from Organizer"
+    s.origin === "outside" ? "outside PacedMind" : s.origin === "continued" ? "in the same terminal" : "from PacedMind"
   }`;
   const props: [string, ReactNode, boolean][] = [
     ["Agent", AGENT_LABEL[s.agent], false],
@@ -312,7 +312,7 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
         </dl>
 
         <div className="flex flex-col gap-2 border-t border-line pt-4">
-          <div className="text-[12.5px] text-fg2">What Organizer heard</div>
+          <div className="text-[12.5px] text-fg2">What PacedMind heard</div>
           {s.events.length ? s.events.map((e) => (
             <div key={e.id} className="flex items-baseline gap-3 text-[12.5px]">
               <span className={cx("shrink-0 font-mono text-[11px] text-dim", allToday ? "w-[38px]" : "w-[92px]")}>
@@ -332,7 +332,7 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
             </Button>
           )}
           {active && (
-            <Button disabled={pending} onClick={() => confirm("Close this session in Organizer? The terminal stays open.") && run(() => closeSessionAction(s.id))}>
+            <Button disabled={pending} onClick={() => confirm("Close this session in PacedMind? The terminal stays open.") && run(() => closeSessionAction(s.id))}>
               Close session
             </Button>
           )}

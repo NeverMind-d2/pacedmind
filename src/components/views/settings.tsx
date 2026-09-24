@@ -5,14 +5,15 @@ import { createProjectAction, resetDataAction, updateProjectAction, updateSettin
 import { projectColor } from "@/lib/colors";
 import { AGENT_LABEL, type AgentId, type Area, type Project, type Settings } from "@/lib/types";
 import { Icon } from "../icons";
+import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
 
 const TOOLS: [string, string][] = [
   ["list_tasks", "Find tasks by project, status or area"],
   ["get_task", "A task with its description, sub-tasks and connections"],
   ["get_next_task", "The next task in a project that is ready"],
-  ["start_task", "Tell Organizer a session picked up a task"],
-  ["finish_task", "Tell Organizer the work is finished"],
+  ["start_task", "Tell PacedMind a session picked up a task"],
+  ["finish_task", "Tell PacedMind the work is finished"],
   ["create_task", "Add a task"],
   ["update_task", "Change fields, add or tick off sub-tasks"],
 ];
@@ -38,7 +39,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-const input = "h-7 min-w-0 flex-1 rounded-md border border-line2 bg-[#030303] px-2 text-[12.5px] text-fg2 outline-none focus:border-[#3a3a3f]";
+const input = "h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-2 text-[12.5px] text-fg2 outline-none focus:border-line-strong";
 
 function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(() => toast(`${what} copied`), () => toast("Couldn't copy", "error"));
@@ -60,14 +61,17 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <Icon name="settings" className="text-mut" />
         <h1 className="text-[14px] font-semibold text-strong">Settings</h1>
-        <span className="text-mut2">Sessions, MCP, projects and planning</span>
+        <span className="text-mut2">Appearance, sessions, MCP and planning</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-10 px-10 py-8">
           <div className="flex flex-col gap-7">
-            <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell Organizer when a session picks up a task and when it's finished.">
+            <Section title="Appearance">
+              <Row label="Theme"><ThemeSelector /></Row>
+            </Section>
+            <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished.">
               <Row label="Status">
-                <span className="flex items-center gap-2 text-[12.5px] text-fg3"><span className="h-1.5 w-1.5 rounded-full bg-[#bdbdc3]" />Running with this app</span>
+                <span className="flex items-center gap-2 text-[12.5px] text-fg3"><span className="h-1.5 w-1.5 rounded-full bg-fg3" />Running with this app</span>
               </Row>
               <Row label="Address">
                 <span className="flex-1 truncate font-mono text-[12px] text-fg2">{mcpUrl}</span>
@@ -85,14 +89,14 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
               </Row>
             </Section>
 
-            <Section title="Connect your agents" note="Sessions you start from Organizer are connected automatically. Set this up once to use Organizer from sessions you start yourself.">
+            <Section title="Connect your agents" note="Sessions you start from PacedMind are connected automatically. Set this up once to use PacedMind from sessions you start yourself.">
               <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
                 <div className="flex items-center gap-2.5">
                   <Icon name="terminal" size={14} className="text-mut" />
                   <span className="flex-1 text-[13px] font-medium text-fg">Claude Code</span>
                   <Button size="sm" onClick={() => copy(claudeCmd, "Command")}>Copy command</Button>
                 </div>
-                <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-[#030303] px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{claudeCmd}</pre>
+                <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{claudeCmd}</pre>
               </div>
               <div className="flex flex-col gap-2.5 p-3.5">
                 <div className="flex items-center gap-2.5">
@@ -100,8 +104,8 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
                   <span className="flex-1 text-[13px] font-medium text-fg">Codex</span>
                   <Button size="sm" onClick={() => copy(codexToml, "Config")}>Copy config</Button>
                 </div>
-                <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-[#030303] px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{codexToml}</pre>
-                <p className="text-[12px] text-mut2">Codex reads the token from the <span className="font-mono">ORGANIZER_TOKEN</span> environment variable. Sessions started from Organizer set it for you.</p>
+                <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{codexToml}</pre>
+                <p className="text-[12px] text-mut2">Codex reads the token from the <span className="font-mono">ORGANIZER_TOKEN</span> environment variable. Sessions started from PacedMind set it for you.</p>
               </div>
             </Section>
 
@@ -155,7 +159,7 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
                 <div className="flex gap-2">
                   <input className={input} placeholder="Name" value={newProject.name} onChange={(e) => setNewProject((n) => ({ ...n, name: e.target.value }))} aria-label="Project name" />
                   <Menu width={160}
-                    trigger={<button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2"><Dot color={areas.find((a) => a.id === newProject.areaId)?.color ?? "#85858c"} size={7} />{areas.find((a) => a.id === newProject.areaId)?.name}</button>}
+                    trigger={<button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2"><Dot color={areas.find((a) => a.id === newProject.areaId)?.color ?? "var(--color-mut2)"} size={7} />{areas.find((a) => a.id === newProject.areaId)?.name}</button>}
                     items={areas.map((a) => ({ value: a.id, label: a.name, icon: <Dot color={a.color} size={7} /> }))}
                     onSelect={(v) => setNewProject((n) => ({ ...n, areaId: v }))} />
                 </div>
@@ -187,7 +191,7 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
                   return (
                     <button key={d} type="button" aria-pressed={on}
                       onClick={() => save({ workDays: on ? settings.workDays.filter((x) => x !== n) : [...settings.workDays, n].sort() })}
-                      className={cx("h-7 w-10 rounded-md border text-[12px]", on ? "border-[#3a3a3f] bg-[#141416] text-strong" : "border-line2 text-mut2")}>{d}</button>
+                      className={cx("h-7 w-10 rounded-md border text-[12px]", on ? "border-line-strong bg-sel text-strong" : "border-line2 text-mut2")}>{d}</button>
                   );
                 })}
               </Row>

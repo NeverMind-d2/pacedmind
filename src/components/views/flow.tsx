@@ -66,7 +66,7 @@ const HANDLE = 16;
 const HEADER_H = 36;
 const GAP = 64;
 const LANES: AgentId[] = ["claude", "codex"];
-const ACCENT = "#8b8ef5";
+const ACCENT = "var(--color-accent)";
 const DND_TYPE = "application/x-organizer-task";
 
 const laneX = (agent: AgentId) => Math.max(0, LANES.indexOf(agent)) * LANE_W;
@@ -86,10 +86,10 @@ const DEFAULT_VIEWPORT = { x: LANE_PAD + 16, y: HEADER_H + 24, zoom: 1 };
 const CANVAS_STYLE = { "--xy-attribution-background-color": "transparent" } as CSSProperties;
 
 const MODE_LINE: Record<EdgeMode, { stroke: string; width: number; dash?: string }> = {
-  auto: { stroke: "#3a3a3f", width: 1.5 },
-  manual: { stroke: "#3a3a3f", width: 1.5, dash: "5 4" },
-  session: { stroke: "#8e8e95", width: 2 },
-  time: { stroke: "#3a3a3f", width: 1.8, dash: "1 4" },
+  auto: { stroke: "var(--color-line-strong)", width: 1.5 },
+  manual: { stroke: "var(--color-line-strong)", width: 1.5, dash: "5 4" },
+  session: { stroke: "var(--color-mut2)", width: 2 },
+  time: { stroke: "var(--color-line-strong)", width: 1.8, dash: "1 4" },
 };
 
 const LEGEND: { mode: EdgeMode; label: string }[] = [
@@ -105,7 +105,7 @@ type Tone = "done" | "waiting" | "running" | "ready" | "queued" | "stopped" | "c
 type NodeInfo = { tone: Tone; state: string; note: string };
 
 const TONE_DOT: Record<Tone, string> = {
-  done: "#48484d", canceled: "#48484d", waiting: ACCENT, running: "#bdbdc3", ready: "#85858c", queued: "#5e5e64", stopped: "#5e5e64",
+  done: "var(--color-faint)", canceled: "var(--color-faint)", waiting: ACCENT, running: "var(--color-fg3)", ready: "var(--color-mut2)", queued: "var(--color-dim)", stopped: "var(--color-dim)",
 };
 
 type TaskNodeData = {
@@ -776,7 +776,7 @@ function FlowEditor(props: FlowViewProps) {
                 colorMode="dark"
                 style={CANVAS_STYLE}
               >
-                <Background variant={BackgroundVariant.Dots} gap={22} size={2} color="#141416" />
+                <Background variant={BackgroundVariant.Dots} gap={22} size={2} color="var(--color-sel)" />
                 <LaneBackdrop active={activeLane} />
                 <ViewportPortal>
                   {groups.boxes.map((b) => {
@@ -784,7 +784,7 @@ function FlowEditor(props: FlowViewProps) {
                     const top = Math.min(...ys) - 12;
                     return (
                       <div key={b.ids.join("-")} aria-hidden="true"
-                        className="pointer-events-none absolute left-0 top-0 -z-10 rounded-xl border border-ctl bg-white/[0.015]"
+                        className="pointer-events-none absolute left-0 top-0 -z-10 rounded-xl border border-ctl bg-ink/[0.015]"
                         style={{ width: NODE_W + 24, height: Math.max(...ys) + NODE_H + 22 - top, transform: `translate(${laneX(b.agent) - 12}px, ${top}px)` }}>
                         <span className="absolute bottom-[3px] right-2.5 text-[11px] text-mut2">One {AGENT_LABEL[b.agent]} session</span>
                       </div>
@@ -833,11 +833,11 @@ function FlowHeader({ project, projects, summary, flowOn, canTidy, onFlow, onTid
           value: p.id, label: p.name, icon: <Dot color={p.color} size={7} />, hint: p.inFlow ? `${p.inFlow} in flow` : undefined,
         }))}
         onSelect={(id) => { if (id !== project.id) router.push(`/flows?p=${id}`); }} />
-      <div className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-[#030303] p-0.5">
+      <div className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
         <Link href={`/roadmap?p=${project.id}`} className="flex h-[22px] items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] text-mut hover:bg-hover hover:text-fg2">
           <Icon name="roadmap" size={12} strokeWidth={2} />Roadmap
         </Link>
-        <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-[#141416] px-2.5 text-[12px] text-strong">
+        <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-sel px-2.5 text-[12px] text-strong">
           <Icon name="flow" size={12} strokeWidth={2} />Flow
         </span>
       </div>
@@ -846,7 +846,7 @@ function FlowHeader({ project, projects, summary, flowOn, canTidy, onFlow, onTid
       <ZoomControls onFit={onFit} />
       <Button onClick={onTidy} disabled={!canTidy} title="Line the sessions up in the order they run">Tidy up</Button>
       <label className="flex h-7 shrink-0 cursor-pointer items-center gap-2 pl-1 text-[12.5px] text-fg3"
-        title="When the flow is on, Organizer starts the next session on its own">
+        title="When the flow is on, PacedMind starts the next session on its own">
         {flowOn ? "Flow on" : "Paused"}
         <Switch on={flowOn} onChange={onFlow} label="Flow on" />
       </label>
@@ -895,7 +895,7 @@ function Palette({ project, tasks, total, dragging, onDragStart, onDragEnd, onAd
       <div className="flex flex-col gap-2.5 px-3.5 pb-2 pt-3.5">
         <div className="text-[12.5px] font-medium text-fg2">Add to the flow</div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" placeholder="Search tasks"
-          className="h-[30px] rounded-md border border-line2 bg-[#030303] px-2.5 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
+          className="h-[30px] rounded-md border border-line2 bg-input px-2.5 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         <div className="flex h-[26px] items-center gap-[7px] px-1.5 text-[12px] text-mut2">
@@ -927,7 +927,7 @@ function Palette({ project, tasks, total, dragging, onDragStart, onDragEnd, onAd
           return (
             <span key={l.mode} className="flex items-center gap-2 text-[12px] text-mut">
               <svg width="24" height="8" viewBox="0 0 24 8" aria-hidden="true">
-                <path d="M1 4H23" stroke={line.stroke === "#3a3a3f" ? "#6a6a70" : line.stroke} strokeWidth={line.width}
+                <path d="M1 4H23" stroke={line.stroke === "var(--color-line-strong)" ? "var(--color-mut2)" : line.stroke} strokeWidth={line.width}
                   strokeDasharray={line.dash} strokeLinecap="round" />
               </svg>
               {l.label}
@@ -942,7 +942,7 @@ function Palette({ project, tasks, total, dragging, onDragStart, onDragEnd, onAd
 function Grip() {
   return (
     <svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true" className="shrink-0">
-      {[2, 6, 10].flatMap((y) => [2, 6].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1" fill="#48484d" />))}
+      {[2, 6, 10].flatMap((y) => [2, 6].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1" fill="var(--color-faint)" />))}
     </svg>
   );
 }
@@ -957,7 +957,7 @@ function LaneBackdrop({ active }: { active: number | null }) {
       {LANES.map((a, i) => (
         <div key={a} className="absolute inset-y-0" style={{
           left: (i * LANE_W - LANE_PAD) * zoom + x, width: LANE_W * zoom,
-          background: active === i ? "rgba(255,255,255,0.025)" : i % 2 ? "rgba(255,255,255,0.012)" : undefined,
+          background: active === i ? "color-mix(in srgb, var(--color-ink) 2.5%, transparent)" : i % 2 ? "color-mix(in srgb, var(--color-ink) 1.2%, transparent)" : undefined,
         }} />
       ))}
       {LANES.slice(1).map((a, i) => (
@@ -1034,13 +1034,13 @@ function GhostNode({ task, lane, y, after }: { task: FlowTask; lane: number; y: 
 function ToneIcon({ tone }: { tone: Tone }) {
   if (tone === "done") return <StatusIcon status="done" size={13} />;
   if (tone === "canceled") return <StatusIcon status="canceled" size={13} />;
-  const ring = { waiting: ACCENT, running: "#bdbdc3", ready: "#85858c", queued: "#5e5e64", stopped: "#5e5e64" }[tone];
+  const ring = { waiting: ACCENT, running: "var(--color-fg3)", ready: "var(--color-mut2)", queued: "var(--color-dim)", stopped: "var(--color-dim)" }[tone];
   return (
     <svg width={13} height={13} viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">
       <circle cx="7" cy="7" r="6" fill="none" stroke={ring} strokeWidth="1.5" strokeDasharray={tone === "queued" ? "2 2" : undefined} />
       {tone === "waiting" && <circle cx="7" cy="7" r="2.5" fill={ACCENT} />}
-      {tone === "running" && <path d="M7 3 A4 4 0 0 1 7 11 Z" fill="#bdbdc3" />}
-      {tone === "stopped" && <path d="M4.5 7 H9.5" stroke="#5e5e64" strokeWidth="1.5" strokeLinecap="round" />}
+      {tone === "running" && <path d="M7 3 A4 4 0 0 1 7 11 Z" fill="var(--color-fg3)" />}
+      {tone === "stopped" && <path d="M4.5 7 H9.5" stroke="var(--color-dim)" strokeWidth="1.5" strokeLinecap="round" />}
     </svg>
   );
 }
@@ -1049,7 +1049,7 @@ function HandleDot({ on = false }: { on?: boolean }) {
   return (
     <span className={cx(
       "pointer-events-none absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.5px] bg-panel",
-      on ? "border-accent" : "border-[#3a3a3f] group-hover:border-mut2 in-[.valid]:border-accent",
+      on ? "border-accent" : "border-line-strong group-hover:border-mut2 in-[.valid]:border-accent",
     )} />
   );
 }
@@ -1059,9 +1059,9 @@ function TaskNodeView({ data, selected }: NodeProps<TaskNode>) {
   return (
     <div className={cx(
       "group flex h-full w-full flex-col gap-[3px] rounded-lg border px-3 py-[7px]",
-      done ? "bg-[#060607]" : "bg-raised",
-      selected ? "border-accent shadow-[0_0_0_1px_#8b8ef5]"
-        : done ? "border-line" : data.tone === "waiting" || data.tone === "running" ? "border-[#2a2a2e]" : "border-ctl",
+      done ? "bg-panel" : "bg-raised",
+      selected ? "border-accent shadow-[0_0_0_1px_var(--color-accent)]"
+        : done ? "border-line" : data.tone === "waiting" || data.tone === "running" ? "border-ctl" : "border-ctl",
     )}>
       <Handle type="target" position={Position.Top} isConnectableStart={false} style={HANDLE_STYLE}><HandleDot /></Handle>
       <div className="flex h-[14px] items-center gap-[7px] leading-[14px]">
@@ -1090,7 +1090,7 @@ function ModeEdgeView({ id, target, sourceX, sourceY, targetX, targetY, data, se
   });
   const line = MODE_LINE[data.mode];
   const hot = !!selected || data.into;
-  const stroke = hot ? ACCENT : data.spent ? "#252528" : line.stroke;
+  const stroke = hot ? ACCENT : data.spent ? "var(--color-ctl)" : line.stroke;
   return (
     <>
       <BaseEdge id={id} path={path} interactionWidth={18}
@@ -1101,7 +1101,7 @@ function ModeEdgeView({ id, target, sourceX, sourceY, targetX, targetY, data, se
         <EdgeLabelRenderer>
           <button type="button" title="Change how it starts" onClick={() => pick(Number(target))}
             className={cx(
-              "nodrag nopan absolute left-0 top-0 flex h-5 items-center whitespace-nowrap rounded-full border bg-raised px-2 text-[11px] hover:border-[#3a3a3f]",
+              "nodrag nopan absolute left-0 top-0 flex h-5 items-center whitespace-nowrap rounded-full border bg-raised px-2 text-[11px] hover:border-line-strong",
               hot ? "border-[rgba(139,142,245,0.6)] text-fg2" : data.spent ? "border-ctl text-dim" : "border-ctl text-mut",
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}>
@@ -1191,9 +1191,9 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
               <Segmented value={task.agent} onChange={onAgent} options={LANES.map((a) => ({ value: a, label: AGENT_LABEL[a] }))} />
             </div>
             <span className="text-mut2">Folder</span>
-            <span title={project.folder ?? `No project folder: it runs in Organizer's workspaces/${task.key.toLowerCase()}`}
+            <span title={project.folder ?? `No project folder: it runs in PacedMind's workspaces/${task.key.toLowerCase()}`}
               className="truncate font-mono text-[11.5px] text-fg3">
-              {project.folder ? shortPath(project.folder) : "Organizer workspace"}
+              {project.folder ? shortPath(project.folder) : "PacedMind workspace"}
             </span>
             <span className="text-mut2">Branch</span>
             {mode === "session"
@@ -1220,7 +1220,7 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
                       className={cx("flex gap-2.5 rounded-[7px] border px-2.5 py-2 text-left",
                         on ? "border-[rgba(139,142,245,0.55)] bg-[rgba(139,142,245,0.06)]" : "border-line2 hover:bg-hover")}>
                       <span className={cx("mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px]",
-                        on ? "border-accent" : "border-[#3a3a3f]")}>
+                        on ? "border-accent" : "border-line-strong")}>
                         {on && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
                       </span>
                       <span className="flex min-w-0 flex-col gap-0.5">
@@ -1232,7 +1232,7 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
                       <input type="datetime-local" aria-label="Start at" value={draft}
                         onChange={(e) => setDraft(e.target.value)} onBlur={commitTime}
                         onKeyDown={(e) => { if (e.key === "Enter") commitTime(); }}
-                        className="h-[30px] rounded-md border border-line2 bg-[#030303] px-2.5 text-[12.5px] text-fg2 outline-none focus:border-ctl" />
+                        className="h-[30px] rounded-md border border-line2 bg-input px-2.5 text-[12.5px] text-fg2 outline-none focus:border-ctl" />
                     )}
                   </Fragment>
                 );

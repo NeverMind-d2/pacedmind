@@ -33,16 +33,16 @@ function sessionHead(s: Session, events: SessionEvent[]): { dot: string; text: s
   switch (s.status) {
     case "starting":
     case "running":
-      if (waitingInTerminal(s, events)) return { dot: "#8b8ef5", text: `${who} hasn't checked in yet. It may be waiting for you in its terminal.` };
-      return { dot: "#bdbdc3", text: `Running in ${who} since ${fmtTime(s.startedAt)}` };
+      if (waitingInTerminal(s, events)) return { dot: "var(--color-accent)", text: `${who} hasn't checked in yet. It may be waiting for you in its terminal.` };
+      return { dot: "var(--color-fg3)", text: `Running in ${who} since ${fmtTime(s.startedAt)}` };
     case "finished":
-      return { dot: "#8b8ef5", text: `${who} finished at ${fmtTime(s.finishedAt ?? s.startedAt)} · waiting for you` };
+      return { dot: "var(--color-accent)", text: `${who} finished at ${fmtTime(s.finishedAt ?? s.startedAt)} · waiting for you` };
     case "done":
-      return { dot: "#48484d", text: `${who} finished, marked done` };
+      return { dot: "var(--color-faint)", text: `${who} finished, marked done` };
     case "closed":
-      return { dot: "#5e5e64", text: "Closed before the agent finished" };
+      return { dot: "var(--color-dim)", text: "Closed before the agent finished" };
     default:
-      return { dot: "#d9776e", text: `Couldn't start: ${s.note ?? "unknown error"}` };
+      return { dot: "var(--color-danger)", text: `Couldn't start: ${s.note ?? "unknown error"}` };
   }
 }
 
@@ -130,8 +130,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
               {task.labels.map((l) => (
                 <button key={l} type="button" title="Remove label" onClick={() => save({ labels: task.labels.filter((x) => x !== l) })}
-                  className="inline-flex h-5 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] text-mut hover:border-[#3a3a3f]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#8e8e95]" />{l}
+                  className="inline-flex h-5 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] text-mut hover:border-line-strong">
+                  <span className="h-1.5 w-1.5 rounded-full bg-mut2" />{l}
                 </button>
               ))}
               <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="+ Add" aria-label="Add label"
@@ -186,7 +186,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 <Button variant="primary" onClick={() => run(() => markSessionDoneAction(session.id))}>Mark done</Button>
               )}
               {active && (
-                <Button onClick={() => confirm("Close this session in Organizer? The terminal stays open.") && run(() => closeSessionAction(session.id))}>
+                <Button onClick={() => confirm("Close this session in PacedMind? The terminal stays open.") && run(() => closeSessionAction(session.id))}>
                   Close session
                 </Button>
               )}

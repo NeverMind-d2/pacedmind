@@ -1,4 +1,4 @@
-// Draws the Organizer logo (the sidebar's indigo square with a dark "O") and writes the icon files:
+// Exports PacedMind's connected pd emblem, as solid as the wordmark's first p.
 //   desktop/icon.ico, desktop/icon.png  – app, window, tray and shortcut icon
 //   src/app/favicon.ico                 – browser tab
 // Run with: npm run icons
@@ -7,10 +7,31 @@ import path from "node:path";
 import zlib from "node:zlib";
 
 const root = path.resolve(import.meta.dirname, "..");
+const geometry = JSON.parse(fs.readFileSync(path.join(root, "src/lib/brand-geometry.json"), "utf8"));
 
-const TOP = [154, 157, 248];
-const BOTTOM = [122, 125, 236];
-const RING = [10, 10, 14];
+const BACKGROUND = [0, 0, 0];
+const INK = [255, 255, 255];
+
+// The first p and last d share their bowl. This emblem stays solid at every size.
+const STROKE = geometry.strokeWidth * 4;
+const OUTER = { x: 128, y: 128, r: 48 + STROKE / 2 };
+const INNER = { x: 128, y: 128, r: 48 - STROKE / 2 };
+const STEMS = [
+  { x: 80, top: 128, bottom: 256 },
+  { x: 176, top: 0, bottom: 128 },
+];
+
+function insideEmblem(x, y, size) {
+  x *= 256;
+  y *= 256;
+  // An optical weight adjustment keeps the entire mark solid at tray sizes.
+  const adjust = size <= 32 ? 1.5 : 0;
+  const outer = Math.hypot(x - OUTER.x, y - OUTER.y) <= OUTER.r + adjust;
+  const stem = STEMS.some(({ x: cx, top, bottom }) =>
+    Math.hypot(x - cx, y - Math.min(Math.max(y, top), bottom)) <= STROKE / 2 + adjust);
+  const inner = Math.hypot(x - INNER.x, y - INNER.y) < INNER.r - adjust;
+  return (outer || stem) && !inner;
+}
 
 function insideRoundedRect(x, y, lo, hi, r) {
   if (x < lo || x > hi || y < lo || y > hi) return false;
@@ -26,26 +47,21 @@ function render(size) {
   for (let py = 0; py < size; py++) {
     for (let px = 0; px < size; px++) {
       let inRect = 0;
-      let inRing = 0;
-      let ySum = 0;
+      let inMark = 0;
       for (let sy = 0; sy < ss; sy++) {
         for (let sx = 0; sx < ss; sx++) {
           const x = (px + (sx + 0.5) / ss) / size;
           const y = (py + (sy + 0.5) / ss) / size;
           if (!insideRoundedRect(x, y, 0.03, 0.97, 0.22)) continue;
           inRect++;
-          ySum += y;
-          const d = Math.hypot(x - 0.5, y - 0.5);
-          if (d <= 0.27 && d >= 0.155) inRing++;
+          if (insideEmblem(x, y, size)) inMark++;
         }
       }
       if (!inRect) continue;
-      const t = ySum / inRect;
-      const f = inRing / inRect;
+      const f = inMark / inRect;
       const o = (py * size + px) * 4;
       for (let i = 0; i < 3; i++) {
-        const bg = TOP[i] + (BOTTOM[i] - TOP[i]) * t;
-        out[o + i] = Math.round(bg * (1 - f) + RING[i] * f);
+        out[o + i] = Math.round(BACKGROUND[i] * (1 - f) + INK[i] * f);
       }
       out[o + 3] = Math.round((255 * inRect) / (ss * ss));
     }
@@ -138,3 +154,18 @@ const write = (rel, data) => {
 write("desktop/icon.ico", ico([16, 20, 24, 32, 40, 48, 64, 128, 256]));
 write("desktop/icon.png", png(256, render(256)));
 write("src/app/favicon.ico", ico([16, 32, 48]));
+write("public/brand/pacedmind-emblem.png", png(512, render(512)));
+
+// An editable vector export, using the same circles and stems as render().
+const emblem = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>PacedMind</title>
+  <defs><clipPath id="tile"><rect x="7.68" y="7.68" width="240.64" height="240.64" rx="56.32"/></clipPath>
+  <mask id="pd"><rect width="256" height="256" fill="black"/>
+    <circle cx="${OUTER.x}" cy="${OUTER.y}" r="${OUTER.r}" fill="white"/>
+${STEMS.map(({ x, top, bottom }) => `    <path d="M${x} ${top}V${bottom}" stroke="white" stroke-width="${STROKE}" stroke-linecap="round"/>`).join("\n")}
+    <circle cx="${INNER.x}" cy="${INNER.y}" r="${INNER.r}" fill="black"/>
+  </mask></defs>
+  <rect x="7.68" y="7.68" width="240.64" height="240.64" rx="56.32" fill="#000000"/>
+  <rect width="256" height="256" fill="#ffffff" mask="url(#pd)" clip-path="url(#tile)"/>
+</svg>\n`;
+write("public/brand/pacedmind-emblem.svg", emblem);

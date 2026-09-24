@@ -17,7 +17,7 @@ const HIGHLIGHT: Record<string, string> = {
   priority: "bg-accent/20 text-accent-fg",
   label: "bg-accent/20 text-accent-fg",
   project: "bg-accent/20 text-accent-fg",
-  duration: "bg-white/10 text-fg2",
+  duration: "bg-ink/10 text-fg2",
   repeat: "bg-accent/20 text-accent-fg",
 };
 
@@ -130,13 +130,13 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
       parsed.durationMin && `about ${parsed.durationMin} min`].filter(Boolean).join(", ")
     : [start ? format(parseLocal(start), "EEE d MMM, HH:mm") : "Starts now", `${duration} min`, weekly && "repeats weekly"].filter(Boolean).join(", ");
 
-  const chip = "flex h-7 items-center gap-1.5 rounded-md border border-ctl bg-[#0a0a0c] px-2 text-[12.5px] text-fg3 hover:bg-sel";
-  const found = "border-accent/45 bg-accent/10 text-[#e4e5fd]";
+  const chip = "flex h-7 items-center gap-1.5 rounded-md border border-ctl bg-hover px-2 text-[12.5px] text-fg3 hover:bg-sel";
+  const found = "border-accent/45 bg-accent/10 text-accent-fg";
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-black/60 pt-24" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+    <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-24" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div role="dialog" aria-label={mode === "task" ? "New task" : "New activity"}
-        className="flex h-fit w-[640px] flex-col rounded-xl border border-[#19191c] bg-raised shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
+        className="flex h-fit w-[640px] flex-col rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]"
         onKeyDown={(e) => {
           if (e.key === "Escape") close();
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
@@ -175,7 +175,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
             />
           </div>
           <textarea aria-label="Description" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} placeholder="Add description…"
-            className="w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-fg3 outline-none placeholder:text-[#6a6a70]" />
+            className="w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-fg3 outline-none placeholder:text-mut2" />
         </div>
 
         <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
@@ -223,7 +223,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           <span className="flex-1" />
           <Button variant="ghost" onClick={close}>Cancel</Button>
           <Button variant="primary" disabled={pending} onClick={submit} className="h-8 px-3">
-            {mode === "task" ? "Create task" : "Add to calendar"} <span className="rounded bg-white/15 px-1.5 font-mono text-[10.5px]">Ctrl ↵</span>
+            {mode === "task" ? "Create task" : "Add to calendar"} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px]">Ctrl ↵</span>
           </Button>
         </div>
       </div>

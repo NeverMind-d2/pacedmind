@@ -11,6 +11,7 @@ import { AreaMenu, InlineName, MoreButton, ProjectMenu, type OpenMenu } from "./
 import { Icon, ProgressRing, type IconName } from "./icons";
 import { Popover, PopoverItem, PopoverLabel, anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
+import { ThemeToggle } from "./theme";
 
 const NAV: { href: string; label: string; icon: IconName; count?: "inbox" | "today" | "sessions" }[] = [
   { href: "/inbox", label: "Inbox", icon: "inbox", count: "inbox" },
@@ -33,7 +34,7 @@ const editing = "flex h-[30px] items-center gap-2.5 rounded-md bg-hover px-2";
 
 function AreaDot({ color }: { color: string }) {
   return (
-    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-white/[0.06]">
+    <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-ink/[0.06]">
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
     </span>
   );
@@ -59,7 +60,7 @@ function MenuRow({ href, active, open, label, onMenu, onClose, children, trailin
   const onContextMenu = (e: MouseEvent) => { e.preventDefault(); onMenu({ x: e.clientX, y: e.clientY }); };
   return (
     <div className="group relative" onContextMenu={onContextMenu}>
-      <Link href={href} className={cx(item, active && "bg-[#0f0f11] text-strong", open && "bg-hover")}>
+      <Link href={href} className={cx(item, active && "bg-sel text-strong", open && "bg-hover")}>
         {children}
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0", open && "opacity-0")}>{trailing}</span>}
       </Link>
@@ -111,13 +112,11 @@ export function Sidebar({ areas, projects, counts, usage }: {
   return (
     <nav aria-label="Main" className="flex w-60 shrink-0 flex-col gap-[18px] overflow-y-auto px-2.5 py-3">
       <div className="flex items-center gap-1.5">
-        <div className="flex h-8 flex-1 items-center gap-2 px-1.5">
-          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-md bg-accent text-[12px] font-semibold text-bg">O</span>
-          <span className="text-[13.5px] font-semibold text-strong">Organizer</span>
-        </div>
         <button type="button" onClick={() => window.dispatchEvent(new CustomEvent("organizer:palette"))} aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)"
-          className="flex h-[30px] w-[30px] items-center justify-center rounded-md text-mut hover:bg-hover">
-          <Icon name="search" />
+          className="flex h-[30px] flex-1 items-center gap-2 rounded-md px-2 text-mut hover:bg-hover">
+          <Icon name="search" size={14} />
+          <span className="text-[12px]">Search</span>
+          <kbd className="ml-auto text-[10px] text-dim">Ctrl K</kbd>
         </button>
         <button type="button" onClick={openQuickAdd} aria-label="New task (C)" title="New task (C)"
           className="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line2 bg-raised text-fg2 hover:bg-hover">
@@ -127,7 +126,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
 
       <div className="flex flex-col gap-px">
         {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className={cx(item, active(n.href) && "bg-[#0f0f11] text-strong")}>
+          <Link key={n.href} href={n.href} className={cx(item, active(n.href) && "bg-sel text-strong")}>
             <Icon name={n.icon} />
             <span className="flex-1">{n.label}</span>
             {n.count && counts[n.count] > 0 && <span className="text-[11.5px] text-mut2">{counts[n.count]}</span>}
@@ -199,15 +198,12 @@ export function Sidebar({ areas, projects, counts, usage }: {
       </div>
 
       <div className="flex-1" />
-      <div className="flex flex-col gap-1.5">
-        <Link href="/settings" className={cx(item, "text-mut", active("/settings") && "bg-[#0f0f11] text-strong")}>
+      <div className="flex items-center gap-1.5">
+        <Link href="/settings" className={cx(item, "flex-1 text-mut", active("/settings") && "bg-sel text-strong")}>
           <Icon name="settings" />
           <span className="flex-1">Settings</span>
         </Link>
-        <div className="flex items-center gap-2 px-2 text-[11.5px] text-mut2">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#7fa894]" />
-          Saved on this device
-        </div>
+        <ThemeToggle />
       </div>
 
       {menuArea && menu && (

@@ -47,19 +47,19 @@ export function Dot({ color, size = 8 }: { color: string; size?: number }) {
 export function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-      className={cx("flex h-[18px] w-[30px] shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-accent-strong" : "justify-start bg-[#222225]")}>
-      <span className="h-3.5 w-3.5 rounded-full bg-strong" />
+      className={cx("flex h-[18px] w-[30px] shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "justify-end bg-accent-strong" : "justify-start bg-ctl")}>
+      <span className="h-3.5 w-3.5 rounded-full bg-white" />
     </button>
   );
 }
 
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: ReactNode }[]; onChange: (v: T) => void }) {
   return (
-    <div className="flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-[#030303] p-0.5">
+    <div className="flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
       {options.map((o) => (
         <button key={o.value} type="button" aria-pressed={o.value === value} onClick={() => onChange(o.value)}
           className={cx("flex h-[22px] items-center gap-1.5 rounded-[5px] px-2.5 text-[12px]",
-            o.value === value ? "bg-[#141416] text-strong" : "text-mut hover:text-fg2")}>
+            o.value === value ? "bg-sel text-strong" : "text-mut hover:text-fg2")}>
           {o.label}
         </button>
       ))}
@@ -101,7 +101,7 @@ export function Menu<V>({
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
       {open && (
         <div role="menu" style={{ width }}
-          className={cx("absolute top-full z-50 mt-1 max-h-80 overflow-auto rounded-lg border border-line2 bg-raised p-1 shadow-[0_12px_32px_rgba(0,0,0,0.6)]",
+          className={cx("absolute top-full z-50 mt-1 max-h-80 overflow-auto rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]",
             align === "right" ? "right-0" : "left-0")}>
           {items.map((it, i) => (
             <button key={i} type="button" role="menuitem" onClick={() => { onSelect(it.value); setOpen(false); }}
@@ -142,9 +142,9 @@ export function Toaster() {
     <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
       {items.map((t) => (
         <div key={t.id} role="status"
-          className={cx("pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-lg border bg-raised px-3.5 py-2.5 text-[12.5px] shadow-[0_12px_32px_rgba(0,0,0,0.6)]",
-            t.kind === "error" ? "border-[#3a2624] text-danger" : "border-line2 text-fg2")}>
-          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: t.kind === "error" ? "#d9776e" : "#8b8ef5" }} />
+          className={cx("pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-lg border bg-raised px-3.5 py-2.5 text-[12.5px] shadow-[var(--shadow-popover)]",
+            t.kind === "error" ? "border-danger-line text-danger" : "border-line2 text-fg2")}>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: t.kind === "error" ? "var(--color-danger)" : "var(--color-accent)" }} />
           {t.text}
         </div>
       ))}

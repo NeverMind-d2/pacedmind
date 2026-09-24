@@ -201,10 +201,10 @@ export function MonthView({
       );
     }
     const t = it.task;
-    const tone = it.kind === "done" ? "border-transparent text-[#6a6a70] hover:bg-hover"
+    const tone = it.kind === "done" ? "border-transparent text-mut2 hover:bg-hover"
       : it.kind === "plan" ? "border-line2 bg-hover text-fg3 hover:bg-sel"
-      : it.overdue ? "border-white/5 bg-white/5 text-danger hover:bg-white/[0.08]"
-      : dateOnly(t.dueDate ?? "") === today ? "border-white/5 bg-white/5 text-fg2 hover:bg-white/[0.08]"
+      : it.overdue ? "border-ink/5 bg-ink/5 text-danger hover:bg-ink/[0.08]"
+      : dateOnly(t.dueDate ?? "") === today ? "border-ink/5 bg-ink/5 text-fg2 hover:bg-ink/[0.08]"
       : "border-line2 bg-hover text-fg3 hover:bg-sel";
     return (
       <div key={`${it.kind}${t.id}`} title={`${t.key} ${t.title}`} {...pressable(() => toggle(t))} {...(it.kind === "done" ? {} : dragSource(t))}
@@ -233,7 +233,7 @@ export function MonthView({
                 {f.value === "due" && <Icon name="flag" size={12} strokeWidth={2.2} />}
                 {f.value === "event" && <span className="h-[7px] w-[7px] rounded-full bg-mut" />}
                 {f.value === "plan" && <Icon name="calendarCheck" size={12} strokeWidth={2.2} className="text-mut" />}
-                {f.value === "target" && <Diamond color="#a1a1a8" size={12} />}
+                {f.value === "target" && <Diamond color="var(--color-mut)" size={12} />}
               </span>
               {f.label}
             </button>
@@ -259,13 +259,13 @@ export function MonthView({
                 const col = i % 7;
                 return (
                   <div key={day} role="group" aria-label={format(parseLocal(day), "EEEE d MMMM")} {...dropTarget(day)}
-                    className={cx("relative flex min-h-0 min-w-0 flex-col gap-[3px] border-b border-[#0e0e10] p-1.5",
+                    className={cx("relative flex min-h-0 min-w-0 flex-col gap-[3px] border-b border-line p-1.5",
                       col < 6 && "border-r", expanded === day ? "z-20" : "overflow-hidden",
-                      isOver ? "bg-accent/[0.07] shadow-[inset_0_0_0_1px_rgba(139,142,245,0.55)]" : isToday ? "bg-[#09090a]" : out && "bg-[#030304]")}>
+                      isOver ? "bg-accent/[0.07] shadow-[inset_0_0_0_1px_rgba(139,142,245,0.55)]" : isToday ? "bg-raised" : out && "bg-input")}>
                     <div className="flex h-6 shrink-0 items-center gap-1 px-0.5">
                       <Link href={`/calendar/week?w=${day}`} title="Open this week"
                         className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1.5 text-[12px]",
-                          isToday ? "bg-accent font-semibold text-bg" : cx("font-medium hover:bg-hover", out ? "text-[#4d4d52]" : day < today ? "text-mut2" : "text-fg2"))}>
+                          isToday ? "bg-accent font-semibold text-bg" : cx("font-medium hover:bg-hover", out ? "text-faint" : day < today ? "text-mut2" : "text-fg2"))}>
                         {day.endsWith("-01") ? format(parseLocal(day), "d MMM") : Number(day.slice(8))}
                       </Link>
                       {isOver && dragKey && (
@@ -285,7 +285,7 @@ export function MonthView({
                     )}
                     {expanded === day && (
                       <div ref={popRef} role="dialog" aria-label={format(parseLocal(day), "EEEE d MMMM")}
-                        className={cx("absolute z-30 flex max-h-[320px] w-[calc(100%+2px)] min-w-[240px] flex-col gap-[3px] overflow-y-auto rounded-lg border border-line2 bg-raised p-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.6)]",
+                        className={cx("absolute z-30 flex max-h-[320px] w-[calc(100%+2px)] min-w-[240px] flex-col gap-[3px] overflow-y-auto rounded-lg border border-line2 bg-raised p-1.5 shadow-[var(--shadow-popover)]",
                           row >= weeks / 2 ? "-bottom-px" : "-top-px", col === 6 ? "-right-px" : "-left-px")}>
                         <div className="flex h-6 shrink-0 items-center px-1 text-[12px] font-medium text-fg2">
                           <span className="flex-1">{format(parseLocal(day), "EEE d MMM")}</span>
@@ -316,7 +316,7 @@ export function MonthView({
                 {noDate.map((t) => (
                   <div key={t.id} title={`${t.key} ${t.title}`} {...pressable(() => toggle(t))} {...dragSource(t)}
                     className={cx("flex h-[34px] shrink-0 cursor-grab items-center gap-2 rounded-md border px-2 active:cursor-grabbing",
-                      dragKey === t.key ? "border-dashed border-[#252528] text-dim" : "border-line text-fg2 hover:bg-hover")}>
+                      dragKey === t.key ? "border-dashed border-ctl text-dim" : "border-line text-fg2 hover:bg-hover")}>
                     <Grip />
                     <StatusIcon status={t.status} />
                     <span className="min-w-0 flex-1 truncate text-[12.5px]">{t.title}</span>
@@ -340,7 +340,7 @@ export function MonthView({
 function Grip() {
   return (
     <svg width="10" height="14" viewBox="0 0 10 14" aria-hidden="true" className="shrink-0">
-      {[3, 7, 11].flatMap((y) => [3, 7].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.1" fill="#4d4d52" />))}
+      {[3, 7, 11].flatMap((y) => [3, 7].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.1" fill="var(--color-faint)" />))}
     </svg>
   );
 }

@@ -85,9 +85,9 @@ export function TaskList({
                 const current = e.start <= now && now < e.end;
                 const area = ctx.areas.find((a) => a.id === e.areaId);
                 return (
-                  <div key={`${e.eventId}-${e.start}`} className={cx("flex h-[38px] items-center gap-3 border-b border-[#0b0b0d] pl-5 pr-4", past ? "text-mut2" : "text-fg")}>
+                  <div key={`${e.eventId}-${e.start}`} className={cx("flex h-[38px] items-center gap-3 border-b border-hover pl-5 pr-4", past ? "text-mut2" : "text-fg")}>
                     <span className={cx("w-[96px] shrink-0 font-mono text-[11.5px]", past ? "text-dim" : "text-mut")}>{fmtTime(e.start)}–{fmtTime(e.end)}</span>
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "#85858c" }} />
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "var(--color-mut2)" }} />
                     <span className="min-w-0 flex-1 truncate">{e.title}</span>
                     {current && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium text-accent-fg">Now</span>}
                     <span className="w-16 shrink-0 text-right text-[11.5px] text-mut2">{area?.name}</span>
@@ -123,7 +123,7 @@ function GroupHeader({ name, count, tone, collapsed, onToggle, onAdd }: {
   name: string; count: number; tone?: "danger"; collapsed?: boolean; onToggle?: () => void; onAdd?: () => void;
 }) {
   return (
-    <div className="flex h-[34px] items-center gap-2 border-b border-[#0e0e10] bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
+    <div className="flex h-[34px] items-center gap-2 border-b border-line bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
       <button type="button" onClick={onToggle} className="flex items-center gap-2" aria-expanded={!collapsed}>
         <Icon name={collapsed ? "chevronRight" : "chevronDown"} size={12} strokeWidth={2.4} className="text-mut2" />
         <span className={tone === "danger" ? "text-danger" : ""}>{name}</span>
