@@ -29,9 +29,35 @@ Open http://127.0.0.1:4320. The dev server uses its own database, `data/organize
 The MCP server runs at `http://127.0.0.1:4319/api/mcp` in the desktop app (`4320` for the dev server) and needs the access token shown in **Settings → MCP server**.
 
 - Sessions started from PacedMind (the **Start in Claude Code** button on a task) are connected automatically. PacedMind opens a Windows Terminal tab in the project's folder with Claude Code, the task and the MCP config.
-- To use PacedMind from sessions you start yourself, copy the `claude mcp add …` command or the Codex `config.toml` snippet from Settings.
+- To use PacedMind from Claude Code sessions you start yourself, run `npm run connect` once. It registers the MCP server as `organizer` for all your projects, using the app's token; `npm run connect -- --remove` undoes it. The `claude mcp add …` command in Settings does the same by hand.
+- For Codex, copy the `config.toml` snippet from Settings.
 
 Set each project's folder in **Settings → Projects and folders**. Flows only start sessions on their own when the project's **Flow** switch is on.
+
+The MCP tools cover the whole app:
+- areas and projects;
+- tasks, with descriptions, sub-tasks, priorities, due and planned dates, and labels;
+- calendar events, and moving plans between days;
+- the agenda with its auto-planned focus blocks, and work hours;
+- agent flows and sessions.
+
+Dates can be written as `YYYY-MM-DD` or as phrases like "friday 10:00". In sessions started from PacedMind, agents can read, add and update tasks without asking. Deleting things, moving calendar events and starting sessions ask in the agent's terminal first.
+
+### Skills
+
+`skills/` holds agent skills that teach Claude Code and Codex how to use these tools well:
+
+- `pacedmind`: the basics.
+- `pacedmind-planning`: plan a day or week, move things.
+- `pacedmind-projects`: break a project down, set up agent flows.
+- `pacedmind-review`: Inbox triage, the weekly review.
+- `pacedmind-agent-session`: the start_task / finish_task protocol for agents working on a task.
+
+```bash
+npm run skills
+```
+
+This installs them in `~/.claude/skills` and, when Codex is installed, in `~/.codex/skills`. Run it again after changing them. `npm run skills -- --remove` uninstalls them.
 
 ## Views
 

@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Desktop app build output (npm run desktop).
     "dist/**",
+    // Local database, session scripts and backups.
+    "data/**",
   ]),
 ]);
 

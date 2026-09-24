@@ -26,7 +26,19 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 ## Layout
 
 - `src/server/` is server-only: `db.ts` (schema and seed), `repo.ts` (all queries), `flow.ts` (which session starts after which), `launcher.ts` (opens a terminal with the agent), `auth.ts` (MCP token check), `views.ts` (view helpers).
-- `src/app/api/mcp/route.ts` is the MCP server (`mcp-handler` v2). Tools: list_tasks, get_task, get_next_task, start_task, finish_task, create_task, update_task. Every request needs `Authorization: Bearer <token>` (Settings → MCP server).
+- `src/app/api/mcp/route.ts` is the MCP server (`mcp-handler` v2). Every request needs `Authorization: Bearer <token>` (Settings → MCP server). The tools live in `src/server/mcp/`:
+  - `planning.ts`: overview, areas, projects, tasks;
+  - `calendar.ts`: events, agenda, reschedule_day, work hours;
+  - `agents.ts`: flows, sessions, and the start_task/finish_task protocol;
+  - `common.ts`: the `tool()` helper, lookups by id/name/key, date parsing (`when()`, which also reads phrases like "friday 10:00"), and output formatting;
+  - `index.ts`: the server instructions.
+  - Tools return plain text; throwing `fail()` returns an error the caller can fix.
+- When adding or renaming a tool, also update:
+  - `skills/pacedmind/references/tools.md`;
+  - `TOOL_GROUPS` in `views/settings.tsx`;
+  - `AGENT_ALLOWED_TOOLS` in `src/server/mcp/agent-tools.ts` (tools that launched sessions may use without asking; keep deletes and launches out).
+- `skills/` holds the agent skills for these tools; `npm run skills` installs them for Claude Code and Codex.
+- `src/server/ops.ts` has the operations shared by Server Actions and MCP tools (task done, close session, flow placement and tidy, loop checks). `src/server/folders.ts` validates project folders before they reach a terminal script.
 - `src/app/api/sessions/[id]/ended` is called by the Claude Code `SessionEnd` hook that the launcher installs per session.
 - `src/app/api/state` returns a version that changes on every database write, plus the sessions waiting for the user. Pages poll it to refresh (`live-refresh.tsx`); the desktop app polls it for notifications.
 - `src/proxy.ts` rejects requests whose Host isn't 127.0.0.1 or localhost (DNS rebinding).

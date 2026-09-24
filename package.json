@@ -7,6 +7,8 @@
     "build": "next build",
     "desktop": "node scripts/build-desktop.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "skills": "node scripts/install-skills.mjs",
+    "connect": "node scripts/connect-claude.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit"
   },

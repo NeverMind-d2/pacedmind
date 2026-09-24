@@ -250,6 +250,23 @@ export function createEvent(input: { title: string; areaId?: string | null; star
   return Number(r.lastInsertRowid);
 }
 
+export function getEvent(id: number): CalEvent | null {
+  const r = db().prepare("SELECT * FROM events WHERE id = ?").get(id) as Row | undefined;
+  return r ? toEvent(r) : null;
+}
+
+export function updateEvent(id: number, patch: Partial<Omit<CalEvent, "id">>) {
+  const cols: Record<string, string> = { title: "title", areaId: "area_id", start: "start_at", end: "end_at", recurrence: "recurrence" };
+  const sets: string[] = [];
+  const vals: (string | null)[] = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (!(k in cols) || v === undefined) continue;
+    sets.push(`${cols[k]} = ?`);
+    vals.push(typeof v === "string" && k === "title" ? v.trim() : (v as string | null));
+  }
+  if (sets.length) db().prepare(`UPDATE events SET ${sets.join(", ")} WHERE id = ?`).run(...vals, id);
+}
+
 export function deleteEvent(id: number) {
   db().prepare("DELETE FROM events WHERE id = ?").run(id);
 }

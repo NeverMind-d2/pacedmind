@@ -4,6 +4,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawn } from "node:child_process";
 import { dbPath } from "./db";
+import { folderProblem } from "./folders";
+import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { AGENT_LABEL, type AgentId, type Session, type Task } from "@/lib/types";
 
@@ -54,7 +56,8 @@ function agentCommand(agent: AgentId, dir: string, session: Session, task: Task,
   const s = repo.getSettings();
   if (agent === "claude") {
     const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, s.mcpToken);
-    const base = `${s.claudeCommand} --mcp-config "${mcpFile}" --settings "${settingsFile}" --allowedTools mcp__organizer`;
+    const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__organizer__${t}`).join(",");
+    const base = `${s.claudeCommand} --mcp-config "${mcpFile}" --settings "${settingsFile}" --allowedTools ${allowed}`;
     if (resume && session.cliSessionId) return `${base} --resume ${session.cliSessionId}`;
     const name = safe(`${task.key} ${task.title}`, 80);
     return `${base} --session-id ${session.cliSessionId} -n "${name}" "${kickoffPrompt(task, session.id)}"`;
@@ -116,7 +119,8 @@ function openCmdWindow(title: string, script: string, env: NodeJS.ProcessEnv) {
 function resolveFolder(task: Task): { folder?: string; error?: string } {
   const project = task.projectId ? repo.getProject(task.projectId) : null;
   if (project?.folder) {
-    if (!fs.existsSync(project.folder)) return { error: `Folder not found: ${project.folder}. Change it in Settings.` };
+    const problem = folderProblem(project.folder);
+    if (problem) return { error: `Can't use the folder ${project.folder}: ${problem} Change it in Settings.` };
     return { folder: project.folder };
   }
   const folder = path.join(dataDir(), "workspaces", task.key.toLowerCase());

@@ -8,14 +8,15 @@ import { Icon } from "../icons";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
 
-const TOOLS: [string, string][] = [
-  ["list_tasks", "Find tasks by project, status or area"],
-  ["get_task", "A task with its description, sub-tasks and connections"],
-  ["get_next_task", "The next task in a project that is ready"],
-  ["start_task", "Tell PacedMind a session picked up a task"],
-  ["finish_task", "Tell PacedMind the work is finished"],
-  ["create_task", "Add a task"],
-  ["update_task", "Change fields, add or tick off sub-tasks"],
+/** The MCP server's tools by purpose (src/server/mcp). */
+const TOOL_GROUPS: [string, string[]][] = [
+  ["Overview", ["get_overview", "get_settings", "update_settings"]],
+  ["Areas", ["list_areas", "create_area", "update_area", "delete_area"]],
+  ["Projects", ["list_projects", "get_project", "create_project", "update_project", "delete_project", "reorder_tasks"]],
+  ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "delete_task"]],
+  ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
+  ["Flows", ["get_flow", "connect_tasks", "disconnect_tasks", "add_to_flow", "remove_from_flow"]],
+  ["Sessions", ["list_sessions", "start_session", "close_session", "get_next_task", "start_task", "finish_task"]],
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -124,11 +125,12 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
               </Row>
             </Section>
 
-            <Section title="Tools agents can use">
-              {TOOLS.map(([name, desc]) => (
-                <div key={name} className="flex h-10 items-center gap-3 border-b border-line px-3.5 last:border-b-0">
-                  <span className="w-[130px] shrink-0 font-mono text-[12px] text-fg2">{name}</span>
-                  <span className="truncate text-[12.5px] text-mut">{desc}</span>
+            <Section title="Tools agents can use"
+              note={<>Sessions started from PacedMind may read, add and update tasks without asking; anything else asks in their terminal first. Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
+              {TOOL_GROUPS.map(([group, names]) => (
+                <div key={group} className="flex items-start gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
+                  <span className="w-[72px] shrink-0 text-[12.5px] text-mut2">{group}</span>
+                  <span className="min-w-0 flex-1 font-mono text-[11.5px] leading-relaxed text-fg3">{names.join(", ")}</span>
                 </div>
               ))}
             </Section>

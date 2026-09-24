@@ -3,9 +3,8 @@
 import { refresh } from "next/cache";
 import * as repo from "@/server/repo";
 import { resetDatabase } from "@/server/db";
-import { afterDone } from "@/server/flow";
 import { resumeSession, startSession, type LaunchResult } from "@/server/launcher";
-import { nowStamp } from "@/lib/dates";
+import { afterTaskDone, closeSession, removeFromFlow } from "@/server/ops";
 import type { AgentId, EdgeMode, Project, Settings } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -34,13 +33,7 @@ export async function updateTaskAction(id: number, patch: Parameters<typeof repo
   const before = repo.getTask(id);
   if (!before) return { ok: false, error: "Task not found" };
   repo.updateTask(id, patch);
-  if (patch.status === "done" && before.status !== "done") {
-    for (const s of repo.listSessions("task_id = ? AND status = 'finished'", id)) {
-      repo.updateSession(s.id, { status: "done" });
-      repo.addSessionEvent(s.id, "done", "You marked it done");
-    }
-    return done({ ok: true, message: launched(afterDone(id)) });
-  }
+  if (patch.status === "done" && before.status !== "done") return done({ ok: true, message: launched(afterTaskDone(id)) });
   return done();
 }
 
@@ -91,14 +84,7 @@ export async function resumeSessionAction(sessionId: string): Promise<Result> {
 
 /** Closes a session by hand, e.g. when its terminal was closed or it got stuck before the agent checked in. */
 export async function closeSessionAction(sessionId: string): Promise<Result> {
-  const s = repo.getSession(sessionId);
-  if (!s) return { ok: false, error: "Session not found" };
-  if (s.status === "starting" || s.status === "running") {
-    repo.updateSession(sessionId, { status: "closed", endedAt: nowStamp() });
-    repo.addSessionEvent(sessionId, "closed", "You closed the session");
-    const task = repo.getTask(s.taskId);
-    if (task?.status === "progress") repo.updateTask(task.id, { status: "todo" });
-  }
+  if (!closeSession(sessionId)) return { ok: false, error: "Session not found" };
   return done();
 }
 
@@ -116,8 +102,7 @@ export async function placeInFlowAction(taskId: number, x: number, y: number, ag
 }
 
 export async function removeFromFlowAction(taskId: number) {
-  for (const e of repo.listEdges().filter((e) => e.fromTaskId === taskId || e.toTaskId === taskId)) repo.deleteEdge(e.id);
-  repo.updateTask(taskId, { flowX: null, flowY: null });
+  removeFromFlow(taskId);
   return done();
 }
 
