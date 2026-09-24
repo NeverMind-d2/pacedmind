@@ -5,8 +5,8 @@
       "name": "organizer",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 4319,
-      "url": "http://127.0.0.1:4319"
+      "port": 4320,
+      "url": "http://127.0.0.1:4320"
     }
   ]
 }

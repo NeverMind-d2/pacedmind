@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local database and session scripts
 /data
+
+# desktop app build output
+/dist

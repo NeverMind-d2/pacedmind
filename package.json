@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 4319 -H 127.0.0.1",
+    "dev": "next dev -p 4320 -H 127.0.0.1",
     "build": "next build",
-    "start": "next start -p 4319 -H 127.0.0.1",
+    "desktop": "node scripts/build-desktop.mjs",
+    "icons": "node scripts/make-icons.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit"
   },
@@ -22,10 +23,12 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^26.6.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "^44.4.5",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",

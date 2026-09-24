@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
 import { QuickAdd } from "@/components/quick-add";
 import { CommandPalette } from "@/components/command-palette";
+import { LiveRefresh } from "@/components/live-refresh";
 import { Toaster } from "@/components/ui";
 import * as repo from "@/server/repo";
 import { usage } from "@/server/views";
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <QuickAdd areas={areas} projects={projects} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />
+      <LiveRefresh />
     </div>
   );
 }

@@ -13,8 +13,9 @@ export interface LaunchResult {
   error?: string;
 }
 
+/** Where agents reach this server. Next sets PORT to the port it listens on (the app uses 4319, `npm run dev` 4320). */
 export function baseUrl(): string {
-  return `http://127.0.0.1:${repo.getSettings().port}`;
+  return `http://127.0.0.1:${process.env.PORT || repo.getSettings().port}`;
 }
 
 export function mcpUrl(): string {
@@ -62,8 +63,22 @@ function agentCommand(agent: AgentId, dir: string, session: Session, task: Task,
   return `${s.codexCommand} "${kickoffPrompt(task, session.id)}"`;
 }
 
+/**
+ * The environment for agent terminals, without what only this server uses. Otherwise an agent's
+ * `npm install` would see NODE_ENV=production, its dev server would try Organizer's PORT, and
+ * Electron-based tools would run as plain Node (ELECTRON_RUN_AS_NODE, set by the desktop app).
+ */
+function agentEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (/^(PORT|HOSTNAME|NODE_ENV|ELECTRON_RUN_AS_NODE|NEXT_.*|__NEXT_.*|TURBOPACK.*|ORGANIZER_.*)$/i.test(key)) delete env[key];
+  }
+  return env;
+}
+
 function openTerminal(dir: string, folder: string, title: string, command: string): string | null {
   const token = repo.getSettings().mcpToken;
+  const env = agentEnv();
   try {
     if (process.platform === "win32") {
       const script = path.join(dir, "start.cmd");
@@ -73,20 +88,20 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
       );
       if (repo.getSettings().terminal === "wt") {
         const child = spawn("wt.exe", ["-w", "organizer", "new-tab", "--title", title, "-d", folder, "cmd", "/k", script], {
-          detached: true, stdio: "ignore",
+          detached: true, stdio: "ignore", env,
         });
-        child.on("error", () => openCmdWindow(title, script));
+        child.on("error", () => openCmdWindow(title, script, env));
         child.unref();
       } else {
-        openCmdWindow(title, script);
+        openCmdWindow(title, script, env);
       }
       return null;
     }
     const script = path.join(dir, "start.sh");
     fs.writeFileSync(script, ["#!/bin/sh", `cd "${folder}"`, `export ORGANIZER_TOKEN=${token}`, command, ""].join("\n"), { mode: 0o755 });
     const child = process.platform === "darwin"
-      ? spawn("open", ["-a", "Terminal", script], { detached: true, stdio: "ignore" })
-      : spawn("x-terminal-emulator", ["-e", script], { detached: true, stdio: "ignore" });
+      ? spawn("open", ["-a", "Terminal", script], { detached: true, stdio: "ignore", env })
+      : spawn("x-terminal-emulator", ["-e", script], { detached: true, stdio: "ignore", env });
     child.unref();
     return null;
   } catch (e) {
@@ -94,8 +109,8 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
   }
 }
 
-function openCmdWindow(title: string, script: string) {
-  spawn("cmd.exe", ["/c", `start "${title}" cmd /k "${script}"`], { detached: true, stdio: "ignore", windowsVerbatimArguments: true }).unref();
+function openCmdWindow(title: string, script: string, env: NodeJS.ProcessEnv) {
+  spawn("cmd.exe", ["/c", `start "${title}" cmd /k "${script}"`], { detached: true, stdio: "ignore", windowsVerbatimArguments: true, env }).unref();
 }
 
 function resolveFolder(task: Task): { folder?: string; error?: string } {

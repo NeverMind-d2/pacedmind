@@ -68,7 +68,8 @@ export function db(): DatabaseSync {
     conn.exec(SCHEMA);
     const seeded = conn.prepare("SELECT value FROM meta WHERE key = 'seeded'").get();
     if (!seeded) {
-      seed(conn, "sample");
+      // The desktop app starts empty (just the default areas); development starts with sample data.
+      seed(conn, process.env.ORGANIZER_SEED === "empty" ? "empty" : "sample");
       conn.prepare("INSERT INTO meta (key, value) VALUES ('seeded', ?)").run(toStamp(new Date()));
     }
     g.__organizerDb = conn;
