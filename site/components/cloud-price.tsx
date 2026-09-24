@@ -18,10 +18,10 @@ export function CloudPrice({ markets, fallback }: { markets: Market[]; fallback:
   return (
     <div>
       <p className="flex items-baseline gap-2 text-ink">
-        <span className="text-[40px] leading-none font-light tracking-[-0.02em] tabular-nums">{formatPrice(market)}</span>
-        <span className="text-[15px] text-mut">/ month</span>
+        <span className="text-[46px] leading-none font-light tabular-nums">{formatPrice(market)}</span>
+        <span className="text-[16px] text-mut">/ month</span>
       </p>
-      <label className="relative mt-3 inline-flex items-center gap-1.5 text-[14px] text-mut">
+      <label className="relative mt-3 inline-flex items-center gap-1.5 text-[15px] text-mut">
         Price for
         <select value={market.code} onChange={(e) => setChosen(e.target.value)}
           className="country-select cursor-pointer appearance-none rounded-none border-0 border-b border-line bg-transparent py-0.5 pr-5 text-text">

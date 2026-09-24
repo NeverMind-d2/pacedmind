@@ -16,7 +16,7 @@ export function Wordmark({ id, unfold = false, className }: { id: string; unfold
   const mask = `url(#${id})`;
   const last = letters.length - 1;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="PacedMind" fill="currentColor" className={className}>
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="PacedMind" fill="currentColor" overflow="visible" className={className}>
       <defs>
         <mask id={id} maskUnits="userSpaceOnUse" x="0" y="0" width={width} height={height} style={{ maskType: "alpha" }}>
           <image href="/brand/wordmark.png" width={width} height={height} />
