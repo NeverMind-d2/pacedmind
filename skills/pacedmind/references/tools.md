@@ -29,12 +29,13 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 - `list_tasks` (read): filters for project, area (`"inbox"` for no area), status list, priority list, label, search words, due_from/due_to, planned_from/planned_to, overdue, unscheduled, include_done and limit.
 - `get_task` (read): everything about one task, including numbered sub-tasks, flow connections and the latest session.
 - `create_task`: title, project or area, description, status, priority, due, planned, estimate_minutes, labels, subtasks and agent.
+  - `agent` is who does the task: `claude`, `codex`, or `human` when only the user can do it. Tasks that are the user's (`human`) stay out of flows, can't start agent sessions, and the auto-planner puts them in the user's time. Left out, the task gets the project's default agent.
 - `create_tasks`: up to 50 tasks at once in one project or area.
 - `update_task`:
   - title, description (replace or `append_to_description`), status, priority, due, planned and estimate;
   - labels (replace, add or remove);
   - move to a project or area;
-  - agent;
+  - agent (`human` also takes the task out of its flow);
   - sub-tasks: add, complete, reopen or remove, by number or title.
   - Setting status done may start sessions that wait for the task in a flow.
 - `bulk_update_tasks`: the same status, priority, due, planned, `shift_days`, project, area or label change for up to 100 tasks.
@@ -51,10 +52,10 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 
 ## Agent flows
 
-- `get_flow` (read): a project's agent lanes, what starts after what and how, whether the flow is on, and the next ready task.
+- `get_flow` (read): a project's flow sessions and which agent runs each, what starts after what and how, whether the flow is on, and the next ready task.
 - `connect_tasks`: from → to, with mode auto, manual, same_session or at_time (plus `at`). It adds the tasks to the flow if needed. Call it again to change the mode.
 - `disconnect_tasks`: removes a connection.
-- `add_to_flow`: puts a task at the end of an agent's lane.
+- `add_to_flow`: puts a task on the flow canvas, under the rest of the flow.
 - `remove_from_flow`: takes a task and its connections off the canvas. The task itself stays.
 
 ## Agent sessions

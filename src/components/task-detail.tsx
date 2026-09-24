@@ -8,8 +8,8 @@ import {
 } from "@/app/actions";
 import { dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, type AgentId, type Priority, type Session, type SessionEvent, type Status, type Task,
-  type TaskContext,
+  AGENT_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf, type AgentId, type Doer, type Priority, type Session, type SessionEvent,
+  type Status, type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
 import { Icon, PriorityIcon, StatusIcon } from "./icons";
@@ -56,7 +56,14 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const project = ctx.projects.find((p) => p.id === task.projectId) ?? null;
   const session = ctx.sessions[task.id] ?? null;
   const events = session ? ctx.sessionEvents[session.id] ?? [] : [];
-  const agent: AgentId = task.agent ?? project?.agent ?? "claude";
+  // Null when the task is yours: then it never starts an agent session.
+  const agent = agentOf(task, project?.agent);
+  const doers: { value: Doer | null; label: string; hint?: string }[] = [
+    { value: "human", label: DOER_LABEL.human, hint: "Stays out of flows" },
+    { value: "claude", label: DOER_LABEL.claude },
+    { value: "codex", label: DOER_LABEL.codex },
+    { value: null, label: project?.agent ? `Project default, ${AGENT_LABEL[project.agent]}` : "Not decided" },
+  ];
   const save = (patch: Parameters<typeof updateTaskAction>[1]) => run(() => updateTaskAction(task.id, patch));
   const due = dueInfo(task.dueDate);
   const subsDone = task.subtasks.filter((s) => s.done).length;
@@ -126,6 +133,17 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               items={[{ value: null as string | null, label: "No project" }, ...ctx.projects.map((p) => ({ value: p.id as string | null, label: p.name }))]}
               onSelect={(v) => save({ projectId: v, ...(v ? { areaId: ctx.projects.find((p) => p.id === v)?.areaId ?? task.areaId } : {}) })} />
           </Prop>
+          <Prop label="Done by">
+            <Menu width={240}
+              trigger={
+                <button type="button" className={cx(pv, !task.agent && "text-mut2")}>
+                  <Icon name={task.agent === "human" ? "user" : "terminal"} size={14} />
+                  {task.agent ? DOER_LABEL[task.agent] : project?.agent ? `${AGENT_LABEL[project.agent]}, the project's default` : "Not decided"}
+                </button>
+              }
+              items={doers.map((d) => ({ ...d, icon: <Icon name={d.value === "human" ? "user" : "terminal"} size={13} /> }))}
+              onSelect={(v) => save({ agent: v })} />
+          </Prop>
           <Prop label="Labels">
             <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
               {task.labels.map((l) => (
@@ -150,6 +168,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 <Icon name="terminal" size={14} />{AGENT_LABEL[session.agent]}
                 <span className="truncate text-mut2">{session.status === "finished" ? "finished" : session.status}</span>
               </a>
+            ) : !agent ? (
+              <span className="px-2 text-mut2">None, this one is yours</span>
             ) : (
               <div className="flex px-2">
                 <div className="flex h-[26px] overflow-hidden rounded-md border border-ctl">
@@ -179,7 +199,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               {!active && session.status !== "failed" && (
                 <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="terminal" size={13} />Resume in terminal</Button>
               )}
-              {(session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
+              {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
                 <Button onClick={() => run(() => startSessionAction(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
               )}
               {session.status === "finished" && (

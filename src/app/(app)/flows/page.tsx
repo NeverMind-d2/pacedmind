@@ -3,7 +3,7 @@ import { Icon } from "@/components/icons";
 import * as repo from "@/server/repo";
 import { projectColor } from "@/lib/colors";
 import { nowStamp, parseLocal } from "@/lib/dates";
-import type { Session } from "@/lib/types";
+import { agentOf, type Session } from "@/lib/types";
 
 const ms = (stamp: string) => parseLocal(stamp).getTime();
 
@@ -66,10 +66,15 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
     })
     .map((s) => s.taskId);
 
-  const flowTasks: FlowTask[] = tasks.map((t) => ({
-    id: t.id, key: t.key, title: t.title, status: t.status, agent: t.agent ?? project.agent ?? "claude",
-    flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt,
-  }));
+  // Tasks that are yours ("human") never run as agent sessions, so they aren't offered to the flow.
+  const flowTasks: FlowTask[] = tasks.flatMap((t) => {
+    const agent = agentOf(t, project.agent);
+    return agent ? [{
+      id: t.id, key: t.key, title: t.title, status: t.status, agent,
+      flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt,
+    }] : [];
+  });
+  const yours = tasks.filter((t) => t.agent === "human" && t.status !== "done" && t.status !== "canceled").length;
   const settings = repo.getSettings();
 
   return (
@@ -78,6 +83,7 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
       project={{ id: project.id, name: project.name, flowOn: project.flowOn, folder: project.folder, color: projectColor(project, areas) }}
       projects={projects.map((p) => ({ id: p.id, name: p.name, color: projectColor(p, areas), inFlow: inFlow(p.id) }))}
       tasks={flowTasks}
+      yours={yours}
       edges={edges}
       sessions={latest}
       continuedFrom={continuedFrom}

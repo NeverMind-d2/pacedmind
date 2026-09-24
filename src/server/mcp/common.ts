@@ -73,6 +73,9 @@ const STATUS_OF: Record<(typeof STATUS_NAMES)[number], Status> = {
 export const statusOf = (s: (typeof STATUS_NAMES)[number]): Status => STATUS_OF[s];
 
 export const agentSchema = z.enum(["claude", "codex"]).describe("claude (Claude Code) or codex (Codex)");
+/** Who does a task. "human" marks a task only the user can do: it stays out of flows and never starts an agent session. */
+export const doerSchema = z.enum(["claude", "codex", "human"])
+  .describe("Who does the task: claude (Claude Code), codex (Codex), or human (only the user can do it; it stays out of flows)");
 
 /* ---------- finding things ---------- */
 
@@ -227,7 +230,7 @@ export function describeTask(t: Task, n: Names = names()): string {
     `Status: ${STATUS_LABEL[t.status]} · Priority: ${PRIORITY_LABEL[t.priority]}`,
     `Where: ${project ? `project ${project.name} (${project.id}) in ${n.area(project.areaId)}` : t.areaId ? `area ${n.area(t.areaId)}` : "Inbox"}`,
     t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? fmtWhen(t.plannedDate) : "none"}` : null,
-    `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
+    `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent === "human" ? " · Done by: the user (human), not in flows" : t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
     project?.folder ? `Folder: ${project.folder}` : null,
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",

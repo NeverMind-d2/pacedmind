@@ -7,7 +7,7 @@ import { dbPath } from "./db";
 import { folderProblem } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
-import { AGENT_LABEL, type AgentId, type Session, type Task } from "@/lib/types";
+import { AGENT_LABEL, agentOf, type AgentId, type Session, type Task } from "@/lib/types";
 
 export interface LaunchResult {
   ok: boolean;
@@ -135,7 +135,8 @@ export function startSession(taskId: number, agentOverride?: AgentId): LaunchRes
   const active = repo.listSessions("task_id = ? AND status IN ('starting', 'running')", task.id);
   if (active.length) return { ok: false, error: `${task.key} already has a running session` };
   const project = task.projectId ? repo.getProject(task.projectId) : null;
-  const agent: AgentId = agentOverride ?? task.agent ?? project?.agent ?? "claude";
+  if (task.agent === "human") return { ok: false, error: `${task.key} is marked as yours. Hand it to Claude Code or Codex before starting a session.` };
+  const agent: AgentId = agentOverride ?? agentOf(task, project?.agent) ?? "claude";
   const { folder, error } = resolveFolder(task);
   if (!folder) return { ok: false, error };
 

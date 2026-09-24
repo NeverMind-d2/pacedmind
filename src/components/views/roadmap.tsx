@@ -169,7 +169,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
             );
           })}
           {nowPos >= 0 && nowPos <= days && (
-            <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: LEFT + X(nowPos), background: "rgb(139 142 245 / 0.7)" }} />
+            <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: LEFT + X(nowPos), background: "color-mix(in srgb, var(--color-accent) 70%, transparent)" }} />
           )}
           {deps.length > 0 && (
             <svg width={gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: LEFT }} aria-hidden="true">
@@ -226,7 +226,8 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
           const t = it.task;
           const done = t.status === "done";
           const waiting = it.state.tone === "waiting";
-          const after = it.after.length ? `After ${it.after.join(", ")}` : it.startOfFlow ? "Start of flow" : "";
+          // Your own tasks are part of the plan but never of the flow.
+          const after = t.agent === "human" ? "Done by you" : it.after.length ? `After ${it.after.join(", ")}` : it.startOfFlow ? "Start of flow" : "";
           return (
             <div key={t.id} onClick={() => onSelect(t.key)}
               className={cx("group flex h-[38px] cursor-pointer items-center gap-2.5 border-b border-hover pl-5 pr-3", t.key === sel ? "bg-sel" : "hover:bg-hover")}>

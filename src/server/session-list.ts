@@ -3,7 +3,7 @@ import { db } from "./db";
 import * as repo from "./repo";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
-import type { Session, Status, Task } from "@/lib/types";
+import { agentOf, type Session, type Status, type Task } from "@/lib/types";
 
 const EARLIER_LIMIT = 30;
 const active = (s: Session) => s.status === "starting" || s.status === "running";
@@ -109,12 +109,12 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
   const startable = [...tasks.values()]
     .filter((t) => rank[t.status] !== undefined && !busy.has(t.id))
     .map((t) => ({ t, p: t.projectId ? projects.get(t.projectId) : undefined }))
-    .filter(({ t, p }) => t.agent || p?.agent)
+    .filter(({ t, p }) => t.agent !== "human" && (t.agent || p?.agent))
     .sort((a, b) =>
       rank[a.t.status]! - rank[b.t.status]! || (a.t.priority || 5) - (b.t.priority || 5) ||
       (a.p?.sort ?? 999) - (b.p?.sort ?? 999) || a.t.sortOrder - b.t.sortOrder)
     .slice(0, 20)
-    .map(({ t, p }) => ({ id: t.id, key: t.key, title: t.title, agent: t.agent ?? p?.agent ?? "claude" }));
+    .map(({ t, p }) => ({ id: t.id, key: t.key, title: t.title, agent: agentOf(t, p?.agent) ?? "claude" }));
 
   return { groups, initialId, startable };
 }

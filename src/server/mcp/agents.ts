@@ -7,7 +7,7 @@ import { startSession } from "../launcher";
 import { closeSession, edgeWouldLoop, flowNeedsTidy, placeInFlow, removeFromFlow, tidyFlow } from "../ops";
 import * as repo from "../repo";
 import { nowStamp } from "@/lib/dates";
-import { AGENT_LABEL, STATUS_LABEL, type AgentId, type EdgeMode, type Session, type Task } from "@/lib/types";
+import { AGENT_LABEL, STATUS_LABEL, agentOf, type AgentId, type EdgeMode, type Session, type Task } from "@/lib/types";
 import {
   agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, names, projectRef, taskRef, tool, when,
 } from "./common";
@@ -33,7 +33,11 @@ function sessionLine(s: Session): string {
 }
 
 /** The agent a task runs with: its own, else its project's, else Claude Code. */
-const agentFor = (t: Task): AgentId => t.agent ?? (t.projectId ? repo.getProject(t.projectId)?.agent : null) ?? "claude";
+/** The agent that runs a task: its own, else the project's, else Claude Code. None for a task that is the user's own. */
+const agentFor = (t: Task): AgentId | null => agentOf(t, t.projectId ? repo.getProject(t.projectId)?.agent : null);
+const notYours = (t: Task) => {
+  if (t.agent === "human") fail(`${t.key} is marked as the user's own task (human), so it stays out of flows and agent sessions. Ask the user before changing that with update_task.`);
+};
 
 function activeSession(taskId: number, sessionId?: string | null) {
   if (sessionId) {
@@ -49,7 +53,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "get_flow", {
     title: "Get project flow",
     description:
-      "A project's flow: which tasks agent sessions work on, in which agent lane, and which task starts after which (and how). Also whether the flow may start sessions on its own.",
+      "A project's flow: which tasks agent sessions work on, which agent runs each, and which task starts after which (and how). Also whether the flow may start sessions on its own.",
     input: z.object({ project: projectRef }),
     kind: "read",
   }, ({ project }) => {
@@ -66,10 +70,10 @@ export function registerAgentTools(server: McpServer) {
       next.length ? `Then: ${next.map((x) => x.name).join(", ")}.` : null,
     ];
     for (const agent of ["claude", "codex"] as AgentId[]) {
-      const lane = inFlow.filter((t) => agentFor(t) === agent);
-      if (!lane.length) continue;
-      lines.push(`\n${AGENT_LABEL[agent]} lane:`);
-      for (const t of lane) {
+      const runs = inFlow.filter((t) => agentFor(t) === agent);
+      if (!runs.length) continue;
+      lines.push(`\nRun by ${AGENT_LABEL[agent]}:`);
+      for (const t of runs) {
         const inc = edges.filter((e) => e.toTaskId === t.id);
         const how = inc.length
           ? `after ${inc.map((e) => `${keyOf.get(e.fromTaskId) ?? `#${e.fromTaskId}`} (${modeName(e.mode)}${e.mode === "time" && e.atTime ? ` ${e.atTime.replace("T", " ")}` : ""})`).join(", ")}`
@@ -102,14 +106,17 @@ export function registerAgentTools(server: McpServer) {
     if (from.id === to.id) fail("A task can't come after itself.");
     if (!from.projectId || from.projectId !== to.projectId) fail("Both tasks have to be in the same project; flows are per project.");
     if (edgeWouldLoop(from.id, to.id)) fail(`${to.key} already leads to ${from.key}, so this would make a loop.`);
+    notYours(from);
+    notYours(to);
     const mode: EdgeMode = MODE_OF[args.mode ?? "auto"];
     const at = mode === "time" ? (args.at ? when(args.at, "required") : fail("at_time needs at, e.g. \"2026-09-26T09:00\".")) : null;
     tx(() => {
-      const fromAgent = agentFor(from);
+      const fromAgent = agentFor(from) ?? "claude";
       if (from.flowX === null || from.flowY === null) placeInFlow(from.id, fromAgent);
       // "Same session" continues in the previous task's terminal, so it runs with that task's agent.
-      const toAgent = mode === "session" ? fromAgent : agentFor(to);
-      if (to.flowX === null || to.flowY === null || (mode === "session" && agentFor(to) !== fromAgent)) placeInFlow(to.id, toAgent, from.id);
+      const toAgent = mode === "session" ? fromAgent : agentFor(to) ?? "claude";
+      if (to.flowX === null || to.flowY === null) placeInFlow(to.id, toAgent, from.id);
+      else if (toAgent !== agentFor(to)) repo.updateTask(to.id, { agent: toAgent });
       repo.createEdge(from.id, to.id, mode);
       repo.setIncomingMode(to.id, mode, at);
     });
@@ -138,15 +145,16 @@ export function registerAgentTools(server: McpServer) {
 
   tool(server, "add_to_flow", {
     title: "Add task to flow",
-    description: "Put a project task on the flow canvas, at the end of an agent's lane, so an agent session can work on it.",
+    description: "Put a project task on the flow canvas, under the rest of the flow, so an agent session can work on it.",
     input: z.object({ task: taskRef, agent: agentSchema.optional().describe("Defaults to the task's or project's agent") }),
     kind: "write",
   }, ({ task, agent }) => {
     const t = findTask(task);
     if (!t.projectId) fail(`${t.key} isn't in a project. Flows belong to projects; move it into one first.`);
-    const a = agent ?? agentFor(t);
+    notYours(t);
+    const a = agent ?? agentFor(t) ?? "claude";
     placeInFlow(t.id, a);
-    return `${t.key} is in the ${AGENT_LABEL[a]} lane of ${names().project(t.projectId)}'s flow.`;
+    return `${t.key} is in ${names().project(t.projectId)}'s flow, run by ${AGENT_LABEL[a]}.`;
   });
 
   tool(server, "remove_from_flow", {
@@ -232,8 +240,9 @@ export function registerAgentTools(server: McpServer) {
     const t = findTask(task);
     let s = activeSession(t.id, session);
     if (!s) {
+      notYours(t);
       const project = t.projectId ? repo.getProject(t.projectId) : null;
-      s = repo.createSession({ taskId: t.id, agent: agent ?? t.agent ?? "claude", folder: project?.folder ?? null, status: "running" });
+      s = repo.createSession({ taskId: t.id, agent: agent ?? agentFor(t) ?? "claude", folder: project?.folder ?? null, status: "running" });
       repo.addSessionEvent(s.id, "started", "Started outside PacedMind");
     }
     repo.updateSession(s.id, { status: "running" });

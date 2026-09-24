@@ -4,7 +4,7 @@ import { addDays } from "date-fns";
 import { db, tx } from "./db";
 import { nowStamp, parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AgentId, Area, CalEvent, EdgeMode, EventOccurrence, FlowEdge, Priority, Project, Session, SessionEvent,
+  AgentId, Area, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Priority, Project, Session, SessionEvent,
   SessionStatus, Settings, Status, Subtask, Task,
 } from "@/lib/types";
 
@@ -135,7 +135,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: JSON.parse(String(r.labels || "[]")),
-  reminder: s(r.reminder), agent: s(r.agent) as AgentId | null, sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
+  reminder: s(r.reminder), agent: s(r.agent) as Doer | null, sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
 });
 
@@ -172,7 +172,7 @@ export interface TaskInput {
   plannedDate?: string | null;
   estimateMin?: number;
   labels?: string[];
-  agent?: AgentId | null;
+  agent?: Doer | null;
 }
 
 export function createTask(input: TaskInput): Task {

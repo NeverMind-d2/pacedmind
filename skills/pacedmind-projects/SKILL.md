@@ -41,7 +41,7 @@ A task description an agent can act on:
 
 A flow runs a project's tasks as agent sessions, one after another. Use it for work an agent can do on its own, such as code, writing or research. Don't use it for the user's own tasks.
 
-1. Mark the agent work: set `agent` to claude or codex with `update_task` or `create_tasks`.
+1. Mark who does what: set `agent` to claude or codex for agent work, and to `human` for tasks only the user can do (calls, purchases, decisions, reviews). Human tasks stay in the project and on its roadmap but never in the flow. Use `update_task` or `create_tasks`.
 2. Connect the tasks in order with `connect_tasks` from → to. Choose the mode by how much the user wants to check in between:
    - **auto**: the next task starts as soon as the previous agent reports finished. Fastest, with the least oversight.
    - **manual**: the next task starts only after the user reviews the previous one and marks it done. The safe choice for anything risky.

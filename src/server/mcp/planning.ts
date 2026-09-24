@@ -4,14 +4,14 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { tx } from "../db";
 import { folderProblem } from "../folders";
 import { nextReadyTask } from "../flow";
-import { afterTaskDone, startsAfterWouldLoop } from "../ops";
+import { afterTaskDone, keepYoursOutOfFlow, startsAfterWouldLoop } from "../ops";
 import * as repo from "../repo";
 import { usage } from "../views";
 import { nextColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, timeOf, toDateStr } from "@/lib/dates";
-import { AGENT_LABEL, STATUS_LABEL, type AgentId, type Status, type Task } from "@/lib/types";
+import { AGENT_LABEL, STATUS_LABEL, type Doer, type Status, type Task } from "@/lib/types";
 import {
-  PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, eventLine, fail,
+  PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail,
   findArea, findAreaOrInbox, findProject, findTask, fmtWhen, isOpen, names, prioritySchema, priorityOf, projectLine,
   plural, projectRef, statusOf, statusSchema, taskLine, taskRef, todayLine, tool, when,
   type PRIORITY_NAMES, type STATUS_NAMES,
@@ -35,14 +35,15 @@ const newTaskFields = {
   estimate_minutes: z.number().int().min(5).max(24 * 60).optional().describe("How long it takes; the auto-planner uses it. Default 60"),
   labels: z.array(z.string()).optional(),
   subtasks: z.array(z.string()).optional().describe("Checklist items"),
-  agent: agentSchema.optional().describe("Set when an AI agent should do the task instead of the user"),
+  agent: doerSchema.optional()
+    .describe("claude or codex when an AI agent should do the task; human when only the user can (it then stays out of flows). Leave it out for the project's default"),
 };
 
 const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim().replace(/^#/, "").toLowerCase()).filter(Boolean))];
 
 type NewTask = {
   title: string; description?: string; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
-  due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: AgentId;
+  due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: Doer;
 };
 
 /** Creates a task. The caller runs afterTaskDone for tasks created as done, outside any transaction. */
@@ -469,7 +470,7 @@ export function registerPlanningTools(server: McpServer) {
       remove_labels: z.array(z.string()).optional(),
       project: projectRef.nullable().optional().describe("Move to this project (and its area), or null to take it out of its project"),
       area: areaRef.nullable().optional().describe('Move to this area without a project, or null / "inbox" for the Inbox'),
-      agent: agentSchema.nullable().optional(),
+      agent: doerSchema.nullable().optional().describe("human takes the task out of its flow for good"),
       add_subtasks: z.array(z.string()).optional(),
       complete_subtasks: z.array(z.string()).optional().describe("Sub-task numbers or titles to tick off"),
       reopen_subtasks: z.array(z.string()).optional(),
@@ -514,10 +515,11 @@ export function registerPlanningTools(server: McpServer) {
       for (const s of remove) repo.deleteSubtask(s.id);
       for (const s of args.add_subtasks ?? []) if (s.trim()) repo.addSubtask(t.id, s);
     });
+    const leftFlow = args.agent === "human" && keepYoursOutOfFlow(t.id) ? [`${t.key} is the user's now, so it left the flow.`] : [];
     const started = status === "done" && t.status !== "done" ? launched(afterTaskDone(t.id)) : [];
     const after = repo.getTask(t.id)!;
     const subs = after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "";
-    return [`Updated ${taskLine(after, names())}${subs}.`, ...started].join("\n");
+    return [`Updated ${taskLine(after, names())}${subs}.`, ...leftFlow, ...started].join("\n");
   });
 
   tool(server, "bulk_update_tasks", {

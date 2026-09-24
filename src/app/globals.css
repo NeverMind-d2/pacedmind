@@ -17,9 +17,9 @@
   --color-mut2: #85858c;
   --color-dim: #5e5e64;
   --color-faint: #48484d;
-  --color-accent: #8b8ef5;
-  --color-accent-strong: #5b5fd6;
-  --color-accent-fg: #b3b5fa;
+  --color-accent: #95abd9;
+  --color-accent-strong: #2e4b91;
+  --color-accent-fg: #bbcbeb;
   --color-danger: #d9776e;
   --color-input: #030303;
   --color-line-strong: #3a3a3f;
@@ -58,9 +58,9 @@ html[data-theme="light"] {
   --color-mut2: #6d6d7a;
   --color-dim: #777785;
   --color-faint: #90909c;
-  --color-accent: #5b5fd6;
-  --color-accent-strong: #5356c7;
-  --color-accent-fg: #4548b3;
+  --color-accent: #172f6f;
+  --color-accent-strong: #172f6f;
+  --color-accent-fg: #172f6f;
   --color-danger: #b5443b;
   --color-input: #ffffff;
   --color-line-strong: #ababba;
@@ -91,7 +91,7 @@ html[data-theme="light"] {
   }
 
   ::selection {
-    background: rgb(139 142 245 / 0.35);
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
   }
 
   * {
@@ -214,6 +214,6 @@ html[data-theme="light"] {
   --xy-controls-button-background-color-hover: var(--color-sel);
   --xy-controls-button-color: var(--color-mut);
   --xy-controls-button-border-color: var(--color-line2);
-  --xy-selection-background-color: rgb(139 142 245 / 0.08);
-  --xy-selection-border: 1px dashed rgb(139 142 245 / 0.6);
+  --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  --xy-selection-border: 1px dashed color-mix(in srgb, var(--color-accent) 60%, transparent);
 }

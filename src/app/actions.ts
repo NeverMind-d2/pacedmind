@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import * as repo from "@/server/repo";
 import { resetDatabase } from "@/server/db";
 import { resumeSession, startSession, type LaunchResult } from "@/server/launcher";
-import { afterTaskDone, closeSession, removeFromFlow } from "@/server/ops";
+import { afterTaskDone, closeSession, keepYoursOutOfFlow, removeFromFlow } from "@/server/ops";
 import type { AgentId, EdgeMode, Project, Settings } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -33,6 +33,7 @@ export async function updateTaskAction(id: number, patch: Parameters<typeof repo
   const before = repo.getTask(id);
   if (!before) return { ok: false, error: "Task not found" };
   repo.updateTask(id, patch);
+  if (patch.agent === "human" && keepYoursOutOfFlow(id)) return done({ ok: true, message: `${before.key} is yours now, so it left the flow` });
   if (patch.status === "done" && before.status !== "done") return done({ ok: true, message: launched(afterTaskDone(id)) });
   return done();
 }

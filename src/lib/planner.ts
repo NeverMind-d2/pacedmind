@@ -109,7 +109,7 @@ export function planTimeBlocks(input: {
     return `${overdue}|${due}|${t.plannedDate ?? "9999-12-31"}|${pr}|${String(t.id).padStart(6, "0")}`;
   };
   const mine = tasks
-    .filter((t) => (t.status === "todo" || t.status === "progress") && !t.agent)
+    .filter((t) => (t.status === "todo" || t.status === "progress") && (!t.agent || t.agent === "human"))
     .filter((t) => t.dueDate || t.plannedDate || t.priority === 1 || t.priority === 2)
     .sort((a, b) => rank(a).localeCompare(rank(b)));
 

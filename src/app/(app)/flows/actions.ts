@@ -11,7 +11,7 @@ const AGENTS = new Set<AgentId>(["claude", "codex"]);
 const MODES = new Set<EdgeMode>(["auto", "manual", "session", "time"]);
 const finite = (...ns: number[]) => ns.every((n) => Number.isFinite(n));
 
-/** Puts a task on the canvas in an agent's lane and, optionally, runs it after another task. */
+/** Puts a task on the canvas, run by `agent`, and optionally runs it after another task. */
 export async function addToFlowAction(
   taskId: number, x: number, y: number, agent: AgentId, afterTaskId: number | null = null,
 ): Promise<Result> {
@@ -35,21 +35,21 @@ export async function tidyFlowAction(positions: { taskId: number; x: number; y: 
   return { ok: true };
 }
 
-/**
- * Sets how a task's session starts. "Same session" only works with the agent of the task it continues,
- * so it can also move the task into that agent's lane.
- */
-export async function setStartAction(
-  taskId: number, mode: EdgeMode, atTime: string | null, move: { x: number; y: number; agent: AgentId } | null = null,
-): Promise<Result> {
+/** Hands tasks to an agent. The canvas sends a task together with the tasks that share its terminal session. */
+export async function setAgentsAction(taskIds: number[], agent: AgentId): Promise<Result> {
+  if (!AGENTS.has(agent)) return { ok: false, error: "Unknown agent" };
+  tx(() => {
+    for (const id of taskIds) if (Number.isFinite(id) && repo.getTask(id)) repo.updateTask(id, { agent });
+  });
+  refresh();
+  return { ok: true };
+}
+
+/** Sets how a task's session starts. */
+export async function setStartAction(taskId: number, mode: EdgeMode, atTime: string | null): Promise<Result> {
   if (!MODES.has(mode)) return { ok: false, error: "Unknown start mode" };
   if (mode === "time" && !(atTime && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(atTime))) return { ok: false, error: "Pick a day and time" };
-  tx(() => {
-    repo.setIncomingMode(taskId, mode, mode === "time" ? atTime : null);
-    if (move && finite(move.x, move.y) && AGENTS.has(move.agent)) {
-      repo.updateTask(taskId, { flowX: move.x, flowY: move.y, agent: move.agent });
-    }
-  });
+  repo.setIncomingMode(taskId, mode, mode === "time" ? atTime : null);
   refresh();
   return { ok: true };
 }

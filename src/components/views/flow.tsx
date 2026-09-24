@@ -17,10 +17,11 @@ import { format } from "date-fns";
 import {
   connectAction, deleteEdgeAction, placeInFlowAction, removeFromFlowAction, setFlowOnAction, startSessionAction,
 } from "@/app/actions";
-import { addToFlowAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
+import { addToFlowAction, setAgentsAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
 import { Icon, StatusIcon } from "@/components/icons";
 import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast } from "@/components/ui";
 import { parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
+import { GRID, NODE_H, NODE_W, freeSpot, layoutFlow, snap, type Point } from "@/lib/flow-layout";
 import { AGENT_LABEL, EDGE_LABEL, type AgentId, type EdgeMode, type FlowEdge, type Session, type Status } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
@@ -30,7 +31,7 @@ export interface FlowTask {
   key: string;
   title: string;
   status: Status;
-  /** Who runs it: the task's agent, else the project's, else Claude Code. It is also the node's lane. */
+  /** Who runs it: the task's agent, else the project's, else Claude Code. */
   agent: AgentId;
   flowX: number | null;
   flowY: number | null;
@@ -42,6 +43,8 @@ export interface FlowViewProps {
   project: { id: string; name: string; flowOn: boolean; folder: string | null; color: string };
   projects: { id: string; name: string; color: string; inFlow: number }[];
   tasks: FlowTask[];
+  /** Open tasks in the project that are yours: they stay out of the flow. */
+  yours: number;
   /** Connections between the project's tasks. */
   edges: FlowEdge[];
   /** Latest session per task id. */
@@ -57,21 +60,14 @@ export interface FlowViewProps {
 
 /* ---------- canvas geometry and styles ---------- */
 
-const NODE_W = 200;
-const NODE_H = 68;
-const LANE_W = 300;
-/** Space between a lane's side and the nodes centred in it. */
-const LANE_PAD = (LANE_W - NODE_W) / 2;
+// Node size and the grid come from src/lib/flow-layout.ts, which the server's placement and tidy use too.
 const HANDLE = 16;
-const HEADER_H = 36;
-const GAP = 64;
-const LANES: AgentId[] = ["claude", "codex"];
+const AGENTS: AgentId[] = ["claude", "codex"];
 const ACCENT = "var(--color-accent)";
+const ACCENT_LINE = "color-mix(in srgb, var(--color-accent) 70%, transparent)";
 const DND_TYPE = "application/x-organizer-task";
-
-const laneX = (agent: AgentId) => Math.max(0, LANES.indexOf(agent)) * LANE_W;
-/** The lane under a flow x coordinate, such as a node's centre. */
-const laneAt = (x: number) => Math.min(LANES.length - 1, Math.max(0, Math.floor((x + LANE_PAD) / LANE_W)));
+const SNAP_GRID: [number, number] = [GRID, GRID];
+const otherAgent = (a: AgentId): AgentId => (a === "claude" ? "codex" : "claude");
 
 /** Handle bounds given up front, so edges don't wait for the DOM to be measured. */
 const HANDLES: NodeHandle[] = [
@@ -80,8 +76,8 @@ const HANDLES: NodeHandle[] = [
 ];
 const HANDLE_STYLE = { width: HANDLE, height: HANDLE, minWidth: 0, minHeight: 0, background: "transparent", border: "none" };
 const DELETE_KEYS = ["Delete", "Backspace"];
-const CONNECTION_LINE = { stroke: "rgba(139,142,245,0.7)", strokeWidth: 1.5, strokeDasharray: "5 4" };
-const DEFAULT_VIEWPORT = { x: LANE_PAD + 16, y: HEADER_H + 24, zoom: 1 };
+const CONNECTION_LINE = { stroke: ACCENT_LINE, strokeWidth: 1.5, strokeDasharray: "5 4" };
+const DEFAULT_VIEWPORT = { x: 40, y: 40, zoom: 1 };
 /** React Flow asks to keep its attribution unless you subscribe to Pro; this lets it blend into the canvas. */
 const CANVAS_STYLE = { "--xy-attribution-background-color": "transparent" } as CSSProperties;
 
@@ -114,9 +110,7 @@ type TaskNodeData = {
   tone: Tone;
   state: string;
   note: string;
-  /** The note announces a lane change while the node is dragged. */
-  hint: boolean;
-  color: string;
+  agent: AgentId;
   /** Lights the outgoing dot: a task dropped from the palette will run after this one. */
   linkOut: boolean;
 };
@@ -126,7 +120,7 @@ type ModeEdgeData = { mode: EdgeMode; label: string; into: boolean; spent: boole
 type ModeEdge = Edge<ModeEdgeData, "mode">;
 
 type Selection = { kind: "node" | "edge"; id: number } | null;
-type Ghost = { taskId: number; lane: number; y: number; after: number | null };
+type Ghost = { taskId: number; x: number; y: number; after: number | null };
 type TaskPatch = Partial<Pick<FlowTask, "flowX" | "flowY" | "agent">>;
 type EdgeOp =
   | { kind: "add"; edge: FlowEdge }
@@ -311,7 +305,7 @@ function canConnect(from: number, to: number, g: Graph): boolean {
   return true;
 }
 
-/** Tasks chained by "same session" connections in one lane share a terminal: they get a box behind them. */
+/** Tasks chained by "same session" connections with one agent share a terminal: they get a box behind them. */
 function sessionGroups(g: Graph): { boxes: { agent: AgentId; ids: number[] }[]; inner: Set<number> } {
   const parent = new Map<number, number>();
   const find = (x: number) => {
@@ -339,41 +333,29 @@ function sessionGroups(g: Graph): { boxes: { agent: AgentId; ids: number[] }[]; 
   return { boxes: [...members.values()].map((ids) => ({ agent: g.byId.get(ids[0])!.agent, ids })), inner };
 }
 
-/** Lays tasks out top to bottom in the order they run, each in its agent's lane. Returns task id → y. */
-function tidy(placed: FlowTask[], g: Graph): Map<number, number> {
-  const before = (a: FlowTask, b: FlowTask) =>
-    (a.flowY ?? 0) - (b.flowY ?? 0) || laneX(a.agent) - laneX(b.agent) || a.sortOrder - b.sortOrder;
-  const indegree = new Map<number, number>(placed.map((t) => [t.id, 0]));
-  for (const e of g.edges) indegree.set(e.toTaskId, (indegree.get(e.toTaskId) ?? 0) + 1);
-  const ready = placed.filter((t) => !indegree.get(t.id));
-  const order: FlowTask[] = [];
-  while (ready.length) {
-    ready.sort(before);
-    const t = ready.shift()!;
-    order.push(t);
-    for (const e of g.outgoing.get(t.id) ?? []) {
-      const left = (indegree.get(e.toTaskId) ?? 1) - 1;
-      indegree.set(e.toTaskId, left);
-      const next = g.byId.get(e.toTaskId);
-      if (left === 0 && next) ready.push(next);
+/**
+ * The task and every task it shares one terminal session with: linked by "same session" connections in either
+ * direction. One session can't switch agents, so they change agent together.
+ */
+function sessionChain(taskId: number, g: Graph): number[] {
+  const chain = new Set([taskId]);
+  const stack = [taskId];
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const e of [...(g.incoming.get(id) ?? []), ...(g.outgoing.get(id) ?? [])]) {
+      if (e.mode !== "session") continue;
+      for (const other of [e.fromTaskId, e.toTaskId]) {
+        if (!chain.has(other)) {
+          chain.add(other);
+          stack.push(other);
+        }
+      }
     }
   }
-  // Anything caught in a loop keeps its current order at the end.
-  for (const t of [...placed].sort(before)) if (!order.includes(t)) order.push(t);
-  const ys = new Map<number, number>();
-  const bottom = LANES.map(() => -Infinity);
-  for (const t of order) {
-    const lane = Math.max(0, LANES.indexOf(t.agent));
-    let y = Math.max(0, bottom[lane] + GAP);
-    for (const e of g.incoming.get(t.id) ?? []) {
-      const sy = ys.get(e.fromTaskId);
-      if (sy !== undefined) y = Math.max(y, sy + NODE_H + GAP);
-    }
-    ys.set(t.id, y);
-    bottom[lane] = y + NODE_H;
-  }
-  return ys;
+  return [...chain];
 }
+
+const positionOf = (t: FlowTask): Point => ({ x: t.flowX ?? 0, y: t.flowY ?? 0 });
 
 /** Default for "at a set time": the next work day at the start of the work day. */
 function nextWorkMorning(now: number, workStart: string, workDays: number[]): string {
@@ -429,6 +411,8 @@ export function FlowView(props: FlowViewProps) {
 
 /** Lets an edge label select the task its connection leads into. */
 const PickNode = createContext<(taskId: number) => void>(() => {});
+/** Lets a node's agent chip hand the task to the other agent. */
+const SwitchAgent = createContext<(taskId: number) => void>(() => {});
 
 const nodeTypes: NodeTypes = { task: TaskNodeView };
 const edgeTypes: EdgeTypes = { mode: ModeEdgeView };
@@ -456,7 +440,7 @@ function FlowEditor(props: FlowViewProps) {
     [placed, graph, sessions, continuedFrom, autoStarted, now],
   );
   const positions = useMemo(
-    () => new Map(placed.map((t) => [t.id, drag?.id === t.id ? { x: drag.x, y: drag.y } : { x: laneX(t.agent), y: t.flowY ?? 0 }])),
+    () => new Map(placed.map((t) => [t.id, drag?.id === t.id ? { x: drag.x, y: drag.y } : positionOf(t)])),
     [placed, drag],
   );
   const groups = useMemo(() => sessionGroups(graph), [graph]);
@@ -466,17 +450,12 @@ function FlowEditor(props: FlowViewProps) {
 
   const nodes = useMemo<TaskNode[]>(() => placed.map((t) => {
     const i = info.get(t.id)!;
-    const lane = drag?.id === t.id ? LANES[laneAt(drag.x + NODE_W / 2)] : t.agent;
-    const moving = lane !== t.agent;
     return {
       id: String(t.id), type: "task", position: positions.get(t.id)!, width: NODE_W, height: NODE_H, handles: HANDLES,
       selected: t.id === selNode, dragging: drag?.id === t.id,
-      data: {
-        key: t.key, title: t.title, tone: i.tone, state: i.state, note: moving ? `Moves to ${AGENT_LABEL[lane]}` : i.note,
-        hint: moving, color: project.color, linkOut: t.id === linkOut,
-      },
+      data: { key: t.key, title: t.title, tone: i.tone, state: i.state, note: i.note, agent: t.agent, linkOut: t.id === linkOut },
     };
-  }), [placed, info, positions, drag, selNode, linkOut, project.color]);
+  }), [placed, info, positions, drag, selNode, linkOut]);
 
   const links = useMemo<ModeEdge[]>(() => graph.edges.map((e) => ({
     id: String(e.id), source: String(e.fromTaskId), target: String(e.toTaskId), type: "mode", selected: e.id === selEdge,
@@ -491,12 +470,13 @@ function FlowEditor(props: FlowViewProps) {
 
   const tones = placed.map((t) => ({ agent: t.agent, tone: info.get(t.id)!.tone }));
   const count = (...ts: Tone[]) => tones.filter((x) => ts.includes(x.tone)).length;
-  const laneStatus = LANES.map((a) => {
-    const mine = tones.filter((x) => x.agent === a);
+  // What each agent is doing right now, for the header.
+  const agentStatus = AGENTS.map((agent) => {
+    const mine = tones.filter((x) => x.agent === agent);
     const waiting = mine.filter((x) => x.tone === "waiting").length;
     const running = mine.filter((x) => x.tone === "running").length;
-    const parts = [waiting ? `${waiting} waiting for you` : "", running ? `${running} running` : ""].filter(Boolean);
-    return parts.length ? parts.join(" · ") : "Idle";
+    const parts = [running ? `${running} running` : "", waiting ? `${waiting} waiting for you` : ""].filter(Boolean);
+    return { agent, status: parts.length ? parts.join(", ") : "idle", busy: parts.length > 0 };
   });
   const summaryParts: [number, string][] = [
     [count("done", "canceled"), "done"], [count("running"), "running"], [count("waiting"), "waiting for you"],
@@ -522,39 +502,52 @@ function FlowEditor(props: FlowViewProps) {
     });
   }, [startTransition]);
 
-  /** Shows both lanes and the top of the flow, zoomed out only as far as needed. */
-  const fitTo = useCallback((ys: number[], ms = 0) => {
+  /** Shows the whole flow, zoomed out only as far as needed and never in past 100%. */
+  const fitTo = useCallback((points: Point[], ms = 0) => {
     const box = canvasRef.current?.getBoundingClientRect();
     if (!box || !box.width || !box.height) return;
-    const top = ys.length ? Math.min(...ys) : 0;
-    const bottom = ys.length ? Math.max(...ys) + NODE_H : NODE_H;
-    const width = LANES.length * LANE_W;
-    const padTop = HEADER_H + 24;
-    const fit = Math.min((box.width - 32) / width, (box.height - padTop - 32) / Math.max(bottom - top, NODE_H));
-    const zoom = Math.min(1, Math.max(0.5, fit));
-    void rf.setViewport({ x: (box.width - width * zoom) / 2 + LANE_PAD * zoom, y: padTop - top * zoom, zoom }, { duration: ms });
+    const xs = points.length ? points.map((p) => p.x) : [0];
+    const ys = points.length ? points.map((p) => p.y) : [0];
+    const left = Math.min(...xs);
+    const top = Math.min(...ys);
+    const width = Math.max(...xs) + NODE_W - left;
+    const height = Math.max(...ys) + NODE_H - top;
+    const pad = 48;
+    const zoom = Math.min(1, Math.max(0.4, Math.min((box.width - 2 * pad) / width, (box.height - 2 * pad) / height)));
+    const y = height * zoom < box.height - 2 * pad ? Math.min(pad, (box.height - height * zoom) / 2) : pad;
+    void rf.setViewport({ x: (box.width - width * zoom) / 2 - left * zoom, y: y - top * zoom, zoom }, { duration: ms });
   }, [rf]);
 
-  const place = (t: FlowTask, agent: AgentId, y: number) => {
-    const x = laneX(agent);
-    act(() => patchTask({ [t.id]: { flowX: x, flowY: y, agent } }), () => placeInFlowAction(t.id, x, y, agent));
-  };
+  const move = (t: FlowTask, x: number, y: number) =>
+    act(() => patchTask({ [t.id]: { flowX: x, flowY: y } }), () => placeInFlowAction(t.id, x, y));
 
-  const addTask = (t: FlowTask, lane: number, y: number, after: number | null, message?: string) => {
-    const agent = LANES[lane];
-    const x = laneX(agent);
+  /** Hands a task to an agent, together with the tasks it shares a terminal session with. */
+  const setAgent = (t: FlowTask, agent: AgentId) => {
+    if (agent === t.agent) return;
+    const ids = sessionChain(t.id, graph).filter((id) => graph.byId.get(id)?.agent !== agent);
+    const keys = ids.map((id) => keyOf(graph, id));
+    act(() => patchTask(Object.fromEntries(ids.map((id) => [id, { agent }]))), () => setAgentsAction(ids, agent),
+      ids.length > 1 ? `${names(keys)} now run in ${AGENT_LABEL[agent]}, because they share one session` : `${t.key} now runs in ${AGENT_LABEL[agent]}`);
+  };
+  const setAgentRef = useRef(setAgent);
+  useEffect(() => { setAgentRef.current = setAgent; });
+  const switchAgent = useCallback((id: number) => {
+    const t = graph.byId.get(id);
+    if (t) setAgentRef.current(t, otherAgent(t.agent));
+  }, [graph]);
+
+  const addTask = (t: FlowTask, at: Point, after: number | null, message?: string) => {
     setSel({ kind: "node", id: t.id });
     act(() => {
-      patchTask({ [t.id]: { flowX: x, flowY: y, agent } });
+      patchTask({ [t.id]: { flowX: at.x, flowY: at.y } });
       if (after !== null) editEdge({ kind: "add", edge: { id: -Date.now(), fromTaskId: after, toTaskId: t.id, mode: "auto", atTime: null } });
-    }, () => addToFlowAction(t.id, x, y, agent, after), message);
+    }, () => addToFlowAction(t.id, at.x, at.y, t.agent, after), message);
   };
 
   const addAtEnd = (t: FlowTask) => {
-    const bottoms = placed.filter((p) => p.agent === t.agent).map((p) => (p.flowY ?? 0) + NODE_H);
-    const y = bottoms.length ? Math.max(...bottoms) + GAP : 0;
-    addTask(t, Math.max(0, LANES.indexOf(t.agent)), y, null, `Added ${t.key} to the ${AGENT_LABEL[t.agent]} lane`);
-    void rf.setCenter(laneX(t.agent) + NODE_W / 2, y + NODE_H / 2, { zoom: rf.getZoom(), duration: 300 });
+    const at = freeSpot(placed.map(positionOf));
+    addTask(t, at, null, `Added ${t.key} to the flow`);
+    void rf.setCenter(at.x + NODE_W / 2, at.y + NODE_H / 2, { zoom: rf.getZoom(), duration: 300 });
   };
 
   const remove = (t: FlowTask) => {
@@ -573,24 +566,30 @@ function FlowEditor(props: FlowViewProps) {
   const setStart = (t: FlowTask, mode: EdgeMode, atTime: string | null) => {
     const first = (graph.incoming.get(t.id) ?? [])[0];
     const source = first ? graph.byId.get(first.fromTaskId) : undefined;
-    // One terminal session can't switch agents: "same session" joins the lane of the task it continues.
-    const move = mode === "session" && source && source.agent !== t.agent ? { x: laneX(source.agent), y: t.flowY ?? 0, agent: source.agent } : null;
+    // One terminal session can't switch agents: "same session" hands the task (and whatever continues
+    // its session) to the agent of the task it continues. It stays where it is on the canvas.
+    const agent = mode === "session" && source && source.agent !== t.agent ? source.agent : null;
+    const ids = agent ? sessionChain(t.id, graph).filter((id) => graph.byId.get(id)?.agent !== agent) : [];
     act(() => {
       editEdge({ kind: "mode", toTaskId: t.id, mode, atTime });
-      if (move) patchTask({ [t.id]: { flowX: move.x, flowY: move.y, agent: move.agent } });
-    }, () => setStartAction(t.id, mode, mode === "time" ? atTime : null, move));
+      if (agent) patchTask(Object.fromEntries(ids.map((id) => [id, { agent }])));
+    }, async () => {
+      const r = await setStartAction(t.id, mode, mode === "time" ? atTime : null);
+      if (agent && r.ok) return setAgentsAction(ids, agent);
+      return r;
+    });
   };
 
   const tidyUp = () => {
-    const ys = tidy(placed, graph);
-    const moved = placed.filter((t) => ys.get(t.id) !== t.flowY || t.flowX !== laneX(t.agent));
+    const at = layoutFlow(placed.map((t) => ({ ...positionOf(t), id: t.id, sortOrder: t.sortOrder })), graph.edges);
+    const moved = placed.filter((t) => at.get(t.id)?.x !== t.flowX || at.get(t.id)?.y !== t.flowY);
     if (moved.length) {
       act(
-        () => patchTask(Object.fromEntries(moved.map((t) => [t.id, { flowX: laneX(t.agent), flowY: ys.get(t.id) ?? 0 }]))),
-        () => tidyFlowAction(moved.map((t) => ({ taskId: t.id, x: laneX(t.agent), y: ys.get(t.id) ?? 0 }))),
+        () => patchTask(Object.fromEntries(moved.map((t) => [t.id, { flowX: at.get(t.id)!.x, flowY: at.get(t.id)!.y }]))),
+        () => tidyFlowAction(moved.map((t) => ({ taskId: t.id, ...at.get(t.id)! }))),
       );
     }
-    fitTo([...ys.values()], 300);
+    fitTo([...at.values()], 300);
   };
 
   const toggleFlow = (on: boolean) =>
@@ -625,11 +624,10 @@ function FlowEditor(props: FlowViewProps) {
     setDrag(null);
     const t = graph.byId.get(Number(node.id));
     if (!t) return;
-    // Snap into the lane under the node's centre; that lane's agent will run it.
-    const agent = LANES[laneAt(node.position.x + NODE_W / 2)];
-    const y = Math.round(node.position.y);
-    if (agent === t.agent && y === t.flowY && t.flowX === laneX(agent)) return;
-    place(t, agent, y);
+    // Anywhere on the grid; where it sits doesn't change who runs it.
+    const x = snap(node.position.x);
+    const y = snap(node.position.y);
+    if (x !== t.flowX || y !== t.flowY) move(t, x, y);
   };
 
   const onConnect = (c: Connection) => {
@@ -664,20 +662,23 @@ function FlowEditor(props: FlowViewProps) {
     }, only ? `Removed ${only.key} from the flow` : undefined);
   };
 
-  /** Where a task dragged from the palette would land, and which task above it it would run after. */
+  /**
+   * Where a task dragged from the palette would land (centred on the pointer, on the grid), and the task just
+   * above it that it would run after.
+   */
   const dropSpot = (clientX: number, clientY: number, taskId: number): Ghost => {
     const p = rf.screenToFlowPosition({ x: clientX, y: clientY });
-    const lane = laneAt(p.x);
-    let y = Math.round((p.y - NODE_H / 2) / 4) * 4;
+    const x = snap(p.x - NODE_W / 2);
+    let y = snap(p.y - NODE_H / 2);
     let after: FlowTask | null = null;
     for (const t of placed) {
-      if (t.id === taskId || LANES.indexOf(t.agent) !== lane) continue;
+      if (t.id === taskId || Math.abs((t.flowX ?? 0) - x) >= NODE_W) continue;
       const gap = y - ((t.flowY ?? 0) + NODE_H);
       if (gap >= -24 && gap <= 160 && (!after || (t.flowY ?? 0) > (after.flowY ?? 0))) after = t;
     }
     // Leave room for the connection's label between the two.
-    if (after) y = Math.max(y, (after.flowY ?? 0) + NODE_H + 44);
-    return { taskId, lane, y, after: after?.id ?? null };
+    if (after) y = Math.max(y, snap((after.flowY ?? 0) + NODE_H + 50));
+    return { taskId, x, y, after: after?.id ?? null };
   };
 
   const onDragOver = (e: DragEvent<HTMLElement>) => {
@@ -685,7 +686,7 @@ function FlowEditor(props: FlowViewProps) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     const g = dropSpot(e.clientX, e.clientY, paletteDrag);
-    setGhost((cur) => (cur && cur.taskId === g.taskId && cur.lane === g.lane && cur.y === g.y && cur.after === g.after ? cur : g));
+    setGhost((cur) => (cur && cur.taskId === g.taskId && cur.x === g.x && cur.y === g.y && cur.after === g.after ? cur : g));
   };
 
   const onDragLeave = (e: DragEvent<HTMLElement>) => {
@@ -699,7 +700,7 @@ function FlowEditor(props: FlowViewProps) {
     if (!t || t.flowX !== null) return;
     e.preventDefault();
     const g = dropSpot(e.clientX, e.clientY, t.id);
-    addTask(t, g.lane, g.y, g.after);
+    addTask(t, g, g.after);
   };
 
   useEffect(() => {
@@ -720,7 +721,6 @@ function FlowEditor(props: FlowViewProps) {
     .sort((a, b) => a.sortOrder - b.sortOrder);
   const ghostTask = ghost ? graph.byId.get(ghost.taskId) : undefined;
   const ghostAfter = ghost && ghost.after !== null ? graph.byId.get(ghost.after) : undefined;
-  const activeLane = drag ? laneAt(drag.x + NODE_W / 2) : ghost ? ghost.lane : null;
 
   let inspector: ReactNode = <EmptyInspector />;
   if (selectedTask) {
@@ -728,7 +728,7 @@ function FlowEditor(props: FlowViewProps) {
     inspector = (
       <Inspector key={`${selectedTask.id}:${at}`} project={project} task={selectedTask} info={info.get(selectedTask.id)!}
         session={sessions[selectedTask.id]} graph={graph} flowOn={flowOn} now={now} defaultAt={defaultAt}
-        onAgent={(agent) => agent !== selectedTask.agent && place(selectedTask, agent, selectedTask.flowY ?? 0)}
+        onAgent={(agent) => setAgent(selectedTask, agent)}
         onStart={(mode, at) => setStart(selectedTask, mode, at)}
         onStartNow={() => act(() => {}, () => startSessionAction(selectedTask.id, selectedTask.agent))}
         onRemove={() => remove(selectedTask)} />
@@ -739,16 +739,17 @@ function FlowEditor(props: FlowViewProps) {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      <FlowHeader project={project} projects={props.projects} summary={summary} flowOn={flowOn} canTidy={placed.length > 0}
-        onFlow={toggleFlow} onTidy={tidyUp} onFit={() => fitTo(placed.map((t) => t.flowY ?? 0), 250)} />
+      <FlowHeader project={project} projects={props.projects} summary={summary} agents={agentStatus} flowOn={flowOn}
+        canTidy={placed.length > 0} onFlow={toggleFlow} onTidy={tidyUp} onFit={() => fitTo(placed.map(positionOf), 250)} />
       <div className="flex min-h-0 flex-1">
-        <Palette project={project} tasks={palette} total={tasks.length} dragging={paletteDrag}
+        <Palette project={project} tasks={palette} total={tasks.length} yours={props.yours} dragging={paletteDrag}
           onDragStart={(t) => setPaletteDrag(t.id)} onDragEnd={() => { setPaletteDrag(null); setGhost(null); }} onAdd={addAtEnd} />
 
         <section aria-label="Flow canvas" className="relative min-w-0 flex-1 overflow-hidden"
           onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
           <div ref={canvasRef} className="absolute inset-0">
             <PickNode.Provider value={pickNode}>
+            <SwitchAgent.Provider value={switchAgent}>
               <ReactFlow<TaskNode, ModeEdge>
                 nodes={nodes}
                 edges={links}
@@ -761,10 +762,12 @@ function FlowEditor(props: FlowViewProps) {
                 isValidConnection={(c) => canConnect(Number(c.source), Number(c.target), graph)}
                 onDelete={onDelete}
                 onPaneClick={() => setSel(null)}
-                onInit={() => fitTo(placed.map((t) => t.flowY ?? 0))}
+                onInit={() => fitTo(placed.map(positionOf))}
                 deleteKeyCode={DELETE_KEYS}
                 selectionKeyCode={null}
                 multiSelectionKeyCode={null}
+                snapToGrid
+                snapGrid={SNAP_GRID}
                 nodeDragThreshold={3}
                 connectionRadius={28}
                 connectionLineStyle={CONNECTION_LINE}
@@ -776,24 +779,28 @@ function FlowEditor(props: FlowViewProps) {
                 colorMode="dark"
                 style={CANVAS_STYLE}
               >
-                <Background variant={BackgroundVariant.Dots} gap={22} size={2} color="var(--color-sel)" />
-                <LaneBackdrop active={activeLane} />
+                <Background variant={BackgroundVariant.Dots} gap={GRID} size={1.6} color="var(--color-ctl)" />
                 <ViewportPortal>
                   {groups.boxes.map((b) => {
-                    const ys = b.ids.map((id) => positions.get(id)?.y ?? 0);
-                    const top = Math.min(...ys) - 12;
+                    // A box around the sessions that share one terminal, wherever they are on the grid.
+                    const ps = b.ids.map((id) => positions.get(id) ?? { x: 0, y: 0 });
+                    const left = Math.min(...ps.map((p) => p.x)) - 12;
+                    const top = Math.min(...ps.map((p) => p.y)) - 12;
                     return (
                       <div key={b.ids.join("-")} aria-hidden="true"
                         className="pointer-events-none absolute left-0 top-0 -z-10 rounded-xl border border-ctl bg-ink/[0.015]"
-                        style={{ width: NODE_W + 24, height: Math.max(...ys) + NODE_H + 22 - top, transform: `translate(${laneX(b.agent) - 12}px, ${top}px)` }}>
+                        style={{
+                          width: Math.max(...ps.map((p) => p.x)) + NODE_W + 12 - left, height: Math.max(...ps.map((p) => p.y)) + NODE_H + 22 - top,
+                          transform: `translate(${left}px, ${top}px)`,
+                        }}>
                         <span className="absolute bottom-[3px] right-2.5 text-[11px] text-mut2">One {AGENT_LABEL[b.agent]} session</span>
                       </div>
                     );
                   })}
-                  {ghost && ghostTask && <GhostNode task={ghostTask} lane={ghost.lane} y={ghost.y} after={ghostAfter} />}
+                  {ghost && ghostTask && <GhostNode task={ghostTask} x={ghost.x} y={ghost.y} after={ghostAfter} />}
                 </ViewportPortal>
-                <LaneHeaders status={laneStatus} />
               </ReactFlow>
+            </SwitchAgent.Provider>
             </PickNode.Provider>
           </div>
           {!placed.length && !ghost && <EmptyCanvas />}
@@ -807,10 +814,11 @@ function FlowEditor(props: FlowViewProps) {
 
 /* ---------- header ---------- */
 
-function FlowHeader({ project, projects, summary, flowOn, canTidy, onFlow, onTidy, onFit }: {
+function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlow, onTidy, onFit }: {
   project: FlowViewProps["project"];
   projects: FlowViewProps["projects"];
   summary: string;
+  agents: { agent: AgentId; status: string; busy: boolean }[];
   flowOn: boolean;
   canTidy: boolean;
   onFlow: (on: boolean) => void;
@@ -843,6 +851,13 @@ function FlowHeader({ project, projects, summary, flowOn, canTidy, onFlow, onTid
       </div>
       <span className="ml-1.5 min-w-0 truncate text-[12px] text-mut2">{summary}</span>
       <span className="flex-1" />
+      {agents.map((a) => (
+        <span key={a.agent} className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap text-[12px] text-mut2 xl:flex">
+          <Icon name="terminal" size={13} strokeWidth={1.9} className="text-mut" />
+          <span className="text-fg3">{AGENT_LABEL[a.agent]}</span>
+          <span className={a.busy ? "text-fg2" : undefined}>{a.status}</span>
+        </span>
+      ))}
       <ZoomControls onFit={onFit} />
       <Button onClick={onTidy} disabled={!canTidy} title="Line the sessions up in the order they run">Tidy up</Button>
       <label className="flex h-7 shrink-0 cursor-pointer items-center gap-2 pl-1 text-[12.5px] text-fg3"
@@ -875,10 +890,11 @@ function ZoomControls({ onFit }: { onFit: () => void }) {
 
 /* ---------- palette ---------- */
 
-function Palette({ project, tasks, total, dragging, onDragStart, onDragEnd, onAdd }: {
+function Palette({ project, tasks, total, yours, dragging, onDragStart, onDragEnd, onAdd }: {
   project: FlowViewProps["project"];
   tasks: FlowTask[];
   total: number;
+  yours: number;
   dragging: number | null;
   onDragStart: (t: FlowTask) => void;
   onDragEnd: () => void;
@@ -903,7 +919,7 @@ function Palette({ project, tasks, total, dragging, onDragStart, onDragEnd, onAd
           <span className="truncate">{project.name}</span>
         </div>
         {list.map((t) => (
-          <button key={t.id} type="button" draggable title="Drag onto the canvas, or click to add it at the end of its lane"
+          <button key={t.id} type="button" draggable title="Drag onto the canvas, or click to add it at the end of the flow"
             onDragStart={(e) => {
               e.dataTransfer.setData(DND_TYPE, String(t.id));
               e.dataTransfer.effectAllowed = "move";
@@ -919,6 +935,11 @@ function Palette({ project, tasks, total, dragging, onDragStart, onDragEnd, onAd
           </button>
         ))}
         {!list.length && <p className="px-1.5 py-1 text-[12px] leading-relaxed text-mut2">{empty}</p>}
+        {yours > 0 && !q && (
+          <p className="px-1.5 pt-2 text-[12px] leading-relaxed text-mut2">
+            {yours === 1 ? "1 task is yours" : `${yours} tasks are yours`}, so {yours === 1 ? "it stays" : "they stay"} out of the flow.
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-[7px] border-t border-line px-4 py-3">
         <div className="text-[12px] text-mut2">How the next session starts</div>
@@ -949,47 +970,9 @@ function Grip() {
 
 /* ---------- canvas layers ---------- */
 
-/** Lane columns behind the nodes, drawn in screen space so they always reach the edges of the canvas. */
-function LaneBackdrop({ active }: { active: number | null }) {
-  const { x, zoom } = useViewport();
-  return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-      {LANES.map((a, i) => (
-        <div key={a} className="absolute inset-y-0" style={{
-          left: (i * LANE_W - LANE_PAD) * zoom + x, width: LANE_W * zoom,
-          background: active === i ? "color-mix(in srgb, var(--color-ink) 2.5%, transparent)" : i % 2 ? "color-mix(in srgb, var(--color-ink) 1.2%, transparent)" : undefined,
-        }} />
-      ))}
-      {LANES.slice(1).map((a, i) => (
-        <div key={a} className="absolute inset-y-0 w-px bg-line" style={{ left: ((i + 1) * LANE_W - LANE_PAD) * zoom + x }} />
-      ))}
-    </div>
-  );
-}
-
-/** Lane titles pinned to the top of the canvas, following the lanes sideways. */
-function LaneHeaders({ status }: { status: string[] }) {
-  const { x, zoom } = useViewport();
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-9 overflow-hidden border-b border-line bg-panel">
-      {LANES.map((a, i) => (
-        <div key={a} className="absolute inset-y-0 flex items-center gap-2 overflow-hidden whitespace-nowrap px-4"
-          style={{ left: (i * LANE_W - LANE_PAD) * zoom + x, width: LANE_W * zoom }}>
-          <Icon name="terminal" size={14} strokeWidth={1.9} className="shrink-0 text-mut" />
-          <span className="text-[12.5px] font-medium text-fg2">{AGENT_LABEL[a]}</span>
-          <span className="truncate text-[12px] text-mut2">{status[i]}</span>
-        </div>
-      ))}
-      {LANES.slice(1).map((a, i) => (
-        <div key={a} className="absolute inset-y-0 w-px bg-line" style={{ left: ((i + 1) * LANE_W - LANE_PAD) * zoom + x }} />
-      ))}
-    </div>
-  );
-}
-
 function EmptyCanvas() {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 top-9 flex flex-col items-center justify-center gap-2 px-8 text-center">
+    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
       <div className="text-[13.5px] text-fg2">Drag tasks here to build the flow</div>
       <div className="max-w-xs text-[12.5px] leading-relaxed text-mut2">
         Each task runs as one agent session. Connect them to decide which session starts after which.
@@ -999,11 +982,10 @@ function EmptyCanvas() {
 }
 
 /** Preview of a palette task while it's dragged over the canvas. */
-function GhostNode({ task, lane, y, after }: { task: FlowTask; lane: number; y: number; after: FlowTask | undefined }) {
-  const x = lane * LANE_W;
+function GhostNode({ task, x, y, after }: { task: FlowTask; x: number; y: number; after: FlowTask | undefined }) {
   const [path] = after
     ? getBezierPath({
-      sourceX: laneX(after.agent) + NODE_W / 2, sourceY: (after.flowY ?? 0) + NODE_H, sourcePosition: Position.Bottom,
+      sourceX: (after.flowX ?? 0) + NODE_W / 2, sourceY: (after.flowY ?? 0) + NODE_H, sourcePosition: Position.Bottom,
       targetX: x + NODE_W / 2, targetY: y - 7, targetPosition: Position.Top,
     })
     : [""];
@@ -1011,18 +993,18 @@ function GhostNode({ task, lane, y, after }: { task: FlowTask; lane: number; y: 
     <>
       {after && (
         <svg aria-hidden="true" width="1" height="1" className="pointer-events-none absolute left-0 top-0 overflow-visible">
-          <path d={path} fill="none" stroke="rgba(139,142,245,0.7)" strokeWidth={1.5} strokeDasharray="5 4" />
+          <path d={path} fill="none" stroke={ACCENT_LINE} strokeWidth={1.5} strokeDasharray="5 4" />
         </svg>
       )}
-      <div className="pointer-events-none absolute left-0 top-0 flex flex-col gap-[3px] rounded-lg border border-dashed border-[rgba(139,142,245,0.6)] bg-[rgba(139,142,245,0.05)] px-3 py-[7px]"
+      <div className="pointer-events-none absolute left-0 top-0 flex flex-col gap-[3px] rounded-lg border border-dashed border-accent/60 bg-accent/5 px-3 py-[7px]"
         style={{ width: NODE_W, height: NODE_H, transform: `translate(${x}px, ${y}px)` }}>
         <div className="flex h-[14px] items-center gap-[7px] leading-[14px]">
           <ToneIcon tone="queued" />
           <span className="font-mono text-[11px] text-mut2">{task.key}</span>
         </div>
         <div className="h-[18px] truncate text-[13px] leading-[18px] text-fg2">{task.title}</div>
-        <div className="h-[14px] truncate text-[11.5px] leading-[14px] text-accent-fg">
-          {after ? `Drop to run after ${after.key}` : `Drop to add it to the ${AGENT_LABEL[LANES[lane]]} lane`}
+        <div className="h-4 truncate text-[11.5px] leading-4 text-accent-fg">
+          {after ? `Drop to run after ${after.key}` : `Drop to add it here, run by ${AGENT_LABEL[task.agent]}`}
         </div>
       </div>
     </>
@@ -1054,14 +1036,13 @@ function HandleDot({ on = false }: { on?: boolean }) {
   );
 }
 
-function TaskNodeView({ data, selected }: NodeProps<TaskNode>) {
+function TaskNodeView({ id, data, selected }: NodeProps<TaskNode>) {
   const done = data.tone === "done" || data.tone === "canceled";
   return (
     <div className={cx(
       "group flex h-full w-full flex-col gap-[3px] rounded-lg border px-3 py-[7px]",
       done ? "bg-panel" : "bg-raised",
-      selected ? "border-accent shadow-[0_0_0_1px_var(--color-accent)]"
-        : done ? "border-line" : data.tone === "waiting" || data.tone === "running" ? "border-ctl" : "border-ctl",
+      selected ? "border-accent shadow-[0_0_0_1px_var(--color-accent)]" : done ? "border-line" : "border-ctl",
     )}>
       <Handle type="target" position={Position.Top} isConnectableStart={false} style={HANDLE_STYLE}><HandleDot /></Handle>
       <div className="flex h-[14px] items-center gap-[7px] leading-[14px]">
@@ -1071,12 +1052,27 @@ function TaskNodeView({ data, selected }: NodeProps<TaskNode>) {
         <span className={cx("whitespace-nowrap text-[11px]", data.tone === "waiting" ? "text-fg2" : "text-mut2")}>{data.state}</span>
       </div>
       <div className={cx("h-[18px] truncate text-[13px] leading-[18px]", done ? "text-mut2" : "text-strong")}>{data.title}</div>
-      <div className="flex h-[14px] min-w-0 items-center gap-1.5 text-[11.5px] leading-[14px]">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: data.color }} />
-        <span className={cx("truncate", data.hint ? "text-accent-fg" : "text-mut2")}>{data.note}</span>
+      <div className="flex h-4 min-w-0 items-center gap-1.5 text-[11.5px] leading-4">
+        <AgentChip taskId={Number(id)} agent={data.agent} done={done} />
+        <span className="truncate text-mut2">{data.note}</span>
       </div>
       <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE}><HandleDot on={data.linkOut} /></Handle>
     </div>
+  );
+}
+
+/** Who runs the session. Clicking hands it to the other agent (with anything that shares its session). */
+function AgentChip({ taskId, agent, done }: { taskId: number; agent: AgentId; done: boolean }) {
+  const switchAgent = useContext(SwitchAgent);
+  const label = <><Icon name="terminal" size={10} strokeWidth={2} className="shrink-0" />{AGENT_LABEL[agent]}</>;
+  const look = "flex h-4 shrink-0 items-center gap-1 whitespace-nowrap rounded-[4px] border border-ctl px-1.5 text-[10.5px] leading-none text-mut";
+  if (done) return <span className={look}>{label}</span>;
+  return (
+    <button type="button" title={`${AGENT_LABEL[agent]} runs this. Click to hand it to ${AGENT_LABEL[otherAgent(agent)]}.`}
+      onClick={(e) => { e.stopPropagation(); switchAgent(taskId); }}
+      className={cx("nodrag nopan hover:border-line-strong hover:text-fg2", look)}>
+      {label}
+    </button>
   );
 }
 
@@ -1102,7 +1098,7 @@ function ModeEdgeView({ id, target, sourceX, sourceY, targetX, targetY, data, se
           <button type="button" title="Change how it starts" onClick={() => pick(Number(target))}
             className={cx(
               "nodrag nopan absolute left-0 top-0 flex h-5 items-center whitespace-nowrap rounded-full border bg-raised px-2 text-[11px] hover:border-line-strong",
-              hot ? "border-[rgba(139,142,245,0.6)] text-fg2" : data.spent ? "border-ctl text-dim" : "border-ctl text-mut",
+              hot ? "border-accent/60 text-fg2" : data.spent ? "border-ctl text-dim" : "border-ctl text-mut",
             )}
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: "all" }}>
             {data.label}
@@ -1154,7 +1150,7 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
     {
       mode: "session", title: "In the same session",
       desc: `${agentShort(srcAgent)} carries on from ${src} in the same terminal, without stopping.` +
-        (srcAgent !== task.agent ? ` Moves it to the ${AGENT_LABEL[srcAgent]} lane.` : ""),
+        (srcAgent !== task.agent ? ` Hands it to ${AGENT_LABEL[srcAgent]}.` : ""),
     },
     { mode: "time", title: "At a set time", desc: `${atLabel(at ?? (validDraft ? draft : defaultAt))}, once ${src} is done.` },
   ];
@@ -1188,7 +1184,7 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
           <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 text-[12.5px]">
             <span className="text-mut2">Agent</span>
             <div className="flex">
-              <Segmented value={task.agent} onChange={onAgent} options={LANES.map((a) => ({ value: a, label: AGENT_LABEL[a] }))} />
+              <Segmented value={task.agent} onChange={onAgent} options={AGENTS.map((a) => ({ value: a, label: AGENT_LABEL[a] }))} />
             </div>
             <span className="text-mut2">Folder</span>
             <span title={project.folder ?? `No project folder: it runs in PacedMind's workspaces/${task.key.toLowerCase()}`}
@@ -1218,7 +1214,7 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
                     <button type="button" role="radio" aria-checked={on}
                       onClick={() => { if (!on) onStart(o.mode, o.mode === "time" ? (validDraft ? draft : defaultAt) : null); }}
                       className={cx("flex gap-2.5 rounded-[7px] border px-2.5 py-2 text-left",
-                        on ? "border-[rgba(139,142,245,0.55)] bg-[rgba(139,142,245,0.06)]" : "border-line2 hover:bg-hover")}>
+                        on ? "border-accent/55 bg-accent/5" : "border-line2 hover:bg-hover")}>
                       <span className={cx("mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px]",
                         on ? "border-accent" : "border-line-strong")}>
                         {on && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
@@ -1312,8 +1308,8 @@ function EmptyInspector() {
       <div className="flex h-11 shrink-0 items-center border-b border-line px-5 text-[12.5px] text-mut">Nothing selected</div>
       <div className="flex flex-col gap-3 px-5 py-[18px] text-[12.5px] leading-relaxed text-mut2">
         <p>Select a session on the canvas to choose its agent and how it starts.</p>
-        <p>To run one session after another, drag from the dot under the first to the dot above the second.</p>
-        <p>Drag a session into the other lane to hand it to that agent. <Kbd>Delete</Kbd> removes what&apos;s selected.</p>
+        <p>Put sessions anywhere on the grid. To run one after another, drag from the dot under the first to the dot above the second.</p>
+        <p>Click the agent on a session to hand it to Claude Code or Codex. Tidy up lines everything up in the order it runs. <Kbd>Delete</Kbd> removes what&apos;s selected.</p>
       </div>
     </aside>
   );

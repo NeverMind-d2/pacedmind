@@ -206,7 +206,7 @@ interface Look {
 
 function barLook(t: Task, latest: Session | undefined, color: string): Look {
   if (!isOpenTask(t)) return { bg: tint(color, 10), bd: tint(color, 22), fg: "text-mut2", check: t.status === "done" };
-  if (latest?.status === "finished") return { bg: tint(color, 20), bd: "rgb(139 142 245 / 0.7)", fg: "text-fg2", dot: true };
+  if (latest?.status === "finished") return { bg: tint(color, 20), bd: "color-mix(in srgb, var(--color-accent) 70%, transparent)", fg: "text-fg2", dot: true };
   if ((latest && isActive(latest)) || t.status === "progress" || t.status === "review") {
     return { bg: tint(color, 34), bd: tint(color, 62), fg: "text-strong" };
   }
@@ -635,7 +635,7 @@ export function Timeline(props: {
                 </svg>
               )}
               {sc.nowPos >= 0 && sc.nowPos <= days && (
-                <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: TREE + X(sc.nowPos), background: "rgb(139 142 245 / 0.75)" }} />
+                <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: TREE + X(sc.nowPos), background: "color-mix(in srgb, var(--color-accent) 75%, transparent)" }} />
               )}
             </div>
           </div>

@@ -2,6 +2,8 @@ export type Status = "backlog" | "todo" | "progress" | "review" | "done" | "canc
 /** Linear-style priority: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
 export type Priority = 0 | 1 | 2 | 3 | 4;
 export type AgentId = "claude" | "codex";
+/** Who does a task: an agent, or you ("human"). Tasks that are yours stay out of flows and agent sessions. */
+export type Doer = AgentId | "human";
 /** How the target task's session starts once the source task is ready. */
 export type EdgeMode = "auto" | "manual" | "session" | "time";
 export type SessionStatus = "starting" | "running" | "finished" | "done" | "closed" | "failed";
@@ -53,7 +55,7 @@ export interface Task {
   estimateMin: number;
   labels: string[];
   reminder: string | null;
-  agent: AgentId | null;
+  agent: Doer | null;
   sortOrder: number;
   flowX: number | null;
   flowY: number | null;
@@ -164,6 +166,14 @@ export const AGENT_LABEL: Record<AgentId, string> = {
   claude: "Claude Code",
   codex: "Codex",
 };
+
+export const DOER_LABEL: Record<Doer, string> = { ...AGENT_LABEL, human: "You" };
+
+/** The agent that runs a task: its own, else the project's, else Claude Code. Null for a task that is yours. */
+export function agentOf(task: { agent: Doer | null }, projectAgent?: AgentId | null): AgentId | null {
+  if (task.agent === "human") return null;
+  return task.agent ?? projectAgent ?? "claude";
+}
 
 export const EDGE_LABEL: Record<EdgeMode, string> = {
   auto: "Auto",

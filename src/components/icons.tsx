@@ -37,6 +37,7 @@ const P = {
   refresh: "M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5",
   more: "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
   box: "M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8",
+  user: "M8 8a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M4.5 20a7.5 7.5 0 0 1 15 0",
 };
 
 export type IconName = keyof typeof P;
