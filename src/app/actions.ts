@@ -4,7 +4,7 @@ import { refresh } from "next/cache";
 import * as repo from "@/server/repo";
 import { resetDatabase } from "@/server/db";
 import { resumeSession, startSession, type LaunchResult } from "@/server/launcher";
-import { afterTaskDone, closeSession, keepYoursOutOfFlow, removeFromFlow } from "@/server/ops";
+import { afterTaskDone, closeSession, edgeWouldLoop, keepYoursOutOfFlow, removeFromFlow } from "@/server/ops";
 import type { AgentId, EdgeMode, Project, Settings } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -110,6 +110,23 @@ export async function removeFromFlowAction(taskId: number) {
 export async function connectAction(fromTaskId: number, toTaskId: number, mode: EdgeMode = "auto") {
   repo.createEdge(fromTaskId, toTaskId, mode);
   return done();
+}
+
+/**
+ * A dependency drawn on the timeline: `toTaskId` waits for `fromTaskId`. It is the same connection a flow
+ * uses, so it follows the same rules and takes the mode of the task's other incoming connections.
+ */
+export async function linkTasksAction(fromTaskId: number, toTaskId: number): Promise<Result> {
+  const from = repo.getTask(fromTaskId);
+  const to = repo.getTask(toTaskId);
+  if (!from || !to) return { ok: false, error: "Task not found" };
+  if (from.id === to.id) return { ok: false, error: "A task can't wait for itself" };
+  if (from.projectId !== to.projectId) return { ok: false, error: `${from.key} and ${to.key} are in different projects. Dependencies stay within one project.` };
+  if (edgeWouldLoop(from.id, to.id)) return { ok: false, error: `${from.key} already waits for ${to.key}, so this would make a loop` };
+  const other = repo.listEdges().find((e) => e.toTaskId === to.id && e.fromTaskId !== from.id);
+  repo.createEdge(from.id, to.id, other?.mode ?? "auto");
+  if (other) repo.setIncomingMode(to.id, other.mode, other.atTime);
+  return done({ ok: true, message: `${to.key} now waits for ${from.key}` });
 }
 
 export async function setIncomingModeAction(taskId: number, mode: EdgeMode, atTime: string | null = null) {

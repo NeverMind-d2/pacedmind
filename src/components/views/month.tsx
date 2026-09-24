@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useOptimistic, useRef, useState, type DragEvent } from "react";
-import { format } from "date-fns";
-import { updateTaskAction } from "@/app/actions";
+import { useEffect, useOptimistic, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { addDays, format } from "date-fns";
+import { deleteTaskAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
-import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf } from "@/lib/dates";
+import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
 import { Diamond, Icon, StatusIcon } from "../icons";
+import { Popover, PopoverItem, PopoverSeparator, anchorOf, type Anchor } from "../popover";
 import { TaskDetail } from "../task-detail";
 import { Dot, cx, useAction } from "../ui";
-import { PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, pressable, useSelection } from "./calendar-parts";
+import { PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, useSelection } from "./calendar-parts";
 
 const DRAG_TYPE = "application/x-organizer-task";
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -30,6 +31,11 @@ type Item = { filter: Filter; sort: string } & (
   | { kind: "event"; event: EventOccurrence; past: boolean }
   | { kind: "target"; project: Project }
 );
+
+/** Which of a task's dates a chip stands for: its deadline, its planned day, or none (the "No date" list). */
+type DateKind = "due" | "plan" | "none";
+type Chip = { task: Task; kind: DateKind | "done" };
+type DatePatch = { dueDate?: string | null; plannedDate?: string | null };
 
 const KIND_ORDER = { due: 0, target: 1, plan: 2, event: 3, done: 4 } as const;
 
@@ -63,6 +69,25 @@ function itemsByDay(tasks: Task[], events: EventOccurrence[], projects: Project[
   return map;
 }
 
+/** A planned day on the deadline's day shows as the deadline alone, so it moves and goes with it. */
+const sharesDueDay = (t: Task) => !!t.plannedDate && !!t.dueDate && t.plannedDate === dateOnly(t.dueDate);
+
+/**
+ * The dates to save when a chip goes to `day`: the chip's own date moves, so the task never shows up twice.
+ * A deadline keeps its time unless `time` is given. Dropped on the deadline flag, a chip becomes the deadline.
+ */
+function movePatch(t: Task, kind: DateKind, day: string, asDeadline: boolean, time?: string | null): DatePatch {
+  if (kind !== "due" && !asDeadline) return { plannedDate: day };
+  const keep = time === undefined ? timeOf(t.dueDate) : time;
+  const dueDate = keep ? `${day}T${keep}` : day;
+  return kind === "plan" || (kind === "due" && sharesDueDay(t)) ? { dueDate, plannedDate: day } : { dueDate };
+}
+
+function clearPatch(t: Task, kind: "due" | "plan"): DatePatch {
+  if (kind === "plan") return { plannedDate: null };
+  return sharesDueDay(t) ? { dueDate: null, plannedDate: null } : { dueDate: null };
+}
+
 /** True when a drag event happens over the "set as deadline" flag inside a day. */
 function onFlag(e: DragEvent) {
   const node = e.target as Node;
@@ -92,11 +117,14 @@ export function MonthView({
   const weeks = days.length / 7;
   const { run } = useAction();
   const [sel, setSel] = useSelection(initialKey);
-  const [all, patchTask] = useOptimistic([...tasks, ...undated], (state, p: { id: number; patch: Partial<Task> }) =>
-    state.map((t) => (t.id === p.id ? { ...t, ...p.patch } : t)));
+  // A null patch means the task was deleted.
+  const [all, patchTask] = useOptimistic([...tasks, ...undated], (state, p: { id: number; patch: DatePatch | null }) =>
+    p.patch ? state.map((t) => (t.id === p.id ? { ...t, ...p.patch } : t)) : state.filter((t) => t.id !== p.id));
   const [show, setShow] = useState<Record<Filter, boolean>>({ due: true, event: true, plan: true, target: true });
-  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ key: string; kind: DateKind } | null>(null);
   const [over, setOver] = useState<{ day: string; flag: boolean } | null>(null);
+  const [overClear, setOverClear] = useState(false);
+  const [menu, setMenu] = useState<{ chip: Chip; anchor: Anchor } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [rows, setRows] = useState(MAX_ITEMS + 1);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -113,8 +141,11 @@ export function MonthView({
 
   useEffect(() => {
     if (!expanded) return;
-    const onDown = (e: MouseEvent) => { if (!popRef.current?.contains(e.target as Node)) setExpanded(null); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(null); };
+    const onDown = (e: globalThis.MouseEvent) => {
+      // A task's menu opens over the day; picking from it shouldn't close the day behind it.
+      if (!popRef.current?.contains(e.target as Node) && !(e.target as Element).closest?.("[role=menu]")) setExpanded(null);
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === "Escape") setExpanded(null); };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
@@ -123,39 +154,83 @@ export function MonthView({
   const selected = all.find((t) => t.key === sel) ?? null;
   const byDay = itemsByDay(all.filter((t) => t.dueDate || t.plannedDate), events, ctx.projects, today, now);
   const noDate = all.filter((t) => !t.dueDate && !t.plannedDate && isOpenTask(t));
-  const toggle = (t: Task) => setSel((s) => (s === t.key ? null : t.key));
+  const undatedLeft = undatedCount - (undated.length - noDate.length);
+  const dragDated = !!drag && drag.kind !== "none";
+  // Closed while every open task has a date. Dragging a dated task opens it, to drop the task there and remove its date.
+  const panelOpen = dragDated || (!selected && undatedLeft > 0);
 
-  const drop = (task: Task, day: string, asDeadline: boolean) => {
-    if (asDeadline) {
-      const time = timeOf(task.dueDate);
-      const dueDate = time ? `${day}T${time}` : day;
-      if (dueDate === task.dueDate) return;
-      run(() => {
-        patchTask({ id: task.id, patch: { dueDate } });
-        return updateTaskAction(task.id, { dueDate });
-      }, `${task.key} is now due ${fmtDay(day)}`);
-    } else if (task.plannedDate !== day) {
-      run(() => {
-        patchTask({ id: task.id, patch: { plannedDate: day } });
-        return updateTaskAction(task.id, { plannedDate: day });
-      }, `Planned ${task.key} for ${fmtDay(day)}`);
-    }
+  const save = (t: Task, patch: DatePatch, message: string) => {
+    if (Object.entries(patch).every(([k, v]) => t[k as keyof DatePatch] === v)) return;
+    run(() => {
+      patchTask({ id: t.id, patch });
+      return updateTaskAction(t.id, patch);
+    }, message);
   };
 
-  const dragSource = (task: Task) => ({
-    draggable: true,
-    onDragStart: (e: DragEvent) => {
-      e.dataTransfer.setData(DRAG_TYPE, task.key);
-      e.dataTransfer.setData("text/plain", `${task.key} ${task.title}`);
-      e.dataTransfer.effectAllowed = "move";
-      // Restyling the dragged element inside dragstart can cancel the drag in Chromium.
-      setTimeout(() => setDragKey(task.key), 0);
-    },
-    onDragEnd: () => {
-      setDragKey(null);
-      setOver(null);
+  const moveTo = (t: Task, kind: DateKind, day: string, asDeadline = false, time?: string | null) => {
+    const patch = movePatch(t, kind, day, asDeadline, time);
+    save(t, patch, patch.dueDate ? `${t.key} is now due ${fmtDay(day)}` : `Planned ${t.key} for ${fmtDay(day)}`);
+  };
+
+  const clearDate = (t: Task, kind: DateKind) => {
+    if (kind === "none") return;
+    const patch = clearPatch(t, kind);
+    const left = { ...t, ...patch };
+    save(t, patch, !left.dueDate && !left.plannedDate ? `${t.key} has no date now`
+      : kind === "due" ? `Removed the due date of ${t.key}` : `Removed the planned date of ${t.key}`);
+  };
+
+  const remove = (t: Task) => {
+    if (sel === t.key) setSel(null);
+    run(() => {
+      patchTask({ id: t.id, patch: null });
+      return deleteTaskAction(t.id);
+    }, `Deleted ${t.key}`);
+  };
+
+  const openMenu = (el: Element, chip: Chip) => setMenu({ chip, anchor: anchorOf(el) });
+  const menuOn = (t: Task, kind: Chip["kind"]) => menu?.chip.task.id === t.id && menu.chip.kind === kind;
+
+  /** A click (or Enter) on a task opens its menu. */
+  const menuPress = (chip: Chip) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    "aria-haspopup": "menu" as const,
+    onClick: (e: MouseEvent<HTMLElement>) => openMenu(e.currentTarget, chip),
+    onKeyDown: (e: KeyboardEvent<HTMLElement>) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      openMenu(e.currentTarget, chip);
     },
   });
+
+  const dragSource = (task: Task, kind: DateKind) => ({
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ key: task.key, kind }));
+      e.dataTransfer.setData("text/plain", `${task.key} ${task.title}`);
+      e.dataTransfer.effectAllowed = "move";
+      setMenu(null);
+      // Restyling the dragged element inside dragstart can cancel the drag in Chromium.
+      setTimeout(() => setDrag({ key: task.key, kind }), 0);
+    },
+    onDragEnd: () => {
+      setDrag(null);
+      setOver(null);
+      setOverClear(false);
+    },
+  });
+
+  /** The task a drop carries, and which of its dates it was dragged by. */
+  const dropped = (e: DragEvent) => {
+    try {
+      const d = JSON.parse(e.dataTransfer.getData(DRAG_TYPE)) as { key: string; kind: DateKind };
+      const task = all.find((t) => t.key === d.key);
+      return task ? { task, kind: d.kind } : null;
+    } catch {
+      return null;
+    }
+  };
 
   const dropTarget = (day: string) => ({
     onDragOver: (e: DragEvent) => {
@@ -169,14 +244,35 @@ export function MonthView({
       if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver((o) => (o?.day === day ? null : o));
     },
     onDrop: (e: DragEvent) => {
-      const task = all.find((t) => t.key === e.dataTransfer.getData(DRAG_TYPE));
-      if (!task) return;
+      const d = dropped(e);
+      if (!d) return;
       e.preventDefault();
       setOver(null);
-      setDragKey(null);
-      drop(task, day, onFlag(e));
+      setDrag(null);
+      moveTo(d.task, d.kind, day, onFlag(e));
     },
   });
+
+  // The "No date" panel takes a dated task and removes the date it was dragged by.
+  const clearTarget = {
+    onDragOver: (e: DragEvent) => {
+      if (!e.dataTransfer.types.includes(DRAG_TYPE) || drag?.kind === "none") return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      setOverClear(true);
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOverClear(false);
+    },
+    onDrop: (e: DragEvent) => {
+      const d = dropped(e);
+      if (!d) return;
+      e.preventDefault();
+      setOverClear(false);
+      setDrag(null);
+      clearDate(d.task, d.kind);
+    },
+  };
 
   const renderItem = (it: Item) => {
     const pill = "flex h-[22px] w-full min-w-0 shrink-0 items-center gap-[5px] overflow-hidden whitespace-nowrap rounded-[5px] border px-1.5 text-left text-[11.5px]";
@@ -207,8 +303,9 @@ export function MonthView({
       : dateOnly(t.dueDate ?? "") === today ? "border-ink/5 bg-ink/5 text-fg2 hover:bg-ink/[0.08]"
       : "border-line2 bg-hover text-fg3 hover:bg-sel";
     return (
-      <div key={`${it.kind}${t.id}`} title={`${t.key} ${t.title}`} {...pressable(() => toggle(t))} {...(it.kind === "done" ? {} : dragSource(t))}
-        className={cx(pill, tone, "cursor-pointer", t.key === sel && "ring-1 ring-accent/70", dragKey === t.key && "opacity-40")}>
+      <div key={`${it.kind}${t.id}`} title={`${t.key} ${t.title}`} {...menuPress({ task: t, kind: it.kind })} {...(it.kind === "done" ? {} : dragSource(t, it.kind))}
+        className={cx(pill, tone, "cursor-pointer", (t.key === sel || menuOn(t, it.kind)) && "ring-1 ring-accent/70",
+          drag?.key === t.key && drag.kind === it.kind && "opacity-40")}>
         <Icon name={it.kind === "done" ? "check" : it.kind === "plan" ? "calendarCheck" : "flag"} size={11} strokeWidth={it.kind === "done" ? 2.4 : 2.2} className="shrink-0" />
         {it.time && <span className="shrink-0 font-mono text-[10.5px] text-mut2">{it.time}</span>}
         <span className={cx("truncate", it.kind === "done" && "line-through")}>{t.title}</span>
@@ -261,14 +358,15 @@ export function MonthView({
                   <div key={day} role="group" aria-label={format(parseLocal(day), "EEEE d MMMM")} {...dropTarget(day)}
                     className={cx("relative flex min-h-0 min-w-0 flex-col gap-[3px] border-b border-line p-1.5",
                       col < 6 && "border-r", expanded === day ? "z-20" : "overflow-hidden",
-                      isOver ? "bg-accent/[0.07] shadow-[inset_0_0_0_1px_rgba(139,142,245,0.55)]" : isToday ? "bg-raised" : out && "bg-input")}>
+                      isOver ? "bg-accent/[0.07] ring-1 ring-inset ring-accent/55" : isToday ? "bg-raised" : out && "bg-input")}>
                     <div className="flex h-6 shrink-0 items-center gap-1 px-0.5">
                       <Link href={`/calendar/week?w=${day}`} title="Open this week"
                         className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-1.5 text-[12px]",
                           isToday ? "bg-accent font-semibold text-bg" : cx("font-medium hover:bg-hover", out ? "text-faint" : day < today ? "text-mut2" : "text-fg2"))}>
                         {day.endsWith("-01") ? format(parseLocal(day), "d MMM") : Number(day.slice(8))}
                       </Link>
-                      {isOver && dragKey && (
+                      {/* A deadline moves wherever it's dropped; anything else can become one here. */}
+                      {isOver && drag && drag.kind !== "due" && (
                         <span data-flag title="Drop here to make it the due date"
                           className={cx("ml-auto flex h-5 items-center gap-1 rounded-[5px] border px-1.5 text-[11px]",
                             over.flag ? "border-accent/60 bg-accent/15 text-accent-fg" : "border-line2 bg-panel text-mut")}>
@@ -303,37 +401,121 @@ export function MonthView({
             </div>
           </div>
 
-          {!selected && (
-            <aside aria-label="Tasks without a date" className="flex w-[280px] shrink-0 flex-col border-l border-line">
-              <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
-                <h2 className="text-[12.5px] font-medium text-fg2">No date</h2>
-                <span className="text-[12px] text-mut2">{undatedCount - (undated.length - noDate.length)}</span>
-              </div>
-              <p className="px-4 pb-2 pt-3 text-[12px] leading-normal text-mut2">
-                Drag a task onto a day to plan it. Drop it on the deadline flag to set a due date instead.
-              </p>
-              <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2.5 pb-3 pt-1">
-                {noDate.map((t) => (
-                  <div key={t.id} title={`${t.key} ${t.title}`} {...pressable(() => toggle(t))} {...dragSource(t)}
-                    className={cx("flex h-[34px] shrink-0 cursor-grab items-center gap-2 rounded-md border px-2 active:cursor-grabbing",
-                      dragKey === t.key ? "border-dashed border-ctl text-dim" : "border-line text-fg2 hover:bg-hover")}>
-                    <Grip />
-                    <StatusIcon status={t.status} />
-                    <span className="min-w-0 flex-1 truncate text-[12.5px]">{t.title}</span>
-                    {t.areaId && <Dot color={areaColor(ctx.areas, t.areaId)} size={7} />}
+          {(!selected || dragDated) && (
+            <aside aria-label="Tasks without a date" inert={!panelOpen} {...clearTarget}
+              className={cx("shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none",
+                panelOpen ? "w-[280px] border-l border-line" : "w-0")}>
+              <div className={cx("flex h-full w-[280px] flex-col", overClear && "bg-accent/[0.04]")}>
+                <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">
+                  <h2 className="text-[12.5px] font-medium text-fg2">No date</h2>
+                  {undatedLeft > 0 && <span className="text-[12px] text-mut2">{undatedLeft}</span>}
+                </div>
+                {dragDated ? (
+                  <div className={cx("mx-2.5 mb-1 mt-3 flex h-16 shrink-0 items-center justify-center gap-2 rounded-lg border border-dashed text-[12.5px]",
+                    overClear ? "border-accent/60 bg-accent/[0.07] text-accent-fg" : "border-ctl text-mut")}>
+                    <Icon name="x" size={13} strokeWidth={2} />Drop here to remove the date
                   </div>
-                ))}
-                {!noDate.length && <div className="px-1.5 py-2 text-[12px] text-mut2">Every open task has a date.</div>}
-                {undatedCount > undated.length && (
-                  <div className="px-1.5 py-1 text-[12px] text-mut2">and {undatedCount - undated.length} more</div>
+                ) : (
+                  <p className="px-4 pb-2 pt-3 text-[12px] leading-normal text-mut2">
+                    Drag a task onto a day to plan it. Drop it on the deadline flag to set a due date instead.
+                  </p>
                 )}
+                <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2.5 pb-3 pt-1">
+                  {noDate.map((t) => (
+                    <div key={t.id} title={`${t.key} ${t.title}`} {...menuPress({ task: t, kind: "none" })} {...dragSource(t, "none")}
+                      className={cx("flex h-[34px] shrink-0 cursor-grab items-center gap-2 rounded-md border px-2 active:cursor-grabbing",
+                        drag?.key === t.key ? "border-dashed border-ctl text-dim" : menuOn(t, "none") ? "border-ctl bg-hover text-fg2" : "border-line text-fg2 hover:bg-hover")}>
+                      <Grip />
+                      <StatusIcon status={t.status} />
+                      <span className="min-w-0 flex-1 truncate text-[12.5px]">{t.title}</span>
+                      {t.areaId && <Dot color={areaColor(ctx.areas, t.areaId)} size={7} />}
+                    </div>
+                  ))}
+                  {undatedCount > undated.length && (
+                    <div className="px-1.5 py-1 text-[12px] text-mut2">and {undatedCount - undated.length} more</div>
+                  )}
+                </div>
               </div>
             </aside>
           )}
         </div>
       </section>
       {selected && <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />}
+      {menu && (
+        <TaskMenu key={`${menu.chip.task.id}-${menu.chip.kind}`} chip={menu.chip} anchor={menu.anchor} onClose={() => setMenu(null)}
+          onOpen={() => { setSel(menu.chip.task.key); setMenu(null); }}
+          onDate={(v) => {
+            const { task: t, kind } = menu.chip;
+            if (kind !== "done") moveTo(t, kind, dateOnly(v), false, kind === "due" ? timeOf(v) : undefined);
+            setMenu(null);
+          }}
+          onClear={() => { if (menu.chip.kind !== "done") clearDate(menu.chip.task, menu.chip.kind); setMenu(null); }}
+          onDelete={() => { remove(menu.chip.task); setMenu(null); }} />
+      )}
     </div>
+  );
+}
+
+/** What a click on a task in the calendar offers: open it, move or remove the date it shows, or delete it. */
+function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: {
+  chip: Chip;
+  anchor: Anchor;
+  onClose: () => void;
+  onOpen: () => void;
+  /** "YYYY-MM-DD", or with a time for a deadline. */
+  onDate: (value: string) => void;
+  onClear: () => void;
+  onDelete: () => void;
+}) {
+  const { task: t, kind } = chip;
+  const value = kind === "due" ? t.dueDate : kind === "plan" ? t.plannedDate : null;
+  const withTime = kind === "due";
+  const [picking, setPicking] = useState(false);
+  const [date, setDate] = useState(value ? dateOnly(value) : "");
+  const [time, setTime] = useState(timeOf(value) ?? "");
+  const [confirming, setConfirming] = useState(false);
+  const pick = (d: string) => { if (d) onDate(withTime && time ? `${d}T${time}` : d); };
+  const quick = (label: string, offset: number) => (
+    <button type="button" onClick={() => pick(toDateStr(addDays(new Date(), offset)))}
+      className="h-7 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel">{label}</button>
+  );
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={264}>
+      <div className="flex min-w-0 items-baseline gap-2 px-2 pb-1.5 pt-1">
+        <span className="shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
+        <span className="truncate text-[12px] text-fg2">{t.title}</span>
+      </div>
+      <PopoverItem icon={<Icon name="arrowRight" size={13} />} onClick={onOpen}>Open task</PopoverItem>
+      {kind !== "done" && (
+        <PopoverItem icon={<Icon name="calendar" size={13} />} onClick={() => setPicking((p) => !p)}>
+          {kind === "none" ? "Plan for a day" : "Change date"}
+        </PopoverItem>
+      )}
+      {picking && (
+        <div className="mx-1 mb-1 flex flex-col gap-0.5 rounded-md border border-line2 bg-panel p-1.5">
+          {quick("Today", 0)}
+          {quick("Tomorrow", 1)}
+          {quick("In a week", 7)}
+          <form className="mt-1 flex gap-1.5" onSubmit={(e) => { e.preventDefault(); pick(date); }}>
+            <input type="date" aria-label="Date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
+            {withTime && (
+              <input type="time" aria-label="Time" value={time} onChange={(e) => setTime(e.target.value)}
+                className="h-7 w-[76px] rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
+            )}
+            <button type="submit" disabled={!date}
+              className="h-7 rounded-md border border-line2 px-2 text-[12px] text-fg2 hover:bg-sel disabled:opacity-50">Set</button>
+          </form>
+        </div>
+      )}
+      {(kind === "due" || kind === "plan") && (
+        <PopoverItem icon={<Icon name="x" size={13} />} onClick={onClear}>{kind === "due" ? "Remove due date" : "Remove planned date"}</PopoverItem>
+      )}
+      <PopoverSeparator />
+      <PopoverItem danger icon={<Icon name="trash" size={13} />} onClick={() => (confirming ? onDelete() : setConfirming(true))}>
+        {confirming ? `Delete ${t.key}? Click again` : "Delete task"}
+      </PopoverItem>
+    </Popover>
   );
 }
 

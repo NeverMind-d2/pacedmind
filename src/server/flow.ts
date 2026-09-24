@@ -26,6 +26,8 @@ function incoming(taskId: number, edges: FlowEdge[]) {
 /** Starts the task's session if the flow allows it right now. */
 function maybeStart(target: Task, edges: FlowEdge[], tasks: Map<number, Task>): LaunchResult | null {
   if (target.status !== "todo" && target.status !== "backlog") return null;
+  // Your own tasks can wait for others (a dependency on the timeline), but they never start a session.
+  if (target.agent === "human") return null;
   const project = target.projectId ? repo.getProject(target.projectId) : null;
   if (!project?.flowOn) return null;
   const inc = incoming(target.id, edges);

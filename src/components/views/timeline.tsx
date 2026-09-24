@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useOptimistic, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { format, getISOWeek } from "date-fns";
+import { deleteEdgeAction, linkTasksAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, minutesOf, parseLocal, timeOf, toStamp } from "@/lib/dates";
 import {
@@ -10,8 +11,9 @@ import {
 } from "@/lib/types";
 import type { DayLoad, TaskState } from "@/server/timeline";
 import { Diamond, Icon, ProgressRing } from "@/components/icons";
+import { Popover, PopoverItem, PopoverLabel, type Anchor } from "@/components/popover";
 import { TaskDetail } from "@/components/task-detail";
-import { Dot, Segmented, cx } from "@/components/ui";
+import { Dot, Segmented, cx, toast, useAction } from "@/components/ui";
 
 /* ---------- small helpers, also used by the roadmap ---------- */
 
@@ -65,7 +67,10 @@ const BAR_TOP = 4;
 const BAR_H = 18;
 const BAR_MID = BAR_TOP + BAR_H / 2;
 const LANE_TOP = 24;
+/** The zone beside each end of a bar that holds its connection dot. */
+const DOT_ZONE = 14;
 const NAV = "inline-flex h-7 w-7 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2";
+const ACCENT_LINE = "color-mix(in srgb, var(--color-accent) 70%, transparent)";
 
 interface Span {
   s: number;
@@ -134,6 +139,13 @@ function sessionSpan(x: Session, from: string, now: string): Span {
   return { s: dayPos(from, x.startedAt), e: dayPos(from, isActive(x) ? now : x.finishedAt ?? x.endedAt ?? x.startedAt) };
 }
 
+/** Where a bar sits in its lane: clamped to the days in view, at least 6px wide. */
+function barBox(sp: Span, sc: Scale) {
+  const clampX = (d: number) => sc.X(Math.max(0, Math.min(sc.days, d)));
+  const left = clampX(sp.s) + 1;
+  return { left, width: Math.max(6, clampX(sp.e) - 1 - left) };
+}
+
 function buildRows(input: {
   areas: Area[]; projects: Project[]; tasks: Task[]; sessionsOf: Map<number, Session[]>; spans: Map<number, TaskSpan>;
   sc: Scale; expanded: Record<string, boolean>; collapsed: Record<string, boolean>;
@@ -193,6 +205,105 @@ function buildRows(input: {
   return { rows, height: y };
 }
 
+/* ---------- dragging bars and drawing dependencies ---------- */
+
+type DatePatch = { dueDate?: string | null; plannedDate?: string | null };
+/** What is being dragged: the bar's start, its end, or the whole bar. */
+type BarPart = "start" | "end" | "move";
+type BarDrag = { taskId: number; part: BarPart; days: number };
+/** From a bar's end to a task that waits for it, from its start to a task it waits for. */
+type LinkSide = "start" | "end";
+/** A dependency being drawn; x and y are the pointer in grid coordinates. */
+type LinkDrag = { taskId: number; side: LinkSide; x: number; y: number; target: number | null; problem: string | null };
+
+/** The deadline sets where a bar ends; without one (or with one before the start), the estimate does. */
+const endsOnDue = (sp: TaskSpan) => sp.due !== null && sp.e === sp.due;
+
+/** How many whole days a bar's part can move by: a bar never gets shorter than a day. */
+function clampDays(sp: TaskSpan, part: BarPart, days: number): number {
+  const last = Math.ceil(sp.e) - 1;
+  if (part === "start") return Math.min(days, last - sp.s);
+  if (part === "end") return Math.max(days, sp.s - last);
+  return days;
+}
+
+/** Where a bar is drawn while it's dragged. */
+function draggedSpan(sp: TaskSpan, part: BarPart, days: number): TaskSpan {
+  if (part === "start") return { s: sp.s + days, e: sp.e, due: endsOnDue(sp) ? sp.due : sp.e };
+  if (part === "end") return { s: sp.s, e: sp.e + days, due: sp.e + days };
+  return { s: sp.s + days, e: sp.e + days, due: sp.due === null ? null : sp.due + days };
+}
+
+/**
+ * The dates a dragged bar saves: its start is the planned day and its end the deadline, which keeps its time.
+ * A bar without a deadline ends where its estimate runs out, so moving its start makes that end the deadline.
+ */
+function dragPatch(t: Task, sp: TaskSpan, part: BarPart, days: number, from: string): DatePatch {
+  const day = (n: number) => addDaysStr(from, n);
+  const last = Math.ceil(sp.e) - 1;
+  const shiftDue = () => {
+    const time = timeOf(t.dueDate);
+    const d = addDaysStr(t.dueDate!, days);
+    return time ? `${d}T${time}` : d;
+  };
+  if (part === "start") return endsOnDue(sp) ? { plannedDate: day(sp.s + days) } : { plannedDate: day(sp.s + days), dueDate: day(last) };
+  if (part === "end") return { dueDate: endsOnDue(sp) ? shiftDue() : day(last + days) };
+  return t.dueDate ? { plannedDate: day(sp.s + days), dueDate: shiftDue() } : { plannedDate: day(sp.s + days) };
+}
+
+/** What a bar says about its new dates while it's dragged. */
+function dragLabel(sp: TaskSpan, part: BarPart, from: string): string {
+  const first = addDaysStr(from, Math.floor(sp.s));
+  const last = addDaysStr(from, Math.ceil(sp.e) - 1);
+  if (part === "start") return `Starts ${fmtDay(first)}`;
+  if (part === "end") return `Due ${fmtDay(last)}`;
+  return first === last ? fmtDay(first) : `${fmtShort(first)} to ${fmtShort(last)}`;
+}
+
+function dragMessage(t: Task, patch: DatePatch, part: BarPart): string {
+  if (part === "end") return `${t.key} is now due ${fmtDay(patch.dueDate!)}`;
+  if (part === "start") return `${t.key} now starts ${fmtDay(patch.plannedDate!)}${patch.dueDate ? ` and is due ${fmtDay(patch.dueDate)}` : ""}`;
+  return `Moved ${t.key} to ${fmtDay(patch.plannedDate!)}`;
+}
+
+/** Why `to` can't wait for `from`, or null when it can. The same rules as connections in a flow. */
+function linkProblem(from: Task, to: Task, edges: FlowEdge[]): string | null {
+  if (edges.some((e) => e.fromTaskId === from.id && e.toTaskId === to.id)) return `${to.key} already waits for ${from.key}`;
+  if (!isOpenTask(to)) return `${to.key} is ${to.status === "done" ? "done" : "canceled"} already`;
+  if (from.projectId !== to.projectId) return `${from.key} and ${to.key} are in different projects. Dependencies stay within one project.`;
+  const seen = new Set<number>();
+  const stack = [to.id];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (id === from.id) return `${from.key} already waits for ${to.key}, so this would make a loop`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const e of edges) if (e.fromTaskId === id) stack.push(e.toTaskId);
+  }
+  return null;
+}
+
+/** While something is dragged, its cursor holds over everything and no text gets selected (see globals.css). */
+function holdCursor(cursor: string) {
+  const html = document.documentElement;
+  html.style.setProperty("--drag-cursor", cursor);
+  html.dataset.dragging = "";
+}
+
+function releaseCursor() {
+  delete document.documentElement.dataset.dragging;
+}
+
+/** Stops the click that ends a drag, so dropping a bar or a connection doesn't also open the task under it. */
+function swallowClick() {
+  const stop = (e: Event) => {
+    e.stopPropagation();
+    e.preventDefault();
+  };
+  window.addEventListener("click", stop, { capture: true, once: true });
+  setTimeout(() => window.removeEventListener("click", stop, { capture: true }), 0);
+}
+
 /* ---------- bar looks: color is the area, state is fill, outline and opacity ---------- */
 
 interface Look {
@@ -230,6 +341,22 @@ function sessionTitle(x: Session): string {
   const start = format(parseLocal(x.startedAt), "EEE d MMM, HH:mm");
   const until = isActive(x) || !end ? "now" : format(parseLocal(end), dateOnly(end) === dateOnly(x.startedAt) ? "HH:mm" : "EEE d MMM, HH:mm");
   return `${AGENT_LABEL[x.agent]} session · ${start} to ${until} · ${SESSION_STATE[x.status]}`;
+}
+
+/**
+ * What comes right after a task's bar: the deadline flag (when the bar runs up to it), then the "waiting for you"
+ * dot. `after` is where the next thing (the label, or the connection dot) can start.
+ */
+function barTail(row: TaskRow, sc: Scale, layers: Record<Layer, boolean>) {
+  const { left, width } = barBox(row.span, sc);
+  const due = row.span.due;
+  const flag = layers.deadlines && due !== null && due >= 0 && due <= sc.days;
+  const flagX = due === null ? 0 : sc.X(due) + 2;
+  let after = left + width + 4;
+  if (flag && due! > row.span.s) after = Math.max(after, flagX + 14);
+  const dotX = after;
+  if (barLook(row.task, row.sessions[row.sessions.length - 1], row.color).dot) after += 11;
+  return { flag, flagX, dotX, after };
 }
 
 const hours = (min: number) => (min < 60 ? `${min}m` : `${Math.round(min / 6) / 10}h`);
@@ -275,10 +402,8 @@ function CapLane({ loads, dayMinutes, sc }: { loads: Record<string, DayLoad>; da
 function ProjectLane({ row, sc }: { row: ProjectRow; sc: Scale }) {
   const { project: p, color, span } = row;
   if (!span) return null;
-  const clampX = (d: number) => sc.X(Math.max(0, Math.min(sc.days, d)));
   const visible = span.e > 0 && span.s < sc.days;
-  const left = clampX(span.s) + 1;
-  const width = Math.max(6, clampX(span.e) - 1 - left);
+  const { left, width } = barBox(span, sc);
   const later = !row.started && !!p.startDate && p.startDate > sc.today;
   const pct = row.total ? Math.round((row.done / row.total) * 100) : 0;
   const text = later ? `Starts ${fmtShort(p.startDate!)}` : `${pct}%`;
@@ -309,53 +434,85 @@ function ProjectLane({ row, sc }: { row: ProjectRow; sc: Scale }) {
   );
 }
 
-function TaskLane({ row, state, sc, layers }: { row: TaskRow; state: TaskState | undefined; sc: Scale; layers: Record<Layer, boolean> }) {
+function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink }: {
+  row: TaskRow;
+  state: TaskState | undefined;
+  sc: Scale;
+  layers: Record<Layer, boolean>;
+  /** Said instead of the state while the bar is dragged, e.g. "Due Fri, 26 Sep". */
+  dragText: string | null;
+  /** The dependency being drawn would end on this task. */
+  linkTarget: boolean;
+  /** Set when the bar can be moved, and stretched by its ends. */
+  onGrab: ((e: ReactPointerEvent, part: BarPart) => void) | null;
+  /** Set when dependencies can be drawn from the bar. */
+  onLink: ((e: ReactPointerEvent, side: LinkSide) => void) | null;
+}) {
   const { task: t, color, span, sessions } = row;
   const look = barLook(t, sessions[sessions.length - 1], color);
   const clampX = (d: number) => sc.X(Math.max(0, Math.min(sc.days, d)));
-  const visible = span.e > 0 && span.s < sc.days;
-  const left = clampX(span.s) + 1;
-  const width = Math.max(6, clampX(span.e) - 1 - left);
-  const text = state?.short ?? "";
+  const bar = layers.tasks && span.e > 0 && span.s < sc.days;
+  const { left, width } = barBox(span, sc);
+  const text = dragText ?? state?.short ?? "";
   const inside = width >= textWidth(text) + (look.check ? 30 : 16);
 
   const due = span.due;
-  const flag = layers.deadlines && due !== null && due >= 0 && due <= sc.days;
   const overdue = isOpenTask(t) && due !== null && due < sc.nowPos;
-  const flagX = due === null ? 0 : sc.X(due) + 2;
-  // Things drawn right after the bar: the deadline flag (when the bar runs up to it), the "waiting for you" dot, the label.
-  let after = left + width + 4;
-  if (flag && due! > span.s) after = Math.max(after, flagX + 14);
-  const dotX = after;
-  if (look.dot) after += 11;
+  const { flag, flagX, dotX, after } = barTail(row, sc, layers);
   const outRight = after + 2 + textWidth(text) <= sc.gridW || left < textWidth(text) + 12;
+  // The connection dots: before the bar, and after everything that follows it. Each zone reaches the bar, so the
+  // pointer can go from the bar to a dot without leaving them.
+  const links = bar && onLink
+    ? [{ side: "start" as const, left: left - DOT_ZONE, width: DOT_ZONE }, { side: "end" as const, left: left + width, width: after - 4 - left - width + DOT_ZONE }]
+    : [];
 
   return (
     <>
-      {layers.tasks && visible && (
-        <>
-          <div title={`${t.key} · ${state?.text ?? ""}`}
-            className={cx("absolute flex items-center gap-[5px] overflow-hidden whitespace-nowrap rounded px-1.5 text-[11px]", look.fg)}
+      {/* Above the dependency lines. Hovering the bar shows the grips at its ends and its connection dots. */}
+      <div className="group/bar pointer-events-none absolute inset-0 z-[1]">
+        {bar && (
+          <div title={`${t.key} · ${state?.text ?? ""}`} onPointerDown={onGrab ? (e) => onGrab(e, "move") : undefined}
+            className={cx("pointer-events-auto absolute flex items-center gap-[5px] overflow-hidden whitespace-nowrap rounded px-1.5 text-[11px]", look.fg,
+              onGrab && "cursor-grab", linkTarget && "ring-1 ring-accent")}
             style={{ top: BAR_TOP, height: BAR_H, left, width, background: look.bg, border: `1px ${look.dashed ? "dashed" : "solid"} ${look.bd}` }}>
             {look.check && <Icon name="check" size={10} strokeWidth={2.8} className="shrink-0" />}
             {inside && <span className="truncate">{text}</span>}
+            {onGrab && (["start", "end"] as const).map((part) => (
+              <span key={part} onPointerDown={(e) => onGrab(e, part)}
+                title={part === "start" ? "Drag to change when it starts" : "Drag to change when it's due"}
+                className={cx("absolute inset-y-0 flex w-2 cursor-ew-resize items-center justify-center", part === "start" ? "left-0" : "right-0")}>
+                <span className="h-2.5 w-0.5 rounded-full bg-current opacity-0 group-hover/bar:opacity-50" />
+              </span>
+            ))}
           </div>
-          {look.dot && <span className="absolute h-[7px] w-[7px] rounded-full bg-accent" style={{ left: dotX, top: BAR_MID - 3 }} />}
-          {!inside && text && (
-            <span className="absolute whitespace-nowrap text-[11px] leading-4 text-mut2"
-              style={outRight ? { top: BAR_TOP + 1, left: after + 2 } : { top: BAR_TOP + 1, right: sc.gridW - left + 6 }}>
-              {text}
+        )}
+        {links.map((z) => (
+          <span key={z.side} onPointerDown={(e) => onLink!(e, z.side)}
+            title={z.side === "end" ? "Drag to a task that waits for this one" : "Drag to a task this one waits for"}
+            className={cx("group/dot pointer-events-auto absolute flex cursor-crosshair items-center", z.side === "end" ? "justify-end" : "justify-start")}
+            style={{ top: BAR_TOP, height: BAR_H, left: z.left, width: z.width }}>
+            <span className="flex w-3.5 justify-center">
+              <span className="h-2 w-2 rounded-full border-[1.5px] border-line-strong bg-panel opacity-0 transition group-hover/bar:opacity-100 group-hover/dot:scale-125 group-hover/dot:border-mut" />
             </span>
-          )}
-        </>
-      )}
+          </span>
+        ))}
+        {flag && (
+          <span title={`${overdue ? "Overdue, was due" : "Due"} ${fmtDay(t.dueDate ?? addDaysStr(sc.from, Math.ceil(due!) - 1))}${timeOf(t.dueDate) ? `, ${timeOf(t.dueDate)}` : ""}`}
+            className={cx("pointer-events-auto absolute flex", !isOpenTask(t) ? "text-dim" : overdue ? "text-danger" : "text-mut")} style={{ left: flagX, top: BAR_MID - 6 }}>
+            <Icon name="flag" size={11} strokeWidth={2.4} />
+          </span>
+        )}
+        {/* The label steps aside while the dots are out. */}
+        {bar && !inside && text && (
+          <span className={cx("absolute whitespace-nowrap text-[11px] leading-4", dragText ? "text-fg2" : "text-mut2",
+            links.length > 0 && cx("transition-transform motion-reduce:transition-none", outRight ? "group-hover/bar:translate-x-2.5" : "group-hover/bar:-translate-x-2.5"))}
+            style={outRight ? { top: BAR_TOP + 1, left: after + 2 } : { top: BAR_TOP + 1, right: sc.gridW - left + 6 }}>
+            {text}
+          </span>
+        )}
+      </div>
+      {bar && look.dot && <span className="absolute h-[7px] w-[7px] rounded-full bg-accent" style={{ left: dotX, top: BAR_MID - 3 }} />}
       {layers.tasks && isOpenTask(t) && <EdgeHint span={span} sc={sc} />}
-      {flag && (
-        <span title={`${overdue ? "Overdue, was due" : "Due"} ${fmtDay(t.dueDate!)}${timeOf(t.dueDate) ? `, ${timeOf(t.dueDate)}` : ""}`}
-          className={cx("absolute flex", !isOpenTask(t) ? "text-dim" : overdue ? "text-danger" : "text-mut")} style={{ left: flagX, top: BAR_MID - 6 }}>
-          <Icon name="flag" size={11} strokeWidth={2.4} />
-        </span>
-      )}
       {layers.sessions && sessions.map((x) => {
         const sp = sessionSpan(x, sc.from, sc.now);
         if (sp.e < 0 || sp.s > sc.days) return null;
@@ -446,14 +603,23 @@ export function Timeline(props: {
   ctx: TaskContext;
   initialKey: string | null;
 }) {
-  const { from, areas, projects, tasks, sessions, edges, states, loads, dayMinutes, ctx } = props;
+  const { from, areas, projects, sessions, states, loads, dayMinutes, ctx } = props;
+  const { run } = useAction();
+  const [tasks, patchTask] = useOptimistic(props.tasks, (state, p: { id: number; patch: DatePatch }) =>
+    state.map((t) => (t.id === p.id ? { ...t, ...p.patch } : t)));
+  const [edges, editEdges] = useOptimistic(props.edges, (state, op: { add: FlowEdge } | { remove: number }) =>
+    "add" in op ? [...state, op.add] : state.filter((e) => e.id !== op.remove));
   const [zoom, setZoom] = useState(props.zoom);
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ tasks: true, sessions: true, blocks: true, deadlines: true, deps: true });
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [sel, setSel] = useState<string | null>(props.initialKey);
   const [tick, setTick] = useState<string | null>(null);
+  const [drag, setDrag] = useState<BarDrag | null>(null);
+  const [link, setLink] = useState<LinkDrag | null>(null);
+  const [depMenu, setDepMenu] = useState<{ edge: FlowEdge; from: string; to: string; anchor: Anchor } | null>(null);
   const [scrollRef, width] = useWidth<HTMLDivElement>(TREE + 924);
+  const gridRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const id = setInterval(() => setTick(toStamp(new Date())), 60_000);
@@ -479,7 +645,12 @@ export function Timeline(props: {
     sessionsOf.set(x.taskId, [...(sessionsOf.get(x.taskId) ?? []), x]);
   }
   const spans = taskSpans(tasks, sessionsOf, edges, from);
-  const { rows, height } = buildRows({ areas, projects, tasks, sessionsOf, spans, sc, expanded, collapsed });
+  const built = buildRows({ areas, projects, tasks, sessionsOf, spans, sc, expanded, collapsed });
+  // The rows keep their order while a bar is dragged; only the dragged bar moves.
+  const rows = drag
+    ? built.rows.map((r) => (r.kind === "task" && r.task.id === drag.taskId ? { ...r, span: draggedSpan(r.span, drag.part, drag.days) } : r))
+    : built.rows;
+  const height = built.height;
 
   const taskRows = new Map(rows.filter((r): r is TaskRow => r.kind === "task").map((r) => [r.task.id, r]));
   const deps = layers.deps && layers.tasks
@@ -495,7 +666,9 @@ export function Timeline(props: {
       const y2 = b.y + BAR_MID;
       const ym = down ? b.y : b.y + b.h;
       return [{
-        id: e.id,
+        edge: e,
+        from: a.task.key,
+        to: b.task.key,
         d: `M${x1} ${y1} V${ym} H${x2 - 6} V${y2} H${x2 - 1}`,
         head: `M${x2 - 5} ${y2 - 3} L${x2 - 1} ${y2} L${x2 - 5} ${y2 + 3}`,
       }];
@@ -504,6 +677,120 @@ export function Timeline(props: {
 
   const selected = sel ? tasks.find((t) => t.key === sel) ?? null : null;
   const select = (t: Task) => setSel((s) => (s === t.key ? null : t.key));
+
+  /** Drags a bar by whole days, then saves its dates. A press without a drag still opens the task. */
+  const grabBar = (e: ReactPointerEvent, row: TaskRow, part: BarPart) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    const { task: t, span: sp } = row;
+    const x0 = e.clientX;
+    let moved = false;
+    let days = 0;
+    const daysAt = (ev: PointerEvent) => clampDays(sp, part, Math.round((ev.clientX - x0) / dayW));
+    const onMove = (ev: PointerEvent) => {
+      if (!moved) {
+        if (Math.abs(ev.clientX - x0) < 4) return;
+        moved = true;
+        holdCursor(part === "move" ? "grabbing" : "ew-resize");
+        setDrag({ taskId: t.id, part, days });
+      }
+      const next = daysAt(ev);
+      if (next === days) return;
+      days = next;
+      setDrag({ taskId: t.id, part, days });
+    };
+    const finish = (ev: PointerEvent | null) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      if (!moved) return;
+      releaseCursor();
+      setDrag(null);
+      if (!ev) return;
+      swallowClick();
+      days = daysAt(ev);
+      if (!days) return;
+      const patch = dragPatch(t, sp, part, days, from);
+      run(() => {
+        patchTask({ id: t.id, patch });
+        return updateTaskAction(t.id, patch);
+      }, dragMessage(t, patch, part));
+    };
+    const onUp = (ev: PointerEvent) => finish(ev);
+    const onCancel = () => finish(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  };
+
+  /** Draws a dependency from one end of a bar to the task row it's dropped on. */
+  const grabLink = (e: ReactPointerEvent, row: TaskRow, side: LinkSide) => {
+    const grid = gridRef.current;
+    if (e.button !== 0 || !grid) return;
+    e.stopPropagation();
+    const source = row.task;
+    const targets = rows.filter((r): r is TaskRow => r.kind === "task" && r.task.id !== source.id);
+    const at = (ev: { clientX: number; clientY: number }): LinkDrag => {
+      const box = grid.getBoundingClientRect();
+      const x = ev.clientX - box.left - TREE;
+      const y = ev.clientY - box.top;
+      const hit = targets.find((r) => y >= r.y && y < r.y + r.h)?.task;
+      const problem = !hit ? null : side === "end" ? linkProblem(source, hit, edges) : linkProblem(hit, source, edges);
+      return { taskId: source.id, side, x, y, target: hit?.id ?? null, problem };
+    };
+    holdCursor("crosshair");
+    setLink(at(e));
+    const onMove = (ev: PointerEvent) => setLink(at(ev));
+    const finish = (ev: PointerEvent | null) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      releaseCursor();
+      setLink(null);
+      if (!ev) return;
+      swallowClick();
+      const l = at(ev);
+      if (l.target === null) return;
+      if (l.problem) {
+        toast(l.problem, "error");
+        return;
+      }
+      const [fromId, toId] = side === "end" ? [source.id, l.target] : [l.target, source.id];
+      run(() => {
+        editEdges({ add: { id: -Date.now(), fromTaskId: fromId, toTaskId: toId, mode: "auto", atTime: null } });
+        return linkTasksAction(fromId, toId);
+      });
+    };
+    const onUp = (ev: PointerEvent) => finish(ev);
+    const onCancel = () => finish(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  };
+
+  const unlink = (edge: FlowEdge, fromKey: string, toKey: string) => {
+    setDepMenu(null);
+    run(() => {
+      editEdges({ remove: edge.id });
+      return deleteEdgeAction(edge.id);
+    }, `${toKey} no longer waits for ${fromKey}`);
+  };
+
+  // The dependency being drawn: from the dot it started at to the task it would end on, or to the pointer.
+  const linkLine = (() => {
+    const src = link && taskRows.get(link.taskId);
+    if (!link || !src) return null;
+    const a = barBox(src.span, sc);
+    // The centers of the dots in TaskLane.
+    const x1 = link.side === "end" ? barTail(src, sc, layers).after - 4 + DOT_ZONE / 2 : a.left - DOT_ZONE / 2;
+    const y1 = src.y + BAR_MID;
+    const dst = link.target !== null && !link.problem ? taskRows.get(link.target) : undefined;
+    const b = dst && barBox(dst.span, sc);
+    const x2 = b ? (link.side === "end" ? b.left - 1 : b.left + b.width + 1) : link.x;
+    const y2 = dst ? dst.y + BAR_MID : link.y;
+    const k = link.side === "end" ? 36 : -36;
+    return { x1, y1, d: `M${x1} ${y1} C${x1 + k} ${y1} ${x2 - k} ${y2} ${x2} ${y2}`, ok: !link.problem };
+  })();
 
   const href = (start: string | null) => {
     const q = new URLSearchParams();
@@ -569,7 +856,7 @@ export function Timeline(props: {
               </div>
             </div>
 
-            <div className="relative" style={{ height }}>
+            <div ref={gridRef} className="relative" style={{ height }}>
               {Array.from({ length: days }, (_, i) => i).filter((i) => i % 7 >= 5).map((i) => (
                 <span key={i} className="pointer-events-none absolute inset-y-0"
                   style={{ left: TREE + X(i), width: X(i + 1) - X(i), background: "color-mix(in srgb, var(--color-ink) 1.8%, transparent)" }} />
@@ -614,11 +901,17 @@ export function Timeline(props: {
                         </button>
                       )}
                     </div>
-                    <div className={cx("relative shrink-0 overflow-hidden", r.kind === "task" && "cursor-pointer")} style={{ width: sc.gridW }}
+                    <div className={cx("relative shrink-0 overflow-hidden", r.kind === "task" && "cursor-pointer select-none")} style={{ width: sc.gridW }}
                       onClick={r.kind === "task" ? () => select(r.task) : undefined}>
                       {r.kind === "cap" && layers.blocks && <CapLane loads={loads} dayMinutes={dayMinutes} sc={sc} />}
                       {r.kind === "proj" && <ProjectLane row={r} sc={sc} />}
-                      {r.kind === "task" && <TaskLane row={r} state={states[r.task.id]} sc={sc} layers={layers} />}
+                      {r.kind === "task" && (
+                        <TaskLane row={r} state={states[r.task.id]} sc={sc} layers={layers}
+                          dragText={drag?.taskId === r.task.id ? dragLabel(r.span, drag.part, from) : null}
+                          linkTarget={!!link && link.target === r.task.id && !link.problem}
+                          onGrab={isOpenTask(r.task) ? (e, part) => grabBar(e, r, part) : null}
+                          onLink={isOpenTask(r.task) && layers.deps ? (e, side) => grabLink(e, r, side) : null} />
+                      )}
                     </div>
                   </div>
                 );
@@ -627,12 +920,29 @@ export function Timeline(props: {
               {deps.length > 0 && (
                 <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: TREE }} aria-hidden="true">
                   {deps.map((p) => (
-                    <g key={p.id}>
-                      <path d={p.d} fill="none" stroke="var(--color-line-strong)" strokeWidth="1.2" strokeLinejoin="round" />
-                      <path d={p.head} fill="none" stroke="var(--color-dim)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                    <g key={p.edge.id} className="group/dep">
+                      <path d={p.d} fill="none" stroke="var(--color-line-strong)" strokeWidth="1.2" strokeLinejoin="round" className="group-hover/dep:stroke-mut" />
+                      <path d={p.head} fill="none" stroke="var(--color-dim)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="group-hover/dep:stroke-mut" />
+                      {/* A wider, invisible copy to click: it offers to remove the dependency. */}
+                      <path d={p.d} fill="none" stroke="transparent" strokeWidth="9" className="cursor-pointer" style={{ pointerEvents: "stroke" }}
+                        onClick={(e) => setDepMenu({ edge: p.edge, from: p.from, to: p.to, anchor: { x: e.clientX, y: e.clientY } })}>
+                        <title>{`${p.to} waits for ${p.from}`}</title>
+                      </path>
                     </g>
                   ))}
                 </svg>
+              )}
+              {linkLine && (
+                <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0 z-[2] overflow-visible" style={{ left: TREE }} aria-hidden="true">
+                  <path d={linkLine.d} fill="none" stroke={linkLine.ok ? ACCENT_LINE : "var(--color-line-strong)"} strokeWidth="1.5" strokeDasharray="5 4" />
+                  <circle cx={linkLine.x1} cy={linkLine.y1} r="4" fill="var(--color-panel)" stroke={linkLine.ok ? ACCENT_LINE : "var(--color-line-strong)"} strokeWidth="1.5" />
+                </svg>
+              )}
+              {link?.problem && (
+                <span className="pointer-events-none absolute z-[3] whitespace-nowrap rounded-md border border-line2 bg-raised px-2 py-1 text-[11.5px] text-mut shadow-[var(--shadow-popover)]"
+                  style={{ left: TREE + link.x + 14, top: link.y + 12 }}>
+                  {link.problem}
+                </span>
               )}
               {sc.nowPos >= 0 && sc.nowPos <= days && (
                 <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: TREE + X(sc.nowPos), background: "color-mix(in srgb, var(--color-accent) 75%, transparent)" }} />
@@ -642,6 +952,12 @@ export function Timeline(props: {
         </div>
       </section>
       {selected && <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />}
+      {depMenu && (
+        <Popover anchor={depMenu.anchor} onClose={() => setDepMenu(null)} width={236}>
+          <PopoverLabel>{depMenu.to} waits for {depMenu.from}</PopoverLabel>
+          <PopoverItem icon={<Icon name="x" size={13} />} onClick={() => unlink(depMenu.edge, depMenu.from, depMenu.to)}>Remove dependency</PopoverItem>
+        </Popover>
+      )}
     </div>
   );
 }

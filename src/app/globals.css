@@ -204,6 +204,12 @@ html[data-theme="light"] {
   }
 }
 
+/* While a timeline bar or dependency is being dragged (timeline.tsx), its cursor holds everywhere and no text gets selected. */
+html[data-dragging] * {
+  cursor: var(--drag-cursor) !important;
+  user-select: none;
+}
+
 /* React Flow follows the same theme as the rest of the workspace. */
 .react-flow {
   --xy-background-color: transparent;
