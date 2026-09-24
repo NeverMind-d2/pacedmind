@@ -4,6 +4,7 @@ import { QuickAdd } from "@/components/quick-add";
 import { CommandPalette } from "@/components/command-palette";
 import { Toaster } from "@/components/ui";
 import * as repo from "@/server/repo";
+import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -20,19 +21,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     today: tasks.filter((t) => open(t) && ((t.dueDate && dateOnly(t.dueDate) <= today) || t.plannedDate === today)).length,
     sessions: repo.listSessions("status = 'finished'").length,
   };
-  const progress = Object.fromEntries(
-    projects.map((p) => {
-      const pts = tasks.filter((t) => t.projectId === p.id && t.status !== "canceled");
-      return [p.id, pts.length ? Math.round((pts.filter((t) => t.status === "done").length / pts.length) * 100) : 0];
-    }),
-  );
   const paletteTasks = tasks.map((t) => ({
     key: t.key, title: t.title, status: t.status,
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
   }));
   return (
     <div className="flex h-full">
-      <Sidebar areas={areas} projects={projects} counts={counts} progress={progress} />
+      <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
       <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel">{children}</main>
       <QuickAdd areas={areas} projects={projects} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />

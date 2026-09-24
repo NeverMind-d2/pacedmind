@@ -24,12 +24,12 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 - `src/app/api/mcp/route.ts` is the MCP server (`mcp-handler` v2). Tools: list_tasks, get_task, get_next_task, start_task, finish_task, create_task, update_task. Every request needs `Authorization: Bearer <token>` (Settings → MCP server).
 - `src/app/api/sessions/[id]/ended` is called by the Claude Code `SessionEnd` hook that the launcher installs per session.
 - `src/app/actions.ts` holds the Server Actions. Every mutation ends with `refresh()` from `next/cache`, or the page will not re-render.
-- `src/lib/` is shared by client and server: types, dates, the quick-add parser (`parse.ts`), the auto-planner (`planner.ts`).
-- `src/components/` holds the UI kit (`ui.tsx`, `icons.tsx`) and task UI (`task-list`, `task-row`, `task-detail`, `quick-add`). Views live in `src/components/views/`.
+- `src/lib/` is shared by client and server: types, dates, colors (`colors.ts`), the quick-add parser (`parse.ts`), the auto-planner (`planner.ts`).
+- `src/components/` holds the UI kit (`ui.tsx`, `icons.tsx`, `popover.tsx`, `dialog.tsx`), task UI (`task-list`, `task-row`, `task-detail`, `quick-add`) and the area/project menus (`entity-menu.tsx`, used by the sidebar and `/projects`). Views live in `src/components/views/`.
 
 ## Conventions
 
 - Next 16: `params` and `searchParams` are Promises, so use `PageProps<"/route">` and await them. Pages under `src/app/(app)` are dynamic (`force-dynamic` in the group layout), because SQLite reads would otherwise be frozen at build time.
 - Dates are local strings: `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, and timestamps `YYYY-MM-DDTHH:mm:ss`. Use the helpers in `src/lib/dates.ts`.
-- Visual rules: near-black neutral palette (tokens in `globals.css`). Color means identity (areas and projects). State is grayscale. The indigo accent is only for today or now, selection, the one primary button, and "session finished, waiting for you". Muted red is only for overdue.
+- Visual rules: near-black neutral palette (tokens in `globals.css`). Color means identity (areas and projects). A project's color is its own or its area's: always use `projectColor(p, areas)`. State is grayscale. The indigo accent is only for today or now, selection, the one primary button, and "session finished, waiting for you". Muted red is only for overdue.
 - Session flow modes on edges: `auto` (starts when the previous task is finished), `manual` (after the user marks it done), `session` (the agent continues in the same terminal), `time` (at `atTime`).

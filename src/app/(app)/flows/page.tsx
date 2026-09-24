@@ -1,6 +1,7 @@
 import { FlowView, type FlowTask } from "@/components/views/flow";
 import { Icon } from "@/components/icons";
 import * as repo from "@/server/repo";
+import { projectColor } from "@/lib/colors";
 import { nowStamp, parseLocal } from "@/lib/dates";
 import type { Session } from "@/lib/types";
 
@@ -12,7 +13,6 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   const projects = repo.listProjects();
   const areas = repo.listAreas();
   const all = repo.listTasks();
-  const color = (areaId: string) => areas.find((a) => a.id === areaId)?.color ?? "#85858c";
   const inFlow = (id: string) => all.filter((t) => t.projectId === id && t.flowX !== null && t.flowY !== null).length;
   const project = projects.find((p) => p.id === want) ?? projects.find((p) => inFlow(p.id) > 0) ?? projects.find((p) => p.agent) ?? projects[0];
 
@@ -75,8 +75,8 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   return (
     <FlowView
       key={project.id}
-      project={{ id: project.id, name: project.name, flowOn: project.flowOn, folder: project.folder, color: color(project.areaId) }}
-      projects={projects.map((p) => ({ id: p.id, name: p.name, color: color(p.areaId), inFlow: inFlow(p.id) }))}
+      project={{ id: project.id, name: project.name, flowOn: project.flowOn, folder: project.folder, color: projectColor(project, areas) }}
+      projects={projects.map((p) => ({ id: p.id, name: p.name, color: projectColor(p, areas), inFlow: inFlow(p.id) }))}
       tasks={flowTasks}
       edges={edges}
       sessions={latest}

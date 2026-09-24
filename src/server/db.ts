@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS areas (
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
   start_date TEXT, target_date TEXT, folder TEXT, agent TEXT, after_project_id TEXT,
-  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0
+  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
@@ -56,6 +56,9 @@ export function dbPath(): string {
   return process.env.ORGANIZER_DB ?? path.join(process.cwd(), "data", "organizer.db");
 }
 
+/** Per module instance, so a code reload in dev also runs new migrations on the cached connection. */
+let migrated = false;
+
 export function db(): DatabaseSync {
   if (!g.__organizerDb) {
     const file = dbPath();
@@ -70,7 +73,17 @@ export function db(): DatabaseSync {
     }
     g.__organizerDb = conn;
   }
+  if (!migrated) {
+    migrate(g.__organizerDb);
+    migrated = true;
+  }
   return g.__organizerDb;
+}
+
+/** Adds columns introduced after a database was first created. */
+function migrate(conn: DatabaseSync) {
+  const cols = (conn.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map((c) => c.name);
+  if (!cols.includes("color")) conn.exec("ALTER TABLE projects ADD COLUMN color TEXT");
 }
 
 export function tx<T>(fn: () => T): T {

@@ -6,6 +6,7 @@ import { useEffect, useOptimistic, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { setFlowOnAction, updateProjectAction } from "@/app/actions";
 import { reorderTasksAction, setNextProjectAction } from "@/app/(app)/roadmap/actions";
+import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, parseLocal } from "@/lib/dates";
 import { AGENT_LABEL, type AgentId, type Area, type Project, type Session, type Task, type TaskContext } from "@/lib/types";
 import type { ProjectStats, StateTone, TaskState } from "@/server/timeline";
@@ -409,7 +410,7 @@ export function Roadmap(props: {
   const router = useRouter();
   const [sel, setSel] = useState<string | null>(props.initialKey);
   const project = projects.find((p) => p.id === props.selectedId) ?? null;
-  const colorOf = (p: Project) => areas.find((a) => a.id === p.areaId)?.color ?? "#85858c";
+  const colorOf = (p: Project) => projectColor(p, areas);
   const selected = sel ? items.find((it) => it.task.key === sel)?.task ?? null : null;
 
   useEffect(() => {

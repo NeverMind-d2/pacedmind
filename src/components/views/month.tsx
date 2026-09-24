@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useOptimistic, useRef, useState, type DragEvent } from "react";
 import { format } from "date-fns";
 import { updateTaskAction } from "@/app/actions";
+import { projectColor } from "@/lib/colors";
 import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf } from "@/lib/dates";
 import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
 import { Diamond, Icon, StatusIcon } from "../icons";
@@ -194,7 +195,7 @@ export function MonthView({
       const p = it.project;
       return (
         <Link key={`p${p.id}`} href={`/project/${p.id}`} title={`${p.name} target date`} className={cx(pill, "border-line2 bg-hover text-fg2 hover:bg-sel")}>
-          <Diamond color={areaColor(ctx.areas, p.areaId)} size={10} />
+          <Diamond color={projectColor(p, ctx.areas)} size={10} />
           <span className="truncate">{p.name}</span>
         </Link>
       );

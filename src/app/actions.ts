@@ -143,10 +143,42 @@ export async function setFlowOnAction(projectId: string, on: boolean) {
 
 /* ---------- projects and settings ---------- */
 
-export async function createProjectAction(input: { name: string; areaId: string; folder?: string | null; agent?: AgentId | null }) {
+export async function createProjectAction(input: {
+  name: string; areaId: string; folder?: string | null; agent?: AgentId | null; color?: string | null;
+}): Promise<Result & { id?: string }> {
   if (!input.name?.trim()) return { ok: false, error: "Give the project a name" };
-  repo.createProject(input);
+  if (!repo.listAreas().some((a) => a.id === input.areaId)) return { ok: false, error: "Pick an area for the project" };
+  const p = repo.createProject(input);
+  refresh();
+  return { ok: true, id: p.id, message: `Created ${p.name}` };
+}
+
+export async function deleteProjectAction(id: string) {
+  const p = repo.getProject(id);
+  if (!p) return { ok: false, error: "Project not found" };
+  const kept = repo.listTasks("project_id = ?", id).length;
+  repo.deleteProject(id);
+  return done({ ok: true, message: kept ? `Deleted ${p.name}. Its tasks stay in the area.` : `Deleted ${p.name}` });
+}
+
+export async function createAreaAction(input: { name: string; color: string }): Promise<Result & { id?: string }> {
+  if (!input.name?.trim()) return { ok: false, error: "Give the area a name" };
+  const a = repo.createArea(input);
+  refresh();
+  return { ok: true, id: a.id, message: `Created ${a.name} (${a.key})` };
+}
+
+export async function updateAreaAction(id: string, patch: { name?: string; color?: string }) {
+  repo.updateArea(id, patch);
   return done();
+}
+
+export async function deleteAreaAction(id: string) {
+  const a = repo.listAreas().find((x) => x.id === id);
+  if (!a) return { ok: false, error: "Area not found" };
+  const kept = repo.listTasks("area_id = ? OR project_id IN (SELECT id FROM projects WHERE area_id = ?)", id, id).length;
+  repo.deleteArea(id);
+  return done({ ok: true, message: kept ? `Deleted ${a.name}. Its tasks moved to the Inbox.` : `Deleted ${a.name}` });
 }
 
 export async function updateProjectAction(id: string, patch: Partial<Omit<Project, "id">>) {

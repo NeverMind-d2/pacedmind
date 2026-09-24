@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { addMonths, format, startOfMonth } from "date-fns";
+import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtTime, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import type { EventOccurrence, Task, TaskContext } from "@/lib/types";
 import type { Health, ProjectTarget } from "@/server/calendar";
@@ -11,7 +12,7 @@ import { openAdd } from "../task-list";
 import { TaskDetail } from "../task-detail";
 import { TaskRow } from "../task-row";
 import { Dot, Segmented, cx } from "../ui";
-import { ViewHeader, areaColor, useSelection } from "./calendar-parts";
+import { ViewHeader, useSelection } from "./calendar-parts";
 
 const DAYS = 14;
 /** Days covered by the small timeline next to the project targets. */
@@ -97,7 +98,7 @@ export function UpcomingView({ today, tasks, events, targets, ctx, initialKey }:
                   <>
                     {g.targets.map((p) => (
                       <Link key={p.id} href={`/project/${p.id}`} className="flex h-[38px] items-center gap-2.5 border-b border-[#0b0b0d] pl-5 pr-4 hover:bg-hover">
-                        <span className="flex w-4 shrink-0 justify-center"><Diamond color={areaColor(ctx.areas, p.areaId)} size={12} /></span>
+                        <span className="flex w-4 shrink-0 justify-center"><Diamond color={projectColor(p, ctx.areas)} size={12} /></span>
                         <span className="min-w-0 flex-1 truncate text-fg">{p.name} target date</span>
                         <span className="shrink-0 text-[11.5px] text-mut">{p.done} of {p.total} tasks done</span>
                       </Link>
@@ -166,7 +167,7 @@ function GroupHeader({ title, date, count, collapsed, onToggle, onAdd, children 
 }
 
 function TargetRow({ target: p, ctx }: { target: ProjectTarget; ctx: TaskContext }) {
-  const color = areaColor(ctx.areas, p.areaId);
+  const color = projectColor(p, ctx.areas);
   const area = ctx.areas.find((a) => a.id === p.areaId);
   const pos = Math.min(100, Math.max(0, (p.daysLeft / WINDOW) * 100));
   const health = HEALTH[p.health];

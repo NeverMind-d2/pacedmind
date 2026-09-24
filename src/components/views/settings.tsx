@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { createProjectAction, resetDataAction, updateProjectAction, updateSettingsAction } from "@/app/actions";
+import { projectColor } from "@/lib/colors";
 import { AGENT_LABEL, type AgentId, type Area, type Project, type Settings } from "@/lib/types";
 import { Icon } from "../icons";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -132,11 +133,10 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
           <div className="flex flex-col gap-7">
             <Section title="Projects and folders" note="A session works in its project's folder. Tasks without a folder get a scratch folder next to the database.">
               {projects.map((p) => {
-                const area = areas.find((a) => a.id === p.areaId);
                 return (
                   <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
                     <div className="flex items-center gap-2.5">
-                      <Dot color={area?.color ?? "#85858c"} size={7} />
+                      <Dot color={projectColor(p, areas)} size={7} />
                       <span className="flex-1 truncate text-[13px] text-fg">{p.name}</span>
                       <Menu align="right" width={170}
                         trigger={<button type="button" className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[12px] text-mut hover:bg-hover">{p.agent ? AGENT_LABEL[p.agent] : "No agent"}<Icon name="chevronDown" size={11} /></button>}

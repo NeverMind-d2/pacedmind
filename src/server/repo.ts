@@ -20,8 +20,60 @@ export function listAreas(): Area[] {
   }));
 }
 
+/** "Work" becomes WRK, "Health" HLT, "Dev" DEV; unique among existing area keys. */
+function deriveKey(name: string): string {
+  const letters = name.toUpperCase().replace(/[^A-Z]/g, "");
+  const consonants = letters.slice(1).replace(/[AEIOUY]/g, "");
+  let base = letters.length <= 3 ? letters : letters[0] + consonants.slice(0, 2);
+  if (base.length < 3) base = letters.slice(0, 3);
+  if (base.length < 3) base = (base + "XXX").slice(0, 3);
+  const taken = new Set(listAreas().map((a) => a.key));
+  let key = base;
+  for (let i = 2; taken.has(key); i++) key = `${base.slice(0, 2)}${i}`;
+  return key;
+}
+
+const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || fallback;
+
+export function createArea(input: { name: string; color: string }): Area {
+  const base = slug(input.name, "area");
+  const ids = new Set(listAreas().map((a) => a.id));
+  let id = base;
+  for (let i = 2; ids.has(id); i++) id = `${base}-${i}`;
+  const sort = Number((db().prepare("SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM areas").get() as Row).n);
+  db().prepare("INSERT INTO areas (id, name, key, color, sort) VALUES (?, ?, ?, ?, ?)").run(id, input.name.trim(), deriveKey(input.name), input.color, sort);
+  return listAreas().find((a) => a.id === id)!;
+}
+
+export function updateArea(id: string, patch: { name?: string; color?: string }) {
+  if (patch.name?.trim()) db().prepare("UPDATE areas SET name = ? WHERE id = ?").run(patch.name.trim(), id);
+  if (patch.color) db().prepare("UPDATE areas SET color = ? WHERE id = ?").run(patch.color, id);
+}
+
+/** Deletes an area and its projects. Tasks are kept and move to the Inbox. */
+export function deleteArea(id: string) {
+  tx(() => {
+    const conn = db();
+    conn.prepare("UPDATE tasks SET area_id = NULL, project_id = NULL WHERE area_id = ? OR project_id IN (SELECT id FROM projects WHERE area_id = ?)").run(id, id);
+    conn.prepare("UPDATE events SET area_id = NULL WHERE area_id = ?").run(id);
+    conn.prepare("UPDATE projects SET after_project_id = NULL WHERE after_project_id IN (SELECT id FROM projects WHERE area_id = ?)").run(id);
+    conn.prepare("DELETE FROM projects WHERE area_id = ?").run(id);
+    conn.prepare("DELETE FROM areas WHERE id = ?").run(id);
+  });
+}
+
+/** Deletes a project. Its tasks stay in the project's area without a project. */
+export function deleteProject(id: string) {
+  tx(() => {
+    const conn = db();
+    conn.prepare("UPDATE projects SET after_project_id = NULL WHERE after_project_id = ?").run(id);
+    conn.prepare("UPDATE tasks SET project_id = NULL WHERE project_id = ?").run(id);
+    conn.prepare("DELETE FROM projects WHERE id = ?").run(id);
+  });
+}
+
 const toProject = (r: Row): Project => ({
-  id: String(r.id), areaId: String(r.area_id), name: String(r.name), startDate: s(r.start_date), targetDate: s(r.target_date),
+  id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
   folder: s(r.folder), agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id), flowOn: Number(r.flow_on) === 1,
   sort: Number(r.sort),
 });
@@ -35,20 +87,22 @@ export function getProject(id: string): Project | null {
   return r ? toProject(r) : null;
 }
 
-export function createProject(input: { name: string; areaId: string; folder?: string | null; agent?: AgentId | null; targetDate?: string | null }): Project {
-  const base = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project";
+export function createProject(input: {
+  name: string; areaId: string; folder?: string | null; agent?: AgentId | null; targetDate?: string | null; color?: string | null;
+}): Project {
+  const base = slug(input.name, "project");
   let id = base;
   for (let i = 2; getProject(id); i++) id = `${base}-${i}`;
   const sort = Number((db().prepare("SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM projects").get() as Row).n);
   db().prepare(
-    `INSERT INTO projects (id, area_id, name, start_date, target_date, folder, agent, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, input.areaId, input.name, toDateStr(new Date()), input.targetDate ?? null, input.folder ?? null, input.agent ?? null, sort);
+    `INSERT INTO projects (id, area_id, name, start_date, target_date, folder, agent, sort, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.folder ?? null, input.agent ?? null, sort, input.color ?? null);
   return getProject(id)!;
 }
 
 export function updateProject(id: string, patch: Partial<Omit<Project, "id">>) {
   const cols: Record<string, string> = {
-    areaId: "area_id", name: "name", startDate: "start_date", targetDate: "target_date", folder: "folder", agent: "agent",
+    areaId: "area_id", name: "name", color: "color", startDate: "start_date", targetDate: "target_date", folder: "folder", agent: "agent",
     afterProjectId: "after_project_id", flowOn: "flow_on", sort: "sort",
   };
   const sets: string[] = [];
@@ -60,6 +114,8 @@ export function updateProject(id: string, patch: Partial<Omit<Project, "id">>) {
   }
   if (!sets.length) return;
   db().prepare(`UPDATE projects SET ${sets.join(", ")} WHERE id = ?`).run(...vals, id);
+  // A project's tasks always live in the project's area.
+  if (patch.areaId) db().prepare("UPDATE tasks SET area_id = ? WHERE project_id = ?").run(patch.areaId, id);
 }
 
 /* ---------- tasks ---------- */

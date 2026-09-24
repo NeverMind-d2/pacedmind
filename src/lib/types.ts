@@ -18,6 +18,8 @@ export interface Project {
   id: string;
   areaId: string;
   name: string;
+  /** Own color; null means the area's color is used. */
+  color: string | null;
   startDate: string | null;
   targetDate: string | null;
   folder: string | null;
@@ -132,6 +134,13 @@ export interface TaskContext {
   /** Latest session per task id. */
   sessions: Record<number, Session>;
   sessionEvents: Record<string, SessionEvent[]>;
+}
+
+/** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
+export interface Usage {
+  areas: Record<string, { projects: number; tasks: number; open: number }>;
+  /** pct is the done share of tasks that aren't canceled. */
+  projects: Record<string, { tasks: number; open: number; done: number; pct: number }>;
 }
 
 export const STATUS_LABEL: Record<Status, string> = {

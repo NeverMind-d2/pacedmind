@@ -11,6 +11,8 @@ export interface ProjectTarget {
   id: string;
   name: string;
   areaId: string;
+  /** Own color; null means the area's. */
+  color: string | null;
   targetDate: string;
   done: number;
   total: number;
@@ -26,7 +28,7 @@ export function projectTargets(projects: Project[], tasks: Task[], today: string
       const own = tasks.filter((t) => t.projectId === p.id && t.status !== "canceled");
       const done = own.filter((t) => t.status === "done").length;
       return {
-        id: p.id, name: p.name, areaId: p.areaId, targetDate: p.targetDate, done, total: own.length,
+        id: p.id, name: p.name, areaId: p.areaId, color: p.color, targetDate: p.targetDate, done, total: own.length,
         daysLeft: dayDiff(today, p.targetDate), health: health(p.startDate, p.targetDate, done, own.length, today),
       };
     })

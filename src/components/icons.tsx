@@ -34,6 +34,8 @@ const P = {
   folder: "M3 6a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z",
   play: "M7 4l12 8-12 8z",
   refresh: "M21 12a9 9 0 1 1-3-6.7L21 8 M21 3v5h-5",
+  more: "M4 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M18 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
+  box: "M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8",
 };
 
 export type IconName = keyof typeof P;

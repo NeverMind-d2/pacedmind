@@ -1,6 +1,6 @@
 import "server-only";
 import * as repo from "./repo";
-import type { Session, SessionEvent, Task, TaskContext } from "@/lib/types";
+import type { Area, Project, Session, SessionEvent, Task, TaskContext, Usage } from "@/lib/types";
 
 export function taskContext(tasks: Task[]): TaskContext {
   const ids = new Set(tasks.map((t) => t.id));
@@ -14,6 +14,23 @@ export function taskContext(tasks: Task[]): TaskContext {
 }
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";
+
+export function usage(areas: Area[], projects: Project[], tasks: Task[]): Usage {
+  const areaOf = new Map(projects.map((p) => [p.id, p.areaId]));
+  const inArea = (t: Task, id: string) => t.areaId === id || (t.projectId !== null && areaOf.get(t.projectId) === id);
+  return {
+    areas: Object.fromEntries(areas.map((a) => {
+      const ts = tasks.filter((t) => inArea(t, a.id));
+      return [a.id, { projects: projects.filter((p) => p.areaId === a.id).length, tasks: ts.length, open: ts.filter(isOpen).length }];
+    })),
+    projects: Object.fromEntries(projects.map((p) => {
+      const ts = tasks.filter((t) => t.projectId === p.id);
+      const counted = ts.filter((t) => t.status !== "canceled");
+      const done = counted.filter((t) => t.status === "done").length;
+      return [p.id, { tasks: ts.length, open: ts.filter(isOpen).length, done, pct: counted.length ? Math.round((done / counted.length) * 100) : 0 }];
+    })),
+  };
+}
 
 const STATUS_ORDER = ["review", "progress", "todo", "backlog", "done", "canceled"] as const;
 const STATUS_GROUP: Record<string, string> = {

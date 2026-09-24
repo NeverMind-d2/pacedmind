@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { format, getISOWeek } from "date-fns";
+import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, minutesOf, parseLocal, timeOf, toStamp } from "@/lib/dates";
 import {
   AGENT_LABEL, type Area, type FlowEdge, type Project, type Session, type SessionStatus, type Task, type TaskContext,
@@ -171,19 +172,20 @@ function buildRows(input: {
     if (!open) continue;
     const color = g.color ?? "#85858c";
     for (const p of own) {
+      const pc = projectColor(p, areas);
       const pts = tasks.filter((t) => t.projectId === p.id && t.status !== "canceled");
       const dated = pts.some((t) => t.plannedDate || t.dueDate || sessionsOf.has(t.id));
       const isOpen = pts.length > 0 && (expanded[p.id] ?? dated);
       const s = p.startDate ? dayDiff(sc.from, p.startDate) : pts.length ? Math.min(...pts.map((t) => spans.get(t.id)!.s)) : null;
       const e = p.targetDate ? dayDiff(sc.from, p.targetDate) + 1 : pts.length ? Math.max(...pts.map((t) => spans.get(t.id)!.e)) : null;
       add({
-        kind: "proj", id: `p-${p.id}`, y, h: ROW_H.proj, project: p, color, open: isOpen,
+        kind: "proj", id: `p-${p.id}`, y, h: ROW_H.proj, project: p, color: pc, open: isOpen,
         done: pts.filter((t) => t.status === "done").length, total: pts.length,
         started: pts.some((t) => t.status === "progress" || t.status === "review" || t.status === "done"),
         span: s !== null && e !== null && e > s ? { s, e } : null,
       });
       if (isOpen) {
-        for (const t of pts.filter(shown).sort((a, b) => a.sortOrder - b.sortOrder || byStart(a, b))) add(taskRow(t, 44, color));
+        for (const t of pts.filter(shown).sort((a, b) => a.sortOrder - b.sortOrder || byStart(a, b))) add(taskRow(t, 44, pc));
       }
     }
     for (const t of loose) add(taskRow(t, 26, color));

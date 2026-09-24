@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { TaskList } from "@/components/task-list";
 import { Icon } from "@/components/icons";
 import * as repo from "@/server/repo";
@@ -10,7 +10,8 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
   const { id } = await props.params;
   const sp = await props.searchParams;
   const project = repo.getProject(id);
-  if (!project) notFound();
+  // Deleted (maybe just now, from its own menu): show the overview instead of a 404.
+  if (!project) redirect("/projects");
   const area = repo.listAreas().find((a) => a.id === project.areaId);
   const tasks = repo.listTasks("project_id = ?", id);
   const link = "inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover";
