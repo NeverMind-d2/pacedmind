@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #010101;
+  --color-panel: #040405;
+  --color-raised: #08080a;
+  --color-hover: #0b0b0d;
+  --color-sel: #101012;
+  --color-line: #121214;
+  --color-line2: #17171a;
+  --color-ctl: #1b1b1e;
+  --color-strong: #ededef;
+  --color-fg: #e4e4e7;
+  --color-fg2: #d4d4d8;
+  --color-fg3: #c4c4ca;
+  --color-mut: #a1a1a8;
+  --color-mut2: #85858c;
+  --color-dim: #5e5e64;
+  --color-faint: #48484d;
+  --color-accent: #8b8ef5;
+  --color-accent-strong: #5b5fd6;
+  --color-accent-fg: #b3b5fa;
+  --color-danger: #d9776e;
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  ::selection {
+    background: rgb(139 142 245 / 0.35);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #1b1b1e transparent;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    color-scheme: dark;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-accent);
+    outline-offset: 1px;
+  }
+}
+
+/* React Flow, restyled for the dark theme. */
+.react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: #3a3a3f;
+  --xy-handle-background-color: #040405;
+  --xy-handle-border-color: #3a3a3f;
+  --xy-controls-button-background-color: #08080a;
+  --xy-controls-button-background-color-hover: #101012;
+  --xy-controls-button-color: #a1a1a8;
+  --xy-controls-button-border-color: #17171a;
+  --xy-selection-background-color: rgb(139 142 245 / 0.08);
+  --xy-selection-border: 1px dashed rgb(139 142 245 / 0.6);
+}
