@@ -31,7 +31,7 @@ export const schemaIds = {
  * and loads only on that host, so local builds count nothing. An empty websiteId turns it off.
  */
 export const analytics = {
-  websiteId: '',
+  websiteId: 'dbfe3125-591a-4b12-bd01-56e61aa753d2',
   script: '/stats/script.js',
   hostname: 'pacedmind.com',
 };

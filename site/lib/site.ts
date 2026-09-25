@@ -23,7 +23,7 @@ export const SITE = {
   // (the server passes /stats/* through to Umami) and loads only on this host, so local builds count
   // nothing. websiteId is the website's id in the dashboard at stats.pacedmind.com; empty turns it off.
   analytics: {
-    websiteId: "",
+    websiteId: "dbfe3125-591a-4b12-bd01-56e61aa753d2",
     script: "/stats/script.js",
     hostname: "pacedmind.com",
   },
