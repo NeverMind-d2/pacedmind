@@ -161,7 +161,13 @@ function parse(v: unknown): unknown {
  */
 function adopt(conn: DatabaseSync) {
   if (conn.prepare("SELECT 1 FROM meta WHERE key = 'adopted'").get()) return;
-  const old = Object.fromEntries((conn.prepare("SELECT key, value FROM settings").all() as Row[]).map((r) => [String(r.key), parse(r.value)]));
+  // A copy of the file as it was comes first, next to it, in case anything below goes wrong.
+  const used = conn.prepare("SELECT (SELECT COUNT(*) FROM projects) + (SELECT COUNT(*) FROM tasks) AS n").get() as Row;
+  if (Number(used.n) > 0) {
+    const stamp = toStamp(new Date()).replace(/[-:]/g, "").replace("T", "-");
+    conn.prepare("VACUUM INTO ?").run(path.join(path.dirname(localDbPath()), `organizer-before-upgrade-${stamp}.db`));
+  }
+  const old =Object.fromEntries((conn.prepare("SELECT key, value FROM settings").all() as Row[]).map((r) => [String(r.key), parse(r.value)]));
   // Only onto settings no account has taken over yet: those carry the account's own.
   if (deviceConfig().userId === null) {
     const token = typeof old.mcpToken === "string" && /^[A-Za-z0-9_-]{24,200}$/.test(old.mcpToken) ? old.mcpToken : null;
