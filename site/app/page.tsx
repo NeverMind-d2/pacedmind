@@ -2,7 +2,7 @@ import Link from "next/link";
 import prices from "@/prices.json";
 import { SITE } from "@/lib/site";
 import type { Market } from "@/lib/markets";
-import { CLOUD, FAQ, FREE, VIEWS as VIEW_COPY } from "@/lib/content";
+import { CLOUD, FAQ, ONE_DEVICE, ONE_DEVICE_SHARE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { Emblem } from "@/components/emblem";
@@ -11,7 +11,7 @@ import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
 import { TodayScreen } from "@/components/screens/today";
 import { TimelineScreen } from "@/components/screens/timeline";
 import { FlowScreen } from "@/components/screens/flow";
-import { CloudPrice } from "@/components/cloud-price";
+import { CountryPicker, PlanPrice } from "@/components/plan-price";
 
 export const metadata = pageMetadata("/");
 
@@ -45,12 +45,9 @@ export default function Home() {
           <div>
             <h1><Wordmark id="hero-wordmark" unfold className="w-full max-w-[560px] text-ink lg:max-w-[380px] xl:max-w-[440px]" /></h1>
             <p className="mt-8 text-[clamp(32px,4vw,46px)] leading-[1.08] font-light tracking-[-0.01em] text-ink sm:mt-10">
-              Find your pace.
+              {TAGLINE}
             </p>
-            <p className="mt-5 max-w-[520px] text-[18px] leading-[1.55] text-pretty text-mut">
-              A calm planner for your tasks, time blocks and deadlines. It starts your Claude Code and Codex
-              sessions and tells you when one is waiting for you.
-            </p>
+            <p className="mt-5 max-w-[520px] text-[18px] leading-[1.55] text-pretty text-mut">{SUMMARY}</p>
             <div className="mt-9 flex flex-wrap gap-3">
               <a className="download" data-os="windows" href={SITE.downloads.windows}>Download for Windows</a>
               <a className="download" data-os="mac" href={SITE.downloads.mac}>Download for macOS</a>
@@ -63,23 +60,26 @@ export default function Home() {
 
         <section id="pricing" className="mt-24 scroll-mt-8 sm:mt-[150px]">
           <h2 className="max-w-[20em] text-[clamp(30px,3.9vw,46px)] leading-[1.15] font-light tracking-[-0.01em] text-ink">
-            A little more peace of mind.{" "}
-            <span className="block text-mut">For about the price of a music subscription.</span>
+            {PRICING.title}{" "}
+            <span className="block text-mut">{PRICING.subtitle}</span>
           </h2>
-          <div className="mt-12 grid border-t border-line sm:mt-16 md:grid-cols-2">
+          <div className="mt-6 flex flex-wrap items-baseline gap-x-8 gap-y-3 sm:mt-8">
+            <p className="text-[16px] text-text sm:text-[18px]">{PRICING.trial}</p>
+            <CountryPicker markets={markets} fallback={prices.fallback} />
+          </div>
+          <div className="mt-10 grid border-t border-line sm:mt-12 md:grid-cols-2">
             <div className="pb-12 pt-10 md:pr-14">
-              <h3 className="text-[22px] font-medium text-ink">Open source</h3>
-              <p className="mt-6 text-[46px] leading-none font-light text-ink">Free</p>
-              <p className="mt-3 text-[15px] leading-6 text-mut">On one device</p>
+              <h3 className="text-[22px] font-medium text-ink">One device</h3>
+              <div className="mt-6"><PlanPrice markets={markets} fallback={prices.fallback} share={ONE_DEVICE_SHARE} /></div>
               <ul className="mt-8 space-y-3 text-[16px] text-text">
-                {FREE.map((item) => <li key={item}>{item}</li>)}
+                {ONE_DEVICE.map((item) => <li key={item}>{item}</li>)}
               </ul>
               <a className="download for-windows mt-10" href={SITE.downloads.windows}>Download for Windows</a>
               <a className="download for-mac mt-10" href={SITE.downloads.mac}>Download for macOS</a>
             </div>
             <div className="border-t border-line pb-12 pt-10 md:border-l md:border-t-0 md:pl-14">
               <h3 className="text-[22px] font-medium text-ink">Cloud</h3>
-              <div className="mt-6"><CloudPrice markets={markets} fallback={prices.fallback} /></div>
+              <div className="mt-6"><PlanPrice markets={markets} fallback={prices.fallback} /></div>
               <ul className="mt-8 space-y-3 text-[16px] text-text">
                 {CLOUD.map((item) => <li key={item}>{item}</li>)}
               </ul>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { SITE, absoluteUrl } from "@/lib/site";
-import { DESCRIPTION, FREE, NAME, TITLE } from "@/lib/content";
+import { DESCRIPTION, NAME, ONE_DEVICE, TITLE } from "@/lib/content";
 
 /**
  * What every page that should be found needs: one canonical URL, the same URL for link previews, and
@@ -82,7 +82,7 @@ export function softwareApplication(): Node {
     applicationSubCategory: "Planner",
     operatingSystem: "Windows, macOS",
     downloadUrl: [...new Set(Object.values(SITE.downloads))],
-    featureList: FREE,
+    featureList: ONE_DEVICE,
     publisher: { "@id": IDS.organization },
   };
 }
