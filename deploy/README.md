@@ -2,7 +2,7 @@
 
 The web app is the same Next.js app as the desktop one, run with `ORGANIZER_MODE=web`: every browser signs in with its own account, and the data is in Supabase. It never opens terminals. Agent sessions started in the browser are queued, and the desktop app signed in to the same account opens them.
 
-The hosted web mode arrives with the cloud migration (branch `pacedmind-cloud`). Until it's merged and launched, `deploy.sh` goes up with `APP_PLACEHOLDER=1`: the site and the docs only (step 3).
+The web app is live at `https://app.pacedmind.com` since 2026-09-25. Every deploy rebuilds it from the checkout it runs in, so deploy from one with current master (step 3).
 
 The server is an OVH VPS (Ubuntu 26.04, `vps-60cf32b8.vps.ovh.net`, 57.131.192.185). It only accepts SSH keys; the key is `pacedmind_vps` (kept outside the repository). Caddy serves HTTPS and proxies to the app on 127.0.0.1:3000; the public site and the docs are static files next to it.
 
@@ -33,8 +33,8 @@ Also turn off OVH's web redirection for the domain (it's the `1|www.pacedmind.co
 
 In the project's dashboard (Authentication > URL Configuration):
 
-- Site URL: `https://app.pacedmind.com`
-- Redirect URLs: `https://app.pacedmind.com/**`, plus `http://127.0.0.1:4319/**` for the desktop app and `http://127.0.0.1:4320/**` for development. (Sign-in links come back to `/auth/callback?next=…`, so exact addresses without the wildcard don't match.)
+- Site URL: `https://app.pacedmind.com`. Email links depend on it: Supabase sends a link back to any address on the Site URL's own host (the web app's `/auth/callback?next=…`) and to loopback addresses (the desktop app's `http://127.0.0.1:4319/auth/callback?next=…`, development's 4320). Anything else has to match a redirect URL, and an entry without a wildcard doesn't match the `?next=…` those links carry.
+- Redirect URLs: the three exact callback URLs from SECURITY.md's checklist, with no wildcards.
 
 Apply the schema (`supabase/migrations`) with `npx supabase link --project-ref <ref>` and `npx supabase db push`, or through the Supabase MCP server. Before real users sign up, set up custom SMTP (Authentication > Emails): the built-in sender is rate-limited and meant for testing. The domain already has OVH email, so an address like `noreply@pacedmind.com` through OVH's SMTP server works.
 
@@ -56,11 +56,9 @@ SUPABASE_URL=https://pyoynjoyhpolijlvoalu.supabase.co SUPABASE_PUBLISHABLE_KEY=s
 
 It uploads the working tree, builds the app on the server, switches `/srv/pacedmind/app` to the new build (the previous one stays in `app.old`), restarts `pacedmind-web`, and uploads `site/out` and `docs/out` when they exist, each replacing the live folder in one step (the previous one stays in `site.old` or `docs.old`). Then it installs `Caddyfile` and `app.caddy` in `/etc/caddy`, once `caddy validate` has accepted them, and reloads Caddy; the previous config stays in `/etc/caddy/Caddyfile.old`. The Supabase variables are only needed the first time (they're kept in `web.env`).
 
-Until the web app launches, deploy only the site and docs, and send `app.pacedmind.com` to the site (`app-placeholder.caddy`):
+When several sessions share one checkout, each may have unfinished work in it: `SITE_ONLY=1` uploads `site/out`, `docs/out` and the Caddy config and keeps the app that runs, and `APP_ONLY=1` rebuilds the app without uploading `site/out` or `docs/out`.
 
-```bash
-APP_PLACEHOLDER=1 deploy/deploy.sh ubuntu@57.131.192.185
-```
+Before the web app launched, `APP_PLACEHOLDER=1 deploy/deploy.sh ubuntu@57.131.192.185` deployed only the site and docs and sent `app.pacedmind.com` to the site (`app-placeholder.caddy`). Now that the app runs, `deploy.sh` refuses that flag, since it would hide the app.
 
 A checkout without the hosted web mode (`src/server/supabase.ts`) refuses to deploy the app: it would put a planner without sign-in on the internet.
 
@@ -108,7 +106,7 @@ sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw --force enable
 
 - `provision.sh`: the one-time server setup.
 - `deploy.sh`: builds and switches the app, uploads the static parts, installs the Caddy config.
-- `pacedmind-web.service`: the systemd unit (`HOSTNAME=127.0.0.1`, `PORT=3000`, `ORGANIZER_MODE=web`, `TZ=Europe/Warsaw`).
+- `pacedmind-web.service`: the systemd unit (`HOSTNAME=127.0.0.1`, `PORT=3000`, `ORGANIZER_MODE=web`, `ORGANIZER_PUBLIC_ORIGIN=https://app.pacedmind.com`, `TZ=Europe/Warsaw`).
 - `Caddyfile`: the server's whole Caddy config, for Caddy 2.6.2 as Ubuntu ships it: HTTPS, `www` and `http://` to `https://pacedmind.com`, one URL per page (no `.html`, no trailing slash), the site's and the docs' 404 pages with a 404 status, caching, and the docs' Markdown copies, search index and navigation files marked `noindex`. The docs need their own `/docs` block because a docs section has both `views.html` and a `views/` folder. `/download/*` serves the installers from `/srv/pacedmind/download` (step 4). `/stats/script.js` and `/stats/api/send` go to Umami, and `stats.pacedmind.com` is its dashboard (step 5).
 - `app.caddy` and `app-placeholder.caddy`: what `app.pacedmind.com` does, the app or a redirect to the site; `deploy.sh` installs one of them as `/etc/caddy/app.caddy`.
 - `umami/compose.yml` and `umami/install.sh`: the visitor statistics (step 5), which `deploy.sh` leaves alone.

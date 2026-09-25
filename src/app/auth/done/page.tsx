@@ -10,12 +10,14 @@ export const metadata: Metadata = { title: "PacedMind" };
 export default async function DonePage(props: PageProps<"/auth/done">) {
   const sp = await props.searchParams;
   const error = typeof sp.error === "string" ? sp.error.slice(0, 300) : null;
+  // A sign-up link that confirmed the email but couldn't sign in here (callback/route.ts).
+  const confirmed = sp.confirmed === "1";
   return (
-    <AuthShell note={error ? "That didn't work." : "Done."}>
+    <AuthShell note={error ? "That didn't work." : confirmed ? "Email confirmed." : "Done."}>
       <div className="rounded-xl border border-line bg-panel p-6 text-[13px] leading-relaxed text-fg3">
         {error
           ? <p>{error}</p>
-          : <p>Go back to the PacedMind app to continue. You can close this tab.</p>}
+          : <p>{confirmed ? "Go back to the PacedMind app and sign in there." : "Go back to the PacedMind app to continue."} You can close this tab.</p>}
       </div>
     </AuthShell>
   );

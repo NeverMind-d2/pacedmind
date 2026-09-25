@@ -18,7 +18,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
     <AuthShell note={MODE === "desktop"
       ? "Sign in to PacedMind Cloud to use your tasks on all your computers."
       : "Sign in to plan your week and follow your agent sessions."}>
-      <LoginForm initialError={typeof sp.error === "string" ? sp.error.slice(0, 300) : null} />
+      <LoginForm initialError={typeof sp.error === "string" ? sp.error.slice(0, 300) : null} confirmed={sp.confirmed === "1"} />
       {MODE === "desktop" && (
         <p className="text-center text-[12.5px] text-mut">
           <Link href="/today" className="font-medium text-fg2 hover:text-strong">Continue without an account</Link>. Your data stays on this computer.

@@ -65,12 +65,14 @@ function useRun(initial: Note = null) {
 
 type Mode = "signin" | "signup" | "reset";
 
-export function LoginForm({ initialError }: { initialError: string | null }) {
+/** `confirmed`: an email link confirmed the address but couldn't sign in here (opened in another browser). */
+export function LoginForm({ initialError, confirmed }: { initialError: string | null; confirmed?: boolean }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const { note, setNote, pending, run } = useRun(initialError ? { text: initialError, error: true } : null);
+  const { note, setNote, pending, run } = useRun(initialError ? { text: initialError, error: true }
+    : confirmed ? { text: "Your email is confirmed. Sign in to continue.", error: false } : null);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -178,6 +180,7 @@ export function SetupForm({ first, email }: { first: boolean; email: string }) {
   const [code, setCode] = useState("");
   const [current, setCurrent] = useState("");
   const [showSecret, setShowSecret] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [done, setDone] = useState(false);
   const { note, setNote, pending, run } = useRun();
 
@@ -252,14 +255,27 @@ export function SetupForm({ first, email }: { first: boolean; email: string }) {
             : <span className="text-[12px] text-neutral-500">Preparing…</span>}
         </div>
         {enrollment && (
+          // A phone can't scan its own screen: this hands the key to the authenticator app on it.
+          <a href={enrollment.uri}
+            className="hidden h-9 w-full items-center justify-center rounded-md border border-line2 text-[12.5px] text-fg2 pointer-coarse:flex">
+            Add to an authenticator app on this device
+          </a>
+        )}
+        {enrollment && (
           <button type="button" onClick={() => setShowSecret(!showSecret)} className="text-[12px] text-mut hover:text-fg2">
             {showSecret ? "Hide the key" : "Can't scan it? Show the key"}
           </button>
         )}
         {enrollment && showSecret && (
-          <code className="select-all break-all rounded-md border border-line2 bg-input px-3 py-2 text-center font-mono text-[12.5px] text-fg2">
-            {enrollment.secret.replace(/(.{4})/g, "$1 ").trim()}
-          </code>
+          <div className="flex w-full items-center gap-2">
+            <code className="flex-1 select-all break-all rounded-md border border-line2 bg-input px-3 py-2 text-center font-mono text-[12.5px] text-fg2">
+              {enrollment.secret.replace(/(.{4})/g, "$1 ").trim()}
+            </code>
+            <Button type="button" className="h-9 shrink-0" onClick={() => navigator.clipboard.writeText(enrollment.secret).then(
+              () => setCopied(true),
+              () => setNote({ text: "Couldn't copy the key. Type it into the app by hand.", error: true }),
+            )}>{copied ? "Copied" : "Copy"}</Button>
+          </div>
         )}
       </div>
       <Field label="Code from the app">

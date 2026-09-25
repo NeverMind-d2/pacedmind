@@ -16,6 +16,8 @@ Environment=HOSTNAME=127.0.0.1
 Environment=PORT=3000
 Environment=NODE_ENV=production
 Environment=ORGANIZER_MODE=web
+# Email links (sign-up, password reset) point here, and requests for any other host are refused.
+Environment=ORGANIZER_PUBLIC_ORIGIN=https://app.pacedmind.com
 # Dates like "today" are computed in this time zone (see AGENTS.md).
 Environment=TZ=Europe/Warsaw
 # SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (public values; see .env.example).

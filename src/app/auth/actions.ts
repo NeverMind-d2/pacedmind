@@ -126,6 +126,8 @@ export interface Enrollment {
   /** An SVG image (data URI) of the QR code. */
   qr: string;
   secret: string;
+  /** The same as an otpauth:// link, which opens an authenticator app on a phone (it can't scan its own screen). */
+  uri: string;
 }
 
 /**
@@ -150,7 +152,7 @@ export async function startEnrollAction(code?: string): Promise<AuthResult & { e
     factorType: "totp", issuer: "PacedMind", friendlyName: `Authenticator ${n} · ${new Date().toISOString().slice(0, 10)} ${Date.now() % 10000}`,
   });
   if (error || !data) return { ok: false, error: explain(error?.message ?? "Couldn't start setting up the app.") };
-  return { ok: true, enrollment: { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret } };
+  return { ok: true, enrollment: { factorId: data.id, qr: data.totp.qr_code, secret: data.totp.secret, uri: data.totp.uri } };
 }
 
 /** Finishes adding an authenticator with its first code; the session is then two-factor. */
