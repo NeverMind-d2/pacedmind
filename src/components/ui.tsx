@@ -1,7 +1,8 @@
 "use client";
 
 import { clsx } from "clsx";
-import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export const cx = clsx;
 
@@ -88,21 +89,47 @@ export function Menu<V>({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const inside = (t: EventTarget | null) => !!ref.current?.contains(t as Node) || !!list.current?.contains(t as Node);
+    const onDown = (e: MouseEvent) => { if (!inside(e.target)) setOpen(false); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    // The list floats over the page, so it can't follow its button when something scrolls or the window resizes.
+    const onScroll = (e: Event) => { if (!list.current?.contains(e.target as Node)) setOpen(false); };
+    const onResize = () => setOpen(false);
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+    };
   }, [open]);
+  // Below the button, or above it when the window has no room below (a dialog's footer, say). It is rendered into
+  // document.body, so a dialog or scrolling panel that hides its overflow can't cut it off.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const box = ref.current?.getBoundingClientRect();
+    if (!box) return;
+    const h = list.current?.scrollHeight ?? 0;
+    const roomBelow = window.innerHeight - 8 - (box.bottom + 4);
+    const roomAbove = box.top - 4 - 8;
+    const down = h <= roomBelow || roomBelow >= roomAbove;
+    const maxHeight = Math.max(80, Math.min(320, down ? roomBelow : roomAbove));
+    const left = Math.max(8, Math.min(align === "right" ? box.right - width : box.left, window.innerWidth - width - 8));
+    setPos({ left, maxHeight, top: down ? box.bottom + 4 : box.top - 4 - Math.min(h, maxHeight) });
+  }, [open, align, width]);
   return (
     <div ref={ref} className={cx("relative", className)}>
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
-      {open && (
-        <div role="menu" style={{ width }}
-          className={cx("absolute top-full z-50 mt-1 max-h-80 overflow-auto rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]",
-            align === "right" ? "right-0" : "left-0")}>
+      {open && createPortal(
+        <div ref={list} role="menu" style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight ?? 320 }}
+          className="fixed z-[80] overflow-auto rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]">
           {items.map((it, i) => (
             <button key={i} type="button" role="menuitem" onClick={() => { onSelect(it.value); setOpen(false); }}
               className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel">
@@ -111,7 +138,8 @@ export function Menu<V>({
               {it.hint && <span className="text-[11.5px] text-mut2">{it.hint}</span>}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
