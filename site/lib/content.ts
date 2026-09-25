@@ -39,8 +39,8 @@ export const VIEWS = [
 
 /**
  * Two plans. One device is free and needs no account. Cloud costs what a music subscription costs in
- * each country (prices.json) and starts with a free trial. No Offer in the structured data until the
- * downloads work (see lib/seo.ts).
+ * each country (prices.json) and starts with a free trial. The structured data offers One device at a
+ * price of 0 (lib/seo.ts).
  */
 export const PRICING = {
   title: "A little more peace of mind.",
