@@ -43,6 +43,8 @@ Everything lives under `/docs` (`basePath: '/docs'`), so search authority stays 
 
 The web server keeps the Markdown copies, the search index and the navigation files out of search results with an `X-Robots-Tag: noindex` header.
 
+Pages whose titles are the same in different sections (Tasks is a concept and a set of MCP tools) get their section's title in the `<title>`, such as "Tasks – Tool reference", because search engines treat pages with the same title as duplicates.
+
 ## Deploy
 
 The server setup is in the repository's `deploy/`: `deploy/Caddyfile` is the whole Caddy config for pacedmind.com and its `/docs`, and `deploy/deploy.sh` uploads `site/out` and `docs/out` (see `deploy/README.md`). Build first:

@@ -113,6 +113,18 @@ function breadcrumbList(page: NonNullable<ReturnType<typeof source.getPage>>) {
   return items;
 }
 
+/**
+ * The page's title in search results and browser tabs. Pages in different sections can share a
+ * title (Tasks is a concept and a set of MCP tools), and search engines treat pages with the same
+ * title as duplicates, so a shared title gets its section's: "Tasks – Tool reference".
+ */
+function searchTitle(page: NonNullable<ReturnType<typeof source.getPage>>) {
+  const { title } = page.data;
+  const shared = source.getPages(page.locale).some((other) => other.url !== page.url && other.data.title === title);
+  const section = page.slugs.length > 1 ? source.getPage(page.slugs.slice(0, -1), page.locale)?.data.title : undefined;
+  return shared && section ? `${title} – ${section}` : title;
+}
+
 export async function generateStaticParams() {
   return source.generateParams('slug', 'lang').filter((p) => p.slug.length > 0);
 }
@@ -128,7 +140,7 @@ export async function generateMetadata(
   const ogImage = getPageImage(page).url;
 
   return {
-    title: { absolute: `${page.data.title} | PacedMind Docs` },
+    title: { absolute: `${searchTitle(page)} | PacedMind Docs` },
     description: page.data.description,
     alternates: pageAlternates(page),
     openGraph: {
