@@ -118,16 +118,21 @@ export function storeImage(input: string, base: string | null): StoredImage {
   const file = `${id}.${kind.ext}`;
   fs.mkdirSync(attachmentsDir(), { recursive: true });
   fs.writeFileSync(path.join(/* turbopackIgnore: true */ attachmentsDir(), file), data);
-  const ok = size && size[0] > 0 && size[1] > 0;
+  // A header can claim any size; the database keeps sizes up to a million pixels a side.
+  const ok = size && size[0] > 0 && size[1] > 0 && size[0] <= 1_000_000 && size[1] <= 1_000_000;
   return { id, file, mime: kind.mime, bytes: data.length, width: ok ? size![0] : null, height: ok ? size![1] : null };
 }
 
+/** The names PacedMind gives the copies it keeps; a name from the cloud is checked against it again here. */
+const IMAGE_FILE = /^[0-9a-f]{16}\.(png|jpg|gif|webp)$/;
+
 /** The stored copy of an attachment. `file` always comes from the database, never from a request. */
 export function attachmentPath(file: string): string {
-  return path.join(attachmentsDir(), path.basename(file));
+  if (!IMAGE_FILE.test(file)) throw new Error("That isn't an image PacedMind saved.");
+  return path.join(attachmentsDir(), file);
 }
 
 /** Removes stored copies, e.g. after their task was deleted. Files that are already gone are fine. */
 export function removeImageFiles(files: string[]) {
-  for (const f of files) fs.rmSync(attachmentPath(f), { force: true });
+  for (const f of files.filter((x) => IMAGE_FILE.test(x))) fs.rmSync(attachmentPath(f), { force: true });
 }

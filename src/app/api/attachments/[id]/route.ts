@@ -15,7 +15,8 @@ const ELSEWHERE = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="2
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const found = /^[0-9a-f]{16}$/.test(id) ? await repo.attachmentFile(id) : null;
+  // Signed out, or without the second factor, there is nothing to show.
+  const found = /^[0-9a-f]{16}$/.test(id) ? await repo.attachmentFile(id).catch(() => null) : null;
   if (!found) return new Response("Not found", { status: 404 });
   let data: Buffer | null = null;
   if (found.here) {
