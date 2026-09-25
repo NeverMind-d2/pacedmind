@@ -10,7 +10,7 @@ An **agent session** is Claude Code or Codex working on one task. PacedMind star
 PacedMind **tracks state**. It:
 
 * starts the session where the task runs, in the right folder, with the right agent and the connection to PacedMind;
-* records when the agent picks the task up and when it finishes, with its one-line note;
+* records when the agent picks the task up and when it hands it back, with its report: a summary, its answer to each **Done when** item, screenshots, how to check the result and its questions;
 * shows running and finished sessions in every view, and notifies when one finishes;
 * starts the next session of a flow when the previous one is ready.
 
@@ -30,13 +30,13 @@ Sessions PacedMind starts in a terminal are connected to its MCP server automati
 1. **Start**: select **Start with Claude Code** on a task, or let a flow start it. The agent starts where the task runs, and the task goes to **In progress**.
 2. **Pick up**: the agent calls `start_task` and reads the task, its description and sub-tasks.
 3. **Work**: the agent works in the task's folder. It ticks off sub-tasks and records follow-up tasks as it goes.
-4. **Hand back**: the agent calls `finish_task` with a note, or you select **Mark finished** for a session that can't. The session is **finished, waiting for you**, the task is **In review**, and PacedMind notifies.
-5. **Review**: check the result in the terminal or app and the folder, then select **Mark done**, or continue the conversation.
+4. **Hand back**: the agent calls `finish_task` with its report, or you select **Mark finished** for a session that can't. The session is **finished, waiting for you**, the task is **In review**, and PacedMind notifies.
+5. **Review**: read the report and check the result, then select **Mark done**, or **Request changes** to send the work back with what should change.
 6. **Next**: marking the task done can start the next sessions of the project's flow.
 
 ## Pages in this section
 
 * **[How a session runs](/agents/lifecycle)**: every state, what the agent is told, and what PacedMind records.
 * **[Start, resume and close sessions](/agents/start-and-manage)**: where sessions start from, where they run, the folder and terminal, permissions, resuming, finishing and closing.
-* **[Review finished work](/agents/review)**: where finished sessions show up, and what **Mark done** does.
+* **[Review finished work](/agents/review)**: where finished sessions show up, the report, **Request changes**, partly done and blocked hand-backs, and what **Mark done** does.
 * **[Automate with flows](/agents/flows)**: connection modes, **Flow on**, same-session chains and projects in sequence.

@@ -31,7 +31,7 @@ Every installation creates its own token, starting with `org_`. It's stored in P
 **Regenerate** makes a new token after the confirmation *Make a new token? Agents set up with the old one lose access until you update them.* Afterwards:
 
 * sessions that PacedMind starts or resumes use the new token automatically;
-* sessions already running keep the old one, so their hand-back (`finish_task`) and Claude Code's report of a closed terminal are refused. Regenerate while no session runs; a running session gets the new token by closing it (**Close session**) and reopening it with **Resume in terminal**;
+* sessions already running keep the old one, so their screenshots (`attach_image`), their hand-back (`finish_task`) and Claude Code's report of a closed terminal are refused. Regenerate while no session runs; a running session gets the new token by closing it (**Close session**) and reopening it with **Resume in terminal**;
 * Claude Code and Codex, connected for the desktop apps and the sessions you start yourself, need the new token: select **Connect** for each in **Settings → Devices** again.
 
 Regenerate the token if it was shared by mistake, for example in a screenshot or a log.
@@ -62,15 +62,15 @@ On connecting, the server gives the agent these instructions:
 > * Refer to tasks by key (WRK-12), to projects by id or name, to areas by id, name or key.
 > * Dates accept YYYY-MM-DD, YYYY-MM-DDTHH:mm or phrases like "tomorrow 9:00" or "next friday". Results show the date that was used; check it.
 > * "planned" is the day the user means to work on a task, "due" is its deadline. Priorities: urgent, high, medium, low, none.
-> * Give tasks descriptions with enough context to act on them later.
+> * Give tasks descriptions with enough context to act on them later. For work an agent will do, add done_when: the outcomes that must be true when it's finished.
 > * Ask the user before deleting anything or starting agent sessions.
-> * If PacedMind started you on a task (your first message names a task and a session), call start_task first and finish_task when the work is ready for review. Never mark your own task done.
+> * If PacedMind started you on a task (your first message names a task and a session), call start_task first. When the work is ready for review, call finish_task with a report: a summary, an answer to each Done when item, screenshots of what can be seen, and how to check it. Never mark your own task done.
 
 The [agent skills](/skills) go into more detail.
 
 ## The tools
 
-The server has 37 tools in seven groups, listed in **Settings → Tools agents can use**:
+The server has 39 tools in seven groups, listed in **Settings → Tools agents can use**:
 
 | Group | Tools |
 | --- | --- |
@@ -80,7 +80,7 @@ The server has 37 tools in seven groups, listed in **Settings → Tools agents c
 | Tasks | `list_tasks`, `get_task`, `create_task`, `create_tasks`, `update_task`, `bulk_update_tasks`, `delete_task` |
 | Calendar | `list_events`, `create_event`, `update_event`, `delete_event`, `get_agenda`, `reschedule_day` |
 | Flows | `get_flow`, `connect_tasks`, `disconnect_tasks`, `add_to_flow`, `remove_from_flow` |
-| Sessions | `list_sessions`, `start_session`, `close_session`, `get_next_task`, `start_task`, `finish_task` |
+| Sessions | `list_sessions`, `start_session`, `close_session`, `request_changes`, `get_next_task`, `start_task`, `attach_image`, `finish_task` |
 
 See the [tool reference](/mcp/tools) for every tool and its parameters.
 

@@ -43,7 +43,17 @@ On Windows, PacedMind's icon sits in the tray: click it to open the window, and 
 
 ## Notifications
 
-When an agent finishes a session, PacedMind shows a notification: *DEV-21 is finished*, with the task's title and the agent's note. Click it to open the session in **Sessions**. PacedMind checks for finished sessions every five seconds while it runs. Sessions that were already waiting when PacedMind started don't get a notification; the icon's tooltip and the **Sessions** count include them.
+When a session is finished, usually because its agent handed the task back, PacedMind shows a notification. Its title says how the work stands:
+
+| Title | When |
+| --- | --- |
+| *DEV-21 is finished* | The work is ready for your check. |
+| *DEV-21 is partly done* | The agent handed back part of the work. |
+| *DEV-21 is blocked* | The agent can't go on without you. |
+
+When the agent's report has questions for you, the title adds *· 1 question for you* or *· 2 questions for you*, such as *DEV-22 is blocked · 2 questions for you*. Below the title come the task's title and the summary of the agent's report. Click the notification to open the session in **Sessions**.
+
+PacedMind checks for finished sessions every five seconds while it runs, so a session sent back with **Request changes** notifies again when the agent hands the task back. Sessions that were already waiting when PacedMind started don't get a notification; the icon's tooltip and the **Sessions** count include them.
 
 Notifications follow the system's own settings:
 

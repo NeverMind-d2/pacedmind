@@ -10,13 +10,13 @@ A session moves through a few states. PacedMind changes them when it starts the 
 | State | Meaning | Shown as |
 | --- | --- | --- |
 | **Starting** | PacedMind created the session and is opening it. In a desktop app, the session stays here until you send the first message and the agent checks in; for Codex cloud, until Codex takes the task on. | *Starting Claude Code since 09:40*, or *Sending to Codex cloud since 09:40* |
-| **Running** | The agent works. | *Running in Claude Code since 09:40*, and outside a terminal with the place, such as *Running in the Claude app on DESKTOP-1 since 09:40* or *Running in Claude Code on the web since 09:40* |
-| **Finished** | The agent handed the task back, or the session was marked finished. | *Claude Code finished at 12:22 · waiting for you*, with a navy dot |
+| **Running** | The agent works. | *Running in Claude Code since 09:40*, and outside a terminal with the place, such as *Running in the Claude app on DESKTOP-1 since 09:40* or *Running in Claude Code on the web since 09:40*. After **Request changes**: *Claude Code is working on your changes since 14:05* |
+| **Finished** | The agent handed the task back, or the session was marked finished. | *Claude Code finished at 12:22 · waiting for you*, with a navy dot. When the agent handed it back partly done or blocked: *Claude Code handed back part of it at 12:22 · waiting for you* or *Claude Code got stuck at 12:22 · needs you* |
 | **Done** | You reviewed the work and marked the task done. | *Claude Code finished, marked done* |
 | **Closed** | The session ended before the agent finished: you closed it, its terminal closed, or Codex cloud couldn't finish it. | *Closed before the agent finished* |
 | **Failed** | The session couldn't be opened or sent. | *Couldn't start:* and the reason |
 
-A session on the computer whose agent hasn't picked the task up within 90 seconds shows *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.* The agent is usually waiting for an answer there, for example to trust the folder or to sign in. See [Troubleshooting](/troubleshooting#a-session-hasnt-checked-in). In a desktop app, it shows *Opened in the Claude app. Send the first message there to start.* Cloud sessions don't check in.
+A session on the computer whose agent hasn't picked the task up within 90 seconds, of its start or of **Request changes**, shows *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.* The agent is usually waiting for an answer there, for example to trust the folder or to sign in. See [Troubleshooting](/troubleshooting#a-session-hasnt-checked-in). In a desktop app, it shows *Opened in the Claude app. Send the first message there to start.* Cloud sessions don't check in.
 
 ## 1. Start
 
@@ -43,45 +43,49 @@ A cloud session can't call PacedMind's tools, so its first message carries the w
 
 The agent calls `start_task` with the task key and the session id. PacedMind records *Claude Code read the task over MCP* and keeps the task **In progress**. The agent receives:
 
-* the task: title, status, priority, dates, estimate, labels, its folder and where its sessions run, the description, the numbered sub-tasks, and the tasks it follows and leads to;
-* the instruction to hand the task back with `finish_task`, with the task key, the session id and a one-line note about what changed, and not to mark it done itself.
+* after **Request changes**, first the changes you asked for, with the instruction to make them before anything else;
+* the task: title, status, priority, dates, estimate, labels, its folder and where its sessions run, the description, the numbered **Done when** items, the numbered sub-tasks, the tasks it follows and leads to, and its latest report;
+* the instruction to hand the task back with `finish_task`, the task key, the session id and a report: a summary, an answer to each **Done when** item, screenshots of anything it changed that can be seen, how to check the result and its questions. If it can't finish, it still hands the task back, partly done or blocked. It doesn't mark the task done itself.
 
 ## 3. Work
 
 The agent works in the task's folder as it normally does, in conversation with you in its terminal or app. With PacedMind's [agent skills](/skills) installed, it also:
 
 * ticks off sub-tasks as it completes them, and adds the ones it discovers;
-* records work it finds outside the task, such as a bug elsewhere, as new tasks in the same project.
+* records work it finds outside the task, such as a bug elsewhere, as new tasks in the same project, and lists them in its report.
 
-PacedMind shows these changes as they happen.
+It can attach screenshots as it goes, with `attach_image`. They show under **Images so far** in the task's details and in **Sessions**, and join its report when it hands the task back. PacedMind shows all these changes as they happen.
 
 ## 4. Hand back
 
-When the work is ready to check, the agent calls `finish_task` with its note. PacedMind then:
+When the work is ready to check, the agent calls `finish_task` with its report: the summary, its answer to each **Done when** item, images, how to check the result, questions, details, links and follow-ups. See [The report](/agents/review#the-report). PacedMind then:
 
-* marks the session **Finished**, with the time and the note;
+* marks the session **Finished**, with the time and the report's summary as its note;
 * moves the task to **In review**;
-* notifies you, and counts the session in the sidebar under **Sessions**;
+* notifies you, such as *DEV-21 is finished · 1 question for you*, and counts the session in the sidebar under **Sessions**;
 * in a flow, starts the next sessions that were waiting for this task to finish (see [Automate with flows](/agents/flows)).
 
-An agent that is blocked hands the task back too, with a note explaining what it needs, so the session doesn't look busy forever.
+An agent that can't finish everything hands the task back too, so the session doesn't look busy forever: **Partly done** when only part of it is ready, **Blocked** when it can't go on without you, with the decision it needs among its questions. Such a hand-back starts nothing in the flow until you mark the task done. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
-A session that can't call `finish_task`, in the cloud or in a desktop app that isn't connected to PacedMind, is handed back with **Mark finished** (*You marked it finished*). PacedMind hands back Codex cloud sessions itself when their task is ready, with a note such as *Codex cloud finished: Add the auto-planner, +120 −8 in 4 files*.
+A session that can't call `finish_task`, in the cloud or in a desktop app that isn't connected to PacedMind, is handed back with **Mark finished** (*You marked it finished*). PacedMind hands back Codex cloud sessions itself when their task is ready, with a note such as *Codex cloud finished: Add the auto-planner, +120 −8 in 4 files*. Neither brings a report.
 
-If the next task in the flow continues **in the same session**, `finish_task` answers the agent with that task, and the agent carries on in the same session without stopping.
+If the next task in the flow continues **in the same session**, and the agent handed its task back as done, `finish_task` answers the agent with that task, and the agent carries on in the same session without stopping.
 
 ## 5. Review
 
-Check the result: the agent's note, its terminal or app, and the changed files, or the pull request of a cloud session. Then:
+Check the result: the agent's report, its terminal or app, and the changed files, or the pull request of a cloud session. Then:
 
 * **Mark done** marks the task done. Its finished sessions count as reviewed (*You marked it done*) and show as **Done**. Tasks connected **Manually** after it can now start.
-* To ask for changes, select **Resume in terminal**, or switch to the still-open terminal or app, and continue the conversation. The agent picks the task up again with `start_task` and hands it back with `finish_task` when done.
+* **Request changes**, for a session in a terminal on this computer, adds what should change to the report and reopens the session in a new terminal (*You asked for changes: …*). The task goes back to **In progress**, and the agent reads your changes first when it calls `start_task`.
+* Or switch to the still-open terminal or app, or select **Resume in terminal**, and continue the conversation. The agent picks the task up again with `start_task`.
+
+Either way, the agent hands the task back with `finish_task` and a new report when it's done.
 
 See [Review finished work](/agents/review).
 
 ## When the terminal closes
 
-* **Claude Code** reports its own exit through the hook PacedMind installed for the session. A running session becomes **Closed** (*Terminal closed before the agent finished*); a finished one keeps its state and records *Terminal closed*. The task keeps its status, so a task that was **In progress** stays there until you change it or close the session.
+* **Claude Code** reports its own exit through the hook PacedMind installed for the session, one per conversation: after **Request changes**, the terminal of the earlier conversation can close without affecting the session. A running session becomes **Closed** (*Terminal closed before the agent finished*); a finished one keeps its state and records *Terminal closed*. The task keeps its status, so a task that was **In progress** stays there until you change it or close the session.
 * **Codex** has no such hook: its session stays **Running** until it's closed in PacedMind with **Close session**.
 * **Desktop apps and the cloud** don't report closing either. Their sessions stay open in PacedMind until they're marked finished or closed with **Close session**. Marking the task done also ends a cloud session.
 
@@ -89,7 +93,7 @@ See [Review finished work](/agents/review).
 
 ## Sessions started outside PacedMind
 
-An agent that was started by hand, and connected to PacedMind over MCP, can report on a task too. When it calls `start_task` without a session id of that task, and the task has no running session, PacedMind creates a session record for it (*Started outside PacedMind*), with the project's folder, and the session appears in **Sessions** like any other. PacedMind refuses this for tasks that are yours. **Resume in terminal** reopens such a session in its folder, or the task's when it has none. Claude Code starts a new conversation there, because PacedMind doesn't know the one the agent was in. See [Resume a session](/agents/start-and-manage#resume-a-session).
+An agent that was started by hand, and connected to PacedMind over MCP, can report on a task too. When it calls `start_task` without a session id of that task, and the task has no running session, PacedMind creates a session record for it (*Started outside PacedMind*), with the project's folder, and the session appears in **Sessions** like any other. An agent that hands a task back with `finish_task` without a session to report on gets such a session too. PacedMind refuses this for tasks that are yours. **Resume in terminal** reopens such a session in its folder, or the task's when it has none. Claude Code starts a new conversation there, because PacedMind doesn't know the one the agent was in. See [Resume a session](/agents/start-and-manage#resume-a-session).
 
 ## What PacedMind records
 
@@ -102,7 +106,7 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Sent to Claude Code on the web from a terminal in app* | A terminal sent the task to Claude Code on the web. |
 | *Sending it to Codex cloud*, then *Codex cloud took it on in the my-app environment* | PacedMind sent the task to Codex cloud, and Codex accepted it. |
 | *Claude Code read the task over MCP* | The agent called `start_task`. |
-| *Claude marked it finished* (the task's details show the agent's note instead) | The agent called `finish_task`. |
+| *Claude marked it finished* (the task's details show the report's summary instead) | The agent called `finish_task`. |
 | *You marked it finished* | You selected **Mark finished**. |
 | *Codex cloud finished: …* | PacedMind found the Codex cloud task ready. |
 | *Codex cloud couldn't finish it* | The Codex cloud task ended with an error. |
@@ -112,6 +116,7 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Terminal closed* | Claude Code's terminal closed after the agent finished. |
 | *Started outside PacedMind* | An agent PacedMind didn't start reported on the task. |
 | *Reopened in a terminal* | You selected **Resume in terminal**. |
+| *You asked for changes:* and the start of your text | You selected **Request changes**. |
 | *Opened in the Claude app* | You selected **Continue in Claude app** or **Open the Claude app**. |
 | *Opened a terminal to pull the cloud session in (claude --teleport)* | You selected **Pull into terminal**. |
 | *Continues session 3f2a9c1b in the same terminal* | A same-session connection continued the session; in a desktop app, *in the same app session*. |

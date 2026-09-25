@@ -9,7 +9,7 @@ A flow chains a project's tasks so their agent sessions start one after another.
 
 **Read-only. Allowed without asking.**
 
-A project's flow: whether it's on, which project it starts after and which follow it, the tasks in the flow grouped by the agent that runs them, and for each task what it starts after and how, and where it runs. Also the open tasks outside the flow and the next ready task.
+A project's flow: whether it's on, which project it starts after and which follow it, the tasks in the flow grouped by the agent that runs them, and for each task what it starts after and how, and where it runs. Also the open tasks outside the flow and the next ready task, as [`get_next_task`](/mcp/tools/sessions#get_next_task) finds it: a task after one that an agent handed back partly done or blocked isn't ready until that one is marked done, or handed back again as done.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

@@ -11,9 +11,9 @@ The MCP server gives an agent the tools; the **skills** tell it how to use them 
 | --- | --- | --- |
 | **pacedmind** | Adding, finding, changing, completing or deleting tasks, projects, areas or activities; asking what's on the plate. | The basics: how the planner is organized, how to refer to things, how to write tasks someone can act on weeks later, and what to ask before doing. |
 | **pacedmind-planning** | *What should I work on?*, *plan today*, *move X to Friday*, *clear my afternoon*, *I'm sick today*, feeling overloaded. | Reads the agenda, proposes a plan, and moves tasks and activities only with your agreement. Explains how focus blocks are made. |
-| **pacedmind-projects** | Starting something new, asking for a breakdown, a roadmap or milestones, or wanting agents to work through a project. | Creates the project, breaks it into well-described tasks with sub-tasks and estimates, orders the roadmap, sets dates and dependencies between projects, and wires agent flows. |
-| **pacedmind-review** | Triage, clean-up, catching up, *what's overdue*, a weekly review. | Goes through the Inbox, overdue and stale tasks, and sessions waiting for review, in small batches with a suggested decision for each. |
-| **pacedmind-agent-session** | The agent's first message names a PacedMind task and session, or it's asked to work on a PacedMind task. | The protocol for working on a task: `start_task`, keeping sub-tasks current, recording follow-up tasks, and handing back with `finish_task`. |
+| **pacedmind-projects** | Starting something new, asking for a breakdown, a roadmap or milestones, or wanting agents to work through a project. | Creates the project, breaks it into well-described tasks with **Done when** lists, sub-tasks and estimates, orders the roadmap, sets dates and dependencies between projects, and wires agent flows. |
+| **pacedmind-review** | Triage, clean-up, catching up, *what's overdue*, a weekly review. | Goes through the Inbox, overdue and stale tasks, and sessions waiting for review, in small batches with a suggested decision for each. For finished sessions, it leads with hand-backs that are partly done or blocked, Done when items that aren't met, and the agents' questions, and sends work back with `request_changes` when you ask. |
+| **pacedmind-agent-session** | The agent's first message names a PacedMind task and session, or it's asked to work on a PacedMind task. | The protocol for working on a task: `start_task`, making the changes you asked for first, keeping sub-tasks current, recording follow-up tasks, attaching screenshots of what can be seen, and handing back with `finish_task` and a report that answers each Done when item. |
 
 The **pacedmind** skill tells the agent to ask before deleting anything and before starting agent sessions, and not to mark a task done that an agent worked on unless you say you reviewed it. The MCP server gives every agent the first two rules too, with or without the skills.
 
@@ -48,6 +48,6 @@ The skills tell agents to use the tools rather than PacedMind's files or databas
 
 * *Add a task to renew the car insurance before October 10, high priority.* The **pacedmind** skill creates it with a description, a due date and an estimate, and reports the key and the resolved date.
 * *Plan my Thursday.* The **pacedmind-planning** skill reads the agenda, suggests what fits in the free focus time, and changes planned days after you agree.
-* *I want to build a recipe app with Claude Code.* The **pacedmind-projects** skill sets up the project, breaks it into tasks with acceptance criteria, and offers a flow.
+* *I want to build a recipe app with Claude Code.* The **pacedmind-projects** skill sets up the project, breaks it into tasks with Done when lists, and offers a flow.
 * *Let's do the weekly review.* The **pacedmind-review** skill walks through the Inbox, overdue tasks, finished sessions and upcoming deadlines.
-* In a session PacedMind started, the **pacedmind-agent-session** skill makes the agent pick up the task, tick off sub-tasks, and hand it back with a note.
+* In a session PacedMind started, the **pacedmind-agent-session** skill makes the agent pick up the task, tick off sub-tasks, attach screenshots, and hand it back with a report.

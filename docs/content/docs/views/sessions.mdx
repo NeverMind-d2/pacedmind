@@ -1,6 +1,6 @@
 ---
 title: Sessions
-description: The Sessions view lists Claude Code and Codex sessions by state, shows where each one runs and what PacedMind heard from its agent, and has the buttons to resume, finish, close, mark done or start the next session.
+description: The Sessions view lists Claude Code and Codex sessions by state, shows where each one runs, the agent's reports and what PacedMind heard from it, and has the buttons to resume, finish, request changes, close, mark done or start the next session.
 ---
 
 **Sessions** lists the agent sessions started from PacedMind, or reported by agents: *Claude Code and Codex sessions started from PacedMind*. The sidebar counts the finished ones that wait for review.
@@ -11,20 +11,22 @@ description: The Sessions view lists Claude Code and Codex sessions by state, sh
 
 | Group | Contains |
 | --- | --- |
-| **Finished, waiting for you** | Sessions whose agent handed the task back. Newest first. |
+| **Finished, waiting for you** | Sessions whose agent handed the task back, including hand-backs that are partly done or blocked. Newest first. |
 | **Running** | Sessions in progress, oldest first. |
 | **Ended today** | Sessions that ended today: marked done, closed or failed. |
 | **Earlier** | Older ended sessions, the latest 30. Collapsed unless the selected session is in it. |
 
-Each row shows the session's state dot, the task's key and title, the project and the agent with its mark and the icon of where it runs (on wide windows), and a short state:
+Each row shows the session's state dot, the task's key and title, the project and the agent with its mark and the icon of where it runs (on wide windows), the number of screenshots, and a short state:
 
 | State | Row text |
 | --- | --- |
-| Finished | *finished 12:22* |
-| Running | *since 09:40*, or *in the cloud since 09:40*. When the agent hasn't checked in after 90 seconds: *waiting in its terminal*, or *waiting in the Claude app* |
+| Finished | *finished 12:22*; handed back partly done, *partly done 12:22*; blocked, *stuck 12:22* |
+| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*. When the agent hasn't checked in after 90 seconds: *waiting in its terminal*, or *waiting in the Claude app* |
 | Done | *done yesterday 18:10* |
 | Closed | *closed before finishing* |
 | Failed | *couldn't start* |
+
+The number of screenshots, with an image icon (*3 images* on hover), counts those in the agent's latest report and those it attached while it works.
 
 Select a row to show its details. The selected session is part of the page's address, so a link to a session, such as from a notification or a task, opens it directly. Without one, the view selects the newest finished session, else the oldest running one, else the newest session.
 
@@ -39,14 +41,21 @@ With no sessions yet, the view explains: *Sessions appear here when you start on
 The details panel shows the project and the key, **Open task**, the task's title, and a line about the state:
 
 * *Running in Claude Code since 09:40* (or *Starting*), and outside a terminal with the place: *Running in the Claude app on DESKTOP-1 since 09:40* or *Running in Claude Code on the web since 09:40*;
+* *Claude Code is working on your changes since 14:05*, after **Request changes**;
 * *Sending to Codex cloud since 09:40*, while Codex takes the task on;
 * *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.*;
-* *Claude Code finished at 12:22 · waiting for you*, with the agent's note in quotes;
+* *Claude Code finished at 12:22 · waiting for you*;
+* *Claude Code handed back part of it at 12:22 · waiting for you*, for a hand-back that is partly done;
+* *Claude Code got stuck at 12:22 · needs you*, for a blocked one;
 * *Done · Claude Code finished at 12:22*;
 * *Closed before the agent finished*;
 * *Couldn't start:* and the reason.
 
-Below it:
+Under it comes the agent's report, with the same parts as in the [task's details](/tasks/task-details#the-agents-report): the summary, the **Done when** answers with a count such as *2 of 3 met*, screenshots, questions, **How to check it**, **Details**, links and follow-ups, and what you asked to change. Here the **Done when** part lists every item of the report with the agent's answer and note. Click a screenshot to open the [image viewer](/tasks/task-details#screenshots). A session without a report shows the agent's note in quotes, and screenshots the agent attaches while it works show under **Images so far**.
+
+A session handed back more than once, after **Request changes** or after it was resumed, has a report for each hand-back, newest first. The arrows next to the state line (**Older report**, **Newer report**) page through them, with the position between them, such as *Report 2 of 2*.
+
+Below them come the session's fields:
 
 | Field | Shows |
 | --- | --- |
@@ -60,7 +69,7 @@ Below it:
 | **Claude session** | For Claude Code in a terminal, its own conversation id, used to resume it. |
 | **Continues** | For a session that carries on another one: that session (*DEV-22's session*). Select it to open it. |
 
-**What PacedMind heard** lists the session's events with their times, such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it finished*, *You marked it done*, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*. See [How a session runs](/agents/lifecycle#what-pacedmind-records) for all of them.
+**What PacedMind heard** lists the session's events with their times, such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it finished*, *You marked it done*, *You asked for changes:* with the start of what you wrote, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*. See [How a session runs](/agents/lifecycle#what-pacedmind-records) for all of them.
 
 ## Buttons
 
@@ -72,8 +81,13 @@ Below it:
 | **Open the task** or **Open Claude Code on the web** | A cloud session. | Opens the Codex cloud task, or Claude Code on the web, in the browser. |
 | **Pull into terminal** | A Claude Code on the web session. | Opens a terminal in the folder with `claude --teleport`, which pulls a cloud session and its branch in. |
 | **Mark finished** | A running session outside a terminal, which may not report back. | The session is finished and the task goes to **In review**, as if the agent had handed it back. The flow may start the next sessions. |
+| **Request changes** | A terminal session whose agent handed the task back: finished, or done after you marked the task done. | Opens a box above the buttons to write what should change (*What should change? Be as specific as you'd be with a colleague.*). **Send to Claude Code**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, sends it: the session reopens in a new terminal (*Sent to Claude Code in a new terminal*), and the task goes back to **In progress**. **Cancel** or <kbd>Esc</kbd> closes the box. |
 | **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, or for a session outside a terminal *Close this session in PacedMind? It keeps running where it is.*, then marks the session closed. A task in progress goes back to **Todo**. |
 | **Mark done** | The agent finished. | Marks the task done. The session counts as reviewed, and the flow may start the next sessions. |
+
+The line under the **Request changes** box says how the agent goes back to work: *Claude Code continues its conversation in a new terminal tab.* for a Claude Code session that PacedMind started in a terminal, or *Codex starts again in a new terminal tab, with its last report and your changes.* for Codex, which starts a new conversation. PacedMind opens a new tab in Windows Terminal, and a new window otherwise. The session moves to **Running**, with *Claude Code is working on your changes since 14:05*, until the agent hands the task back with a new report. For Claude Code, **Claude session** then shows the id of the conversation's new branch. See [Request changes](/tasks/task-details#request-changes).
+
+Sessions in the Claude or Codex app, or in the cloud, don't offer **Request changes**: write the changes to the agent where it runs, with **Open the Claude app**, **Open the Codex app**, **Open the task** or **Open Claude Code on the web**. If another session of the task is running, PacedMind answers *This task already has a running session*; for a session that ran on another computer, *This session ran on DESKTOP-2. Ask for the changes in PacedMind there.*
 
 Under the buttons, *Next in* the project names the next open task the flow leads to, with **Start session** when that task is still to do or in the backlog and has no running session.
 

@@ -30,26 +30,70 @@ Returns the number of matches and one line per task. When there are more than th
 
 **Read-only. Allowed without asking.**
 
-Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, the description, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, and when it was created, updated and finished.
+Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `task` | string | yes | The task key. |
 
-The sub-task numbers are the ones `update_task` accepts.
+The report starts with its session, the agent, when it was handed back and its outcome: *done*, *partly done* or *blocked, needs the user*. Then come the summary, each Done when item with the agent's verdict (*met*, *partly met*, *not met* or *not answered*) and note, the images, each by its caption, size in pixels, type and file size, how to check the result, the questions for the user, links, follow-ups, the details, and the changes the user asked for, if any. It's headed *Latest report* when it comes from the task's latest session, else *Last report, from an earlier session*. The *Latest session* line appears only when that session has no report of its own, such as a session still at work on its first hand-back.
+
+For example, with the sample data:
+
+```text
+DEV-21 · MCP server skeleton
+Status: In review · Priority: High
+Where: project Organizer app (organizer) in Dev
+Due: 2026-09-25 (Fri) · Planned for: none
+Estimate: 1h · Agent: Claude Code
+Labels: mcp
+
+Description:
+Expose tasks, projects and time blocks over MCP so Claude Code and Codex can read and update them.
+
+Done when:
+1. /api/mcp answers tools/list with the task tools
+2. Requests without the token get 401
+3. Claude Code can create a task through it
+
+Starts after: DEV-19 (auto)
+Leads to: DEV-22 (manual), DEV-24 (auto)
+
+Latest report · session 3f2a9c1b · Claude Code · 2026-09-24 13:53:07 · done
+Summary: MCP endpoint added at /api/mcp. Tests pass.
+Done when:
+1. [met] /api/mcp answers tools/list with the task tools · 12 tools listed.
+2. [met] Requests without the token get 401
+3. [partly met] Claude Code can create a task through it · Tried with the MCP inspector, not with Claude Code yet.
+How to check:
+1. Run npm run dev
+2. Open Settings → MCP server and copy the connect command
+3. Ask Claude Code to list your tasks
+Questions for the user:
+- Should agents be allowed to delete tasks without asking?
+Details:
+- `src/app/api/mcp/route.ts` serves the MCP server with **mcp-handler**.
+- Tools for tasks, projects and time blocks live in `src/server/mcp/`.
+- Every request needs the bearer token from Settings.
+
+Created 2026-09-21 13:53:07 · updated 2026-09-24 13:53:07
+```
+
+The sub-task numbers are the ones `update_task` accepts, and the Done when numbers are the ones `finish_task` accepts in `criteria`.
 
 ## `create_task`
 
 **Changes data. Allowed without asking.**
 
-Adds a task. Without `project` and `area`, it goes to the Inbox. Returns the new task, with its key.
+Adds a task. Without `project` and `area`, it goes to the Inbox.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `title` | string | yes | A short, concrete action. |
 | `project` | string | no | The project. Its area comes with it. |
 | `area` | string | no | The area, when there's no project. |
-| `description` | string | no | Context, acceptance criteria, links. Plain text or Markdown. |
+| `description` | string | no | Why it matters, context, constraints, links. Plain text or Markdown. |
+| `done_when` | string list | no | What must be true when the task is finished, one checkable outcome per item, such as "/reports has a Download CSV button" or "A screenshot of the new page". Up to 20 items; blank and repeated items are left out. Agents answer each item when they hand the task back. See [Done when](/concepts/tasks#done-when). |
 | `status` | status | no | Defaults to `todo`. |
 | `priority` | priority | no | Defaults to `none`. |
 | `due` | date, optional time | no | The deadline. |
@@ -58,6 +102,8 @@ Adds a task. Without `project` and `area`, it goes to the Inbox. Returns the new
 | `labels` | string list | no | Labels, stored in lowercase, without `#`. |
 | `subtasks` | string list | no | Checklist items. |
 | `agent` | `claude`, `codex` or `human` | no | Who does it. Left out, the task gets the project's default agent. `human` keeps it out of flows. |
+
+Returns the new task's line, with its key and the number of Done when items and sub-tasks: *Created DEV-43 · Todo · High · Add CSV export to the reports page · Organizer app · 4 Done when items · 3 sub-tasks.*
 
 A project together with an area that isn't the project's area is refused: *Project … is in …, not …. Leave out the area.* A task created as `done` can start the next sessions of a flow, like any task marked done.
 
@@ -71,7 +117,7 @@ Adds up to 50 tasks at once, for example when breaking a project down. All go to
 | --- | --- | --- | --- |
 | `project` | string | no | The project for all tasks. |
 | `area` | string | no | The area for all tasks, when there's no project. |
-| `tasks` | list | yes | 1 to 50 tasks, each with `title` and any of the optional `create_task` fields. |
+| `tasks` | list | yes | 1 to 50 tasks, each with `title` and any of the optional `create_task` fields, such as `description` and `done_when`. |
 
 All dates are checked before anything is created, so one wrong date doesn't leave half the tasks behind.
 
@@ -79,7 +125,7 @@ All dates are checked before anything is created, so one wrong date doesn't leav
 
 **Changes data. Allowed without asking.**
 
-Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`.
+Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`, and an empty list, `[]`, clears `done_when`.
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -87,6 +133,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `title` | string | The new title. |
 | `description` | string | Replaces the description. |
 | `append_to_description` | string | Adds a paragraph at the end of the description. |
+| `done_when` | string list | Replaces the Done when list, up to 20 items. `[]` clears it. |
 | `status` | status | The new status. `done` can start the next sessions of a flow. |
 | `priority` | priority | The new priority. |
 | `due` | date with optional time, or `null` | The deadline. |
@@ -104,7 +151,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `reopen_subtasks` | string list | Sub-tasks to reopen. |
 | `remove_subtasks` | string list | Sub-tasks to delete. |
 
-Returns the updated task line and, with sub-tasks, how many are done, such as *· 3/4 sub-tasks done*. It also reports *WRK-12 is the user's now, so it left the flow.* and the sessions a status of `done` started.
+Returns the updated task line; with `done_when`, the number of Done when items, such as *· 3 Done when items*; and, with sub-tasks, how many are done, such as *· 3/4 sub-tasks done*. It also reports *WRK-12 is the user's now, so it left the flow.* and the sessions a status of `done` started.
 
 ## `bulk_update_tasks`
 
@@ -130,7 +177,7 @@ Applies the same change to up to 100 tasks, for rescheduling and triage.
 
 **Deletes. Agents ask the user first.**
 
-Deletes a task with its sub-tasks, sessions and flow connections. Setting the status to `canceled` keeps a record and is often the better choice.
+Deletes a task with its sub-tasks, sessions and flow connections, and the reports and images its agents handed back. Setting the status to `canceled` keeps a record and is often the better choice.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

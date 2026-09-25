@@ -1,9 +1,9 @@
 ---
 title: Tasks
-description: Task keys, the six statuses, priorities, labels, estimates, descriptions and sub-tasks, and the difference between canceling and deleting.
+description: Task keys, the six statuses, priorities, labels, estimates, descriptions, Done when lists and sub-tasks, and the difference between canceling and deleting.
 ---
 
-A task is one piece of work. Besides its title, it has a key, a status, a priority, two dates, an estimate, labels, a description, sub-tasks, and someone who does it.
+A task is one piece of work. Besides its title, it has a key, a status, a priority, two dates, an estimate, labels, a description, a **Done when** list, sub-tasks, and someone who does it.
 
 ## Keys
 
@@ -18,7 +18,7 @@ A key never changes. Moving a task to another area or project keeps its key, so 
 | **Backlog** | Kept for later; not planned yet. | You |
 | **Todo** | To do. New tasks start here. | You; also **Close session**, for a task in progress |
 | **In progress** | Being worked on. | You; PacedMind when a session starts on the task |
-| **In review** | Finished by an agent, waiting for you to check it. | The agent, when it hands the task back |
+| **In review** | Handed back by an agent, with its report, waiting for you to check it. | The agent, when it hands the task back |
 | **Done** | Finished and checked. | You |
 | **Canceled** | Won't be done, but kept for the record. | You |
 
@@ -57,9 +57,17 @@ The estimate decides:
 
 ## Description and sub-tasks
 
-The **description** holds what won't be obvious later: context, links, constraints and what done looks like. For work an agent will do, write the acceptance criteria there; the agent reads them when it picks the task up.
+The **description** holds what won't be obvious later: why it matters, context, constraints and links. What the result must be goes in the **Done when** list (below).
 
 **Sub-tasks** are checklist items. Add them in the details panel (**+ Add sub-task**, then <kbd>Enter</kbd>), tick them off, or hover one and select its **×** to delete it. The panel shows how many are done. Agents working on a task tick off sub-tasks as they go and add the ones they discover.
+
+## Done when
+
+The **Done when** list says what must be true when the task is finished, one checkable outcome per item, such as *The export downloads the rows for the current filters* or *A screenshot of the new button*. Sub-tasks are the way there; **Done when** is where to end up.
+
+Add items in the details panel, under the description, or with **Done when** in quick add. Empty and repeated items are left out. Agents can set the list too, when they create or update a task.
+
+For work an agent will do, the list is its acceptance criteria. The agent reads it when it picks the task up, and its report answers each item with **Met**, **Partly met** or **Not met**, and a note on how it checked. The details panel then shows each answer next to its item. See [Review finished work](/agents/review#the-report).
 
 ## Where a task lives
 
@@ -73,6 +81,6 @@ A task created in a project gets the project's default agent as its doer. See [W
 
 ## Cancel or delete
 
-**Canceled** keeps the task, its history and its sessions, out of the way. Deleting removes the task together with its sub-tasks, its session records and its flow connections, and can't be undone.
+**Canceled** keeps the task, its history and its sessions, out of the way. Deleting removes the task together with its sub-tasks, its session records, the agents' reports and their images, and its flow connections, and can't be undone.
 
 Delete a task from its details panel (the trash button), from its menu in the calendar (**Delete task**), or through an agent. The details panel asks *Delete WRK-12?* first; the calendar menu asks for a second click.

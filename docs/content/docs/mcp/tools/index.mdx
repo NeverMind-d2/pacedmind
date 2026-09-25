@@ -1,6 +1,6 @@
 ---
 title: Tool reference
-description: Conventions shared by all 37 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
+description: Conventions shared by all 39 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
 ---
 
 The pages in this section describe every tool of the `organizer` MCP server with its parameters and what it returns. Agents see the same descriptions and parameter schemas in their MCP client; this reference is for the people who use and configure them.
@@ -53,9 +53,9 @@ Each tool is marked for the client as one of:
 * **read-only**: never changes anything;
 * **changes data**: creates or updates;
 * **deletes**: removes something;
-* **starts an agent**: `start_session`, which starts an agent on the user's computer or in its cloud.
+* **starts an agent**: `start_session`, which starts an agent on the user's computer or in its cloud, and `request_changes`, which reopens an agent's session in a new terminal on the user's computer.
 
-In Claude Code sessions that PacedMind starts, 16 tools run without asking; the rest ask for approval in the agent's terminal. They're marked **Allowed without asking** on the tool pages. Codex sessions follow Codex's own approval settings.
+In Claude Code sessions that PacedMind starts, 17 tools run without asking; the rest ask for approval in the agent's terminal. They're marked **Allowed without asking** on the tool pages. Codex sessions follow Codex's own approval settings.
 
 ## All tools
 
@@ -95,9 +95,11 @@ In Claude Code sessions that PacedMind starts, 16 tools run without asking; the 
 | [`list_sessions`](/mcp/tools/sessions#list_sessions) | Agent sessions, newest first. |
 | [`start_session`](/mcp/tools/sessions#start_session) | Start an agent on a task: in a terminal, its desktop app or its cloud. |
 | [`close_session`](/mcp/tools/sessions#close_session) | Mark a stuck session closed. |
+| [`request_changes`](/mcp/tools/sessions#request_changes) | Send an agent's work back to it with the changes the user wants. |
 | [`get_next_task`](/mcp/tools/sessions#get_next_task) | The next ready task in a project. |
 | [`start_task`](/mcp/tools/sessions#start_task) | For agents: start work on a task. |
-| [`finish_task`](/mcp/tools/sessions#finish_task) | For agents: hand a task back for review. |
+| [`attach_image`](/mcp/tools/sessions#attach_image) | For agents: add a screenshot or another image to the task. |
+| [`finish_task`](/mcp/tools/sessions#finish_task) | For agents: hand a task back for review, with a report. |
 
 ## Pages in this section
 

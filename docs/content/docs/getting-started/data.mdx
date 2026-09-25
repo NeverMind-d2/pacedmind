@@ -1,9 +1,9 @@
 ---
 title: Where your data lives
-description: The files PacedMind keeps on the computer, who can reach its server, and how to back up, move or reset the data.
+description: The files PacedMind keeps on the computer, including the images in agents' reports, who can reach its server, and how to back up, move or reset the data.
 ---
 
-PacedMind keeps everything in one SQLite database on the computer: areas, projects, tasks, activities, flows, agent sessions, the computers it runs on and settings, including the MCP access token. The app's server reads and writes it; nothing is sent elsewhere. The exception is a session you send to an agent's cloud: the agent's own tool takes the task's title, description, **Done when** list and sub-tasks there.
+PacedMind keeps everything in one SQLite database on the computer: areas, projects, tasks, activities, flows, agent sessions and their reports, the computers it runs on and settings, including the MCP access token. The images in agents' reports are files next to it. The app's server reads and writes both; nothing is sent elsewhere. The exception is a session you send to an agent's cloud: the agent's own tool takes the task's title, description, **Done when** list and sub-tasks there.
 
 ## File locations
 
@@ -12,6 +12,7 @@ PacedMind keeps everything in one SQLite database on the computer: areas, projec
 | The database | `%APPDATA%\Organizer\data\organizer.db`, with `organizer.db-wal` and `organizer.db-shm` next to it |
 | This computer's id in PacedMind, which sessions use to know where they run | `%APPDATA%\Organizer\data\device.json` |
 | Files for each agent session: the start script and, for Claude Code, its MCP and hook settings | `%APPDATA%\Organizer\data\sessions\<session id>\` |
+| Images from agents' reports, copied when the agent attaches them, one file per image | `%APPDATA%\Organizer\data\attachments\` |
 | Working folders for tasks without their own folder or a project folder, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
 | Window size and position, the theme, and whether the tray hint was shown | `%APPDATA%\Organizer\window-state.json` |
 | The server log | `%APPDATA%\Organizer\logs\server.log` |
@@ -30,17 +31,17 @@ The server listens on `127.0.0.1`, port 4319, so only programs on the same compu
 
 The MCP server at `http://127.0.0.1:4319/api/mcp` also needs the access token from **Settings → MCP server**. See [MCP server](/mcp).
 
-The session files contain the access token: the start script passes it to the agent, Claude Code's MCP configuration (`mcp.json`) uses it for the connection, and its settings file (`settings.json`) uses it for the hook that reports the end of the session. Keep the data folder private, and regenerate the token if it was shared by mistake. Sessions that are resumed afterwards get the new token.
+The session files contain the access token: the start script passes it to the agent, Claude Code's MCP configuration (`mcp.json`) uses it for the connection, and its settings files, one per conversation (`settings-<conversation id>.json`), use it for the hook that reports the end of the session. Keep the data folder private, and regenerate the token if it was shared by mistake. Sessions that are resumed afterwards get the new token.
 
 ## Back up and restore
 
 The database is written continuously while PacedMind runs, so copy it only while the app is closed. Its recent changes can sit in `organizer.db-wal` rather than in `organizer.db`, so always copy all three `organizer.db*` files together:
 
 1. Quit PacedMind: its tray icon → **Quit PacedMind** on Windows, <kbd>⌘</kbd>+<kbd>Q</kbd> on macOS.
-2. Copy the `data` folder (`%APPDATA%\Organizer\data`, or `~/Library/Application Support/Organizer/data` on macOS), or at least every `organizer.db*` file in it.
+2. Copy the `data` folder (`%APPDATA%\Organizer\data`, or `~/Library/Application Support/Organizer/data` on macOS), or at least every `organizer.db*` file in it and the `attachments` folder, which holds the images of agents' reports.
 3. Start PacedMind again.
 
-To restore, quit PacedMind, delete the `organizer.db*` files in the `data` folder, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
+To restore, quit PacedMind, delete the `organizer.db*` files and the `attachments` folder in the `data` folder, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
 
 The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects and folders** afterwards, and tasks' own folders in their details.
 
@@ -53,7 +54,7 @@ The same steps move PacedMind to another computer: install it there, quit it, an
 | **Load sample data** | Replaces everything with an example workspace. Asks *Replace everything with the sample data?* first. |
 | **Start empty** | Deletes all tasks, projects, activities and sessions and restores the five default areas. Asks *Delete all tasks, projects, activities and sessions?* first. |
 
-Neither can be undone. Both keep the settings: work hours, how sessions start, and the MCP access token. They change the database only: the `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
+Neither can be undone. Both keep the settings: work hours, how sessions start, and the MCP access token. They change the database and delete the `attachments` folder with the images of agents' reports. The `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
 
 ## Reinstalling and uninstalling
 

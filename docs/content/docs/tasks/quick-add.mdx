@@ -20,9 +20,9 @@ Only **New task** in a list's header and a group's **+** fill in the list's plac
 
    *Send invoice to Acme friday 10:00 !high #finance*
 
-2. Optionally, add a description under the title (*Add description…*).
+2. Optionally, add a description under the title (*Add description…*), and what must be true when the task is finished with the **Done when** chip ([below](#done-when)).
 3. Check the chips and the summary line. If a word was read wrongly, reword the title; changing a chip changes the value but doesn't put the word back into the title.
-4. Select **Create task**, or press <kbd>Enter</kbd> (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> from the description).
+4. Select **Create task**, or press <kbd>Enter</kbd> (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> from the description or the **Done when** field).
 
 PacedMind confirms with the new key, such as *Created WRK-13*. The recognized parts are removed from the title: the example creates the task *Send invoice to Acme*, due Friday at 10:00, with high priority and the label *finance*.
 
@@ -52,10 +52,23 @@ A typed date always becomes the due date. To plan the task for a day instead, us
 | **Plan for a day** | The planned date, without a time. Shows *Planned* and the day once set. |
 | Project | **No project**, or a project: those in the chosen area, or all of them when no area is chosen. Choosing a project also chooses its area. |
 | Labels | One chip per label typed with `#`. |
+| **Done when** | Shows the **Done when** field under the description, or hides it again while it's empty. Reads *Done when · 2* once the field has two items. |
 
 Chips filled from the title are highlighted. Changing a chip overrides what was typed; the recognized words stay out of the title. An `@word` that matches no project is removed from the title too, without setting a project.
 
 The line above the buttons summarizes the task, for example *due Fri 2 Oct at 10:00, high priority, label finance, in Q4 planning, about 30 min*. With nothing recognized yet, it reads *Type a title. Dates, !priority, #labels and @project are picked up as you type.*
+
+## Done when
+
+The **Done when** chip (*What must be true when it's done*) adds the task's **Done when** list: one checkable outcome per item, which an agent answers when it hands the task back. See [Done when](/concepts/tasks#done-when).
+
+Select the chip to show the **Done when** field under the description, and write one item per line. The field's placeholder reads *One per line, e.g.*, followed by two examples: *The export downloads the rows for the current filters* and *A screenshot of the new button*.
+
+* <kbd>Enter</kbd> starts a new line, and so a new item. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> creates the task.
+* A list marker at the start of a line is dropped, so a pasted list works: `-`, `*`, `•`, `1.` or `1)`, followed by a space.
+* Empty lines are left out, and an item that repeats another is kept once.
+
+The chip counts the items, such as *Done when · 2*. Selecting the chip again hides the field while it's empty; with text in it, the field stays. The chip is there for tasks only, not for activities. After the task is created, its details panel edits the list ([Done when](/tasks/task-details#done-when)).
 
 ## Create an activity
 

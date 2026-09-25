@@ -11,10 +11,12 @@ Flows are built in the [Flows](/views/flows) editor, or by an agent with `connec
 
 | Mode | In the editor | The next session starts | "Ready" means |
 | --- | --- | --- | --- |
-| **Automatically** | **Auto**, a solid line | As a new session, as soon as the task before it is finished. | The task before it is **In review** (the agent handed it back) or **Done**. |
+| **Automatically** | **Auto**, a solid line | As a new session, as soon as the task before it is finished. | The task before it is **In review** (the agent handed it back, not partly done or blocked) or **Done**. |
 | **Manually** | **Manual**, a dashed line | As a new session, after you mark the task before it done. | The task before it is **Done**. |
-| **In the same session** | **Same session**, a thicker line | In the same session: the agent carries on without stopping. | The task before it is finished. |
-| **At a set time** | The day and time, a dotted line | As a new session, at the set time, once the task before it is finished. | The task before it is **In review** or **Done**, and the time has come. |
+| **In the same session** | **Same session**, a thicker line | In the same session: the agent carries on without stopping. | The agent handed the task before it back as done. |
+| **At a set time** | The day and time, a dotted line | As a new session, at the set time, once the task before it is finished. | The task before it is **In review** (not partly done or blocked) or **Done**, and the time has come. |
+
+A task the agent handed back **Partly done** or **Blocked** holds up every task after it until you mark it done, or the agent hands it back again as done. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
 A new session runs where its task says: in a terminal or the agent's desktop app on your computer, or in the agent's cloud. See [Where a session runs](/agents/start-and-manage#where-a-session-runs).
 
@@ -53,7 +55,7 @@ One session can't switch agents or places, so a chain of same-session tasks runs
 
 When the chain's terminal closes, every session in it that is still running closes too.
 
-The next task continues only when the agent hands the task before it back with `finish_task`. If the session is marked finished by hand instead, the next task starts as a new session. If the task is marked done by hand, or the terminal closes first, start the next task yourself. Cloud sessions can't continue one another, so a task after a cloud session starts as a new session.
+The next task continues only when the agent hands the task before it back as done with `finish_task`. After a partly done or blocked hand-back, start the next task yourself. If the session is marked finished by hand instead, the next task starts as a new session. If the task is marked done by hand, or the terminal closes first, start the next task yourself. Cloud sessions can't continue one another, so a task after a cloud session starts as a new session.
 
 ## Projects in sequence
 
@@ -66,7 +68,7 @@ Tasks that are yours are never part of a flow. They can still have connections, 
 ## Build a flow step by step
 
 1. Give the project a folder and a default agent in **Settings → Projects and folders**, or bring your projects over with **Import from Claude and Codex** there.
-2. Break the work into tasks with clear descriptions and acceptance criteria. See [Tasks](/concepts/tasks#description-and-sub-tasks).
+2. Break the work into tasks with clear descriptions and **Done when** lists, which agents answer in their reports. See [Tasks](/concepts/tasks#done-when).
 3. Open **Flows** for the project and drag the tasks onto the canvas in order. Dropping a task just below another connects it automatically.
 4. Set how each session starts, and where it runs: select it and choose under **Starts** and **Runs in**. Use **Manually** where you want to review before the next step.
 5. Select **Tidy up** to line the flow up, then switch **Flow on**.
