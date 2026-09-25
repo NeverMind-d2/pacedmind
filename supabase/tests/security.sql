@@ -259,6 +259,12 @@ begin
     out := out || '18e FAIL a computer moved to another account' || E'\n';
     reset role;
   exception when others then out := out || '18e computer''s owner refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set url = 'https://chatgpt.com/codex/tasks/task_e_0123' where id = '0123456789abcdef';
+    get diagnostics n = row_count; out := out || '18f https session link saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18f ERROR ' || sqlerrm || E'\n'; end;
 
   -- 19. anon reads no reports or images
   begin
