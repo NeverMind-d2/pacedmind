@@ -94,7 +94,8 @@ export function storeImage(input: string, base: string | null): StoredImage {
   const shown = source === path.normalize(input.trim()) ? source : `${input.trim()} (read as ${source})`;
   let stat: fs.Stats;
   try {
-    stat = fs.statSync(source);
+    // turbopackIgnore: a path chosen at run time would make the build trace (and ship) the whole project.
+    stat = fs.statSync(/* turbopackIgnore: true */ source);
   } catch {
     throw new ImageError(`PacedMind can't find ${shown}. Save the image to a file and pass its absolute path.`);
   }
@@ -102,7 +103,7 @@ export function storeImage(input: string, base: string | null): StoredImage {
   if (stat.size > MAX_IMAGE_BYTES) {
     throw new ImageError(`${path.basename(source)} is ${(stat.size / 1048576).toFixed(1)} MB; an image can be up to ${MAX_IMAGE_BYTES / 1048576} MB. Save a smaller one, for example only the window instead of the whole screen.`);
   }
-  const data = fs.readFileSync(source);
+  const data = fs.readFileSync(/* turbopackIgnore: true */ source);
   const kind = kindOf(data);
   if (!kind) throw new ImageError(`${path.basename(source)} isn't a PNG, JPEG, GIF or WebP image.`);
   let size: [number, number] | null = null;
@@ -110,7 +111,7 @@ export function storeImage(input: string, base: string | null): StoredImage {
   const id = crypto.randomBytes(8).toString("hex");
   const file = `${id}.${kind.ext}`;
   fs.mkdirSync(attachmentsDir(), { recursive: true });
-  fs.writeFileSync(path.join(attachmentsDir(), file), data);
+  fs.writeFileSync(path.join(/* turbopackIgnore: true */ attachmentsDir(), file), data);
   const ok = size && size[0] > 0 && size[1] > 0;
   return { id, file, mime: kind.mime, bytes: data.length, width: ok ? size![0] : null, height: ok ? size![1] : null };
 }
