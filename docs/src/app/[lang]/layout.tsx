@@ -1,6 +1,7 @@
 import '../global.css';
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono, Jost } from 'next/font/google';
+import { Analytics } from '@/components/Analytics';
 import { DocsProvider } from '@/components/DocsProvider';
 import StaticSearchDialog from '@/components/SearchDialog';
 import { i18n } from '@/lib/i18n';
@@ -65,6 +66,7 @@ export default async function Layout({ children, params }: LayoutProps<'/[lang]'
         >
           {children}
         </DocsProvider>
+        <Analytics />
       </body>
     </html>
   );

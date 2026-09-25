@@ -1,6 +1,6 @@
 import Link from "next/link";
 import prices from "@/prices.json";
-import { SITE } from "@/lib/site";
+import { SITE, downloadEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
 import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
@@ -54,8 +54,8 @@ export default function Home() {
             </p>
             <p className="mt-5 max-w-[520px] text-[18px] leading-[1.55] text-pretty text-mut">{SUMMARY}</p>
             <div className="mt-9 flex flex-wrap gap-3">
-              <a className="download" data-os="windows" href={SITE.downloads.windows}>Download for Windows</a>
-              <a className="download" data-os="mac" href={SITE.downloads.mac}>Download for macOS</a>
+              <a className="download" data-os="windows" href={SITE.downloads.windows} {...downloadEvent("windows", "hero")}>Download for Windows</a>
+              <a className="download" data-os="mac" href={SITE.downloads.mac} {...downloadEvent("mac", "hero")}>Download for macOS</a>
             </div>
             <p className="mt-4 text-[15px] text-mut">{DOWNLOAD_NOTE}</p>
           </div>
@@ -78,8 +78,8 @@ export default function Home() {
               <ul className="mt-8 space-y-3 text-[16px] text-text">
                 {ONE_DEVICE.map((item) => <li key={item}>{item}</li>)}
               </ul>
-              <a className="download for-windows mt-10" href={SITE.downloads.windows}>Download for Windows</a>
-              <a className="download for-mac mt-10" href={SITE.downloads.mac}>Download for macOS</a>
+              <a className="download for-windows mt-10" href={SITE.downloads.windows} {...downloadEvent("windows", "pricing")}>Download for Windows</a>
+              <a className="download for-mac mt-10" href={SITE.downloads.mac} {...downloadEvent("mac", "pricing")}>Download for macOS</a>
             </div>
             <div className="border-t border-line pb-12 pt-10 md:border-l md:border-t-0 md:pl-14">
               <h3 className="text-[22px] font-medium text-ink">Cloud</h3>
