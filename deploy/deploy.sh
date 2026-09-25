@@ -73,6 +73,7 @@ tar -C "$root/deploy" -czf - Caddyfile "$snippet" |
     cd /tmp/pacedmind-caddy
     if [ $snippet != app.caddy ]; then mv $snippet app.caddy; fi
     sudo caddy validate --config Caddyfile --adapter caddyfile >/dev/null
+    if [ -f /etc/caddy/Caddyfile ]; then sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.old; fi
     sudo install -m 644 Caddyfile app.caddy /etc/caddy/
     sudo systemctl enable caddy >/dev/null 2>&1
     sudo systemctl reload-or-restart caddy"

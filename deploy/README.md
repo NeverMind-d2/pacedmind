@@ -51,7 +51,7 @@ Build the static parts first if they should go up too (`npm run build` in `site/
 SUPABASE_URL=https://pyoynjoyhpolijlvoalu.supabase.co SUPABASE_PUBLISHABLE_KEY=sb_publishable_... deploy/deploy.sh ubuntu@57.131.192.185
 ```
 
-It uploads the working tree, builds the app on the server, switches `/srv/pacedmind/app` to the new build (the previous one stays in `app.old`), restarts `pacedmind-web`, and uploads `site/out` and `docs/out` when they exist, each replacing the live folder in one step (the previous one stays in `site.old` or `docs.old`). Then it installs `Caddyfile` and `app.caddy` in `/etc/caddy`, once `caddy validate` has accepted them, and reloads Caddy. The Supabase variables are only needed the first time (they're kept in `web.env`).
+It uploads the working tree, builds the app on the server, switches `/srv/pacedmind/app` to the new build (the previous one stays in `app.old`), restarts `pacedmind-web`, and uploads `site/out` and `docs/out` when they exist, each replacing the live folder in one step (the previous one stays in `site.old` or `docs.old`). Then it installs `Caddyfile` and `app.caddy` in `/etc/caddy`, once `caddy validate` has accepted them, and reloads Caddy; the previous config stays in `/etc/caddy/Caddyfile.old`. The Supabase variables are only needed the first time (they're kept in `web.env`).
 
 Until the web app launches, deploy only the site and docs, and send `app.pacedmind.com` to the site (`app-placeholder.caddy`):
 
