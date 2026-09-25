@@ -1,7 +1,7 @@
 import '../global.css';
 import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono, Jost } from 'next/font/google';
-import { RootProvider } from 'fumadocs-ui/provider/next';
+import { DocsProvider } from '@/components/DocsProvider';
 import StaticSearchDialog from '@/components/SearchDialog';
 import { i18n } from '@/lib/i18n';
 import { siteUrl } from '@/lib/shared';
@@ -49,7 +49,7 @@ export default async function Layout({ children, params }: LayoutProps<'/[lang]'
       suppressHydrationWarning
     >
       <body className="flex min-h-screen flex-col">
-        <RootProvider
+        <DocsProvider
           i18n={{ locale: lang, locales, translations: translations[lang] }}
           search={{
             // Static search: the build writes the index to /docs/api/search and
@@ -64,7 +64,7 @@ export default async function Layout({ children, params }: LayoutProps<'/[lang]'
           }}
         >
           {children}
-        </RootProvider>
+        </DocsProvider>
       </body>
     </html>
   );
