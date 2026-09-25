@@ -2,6 +2,10 @@ import Link from "next/link";
 import prices from "@/prices.json";
 import { SITE } from "@/lib/site";
 import type { Market } from "@/lib/markets";
+import { CLOUD, FAQ, FREE, VIEWS as VIEW_COPY } from "@/lib/content";
+import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
+import { JsonLd } from "@/components/json-ld";
+import { Emblem } from "@/components/emblem";
 import { Wordmark } from "@/components/wordmark";
 import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
 import { TodayScreen } from "@/components/screens/today";
@@ -9,48 +13,26 @@ import { TimelineScreen } from "@/components/screens/timeline";
 import { FlowScreen } from "@/components/screens/flow";
 import { CloudPrice } from "@/components/cloud-price";
 
+export const metadata = pageMetadata("/");
+
 // Only what the price needs reaches the browser.
 const markets: Market[] = Object.entries(prices.markets)
   .map(([code, { name, currency, locale, amount }]) => ({ code, name, currency, locale, amount }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
 // The screens render here, on the server; the deck only moves them.
-const VIEWS: DeckItem[] = [
-  {
-    tab: "Today",
-    title: "Plan the day you have",
-    body: "Tasks, time blocks, deadlines and events share one calendar. When an agent finishes, PacedMind tells you and books a short check in your day.",
-    screen: <TodayScreen />,
-  },
-  {
-    tab: "Timeline",
-    title: "See the whole plan",
-    body: "Every project, deadline and agent session on one timeline, next to the hours you have planned for each day.",
-    screen: <TimelineScreen />,
-  },
-  {
-    tab: "Flow",
-    title: "Agents, one after another",
-    body: "Place Claude Code and Codex sessions anywhere on the grid and connect them. The next one starts when the last finishes, after you sign off, or at a time you choose.",
-    screen: <FlowScreen />,
-  },
-];
-
-const FREE = ["Tasks, time blocks, calendar and deadlines", "Claude Code and Codex sessions, and flows", "Windows and macOS", "Your plan stays on your computer"];
-const CLOUD = ["Everything in Open source", "Unlimited tasks in the cloud", "All your devices, in sync"];
-
-function Emblem({ size }: { size: number }) {
-  // eslint-disable-next-line @next/next/no-img-element -- a static export has no image optimizer
-  return <img src="/brand/emblem.svg" width={size} height={size} alt="" />;
-}
+const SCREENS = { Today: <TodayScreen />, Timeline: <TimelineScreen />, Flow: <FlowScreen /> };
+const VIEWS: DeckItem[] = VIEW_COPY.map((view) => ({ ...view, screen: SCREENS[view.tab] }));
 
 export default function Home() {
   return (
     <>
+      <JsonLd data={graph(softwareApplication(), faqPage(FAQ))} />
       <header className="mx-auto flex h-[76px] max-w-[1120px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="PacedMind" className="rounded-[7px]"><Emblem size={30} /></Link>
         <nav className="flex gap-[30px] text-[16px] text-mut">
           <a href="#pricing" className="hover:text-ink">Pricing</a>
+          <a href={SITE.docs} className="hover:text-ink">Docs</a>
           <a href={SITE.repo} className="hover:text-ink">GitHub</a>
         </nav>
       </header>
@@ -100,12 +82,30 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {/* The same questions and answers are in the page's FAQPage data and in /llms-full.txt. */}
+        <section id="faq" className="mt-24 scroll-mt-8 sm:mt-[150px]">
+          <h2 className="text-[clamp(30px,3.9vw,46px)] leading-[1.15] font-light tracking-[-0.01em] text-ink">
+            Frequently asked questions
+          </h2>
+          <div className="mt-12 border-t border-line sm:mt-16">
+            {FAQ.map(({ question, answer }) => (
+              <div key={question} className="grid gap-3 border-b border-line py-8 md:grid-cols-2 md:gap-0 md:py-10">
+                <h3 className="text-[19px] leading-[1.35] font-medium text-ink sm:text-[20px] md:pr-14">{question}</h3>
+                <p className="text-[16px] leading-[1.6] text-mut sm:text-[18px] md:pl-14">{answer}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </main>
 
       <footer className="mx-auto mt-24 max-w-[1120px] px-5 sm:mt-32 sm:px-8">
         <div className="flex items-center justify-between border-t border-line py-8 text-[15px] text-mut">
           <span className="flex items-center gap-3 text-text"><Emblem size={20} />PacedMind</span>
-          <a href={SITE.repo} className="hover:text-ink">Source on GitHub</a>
+          <div className="flex gap-6">
+            <a href={SITE.docs} className="hover:text-ink">Docs</a>
+            <a href={SITE.repo} className="hover:text-ink">Source on GitHub</a>
+          </div>
         </div>
       </footer>
     </>
