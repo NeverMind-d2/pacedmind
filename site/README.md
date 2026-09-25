@@ -34,6 +34,10 @@ A change of more than 40% is never saved, because it more likely means the page 
 - `/llms.txt` introduces PacedMind for assistants and links the docs' `/docs/llms.txt` and `/docs/llms-full.txt`; `/llms-full.txt` has the page as text, with Cloud's planned price in every country.
 - Performance: only Jost's Latin file is preloaded, the CSS is inlined into the HTML (`next.config.mjs`), and the page's images are imported, so their URLs carry a content hash and can be cached for a year.
 
+## Visitor statistics
+
+Umami counts visits without cookies (the repository's `deploy/README.md`, step 5). `components/analytics.tsx` loads its tracker from `/stats/script.js` on pacedmind.com only, so `npm run dev` and local builds count nothing, and only once `SITE.analytics.websiteId` in `lib/site.ts` is set. The docs use the same website id. A link with `downloadEvent()`'s attributes is also counted as a `Download` event when clicked: give any new download button one.
+
 ## Design
 
 - The page is set in Jost, a geometric face that matches the wordmark; the app's screens use the app's own Geist. The accent is the app's navy, only on the primary download button. Light and dark follow the visitor's system.

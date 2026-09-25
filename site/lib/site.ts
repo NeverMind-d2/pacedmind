@@ -18,9 +18,23 @@ export const SITE = {
     google: "", // Google Search Console: the content of google-site-verification
     bing: "", // Bing Webmaster Tools: the content of msvalidate.01
   },
+  // Umami, cookieless visitor statistics (deploy/umami), shared with the docs (analytics in
+  // docs/src/lib/shared.ts): one website counts the whole domain. The tracker comes from this site
+  // (the server passes /stats/* through to Umami) and loads only on this host, so local builds count
+  // nothing. websiteId is the website's id in the dashboard at stats.pacedmind.com; empty turns it off.
+  analytics: {
+    websiteId: "",
+    script: "/stats/script.js",
+    hostname: "pacedmind.com",
+  },
 } as const;
 
 /** The absolute URL of a path on the site, written the way Next writes the page's canonical link. */
 export function absoluteUrl(path: string) {
   return path === "/" ? SITE.url : `${SITE.url}${path}`;
+}
+
+/** Makes Umami count a click on a download button as a "Download" event, with the system and where the button is. */
+export function downloadEvent(os: "windows" | "mac", place: "hero" | "pricing") {
+  return { "data-umami-event": "Download", "data-umami-event-os": os, "data-umami-event-place": place };
 }

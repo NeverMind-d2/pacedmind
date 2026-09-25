@@ -24,6 +24,18 @@ export const schemaIds = {
   software: `${siteUrl}/#software`,
 };
 
+/**
+ * Umami, cookieless visitor statistics (../deploy/umami). The same website as the home page's
+ * (SITE.analytics in ../site/lib/site.ts; keep the two in step), so one website counts the whole
+ * domain. The tracker comes from pacedmind.com itself (the server passes /stats/* through to Umami)
+ * and loads only on that host, so local builds count nothing. An empty websiteId turns it off.
+ */
+export const analytics = {
+  websiteId: '',
+  script: '/stats/script.js',
+  hostname: 'pacedmind.com',
+};
+
 /** The publisher and author of every page: a reference to the home page's Organization. */
 export const organizationRef = {
   '@type': 'Organization',

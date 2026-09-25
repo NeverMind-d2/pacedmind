@@ -1,0 +1,48 @@
+# Umami: cookieless visitor statistics for pacedmind.com, installed on the VPS as /opt/umami/compose.yml.
+# Secrets come from /opt/umami/.env (root only, generated on the VPS; see deploy/README.md).
+# Only Caddy reaches Umami, on 127.0.0.1:3001 (the web app has 3000): pacedmind.com/stats/* passes the
+# tracker through, and stats.pacedmind.com serves the dashboard (deploy/Caddyfile).
+services:
+  umami:
+    image: ghcr.io/umami-software/umami:latest
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      DATABASE_URL: postgresql://umami:${POSTGRES_PASSWORD}@db:5432/umami
+      APP_SECRET: ${APP_SECRET}
+      TWO_FACTOR_ENCRYPTION_KEY: ${TWO_FACTOR_ENCRYPTION_KEY}
+      DISABLE_TELEMETRY: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/heartbeat"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: umami
+      POSTGRES_USER: umami
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - umami-db-data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+volumes:
+  umami-db-data:

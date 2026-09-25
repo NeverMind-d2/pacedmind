@@ -1,6 +1,7 @@
 # The VPS's whole Caddy config: the web app at app.pacedmind.com, and on pacedmind.com the home page
 # (site/out in /srv/pacedmind/site) and the docs (docs/out in /srv/pacedmind/docs, served at /docs),
-# both static. Works with Caddy 2.6.2, the version Ubuntu 26.04 ships.
+# both static, with visitor statistics from Umami (dashboard at stats.pacedmind.com). Works with
+# Caddy 2.6.2, the version Ubuntu 26.04 ships.
 #
 # deploy.sh installs it as /etc/caddy/Caddyfile next to app.caddy (this folder's app.caddy, or
 # app-placeholder.caddy before the web app launches), after `caddy validate` has passed, and reloads
@@ -9,6 +10,20 @@
 # The web app, or a redirect to the site before it launches.
 app.pacedmind.com {
 	import app.caddy
+}
+
+# The Umami dashboard (deploy/umami): a sign-in page, kept out of search results.
+stats.pacedmind.com {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+	reverse_proxy 127.0.0.1:3001
 }
 
 # The one canonical host is pacedmind.com; www is only a way in, in one hop from http:// too.
@@ -46,13 +61,14 @@ pacedmind.com {
 	rewrite @mdx /docs/llms.mdx/{re.mdx.1}/content.md
 
 	# Content-hashed build files are cached for good, images for a day; pages and text files are
-	# checked again on every visit (the ETag keeps that cheap).
+	# checked again on every visit (the ETag keeps that cheap). Umami sets its own (/stats/, below).
 	map {path} {cache_control} {
 		~^/(docs/)?_next/static/ "public, max-age=31536000, immutable"
 		~\.(png|jpe?g|webp|avif|gif|svg|ico|woff2?)$ "public, max-age=86400"
 		default "no-cache"
 	}
-	header Cache-Control {cache_control}
+	@ours not path /stats/*
+	header @ours Cache-Control {cache_control}
 
 	# Readable, but kept out of search results: the files Next.js fetches for client-side navigation
 	# (every .txt except robots.txt and llms.txt), the docs as Markdown for assistants, and the docs'
@@ -84,6 +100,14 @@ pacedmind.com {
 		@dmg path *.dmg
 		header @dmg Content-Type application/x-apple-diskimage
 		file_server
+	}
+
+	# Visitor statistics: Umami (deploy/umami) on 127.0.0.1:3001. Only its tracker and the address the
+	# tracker reports to pass through, so the tracker is first-party; the dashboard is stats.pacedmind.com.
+	@umami path /stats/script.js /stats/api/send
+	handle @umami {
+		uri strip_prefix /stats
+		reverse_proxy 127.0.0.1:3001
 	}
 
 	# The docs. A section has both views.html and a views/ folder; /docs is docs/index.html.

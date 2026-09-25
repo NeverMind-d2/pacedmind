@@ -2,6 +2,7 @@ import './global.css';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Geist, Jost } from 'next/font/google';
+import { Analytics } from '@/components/Analytics';
 
 // The 404 page for any URL under /docs that matches no page: out/404.html in the static build.
 // It bypasses the [lang] layout (a root layout under a dynamic segment can't render it), so it
@@ -44,6 +45,7 @@ export default function GlobalNotFound() {
             </a>
           </div>
         </main>
+        <Analytics />
       </body>
     </html>
   );

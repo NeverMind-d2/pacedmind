@@ -45,6 +45,10 @@ The web server keeps the Markdown copies, the search index and the navigation fi
 
 Pages whose titles are the same in different sections (Tasks is a concept and a set of MCP tools) get their section's title in the `<title>`, such as "Tasks – Tool reference", because search engines treat pages with the same title as duplicates.
 
+### Visitor statistics
+
+The docs count visits in the same Umami website as the home page (`deploy/README.md`, step 5). `src/components/Analytics.tsx` loads the tracker from `/stats/script.js` on pacedmind.com only, once `analytics.websiteId` in `src/lib/shared.ts` is set, and it follows page changes in the browser by itself.
+
 ## Deploy
 
 The server setup is in the repository's `deploy/`: `deploy/Caddyfile` is the whole Caddy config for pacedmind.com and its `/docs`, and `deploy/deploy.sh` uploads `site/out` and `docs/out` (see `deploy/README.md`). Build first:

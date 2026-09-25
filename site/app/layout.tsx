@@ -4,6 +4,7 @@ import { SITE } from "@/lib/site";
 import { NAME, SEARCH_DESCRIPTION, SEARCH_TITLE } from "@/lib/content";
 import { graph, organization, website } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
+import { Analytics } from "@/components/analytics";
 import "./globals.css";
 
 // Jost for the page: geometric, with round bowls and a single-storey "a" like the wordmark. Every
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <JsonLd data={graph(organization(), website())} />
         {/* The 3D deck reaches past the text column; clip it at the window edge so it never widens the page. */}
         <div className="overflow-x-clip">{children}</div>
+        <Analytics />
       </body>
     </html>
   );
