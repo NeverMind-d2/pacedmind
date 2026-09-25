@@ -1,11 +1,12 @@
 import "server-only";
 import { tx } from "./db";
 import * as repo from "./repo";
+import type { StoredImage } from "./attachments";
 import { afterDone, afterFinished } from "./flow";
-import { startSession, type LaunchResult } from "./launcher";
+import { reopenForChanges, startSession, type LaunchResult } from "./launcher";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
-import { AGENT_LABEL, type AgentId, type Session, type Task } from "@/lib/types";
+import { AGENT_LABEL, type AgentId, type ReportCriterion, type ReportOutcome, type Session, type Task } from "@/lib/types";
 
 /* Operations shared by the Server Actions (the UI) and the MCP tools, so both behave the same. */
 
@@ -34,20 +35,41 @@ export function activeSession(taskId: number, sessionId?: string | null): Sessio
   return repo.listSessions("task_id = ? AND status IN ('starting', 'running')", taskId)[0] ?? null;
 }
 
+/** What an agent hands back with finish_task besides its summary (the note). The images are already stored. */
+export interface HandBack {
+  outcome: ReportOutcome;
+  details?: string;
+  criteria?: ReportCriterion[];
+  verify?: string[];
+  questions?: string[];
+  links?: { label: string; url: string }[];
+  followUps?: string[];
+  images?: { img: StoredImage; caption?: string }[];
+}
+
 /**
  * The work on a task is finished and waits for your check: its session and the task say so, and the flow starts
  * what waited for it. A "same session" connection continues in the same session when the agent reported it (`by`
- * "agent"); when you or the cloud's status said so, that task starts in a new session instead.
+ * "agent"); when you or the cloud's status said so, that task starts in a new session instead. An agent's hand-back
+ * comes with a report; when that says the work is partial or blocked, the flow waits for you.
  */
-export function finishTask(taskId: number, sessionId: string | null, note: string, by: "agent" | "you" | "cloud"): {
+export function finishTask(taskId: number, sessionId: string | null, note: string, by: "agent" | "you" | "cloud", report?: HandBack): {
   session: Session | null; continueWith: Task | null; continued: Session | null; started: LaunchResult[];
 } {
   const s = activeSession(taskId, sessionId);
-  if (s) {
-    repo.updateSession(s.id, { status: "finished", finishedAt: nowStamp(), note: note || null });
-    repo.addSessionEvent(s.id, "finished", by === "you" ? `You marked it finished${note ? `: ${note}` : ""}` : note);
-  }
-  repo.updateTask(taskId, { status: "review" });
+  tx(() => {
+    if (s) {
+      repo.updateSession(s.id, { status: "finished", finishedAt: nowStamp(), note: note || null });
+      repo.addSessionEvent(s.id, "finished", by === "you" ? `You marked it finished${note ? `: ${note}` : ""}` : note);
+      if (report) {
+        const { images = [], ...fields } = report;
+        const reportId = repo.createReport({ sessionId: s.id, taskId, summary: note, ...fields });
+        for (const x of images) repo.addAttachment(x.img, { taskId, sessionId: s.id, reportId, caption: x.caption });
+      }
+    }
+    repo.updateTask(taskId, { status: "review" });
+  });
+  if (report && report.outcome !== "done") return { session: s, continueWith: null, continued: null, started: [] };
   const { continueWith, started } = afterFinished(taskId);
   let continued: Session | null = null;
   if (continueWith && by === "agent" && s?.surface !== "cloud") {
@@ -80,6 +102,42 @@ export function closeSession(sessionId: string): boolean {
     if (task?.status === "progress") repo.updateTask(task.id, { status: "todo" });
   }
   return true;
+}
+
+/**
+ * The user read an agent's hand-back and wants changes. They go on the session's last report, where start_task
+ * finds them, and the session reopens in a new terminal: Claude Code continues its conversation, Codex starts
+ * a new one. The task goes back to in progress, also when it was already marked done.
+ */
+export function requestChanges(sessionId: string, changes: string): LaunchResult {
+  const text = changes.trim();
+  const s = repo.getSession(sessionId);
+  if (!s) return { ok: false, error: "Session not found" };
+  if (!text) return { ok: false, error: "Write what should change" };
+  if (s.status !== "finished" && s.status !== "done") return { ok: false, error: "The agent hasn't handed this task back yet" };
+  const task = repo.getTask(s.taskId);
+  if (task?.agent === "human") return { ok: false, error: `${task.key} is marked as yours. Hand it to Claude Code or Codex first.` };
+  if (repo.listSessions("task_id = ? AND status IN ('starting', 'running')", s.taskId).length) {
+    return { ok: false, error: "This task already has a running session" };
+  }
+  // Hand-backs from before reports existed only left a note; it becomes their report.
+  const report = repo.latestSessionReport(s.id);
+  const reportId = report?.id ?? repo.createReport({
+    sessionId: s.id, taskId: s.taskId, outcome: "done", summary: s.note || "Handed back without a report", createdAt: s.finishedAt ?? undefined,
+  });
+  // Written before the terminal opens, so the agent finds it however fast it starts.
+  repo.setReportChanges(reportId, text, nowStamp());
+  const r = reopenForChanges(s.id);
+  if (!r.ok) {
+    repo.setReportChanges(reportId, report?.changes ?? null, report?.changesAt ?? null);
+    return r;
+  }
+  tx(() => {
+    repo.updateSession(s.id, { status: "running", endedAt: null });
+    repo.addSessionEvent(s.id, "changes_requested", `You asked for changes: ${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}`);
+    repo.updateTask(s.taskId, { status: "progress" });
+  });
+  return { ok: true, session: repo.getSession(s.id)! };
 }
 
 /* ---------- flow canvas ---------- */

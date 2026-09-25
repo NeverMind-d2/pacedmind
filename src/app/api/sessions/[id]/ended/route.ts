@@ -8,6 +8,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const first = repo.getSession(id);
   if (!first) return Response.json({ ok: false, error: "Unknown session" }, { status: 404 });
+  // The hook names the Claude Code conversation it belongs to. After a request for changes the session goes on in
+  // a new branch of the conversation, and a terminal still open on the old one says nothing about it when it closes.
+  const cli = new URL(req.url).searchParams.get("cli");
+  if (cli && first.cliSessionId && cli !== first.cliSessionId) return Response.json({ ok: true, current: false });
 
   // A terminal can carry a chain of "same session" tasks; close every one still open.
   const chain = [first];

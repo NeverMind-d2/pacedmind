@@ -10,7 +10,9 @@ export function taskContext(tasks: Task[]): TaskContext {
   }
   const sessionEvents: Record<string, SessionEvent[]> = {};
   for (const s of Object.values(sessions)) sessionEvents[s.id] = repo.sessionEvents(s.id);
-  return { areas: repo.listAreas(), projects: repo.listProjects(), sessions, sessionEvents };
+  const reports = Object.fromEntries(repo.reportsForTasks([...ids]));
+  const pending = Object.fromEntries(repo.pendingImages(Object.values(sessions).map((s) => s.id)));
+  return { areas: repo.listAreas(), projects: repo.listProjects(), sessions, sessionEvents, reports, pending };
 }
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";

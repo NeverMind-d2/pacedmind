@@ -32,9 +32,11 @@ A review is about decisions, not just lists. Show items in small batches, each w
 
 ## Agent sessions
 
-- `list_sessions` with `status: "waiting"` shows agents that finished and wait for the user's review.
-  - Summarize each one (task and note) and remind the user to review it.
+- `list_sessions` with `status: "waiting"` shows agents that finished and wait for the user's review, with a count of Done when items met, images and questions.
+  - `get_task` shows the agent's report: the summary, its answer to each Done when item, image captions, how to check it and its questions.
+  - Summarize each one briefly. Lead with what needs the user: hand-backs that were partial or blocked, Done when items that aren't met, and questions. Point to the screenshots in PacedMind rather than describing them.
   - Mark a task done only once the user confirms (`update_task` with status done). This may start the next session in its flow.
+  - When the user wants changes instead, `request_changes` with the task and their feedback in their words sends it back: the agent's session reopens in a new terminal and continues from its report. It opens a terminal on the user's computer, so only use it when the user asks.
 - `list_sessions` with `status: "running"` shows sessions still at work. If one has been running a long time without progress, the user may want to look at its terminal or close it with `close_session`.
 
 ## Weekly review

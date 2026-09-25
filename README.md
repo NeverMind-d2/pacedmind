@@ -1,6 +1,6 @@
 # PacedMind
 
-A personal planner in the style of Linear: tasks, time blocks, one calendar and timeline for everything, and deadlines. It also coordinates Claude Code and Codex sessions: start a session from a task, keep talking to the agent in its own terminal, and see here when the agent says it's finished.
+A personal planner in the style of Linear: tasks, time blocks, one calendar and timeline for everything, and deadlines. It also coordinates Claude Code and Codex sessions: start a session from a task, keep talking to the agent in its own terminal, and see here when the agent says it's finished, with its report and screenshots.
 
 ## Desktop app
 
@@ -59,10 +59,10 @@ Set each project's folder in **Settings → Projects and folders**. Flows only s
 
 The MCP tools cover the whole app:
 - areas and projects;
-- tasks, with descriptions, sub-tasks, priorities, due and planned dates, and labels;
+- tasks, with descriptions, "Done when" lists, sub-tasks, priorities, due and planned dates, and labels;
 - calendar events, and moving plans between days;
 - the agenda with its auto-planned focus blocks, and work hours;
-- agent flows and sessions.
+- agent flows and sessions, and the reports agents hand back.
 
 Dates can be written as `YYYY-MM-DD` or as phrases like "friday 10:00". In sessions started from PacedMind, agents can read, add and update tasks without asking. Deleting things, moving calendar events and starting sessions ask in the agent's terminal first.
 
@@ -74,13 +74,23 @@ Dates can be written as `YYYY-MM-DD` or as phrases like "friday 10:00". In sessi
 - `pacedmind-planning`: plan a day or week, move things.
 - `pacedmind-projects`: break a project down, set up agent flows.
 - `pacedmind-review`: Inbox triage, the weekly review.
-- `pacedmind-agent-session`: the start_task / finish_task protocol for agents working on a task.
+- `pacedmind-agent-session`: the start_task / finish_task protocol for agents working on a task, including the report and screenshots.
 
 ```bash
 npm run skills
 ```
 
 This installs them in `~/.claude/skills` and, when Codex is installed, in `~/.codex/skills`. Run it again after changing them. `npm run skills -- --remove` uninstalls them.
+
+## Reports from agents
+
+A task's **Done when** list says what must be true when it's finished, one checkable outcome per line. Add it in the task panel, or with the Done when chip when you create a task.
+
+When an agent hands a task back, `finish_task` carries a report: a summary, a verdict (met, partly or not met) for each Done when item, screenshots, how to check the result, questions for you, and details in Markdown. Open the task, or the session in Sessions, to see it, and click a screenshot to see it full size. An agent that hands back only part of the work (partial) or gets stuck (blocked) holds its flow: nothing after it starts until you mark the task done.
+
+If it isn't right yet, press **Request changes** under the report and write what should change. (Sessions in the Claude or Codex app, or in the cloud, take changes where they run.) The session reopens in a new terminal tab: Claude Code continues its conversation (as a new branch of it, so the old tab doesn't get in the way), and Codex starts a new one that reads its report and your changes. Either way the agent hands the task back with a new report, and the arrows on the report page through earlier ones.
+
+Agents attach screenshots by saving an image file and passing its path (`attach_image`, or `images` in `finish_task`). PacedMind checks that it's a PNG, JPEG, GIF or WebP of up to 20 MB and keeps a copy in `attachments/` next to the database. Deleting the task deletes its images.
 
 ## Views
 

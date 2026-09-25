@@ -48,6 +48,8 @@ export interface FlowTask {
   flowY: number | null;
   sortOrder: number;
   completedAt: string | null;
+  /** Handed back partial or blocked: what comes after it waits until the user marks it done. */
+  held: boolean;
 }
 
 /** A computer PacedMind runs on, and what it has of each agent. */
@@ -296,14 +298,15 @@ function placeLabel(agent: AgentId, surface: Surface, device: FlowDevice | undef
   return several && surface !== "cloud" && device ? `${base} · ${device.name}` : base;
 }
 
-const READY = new Set<Status>(["review", "done"]);
+/** Mirrors src/server/flow.ts: done, or handed back for review unless the hand-back was partial or blocked. */
+const ready = (t: FlowTask) => t.status === "done" || (t.status === "review" && !t.held);
 
 /** Mirrors src/server/flow.ts: whether one connection lets its target start. */
 function satisfied(e: FlowEdge, source: FlowTask | undefined, nowStr: string): boolean {
   if (!source) return true;
   if (e.mode === "manual") return source.status === "done";
-  if (e.mode === "time") return READY.has(source.status) && !!e.atTime && e.atTime <= nowStr;
-  return READY.has(source.status);
+  if (e.mode === "time") return ready(source) && !!e.atTime && e.atTime <= nowStr;
+  return ready(source);
 }
 
 function startMode(incoming: FlowEdge[]): EdgeMode | "mixed" | null {

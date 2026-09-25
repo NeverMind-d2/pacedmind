@@ -26,6 +26,8 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [mode, setMode] = useState<"task" | "activity">("task");
   const [text, setText] = useState("");
   const [desc, setDesc] = useState("");
+  // "Done when" items, one per line; null while the field is hidden.
+  const [doneWhen, setDoneWhen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [scroll, setScroll] = useState(0);
   const [defaults, setDefaults] = useState<Defaults>({});
@@ -77,10 +79,14 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const duration = ov.duration ?? parsed.durationMin ?? 60;
   const start = mode === "activity" ? (parsed.date && parsed.hasTime ? parsed.date : ov.due ?? null) : null;
 
+  // One item per line; list markers someone typed or pasted ("- ", "1. ") are dropped.
+  const doneItems = (doneWhen ?? "").split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim()).filter(Boolean);
+
   const close = () => {
     setOpen(false);
     setText("");
     setDesc("");
+    setDoneWhen(null);
     setOv({});
   };
 
@@ -91,7 +97,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
       run(async () => {
         const r = await createTaskAction({
           title, description: desc, areaId, projectId, status, priority, dueDate: due, plannedDate: planned,
-          labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined,
+          labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined, doneWhen: doneItems,
         });
         if (r.ok) toast(`Created ${r.key}`);
         return r.ok ? undefined : r;
@@ -107,7 +113,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         return r.ok ? undefined : r;
       });
     }
-    if (more) { setText(""); setDesc(""); setOv({}); input.current?.focus(); } else close();
+    if (more) { setText(""); setDesc(""); setDoneWhen(null); setOv({}); input.current?.focus(); } else close();
   };
 
   if (!open) return null;
@@ -176,6 +182,14 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           </div>
           <textarea aria-label="Description" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} placeholder="Add description…"
             className="w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-fg3 outline-none placeholder:text-mut2" />
+          {mode === "task" && doneWhen !== null && (
+            <div className="flex flex-col gap-1 border-t border-line pb-1 pt-2.5">
+              <span className="text-[12px] font-medium text-fg3">Done when</span>
+              <textarea aria-label="Done when" value={doneWhen} onChange={(e) => setDoneWhen(e.target.value)} rows={3} autoFocus
+                placeholder={"One per line, e.g.\nThe export downloads the rows for the current filters\nA screenshot of the new button"}
+                className="field-sizing-content min-h-[60px] w-full resize-none bg-transparent text-[13px] leading-relaxed text-fg3 outline-none placeholder:text-dim" />
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
@@ -198,6 +212,10 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
               {parsed.labels.map((l) => (
                 <span key={l} className={cx(chip, found)}><Icon name="tag" size={13} />{l}</span>
               ))}
+              <button type="button" aria-pressed={doneWhen !== null} onClick={() => setDoneWhen((d) => (d === null ? "" : d.trim() ? d : null))}
+                title="What must be true when it's done" className={cx(chip, doneItems.length > 0 && found)}>
+                <Icon name="target" size={13} />{doneItems.length ? `Done when · ${doneItems.length}` : "Done when"}
+              </button>
             </>
           ) : (
             <>

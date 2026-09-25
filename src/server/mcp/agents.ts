@@ -1,19 +1,22 @@
 import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
+import { ImageError, removeImageFiles, storeImage, type StoredImage } from "../attachments";
 import { tx } from "../db";
 import { deviceFor } from "../devices";
 import { nextReadyTask } from "../flow";
 import { startSession } from "../launcher";
 import {
-  activeSession, closeSession, edgeWouldLoop, finishTask, flowNeedsTidy, placeInFlow, removeFromFlow, startedLines, tidyFlow,
+  activeSession, closeSession, edgeWouldLoop, finishTask, flowNeedsTidy, placeInFlow, removeFromFlow, requestChanges, startedLines, tidyFlow,
 } from "../ops";
 import * as repo from "../repo";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, STATUS_LABEL, agentOf, surfaceOf, type AgentId, type EdgeMode, type Session, type Surface, type Task,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, STATUS_LABEL, agentOf, surfaceOf, type AgentId, type EdgeMode, type ReportCriterion, type Session,
+  type Surface, type Task,
 } from "@/lib/types";
 import {
-  agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, names, projectRef, taskRef, tool, when,
+  agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, imageLine, names, plural, projectRef, reportCounts,
+  taskRef, tool, when,
 } from "./common";
 
 const MODE_OF = { auto: "auto", manual: "manual", same_session: "session", at_time: "time" } as const satisfies Record<string, EdgeMode>;
@@ -40,7 +43,11 @@ function placeText(agent: AgentId, surface: Surface, deviceId: string | null): s
 function sessionLine(s: Session): string {
   const t = repo.getTask(s.taskId);
   const at = (s.finishedAt ?? s.endedAt ?? s.startedAt).replace("T", " ");
-  return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId)} · ${SESSION_TEXT[s.status]} · ${at}${s.note ? ` · ${s.note}` : ""}`;
+  const report = repo.latestSessionReport(s.id);
+  const counts = report ? reportCounts(report) : "";
+  return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId)} · ` +
+    `${SESSION_TEXT[s.status]} · ${at}${report && report.outcome !== "done" ? ` · handed back ${report.outcome}` : ""}` +
+    `${s.note ? ` · ${s.note}` : ""}${counts ? ` (${counts})` : ""}`;
 }
 
 /** The agent that runs a task: its own, else the project's, else Claude Code. None for a task that is the user's own. */
@@ -55,6 +62,74 @@ function runsText(t: Task): string {
   const project = t.projectId ? repo.getProject(t.projectId) : null;
   const device = deviceFor(t.deviceId, project?.deviceId);
   return placeText(agent, surfaceOf(t.runIn, device.agents[agent]), device.id);
+}
+
+/**
+ * The session an agent reports on: the one it names, else the one running, else the latest if it already
+ * handed the task back (the user resumed it and asked for more).
+ */
+function reportingSession(taskId: number, sessionId?: string | null) {
+  const s = activeSession(taskId, sessionId);
+  if (s) return s;
+  const latest = repo.latestSession(taskId);
+  return latest?.status === "finished" ? latest : null;
+}
+
+/** A session for an agent that works on a task PacedMind didn't start. */
+function outsideSession(t: Task, agent?: AgentId) {
+  notYours(t);
+  const project = t.projectId ? repo.getProject(t.projectId) : null;
+  const s = repo.createSession({ taskId: t.id, agent: agent ?? agentFor(t) ?? "claude", folder: project?.folder ?? null, status: "running" });
+  repo.addSessionEvent(s.id, "started", "Started outside PacedMind");
+  return s;
+}
+
+/** Where relative image paths are read from: the folder the agent works in. */
+const workFolder = (t: Task, s: Session | null) => s?.folder ?? (t.projectId ? repo.getProject(t.projectId)?.folder ?? null : null);
+
+/** Copies images into PacedMind. If one fails, none are kept, so the agent can fix the path and call again. */
+function storeImages(images: { path: string; caption?: string }[], base: string | null): { img: StoredImage; caption?: string }[] {
+  const stored: { img: StoredImage; caption?: string }[] = [];
+  try {
+    for (const x of images) stored.push({ img: storeImage(x.path, base), caption: x.caption });
+    return stored;
+  } catch (e) {
+    removeImageFiles(stored.map((x) => x.img.file));
+    if (e instanceof ImageError) fail(images.length > 1 ? `${e.message} Nothing was recorded; fix it and call again.` : e.message);
+    throw e;
+  }
+}
+
+const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Matches the agent's answers to the task's "Done when" items, by number or text. The report keeps each
+ * item's text as it is now. Answers that match no item are kept too, as extra items the agent checked.
+ */
+function answerCriteria(t: Task, answers: { item: number | string; verdict: ReportCriterion["verdict"]; note?: string }[]): ReportCriterion[] {
+  const out: ReportCriterion[] = t.doneWhen.map((text) => ({ text, verdict: null, note: "" }));
+  for (const a of answers) {
+    const ref = String(a.item).trim();
+    let i: number;
+    if (/^\d+$/.test(ref)) {
+      i = Number(ref) - 1;
+      if (i < 0 || i >= t.doneWhen.length) {
+        fail(t.doneWhen.length
+          ? `${t.key}'s Done when has ${plural(t.doneWhen.length, "item")}; there's no item ${ref}.`
+          : `${t.key} has no Done when items. Pass the text of what you checked as item.`);
+      }
+    } else {
+      i = t.doneWhen.findIndex((c) => norm(c) === norm(ref));
+      if (i < 0) {
+        const partial = t.doneWhen.map((c, k) => (norm(c).includes(norm(ref)) || norm(ref).includes(norm(c)) ? k : -1)).filter((k) => k >= 0);
+        if (partial.length === 1) i = partial[0];
+      }
+    }
+    const answer = { verdict: a.verdict, note: (a.note ?? "").trim() };
+    if (i >= 0) out[i] = { ...out[i], ...answer };
+    else if (ref) out.push({ text: ref, ...answer });
+  }
+  return out;
 }
 
 export function registerAgentTools(server: McpServer) {
@@ -232,6 +307,26 @@ export function registerAgentTools(server: McpServer) {
     return sessionLine(repo.getSession(s.id)!);
   });
 
+  tool(server, "request_changes", {
+    title: "Request changes",
+    description:
+      "Send work an agent handed back to the agent again, with what the user wants changed. PacedMind adds the changes to the agent's last report and reopens its session in a new terminal on the user's computer: Claude Code continues its conversation, Codex starts a new one that reads the report and the changes. The task goes back to in progress. Only when the user asks.",
+    input: z.object({
+      task: taskRef,
+      changes: z.string().describe("What should change, in the user's words. The agent reads it as written"),
+    }),
+    kind: "launch",
+  }, ({ task, changes }) => {
+    const t = findTask(task);
+    const s = repo.latestSession(t.id);
+    if (!s || (s.status !== "finished" && s.status !== "done")) {
+      fail(`${t.key} has no hand-back to send changes to${s ? `: its latest session is ${SESSION_TEXT[s.status]}` : ""}. start_session starts a new session.`);
+    }
+    const r = requestChanges(s.id, changes);
+    if (!r.ok) fail(r.error ?? "The session didn't reopen.");
+    return `Sent the changes to ${AGENT_LABEL[s.agent]}. ${t.key} is in progress again: session ${s.id} reopened in a new terminal on the user's computer.`;
+  });
+
   /* ---------- the session protocol for agents working on a task ---------- */
 
   tool(server, "get_next_task", {
@@ -256,36 +351,122 @@ export function registerAgentTools(server: McpServer) {
     kind: "write",
   }, ({ task, session, agent }) => {
     const t = findTask(task);
-    let s = activeSession(t.id, session);
-    if (!s) {
-      notYours(t);
-      const project = t.projectId ? repo.getProject(t.projectId) : null;
-      s = repo.createSession({ taskId: t.id, agent: agent ?? agentFor(t) ?? "claude", folder: project?.folder ?? null, status: "running" });
-      repo.addSessionEvent(s.id, "started", "Started outside PacedMind");
-    }
+    const s = activeSession(t.id, session) ?? outsideSession(t, agent);
     repo.updateSession(s.id, { status: "running" });
     repo.addSessionEvent(s.id, "picked_up", `${AGENT_LABEL[s.agent]} read the task over MCP`);
     if (t.status !== "progress") repo.updateTask(t.id, { status: "progress" });
-    return (
-      `${describeTask(repo.getTask(t.id)!)}\n\nPacedMind session: ${s.id}\n` +
-      `Work on this task here. When it is ready for the user to check, call finish_task with task ${t.key}, ` +
-      `session ${s.id} and a one-line note about what changed. Do not mark it done yourself.`
-    );
+    const after = repo.getTask(t.id)!;
+    // A request for changes stays on the last report until the agent hands the task back again.
+    const asked = repo.latestReport(t.id);
+    return [
+      asked?.changes
+        ? `The user reviewed your last hand-back and asked for changes (${(asked.changesAt ?? "").replace("T", " ")}):\n${asked.changes}\n\n` +
+          "Make these changes first; your last report is at the end of the task below. Then hand the task back again with finish_task " +
+          "and a new report whose summary starts with what you changed.\n"
+        : null,
+      describeTask(after),
+      `\nPacedMind session: ${s.id}`,
+      `Work on this task here. When it is ready for the user to check, call finish_task with task ${t.key}, session ${s.id} and a report:`,
+      "- summary: one or two sentences on what changed and what the user should look at first;",
+      after.doneWhen.length ? "- criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);" : null,
+      "- images: screenshots of anything you changed that can be seen. Save each as a PNG file and pass its path; attach_image adds them while you work;",
+      "- verify: steps the user can follow to check the result, and questions: anything the user has to decide;",
+      "- details: anything longer, in Markdown.",
+      "If you can't finish, still call finish_task, with outcome partial or blocked, and say why. Do not mark the task done yourself.",
+    ].filter((l) => l !== null).join("\n");
+  });
+
+  tool(server, "attach_image", {
+    title: "Attach image",
+    description:
+      "For agents: add a screenshot or another image (PNG, JPEG, GIF or WebP, up to 20 MB) to the task you're working on, so the user sees it with your report. Save the image as a file first and pass its path; PacedMind keeps its own copy. You can also pass images to finish_task.",
+    input: z.object({
+      task: taskRef,
+      session: z.string().optional().describe("Your session id"),
+      path: z.string().describe("Path of the image file on this computer. Relative paths are read from the project folder"),
+      caption: z.string().optional().describe("What the image shows, in a few words"),
+    }),
+    kind: "write",
+  }, ({ task, session, path, caption }) => {
+    const t = findTask(task);
+    const s = activeSession(t.id, session) ?? repo.latestSession(t.id);
+    if (!s) fail(`${t.key} has no session yet. Call start_task with task ${t.key} first.`);
+    if (repo.listAttachments("session_id = ?", s.id).length >= 40) fail("This session already has 40 images. Attach the ones that show the result best.");
+    const [{ img }] = storeImages([{ path }], workFolder(t, s));
+    // After a hand-back, the image joins the latest report; before, it waits for finish_task.
+    const report = s.status === "running" || s.status === "starting" ? null : repo.latestSessionReport(s.id);
+    const a = repo.addAttachment(img, { taskId: t.id, sessionId: s.id, reportId: report?.id ?? null, caption });
+    return `Attached ${imageLine(a)} to ${t.key}${report ? ", in your last report" : ". It will be part of your report when you call finish_task"}.`;
+  });
+
+  const criterion = z.object({
+    item: z.union([z.number().int().min(1), z.string()]).describe("The Done when item's number, as start_task listed it, or its text"),
+    verdict: z.enum(["met", "partly", "not_met"]),
+    note: z.string().optional().describe("How you checked it, or what's missing"),
   });
 
   tool(server, "finish_task", {
     title: "Finish task",
-    description: "For agents: tell PacedMind the work on a task is finished and ready for the user to check.",
+    description:
+      "For agents: hand a task back for the user's review, with a report of what you did. PacedMind shows the report on the task: your summary, your answer to each Done when item, screenshots, how to check the result and your questions. If not everything is ready, use outcome partial or blocked; the flow then waits for the user.",
     input: z.object({
       task: taskRef,
       session: z.string().optional(),
-      note: z.string().describe("One line about what changed"),
+      summary: z.string().optional().describe("Required. One or two sentences on what changed and what the user should look at first"),
+      outcome: z.enum(["done", "partial", "blocked"]).optional()
+        .describe("done (default): everything asked for is ready. partial: only some of it is. blocked: you can't go on without the user"),
+      criteria: z.array(criterion).optional().describe("Your answer to each of the task's Done when items"),
+      images: z.array(z.object({
+        path: z.string().describe("Path of a PNG, JPEG, GIF or WebP file on this computer"),
+        caption: z.string().optional().describe("What it shows"),
+      })).max(20).optional().describe("Screenshots of the result, or other images that show it. Save them as files first"),
+      verify: z.array(z.string()).optional().describe("Steps the user can follow to check the result: a command to run, a page to open, what to look for"),
+      questions: z.array(z.string()).optional().describe("Decisions or answers you need from the user"),
+      details: z.string().optional().describe("Anything longer, in Markdown: what you did and why, trade-offs, test results, findings"),
+      links: z.array(z.object({ label: z.string(), url: z.string() })).optional().describe("Pull requests, commits, previews or documents"),
+      follow_ups: z.array(taskRef).optional().describe("Keys of tasks you created for work outside this one"),
+      note: z.string().optional().describe("Older name for summary"),
     }),
     kind: "write",
-  }, ({ task, session, note }) => {
-    const t = findTask(task);
-    const { continueWith, continued, started } = finishTask(t.id, session ?? null, note, "agent");
-    const lines = [`Recorded. ${t.key} is finished and waits for the user's check.`, ...startedLines(started)];
+  }, (args) => {
+    const t = findTask(args.task);
+    const summary = (args.summary ?? args.note ?? "").replace(/\s+/g, " ").trim();
+    if (!summary) fail("finish_task needs a summary: one or two sentences on what changed and what the user should look at first.");
+    const outcome = args.outcome ?? "done";
+    if (t.doneWhen.length && !args.criteria?.length && outcome !== "blocked") {
+      fail(`${t.key} lists what "done" means. Answer each item in criteria (verdict met, partly or not_met, with a note), then call finish_task again:\n` +
+        t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n"));
+    }
+    const criteria = answerCriteria(t, args.criteria ?? []);
+    const followUps = [...new Set((args.follow_ups ?? []).map((k) => repo.getTask(k.trim())?.key ?? ""))].filter((k) => k && k !== t.key);
+    const unknown = (args.follow_ups ?? []).filter((k) => !repo.getTask(k.trim()));
+    const clean = (xs?: string[]) => (xs ?? []).map((x) => x.trim()).filter(Boolean);
+    const found = reportingSession(t.id, args.session);
+    const stored = storeImages(args.images ?? [], workFolder(t, found));
+    let result: ReturnType<typeof finishTask>;
+    try {
+      // A report belongs to a session: the agent's, or a new one when it works on the task outside PacedMind.
+      const s = found ?? outsideSession(t);
+      result = finishTask(t.id, s.id, summary, "agent", {
+        outcome, details: args.details, criteria, verify: clean(args.verify), questions: clean(args.questions),
+        links: (args.links ?? []).filter((l) => l.url.trim()).map((l) => ({ label: l.label.trim() || l.url.trim(), url: l.url.trim() })),
+        followUps, images: stored,
+      });
+    } catch (e) {
+      removeImageFiles(stored.map((x) => x.img.file));
+      throw e;
+    }
+    const { session, continueWith, continued, started } = result;
+    const report = session ? repo.latestSessionReport(session.id) : null;
+    const lines = [`Recorded your report for ${t.key} (${(report && reportCounts(report)) || "summary only"}). It waits for the user's check.`];
+    const unanswered = criteria.filter((c) => c.verdict === null);
+    if (unanswered.length && outcome !== "blocked") lines.push(`Not answered: ${unanswered.map((c) => `"${c.text}"`).join(", ")}.`);
+    if (unknown.length) lines.push(`Left out follow-ups that aren't PacedMind tasks: ${unknown.join(", ")}.`);
+    if (outcome !== "done") {
+      lines.push(`You handed it back as ${outcome}, so the flow waits until the user marks ${t.key} done. You can stop here.`);
+      return lines.join("\n");
+    }
+    lines.push(...startedLines(started));
     if (continueWith && continued) {
       lines.push(`\nNext in this same session: ${continueWith.key} · ${continueWith.title}.`);
       lines.push(`Call start_task with task ${continueWith.key} and session ${continued.id}, then keep working.`);

@@ -3,16 +3,19 @@
 import { useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
-  addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction,
+  addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction, requestChangesAction,
   resumeSessionAction, startSessionAction, toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
 import { dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf,
-  type AgentId, type Doer, type Priority, type Session, type SessionEvent, type Status, type Surface, type Task, type TaskContext,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, VERDICT_LABEL, agentOf,
+  type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
+  type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
-import { AgentIcon, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
+import { AgentIcon, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
+import { InlineMarkdown } from "./markdown";
+import { Gallery, ReportBody, RequestChangesForm, SessionReport, sameText } from "./report";
 import { Button, Dot, IconButton, Menu, cx, useAction } from "./ui";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
@@ -36,7 +39,8 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 
 const pv = "flex h-7 max-w-full items-center gap-2 rounded-md px-2 text-left text-fg2 hover:bg-hover";
 
-function sessionHead(s: Session, events: SessionEvent[]): { dot: string; text: string } {
+/** The session's state in one line; `report` is its latest hand-back, if any. */
+function sessionHead(s: Session, events: SessionEvent[], report: Report | null): { dot: string; text: string } {
   const who = AGENT_LABEL[s.agent];
   switch (s.status) {
     case "starting":
@@ -49,9 +53,14 @@ function sessionHead(s: Session, events: SessionEvent[]): { dot: string; text: s
             : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`,
         };
       }
+      if (report?.changes && report.changesAt) return { dot: "var(--color-fg3)", text: `${who} is working on your changes since ${fmtTime(report.changesAt)}` };
       return { dot: "var(--color-fg3)", text: `Running ${s.surface === "terminal" ? `in ${who}` : placeOf(s.agent, s.surface)} since ${fmtTime(s.startedAt)}` };
-    case "finished":
-      return { dot: "var(--color-accent)", text: `${who} finished at ${fmtTime(s.finishedAt ?? s.startedAt)} · waiting for you` };
+    case "finished": {
+      const at = fmtTime(s.finishedAt ?? s.startedAt);
+      if (report?.outcome === "blocked") return { dot: "var(--color-accent)", text: `${who} got stuck at ${at} · needs you` };
+      if (report?.outcome === "partial") return { dot: "var(--color-accent)", text: `${who} handed back part of it at ${at} · waiting for you` };
+      return { dot: "var(--color-accent)", text: `${who} finished at ${at} · waiting for you` };
+    }
     case "done":
       return { dot: "var(--color-faint)", text: `${who} finished, marked done` };
     case "closed":
@@ -84,6 +93,33 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const subsDone = task.subtasks.filter((s) => s.done).length;
   const active = session && (session.status === "running" || session.status === "starting");
 
+  // What agents handed back, newest first. The one on view answers the Done when list; the arrows page through older ones.
+  const reports = ctx.reports[task.id] ?? [];
+  const [viewing, setViewing] = useState(0);
+  const report = reports[Math.min(viewing, reports.length - 1)] ?? null;
+  const latestOfSession = session ? reports.find((r) => r.sessionId === session.id) ?? null : null;
+  const inCard = !!report && report.sessionId === session?.id;
+  const soFar = session ? ctx.pending[session.id] ?? [] : [];
+  const offList = report ? report.criteria.filter((c) => !task.doneWhen.some((d) => sameText(d, c.text))) : [];
+  const head = session ? sessionHead(session, events, latestOfSession) : null;
+  // Changes go back to an agent in a terminal once it handed the task back, also after the task was marked done.
+  // Sessions in the apps or the cloud take them where they run.
+  const [asking, setAsking] = useState(false);
+  const canAsk = !!agent && session?.surface === "terminal" && (session.status === "finished" || session.status === "done");
+  const pager = reports.length > 1 && (
+    <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
+      <button type="button" aria-label="Older report" disabled={viewing >= reports.length - 1} onClick={() => setViewing((v) => v + 1)}
+        className="flex h-5 w-5 items-center justify-center rounded hover:bg-hover disabled:opacity-30">
+        <Icon name="chevronLeft" size={12} strokeWidth={2.2} />
+      </button>
+      <span className="tabular-nums">Report {reports.length - viewing} of {reports.length}</span>
+      <button type="button" aria-label="Newer report" disabled={viewing === 0} onClick={() => setViewing((v) => v - 1)}
+        className="flex h-5 w-5 items-center justify-center rounded hover:bg-hover disabled:opacity-30">
+        <Icon name="chevronRight" size={12} strokeWidth={2.2} />
+      </button>
+    </span>
+  );
+
   return (
     <aside aria-label="Task details" className="flex w-[420px] shrink-0 flex-col border-l border-line">
       <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line pl-6 pr-3 text-[12.5px] text-mut">
@@ -110,6 +146,77 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             onBlur={() => desc !== task.description && save({ description: desc })}
             className="field-sizing-content min-h-[44px] resize-none bg-transparent text-[13.5px] leading-relaxed text-mut outline-none placeholder:text-dim" />
         </div>
+
+        <DoneWhen items={task.doneWhen} answers={report?.criteria ?? null} onChange={(doneWhen) => save({ doneWhen })} />
+
+        {session && head && (
+          <div className="flex flex-col gap-3.5 rounded-lg border border-line2 p-3.5">
+            <div className="flex items-start gap-2 text-[12.5px] text-fg">
+              <span className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: head.dot }} />
+              <span className="min-w-0 flex-1">{head.text}</span>
+              {inCard && pager}
+            </div>
+            {inCard ? <SessionReport key={report.id} report={report} criteria={offList} working={!!active} />
+              : session.note && session.status !== "failed" && <p className="text-[12.5px] leading-relaxed text-mut">“{session.note}”</p>}
+            {soFar.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <div className="text-[12px] font-medium text-fg3">Images so far</div>
+                <Gallery images={soFar} />
+              </div>
+            )}
+            <div className="truncate font-mono text-[11px] text-mut2">{session.folder}{session.branch ? ` · ${session.branch}` : ""}</div>
+            {asking && canAsk ? (
+              <RequestChangesForm agent={session.agent} resumes={session.agent === "claude" && !!session.cliSessionId} pending={pending}
+                onCancel={() => setAsking(false)}
+                onSend={(changes) => run(async () => {
+                  const r = await requestChangesAction(session.id, changes);
+                  if (r.ok) setAsking(false);
+                  return r;
+                })} />
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {!active && session.status !== "failed" && session.surface === "terminal" && (
+                  <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="terminal" size={13} />Resume in terminal</Button>
+                )}
+                {session.surface === "desktop" && session.status !== "failed" && (
+                  <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="appWindow" size={13} />Open the {APP_LABEL[session.agent]}</Button>
+                )}
+                {session.surface === "cloud" && session.url && (
+                  <a href={session.url} target="_blank" rel="noreferrer"
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
+                    <Icon name="cloud" size={13} />Open in the cloud
+                  </a>
+                )}
+                {canAsk && <Button onClick={() => setAsking(true)}><Icon name="pen" size={13} />Request changes</Button>}
+                {active && session.surface !== "terminal" && (
+                  <Button onClick={() => run(() => finishSessionAction(session.id))}><Icon name="check" size={13} />Mark finished</Button>
+                )}
+                {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
+                  <Button onClick={() => run(() => startSessionAction(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
+                )}
+                {session.status === "finished" && (
+                  <Button variant="primary" onClick={() => run(() => markSessionDoneAction(session.id))}>Mark done</Button>
+                )}
+                {active && (
+                  <Button onClick={() => confirm("Close this session in PacedMind? The terminal stays open.") && run(() => closeSessionAction(session.id))}>
+                    Close session
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {report && !inCard && (
+          <div className="flex flex-col gap-3.5 rounded-lg border border-line2 p-3.5">
+            <div className="flex items-center gap-2 text-[12.5px] text-fg2">
+              <Icon name="terminal" size={13} className="shrink-0 text-mut2" />
+              <span className="min-w-0 flex-1 truncate">{AGENT_LABEL[report.agent]}&apos;s report, {format(parseLocal(report.createdAt), "d MMM HH:mm")}</span>
+              {pager}
+            </div>
+            <ReportBody key={report.id} report={report} criteria={offList} />
+          </div>
+        )}
 
         <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 text-[12.5px]">
           <Prop label="Status">
@@ -214,45 +321,6 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           </Prop>
         </div>
 
-        {session && (
-          <div className="flex flex-col gap-2 rounded-lg border border-line2 p-3.5">
-            <div className="flex items-center gap-2 text-[12.5px] text-fg">
-              <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: sessionHead(session, events).dot }} />
-              {sessionHead(session, events).text}
-            </div>
-            {session.note && session.status !== "failed" && <p className="text-[12.5px] leading-relaxed text-mut">“{session.note}”</p>}
-            <div className="truncate font-mono text-[11px] text-mut2">{session.folder}{session.branch ? ` · ${session.branch}` : ""}</div>
-            <div className="mt-0.5 flex flex-wrap gap-2">
-              {!active && session.status !== "failed" && session.surface === "terminal" && (
-                <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="terminal" size={13} />Resume in terminal</Button>
-              )}
-              {session.surface === "desktop" && session.status !== "failed" && (
-                <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="appWindow" size={13} />Open the {APP_LABEL[session.agent]}</Button>
-              )}
-              {session.surface === "cloud" && session.url && (
-                <a href={session.url} target="_blank" rel="noreferrer"
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
-                  <Icon name="cloud" size={13} />Open in the cloud
-                </a>
-              )}
-              {active && session.surface !== "terminal" && (
-                <Button onClick={() => run(() => finishSessionAction(session.id))}><Icon name="check" size={13} />Mark finished</Button>
-              )}
-              {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
-                <Button onClick={() => run(() => startSessionAction(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
-              )}
-              {session.status === "finished" && (
-                <Button variant="primary" onClick={() => run(() => markSessionDoneAction(session.id))}>Mark done</Button>
-              )}
-              {active && (
-                <Button onClick={() => confirm("Close this session in PacedMind? The terminal stays open.") && run(() => closeSessionAction(session.id))}>
-                  Close session
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
         <div className="flex flex-col gap-1.5">
           <div className="flex h-[26px] items-center gap-2.5 text-[12.5px] font-medium text-fg2">
             Sub-tasks
@@ -322,6 +390,67 @@ function FolderProp({ task, projectFolder, onSave }: { task: Task; projectFolder
       </span>
       <span className="shrink-0 text-[11.5px] text-mut2">{task.folder ? "own" : shown ? "project's" : ""}</span>
     </button>
+  );
+}
+
+/**
+ * What must be true when the task is finished. Agents answer each item when they hand the task back;
+ * with a report on view (`answers`), every item shows its answer.
+ */
+function DoneWhen({ items, answers, onChange }: {
+  items: string[];
+  answers: ReportCriterion[] | null;
+  onChange: (items: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const answerFor = (text: string) => answers?.find((c) => sameText(c.text, text)) ?? null;
+  // With a report on view, items it didn't answer (or added since) count as not met.
+  const met = items.filter((text) => answerFor(text)?.verdict === "met").length;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex h-[26px] items-center gap-2.5 text-[12.5px] font-medium text-fg2">
+        Done when
+        {answers && items.length > 0 && <span className="font-normal text-mut2">{met} of {items.length} met</span>}
+      </div>
+      {items.map((text, i) => (
+        <DoneWhenItem key={`${i}:${text}`} text={text} answer={answerFor(text)} reported={!!answers}
+          onSave={(v) => onChange(v.trim() ? items.map((x, k) => (k === i ? v : x)) : items.filter((_, k) => k !== i))}
+          onDelete={() => onChange(items.filter((_, k) => k !== i))} />
+      ))}
+      <input value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="Add a Done when item"
+        placeholder="+ Add what must be true when it's done"
+        onKeyDown={(e) => { if (e.key === "Enter" && draft.trim()) { e.preventDefault(); onChange([...items, draft.trim()]); setDraft(""); } }}
+        className="h-[30px] rounded-md bg-transparent px-2 text-[12.5px] text-fg2 outline-none placeholder:text-mut2 hover:bg-hover focus:bg-hover" />
+    </div>
+  );
+}
+
+function DoneWhenItem({ text, answer, reported, onSave, onDelete }: {
+  text: string;
+  answer: ReportCriterion | null;
+  /** Whether a report is on view: then an item without an answer shows as not answered. */
+  reported: boolean;
+  onSave: (text: string) => void;
+  onDelete: () => void;
+}) {
+  const [value, setValue] = useState(text);
+  const verdict = answer?.verdict ?? (reported ? "unanswered" : "none");
+  return (
+    <div className="group flex items-start gap-2.5 rounded-md px-2 py-[5px] hover:bg-hover">
+      <span className="mt-[3px] shrink-0" title={answer?.verdict ? VERDICT_LABEL[answer.verdict] : reported ? "Not answered" : undefined}>
+        <VerdictIcon verdict={verdict} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <textarea value={value} rows={1} aria-label="Done when item" onChange={(e) => setValue(e.target.value)}
+          onBlur={() => value.trim() !== text && onSave(value.trim())}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
+          className="field-sizing-content block w-full resize-none bg-transparent text-[12.5px] leading-[1.5] text-fg2 outline-none" />
+        {answer?.note && <div className="text-[12px] leading-[1.5] text-mut2"><InlineMarkdown text={answer.note} /></div>}
+      </div>
+      <button type="button" aria-label="Remove this item" onClick={onDelete} className="mt-[2px] hidden text-mut2 hover:text-fg2 group-hover:block">
+        <Icon name="x" size={13} />
+      </button>
+    </div>
   );
 }
 

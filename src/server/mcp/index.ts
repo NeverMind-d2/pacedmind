@@ -18,6 +18,6 @@ export const SERVER_INSTRUCTIONS = `PacedMind is the user's personal planner. Ar
 - Refer to tasks by key (WRK-12), to projects by id or name, to areas by id, name or key.
 - Dates accept YYYY-MM-DD, YYYY-MM-DDTHH:mm or phrases like "tomorrow 9:00" or "next friday". Results show the date that was used; check it.
 - "planned" is the day the user means to work on a task, "due" is its deadline. Priorities: urgent, high, medium, low, none.
-- Give tasks descriptions with enough context to act on them later.
+- Give tasks descriptions with enough context to act on them later. For work an agent will do, add done_when: the outcomes that must be true when it's finished.
 - Ask the user before deleting anything or starting agent sessions.
-- If PacedMind started you on a task (your first message names a task and a session), call start_task first and finish_task when the work is ready for review. Never mark your own task done.`;
+- If PacedMind started you on a task (your first message names a task and a session), call start_task first. When the work is ready for review, call finish_task with a report: a summary, an answer to each Done when item, screenshots of what can be seen, and how to check it. Never mark your own task done.`;

@@ -47,6 +47,14 @@ export function kickoffPrompt(task: Task, sessionId: string): string {
   );
 }
 
+/** The first message when an agent goes back to a task because the user asked for changes (see requestChanges in ops.ts). */
+export function changesPrompt(task: Task, sessionId: string): string {
+  return safe(
+    `PacedMind task ${task.key}, session ${sessionId}: the user reviewed your work on ${safe(task.title, 120)} and asked for changes. Call the organizer MCP tool start_task with task ${task.key} and session ${sessionId} to read them, then follow the instructions it returns.`,
+    600,
+  );
+}
+
 /**
  * The first message of a cloud session. The cloud can't reach PacedMind on this computer, so the task comes along
  * in full and the agent hands the work back as a branch and a pull request.
@@ -56,6 +64,7 @@ export function cloudPrompt(task: Task): string {
   return [
     `Task ${task.key}: ${task.title}`,
     task.description.trim(),
+    task.doneWhen.length ? `Done when:\n${task.doneWhen.map((c) => `- ${c}`).join("\n")}` : "",
     subs.length ? `Sub-tasks:\n${subs.join("\n")}` : "",
     `Work on a new branch named agent/${task.key.toLowerCase()} and open a pull request when it's ready for review. ` +
       "This task comes from PacedMind, which you can't reach from here, so don't look for its tools.",
@@ -68,34 +77,46 @@ function sessionDir(id: string): string {
   return dir;
 }
 
-function writeClaudeConfig(dir: string, sessionId: string, token: string) {
+/**
+ * The MCP config and the SessionEnd hook for one Claude Code conversation (`cli`). The hook names its
+ * conversation, and each conversation has its own settings file, so a terminal still open on an older
+ * conversation of the session can't close the session when it exits.
+ */
+function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: string) {
   const mcp = { mcpServers: { organizer: { type: "http", url: mcpUrl(), headers: { Authorization: `Bearer ${token}` } } } };
-  const ended = `curl -s -X POST -H "Authorization: Bearer ${token}" ${baseUrl()}/api/sessions/${sessionId}/ended`;
+  const ended = `curl -s -X POST -H "Authorization: Bearer ${token}" "${baseUrl()}/api/sessions/${sessionId}/ended?cli=${cli}"`;
   const settings = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: ended }] }] } };
   const mcpFile = path.join(dir, "mcp.json");
-  const settingsFile = path.join(dir, "settings.json");
+  const settingsFile = path.join(dir, `settings-${cli}.json`);
   fs.writeFileSync(mcpFile, JSON.stringify(mcp, null, 2));
   fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
   return { mcpFile, settingsFile };
 }
 
-/** Builds the agent command line for a terminal session (without folder/title handling). */
-function agentCommand(agent: AgentId, dir: string, session: Session, task: Task, resume: boolean): string {
+/**
+ * The command line that opens the agent in a terminal (without folder/title handling). start: a new conversation
+ * with the kickoff message. resume: back into the last conversation. changes: the last conversation goes on as a
+ * new branch whose first message says the user asked for changes; Codex starts a new conversation instead.
+ * Also returns the Claude Code conversation it runs (null for Codex), which is new when there is none to go back to.
+ */
+function agentCommand(dir: string, session: Session, task: Task, kind: "start" | "resume" | "changes"): { command: string; conversation: string | null } {
   const s = repo.getSettings();
-  const cli = cliCommand(agent, thisDevice());
-  if (agent === "claude") {
-    const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, s.mcpToken);
-    const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__organizer__${t}`).join(",");
-    const base = `${cli} --mcp-config "${mcpFile}" --settings "${settingsFile}" --allowedTools ${allowed}`;
-    if (resume && session.cliSessionId) return `${base} --resume ${session.cliSessionId}`;
-    const name = safe(`${task.key} ${task.title}`, 80);
-    return `${base} --session-id ${session.cliSessionId} -n "${name}" "${kickoffPrompt(task, session.id)}"`;
+  const exe = cliCommand(session.agent, thisDevice());
+  const prompt = kind === "changes" ? changesPrompt(task, session.id) : kickoffPrompt(task, session.id);
+  if (session.agent === "codex") {
+    // PacedMind's MCP server for this session, whatever config.toml says; the token comes from ORGANIZER_TOKEN,
+    // which the terminal script sets.
+    const mcp = `-c mcp_servers.organizer.url="${mcpUrl()}" -c mcp_servers.organizer.bearer_token_env_var="ORGANIZER_TOKEN"`;
+    return { command: kind === "resume" ? `${exe} ${mcp} resume --last` : `${exe} ${mcp} "${prompt}"`, conversation: null };
   }
-  // PacedMind's MCP server for this session, whatever config.toml says; the token comes from ORGANIZER_TOKEN,
-  // which the terminal script sets.
-  const mcp = `-c mcp_servers.organizer.url="${mcpUrl()}" -c mcp_servers.organizer.bearer_token_env_var="ORGANIZER_TOKEN"`;
-  if (resume) return `${cli} ${mcp} resume --last`;
-  return `${cli} ${mcp} "${kickoffPrompt(task, session.id)}"`;
+  const last = session.cliSessionId;
+  const conversation = last && kind !== "changes" ? last : crypto.randomUUID();
+  const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, s.mcpToken);
+  const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__organizer__${t}`).join(",");
+  const base = `${exe} --mcp-config "${mcpFile}" --settings "${settingsFile}" --allowedTools ${allowed}`;
+  if (last && kind === "resume") return { command: `${base} --resume ${last}`, conversation };
+  if (last && kind === "changes") return { command: `${base} --resume ${last} --fork-session --session-id ${conversation} "${prompt}"`, conversation };
+  return { command: `${base} --session-id ${conversation} -n "${safe(`${task.key} ${task.title}`, 80)}" "${prompt}"`, conversation };
 }
 
 /** A Codex cloud environment is picked by its label or id; anything else can't go on a command line. */
@@ -290,7 +311,7 @@ function launch(session: Session, task: Task, device: Device, env = ""): LaunchR
     const quote = process.platform === "win32" ? cmdQuote : shQuote;
     failed = openTerminal(dir, folder, `${task.key} · ${CLOUD_LABEL[agent]}`, `${cliCommand(agent, device)} --cloud ${quote(cloudPrompt(task))}`);
   } else {
-    failed = openTerminal(dir, folder, `${task.key} · ${AGENT_LABEL[agent]}`, agentCommand(agent, dir, session, task, false));
+    failed = openTerminal(dir, folder, `${task.key} · ${AGENT_LABEL[agent]}`, agentCommand(dir, session, task, "start").command);
   }
   if (failed) {
     repo.updateSession(session.id, { status: "failed", endedAt: session.startedAt, note: failed });
@@ -339,7 +360,10 @@ export function resumeSession(sessionId: string, surface?: Surface): LaunchResul
   const session = repo.getSession(sessionId);
   if (!session) return { ok: false, error: "Session not found" };
   const task = repo.getTask(session.taskId);
-  if (!task || !session.folder) return { ok: false, error: "The task or its folder is gone" };
+  if (!task) return { ok: false, error: "The task is gone" };
+  // Sessions started outside PacedMind may have no folder; they get the one a new session would.
+  const folder = session.folder ?? taskFolder(task).folder;
+  if (!folder) return { ok: false, error: `${task.key} has no folder to work in` };
   const to = surface ?? session.surface;
   const dir = sessionDir(session.id);
   let failed: string | null;
@@ -353,17 +377,49 @@ export function resumeSession(sessionId: string, surface?: Surface): LaunchResul
     text = `Opened in the ${APP_LABEL[session.agent]}`;
   } else if (session.surface === "cloud") {
     if (session.agent === "claude") {
-      failed = openTerminal(dir, session.folder, `${task.key} · teleport`, `${cliCommand("claude", thisDevice())} --teleport`);
+      failed = openTerminal(dir, folder, `${task.key} · teleport`, `${cliCommand("claude", thisDevice())} --teleport`);
       text = "Opened a terminal to pull the cloud session in (claude --teleport)";
     } else {
       failed = openUrl(session.url ?? CLOUD_HOME.codex);
       text = `Opened ${CLOUD_LABEL.codex}`;
     }
   } else {
-    failed = openTerminal(dir, session.folder, `${task.key} · ${AGENT_LABEL[session.agent]}`, agentCommand(session.agent, dir, session, task, true));
+    const { command, conversation } = agentCommand(dir, session, task, "resume");
+    failed = openTerminal(dir, folder, `${task.key} · ${AGENT_LABEL[session.agent]}`, command);
+    // With no conversation to go back to, a new one started.
+    if (!failed && conversation !== session.cliSessionId) repo.updateSession(session.id, { cliSessionId: conversation });
     text = "Reopened in a terminal";
   }
   if (failed) return { ok: false, error: failed };
   repo.addSessionEvent(session.id, "resumed", text);
-  return { ok: true, session, message: text };
+  return { ok: true, session: repo.getSession(session.id)!, message: text };
+}
+
+/**
+ * Sends a terminal session back to work on changes the user asked for (see requestChanges in ops.ts). It reopens
+ * with a first message that says so. Claude Code continues its conversation as a new branch of it, with its own
+ * id, so a terminal still open on the old one doesn't get in the way; Codex starts a new conversation.
+ */
+export function reopenForChanges(sessionId: string): LaunchResult {
+  const session = repo.getSession(sessionId);
+  if (!session) return { ok: false, error: "Session not found" };
+  const task = repo.getTask(session.taskId);
+  if (!task) return { ok: false, error: "The task is gone" };
+  // Changes reach the agent through start_task, which cloud sessions can't call, and the apps start new conversations.
+  if (session.surface !== "terminal") {
+    const where = session.surface === "cloud" ? CLOUD_LABEL[session.agent] : `the ${APP_LABEL[session.agent]}`;
+    return { ok: false, error: `This session runs in ${where}. Open it there and write your changes to the agent.` };
+  }
+  if (session.deviceId && session.deviceId !== thisDeviceId()) {
+    const device = repo.getDevice(session.deviceId);
+    return { ok: false, error: `This session ran on ${device?.name ?? "another device"}. Ask for the changes in PacedMind there.` };
+  }
+  const folder = session.folder ?? taskFolder(task).folder;
+  if (!folder) return { ok: false, error: `${task.key} has no folder to work in` };
+  const dir = sessionDir(session.id);
+  const { command, conversation } = agentCommand(dir, session, task, "changes");
+  const failed = openTerminal(dir, folder, `${task.key} · ${AGENT_LABEL[session.agent]}`, command);
+  if (failed) return { ok: false, error: failed };
+  if (conversation !== session.cliSessionId) repo.updateSession(session.id, { cliSessionId: conversation });
+  return { ok: true, session: repo.getSession(session.id)!, message: `Sent to ${AGENT_LABEL[session.agent]} in a new terminal` };
 }

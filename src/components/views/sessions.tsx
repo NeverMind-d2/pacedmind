@@ -4,11 +4,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { closeSessionAction, finishSessionAction, markSessionDoneAction, resumeSessionAction, startSessionAction } from "@/app/actions";
+import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction, resumeSessionAction, startSessionAction } from "@/app/actions";
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
+import { Gallery, RequestChangesForm, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
-import { AGENT_LABEL, APP_LABEL, CLOUD_LABEL, type AgentId, type SessionEvent, type SessionStatus, type Surface } from "@/lib/types";
+import {
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, type AgentId, type Attachment, type Report, type SessionEvent, type SessionStatus, type Surface,
+} from "@/lib/types";
 
 /* ---------- data from the server ---------- */
 
@@ -38,6 +41,10 @@ export interface SessionItem {
   /** Where the task opens in the app. */
   href: string | null;
   events: SessionEvent[];
+  /** What the agent handed back, newest first. A resumed session can hand back more than once. */
+  reports: Report[];
+  /** Images attached while it works, before it hands the task back. */
+  pending: Attachment[];
   /** The next task in the flow after this one. */
   next: { id: number; key: string; title: string; href: string; canStart: boolean } | null;
 }
@@ -115,12 +122,17 @@ function placeTitle(s: SessionItem): string {
 
 function meta(s: SessionItem, now: number): string {
   switch (s.status) {
-    case "finished":
-      return `finished ${clock(s.finishedAt ?? s.startedAt, now)}`;
+    case "finished": {
+      const outcome = s.reports[0]?.outcome;
+      return `${outcome === "blocked" ? "stuck" : outcome === "partial" ? "partly done" : "finished"} ${clock(s.finishedAt ?? s.startedAt, now)}`;
+    }
     case "starting":
-    case "running":
+    case "running": {
       if (unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
+      const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
+      if (asked) return `changes since ${clock(asked, now)}`;
       return `${s.surface === "cloud" ? "in the cloud " : ""}since ${clock(s.startedAt, now)}`;
+    }
     case "done":
       return `done ${clock(s.endAt ?? s.startedAt, now)}`;
     case "closed":
@@ -140,10 +152,18 @@ function headline(s: SessionItem, now: number): string {
   switch (s.status) {
     case "starting":
       return s.surface === "cloud" ? `Sending to ${CLOUD_LABEL[s.agent]} since ${clockLong(s.startedAt, now)}` : `Starting ${who} since ${clockLong(s.startedAt, now)}`;
-    case "running":
+    case "running": {
+      const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
+      if (asked) return `${who} is working on your changes since ${clockLong(asked, now)}`;
       return s.surface === "terminal" ? `Running in ${who} since ${clockLong(s.startedAt, now)}` : `Running in ${place(s)} since ${clockLong(s.startedAt, now)}`;
-    case "finished":
-      return `${who} finished at ${clockLong(s.finishedAt ?? s.startedAt, now)} · waiting for you`;
+    }
+    case "finished": {
+      const at = clockLong(s.finishedAt ?? s.startedAt, now);
+      const outcome = s.reports[0]?.outcome;
+      if (outcome === "blocked") return `${who} got stuck at ${at} · needs you`;
+      if (outcome === "partial") return `${who} handed back part of it at ${at} · waiting for you`;
+      return `${who} finished at ${at} · waiting for you`;
+    }
     case "done":
       return s.finishedAt ? `Done · ${who} finished at ${clockLong(s.finishedAt, now)}` : "Done";
     case "closed":
@@ -262,6 +282,7 @@ function StateDot({ status }: { status: SessionStatus }) {
 
 function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; selected: boolean; onSelect: () => void }) {
   const live = s.status === "finished" || isActive(s);
+  const images = (s.reports[0]?.images.length ?? 0) + s.pending.length;
   return (
     <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined}
       className={cx("flex h-[42px] w-full items-center gap-3 border-b border-hover px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
@@ -273,6 +294,9 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
         <AgentIcon agent={s.agent} size={12} className="text-mut" />{AGENT_LABEL[s.agent]}
         <SurfaceIcon surface={s.surface} size={11} className="text-dim" />
       </span>
+      <span title={images ? `${images} image${images === 1 ? "" : "s"}` : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2">
+        {images > 0 && <><Icon name="image" size={13} />{images}</>}
+      </span>
       <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px]", s.status === "finished" ? "text-fg2" : "text-mut2")}>
         {meta(s, now)}
       </span>
@@ -283,6 +307,11 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
 function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (id: string) => void }) {
   const { run, pending } = useAction();
   const active = isActive(s);
+  const [viewing, setViewing] = useState(0);
+  const report = s.reports[Math.min(viewing, s.reports.length - 1)] ?? null;
+  const [asking, setAsking] = useState(false);
+  // Sessions in the apps or the cloud take changes where they run.
+  const canAsk = s.surface === "terminal" && (s.status === "finished" || s.status === "done");
   const worked = workedFor(s, now);
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
@@ -316,10 +345,32 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
           <h2 className="text-[20px] font-semibold leading-snug tracking-[-0.01em] text-strong">{s.task?.title ?? "Deleted task"}</h2>
           <div className="flex items-center gap-2 text-[12.5px] text-fg2">
             <StateDot status={s.status} />
-            {headline(s, now)}
+            <span className="min-w-0 flex-1">{headline(s, now)}</span>
+            {s.reports.length > 1 && (
+              <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
+                <button type="button" aria-label="Older report" disabled={viewing >= s.reports.length - 1} onClick={() => setViewing((v) => v + 1)}
+                  className="flex h-5 w-5 items-center justify-center rounded hover:bg-hover disabled:opacity-30">
+                  <Icon name="chevronLeft" size={12} strokeWidth={2.2} />
+                </button>
+                <span className="tabular-nums">Report {s.reports.length - viewing} of {s.reports.length}</span>
+                <button type="button" aria-label="Newer report" disabled={viewing === 0} onClick={() => setViewing((v) => v - 1)}
+                  className="flex h-5 w-5 items-center justify-center rounded hover:bg-hover disabled:opacity-30">
+                  <Icon name="chevronRight" size={12} strokeWidth={2.2} />
+                </button>
+              </span>
+            )}
           </div>
-          {s.note && s.status !== "failed" && <p className="text-[13px] leading-[1.6] text-mut">“{s.note}”</p>}
+          {!report && s.note && s.status !== "failed" && <p className="text-[13px] leading-[1.6] text-mut">“{s.note}”</p>}
         </div>
+
+        {report && <SessionReport key={report.id} report={report} criteria={report.criteria} working={active} />}
+
+        {s.pending.length > 0 && (
+          <div className="flex flex-col gap-1.5">
+            <div className="text-[12px] font-medium text-fg3">Images so far</div>
+            <Gallery images={s.pending} />
+          </div>
+        )}
 
         <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-2 gap-y-2.5 text-[12.5px]">
           {props.map(([label, value, mono]) => (
@@ -355,7 +406,16 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
       </div>
 
       <div className="flex shrink-0 flex-col gap-3 border-t border-line pb-4 pl-6 pr-4 pt-3.5">
-        <div className="flex flex-wrap items-center gap-2">
+        {asking && canAsk && (
+          <RequestChangesForm agent={s.agent} resumes={s.agent === "claude" && !!s.cliSessionId} pending={pending}
+            onCancel={() => setAsking(false)}
+            onSend={(changes) => run(async () => {
+              const r = await requestChangesAction(s.id, changes);
+              if (r.ok) setAsking(false);
+              return r;
+            })} />
+        )}
+        <div className={cx("flex flex-wrap items-center gap-2", asking && canAsk && "hidden")}>
           {!active && s.status !== "failed" && s.surface === "terminal" && (
             <Button disabled={pending} onClick={() => run(() => resumeSessionAction(s.id))}>
               <Icon name="terminal" size={13} strokeWidth={2} />Resume in terminal
@@ -386,6 +446,11 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
             <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check, and what comes next may start."
               onClick={() => run(() => finishSessionAction(s.id))}>
               <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
+            </Button>
+          )}
+          {canAsk && (
+            <Button disabled={pending} onClick={() => setAsking(true)}>
+              <Icon name="pen" size={13} strokeWidth={2} />Request changes
             </Button>
           )}
           {active && (

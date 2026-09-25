@@ -74,12 +74,13 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   }));
 
   // Tasks that are yours ("human") never run as agent sessions, so they aren't offered to the flow.
+  const held = repo.heldTaskIds();
   const flowTasks: FlowTask[] = tasks.flatMap((t) => {
     const agent = agentOf(t, project.agent);
     return agent ? [{
       id: t.id, key: t.key, title: t.title, status: t.status, agent,
       runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? me.id, folder: t.folder ?? project.folder, ownFolder: !!t.folder,
-      flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt,
+      flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt, held: held.has(t.id),
     }] : [];
   });
   const yours = tasks.filter((t) => t.agent === "human" && t.status !== "done" && t.status !== "canceled").length;

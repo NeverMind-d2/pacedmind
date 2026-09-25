@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
   labels TEXT NOT NULL DEFAULT '[]', reminder TEXT, agent TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
   flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT,
-  run_in TEXT, device_id TEXT, folder TEXT
+  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS subtasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -47,6 +47,21 @@ CREATE TABLE IF NOT EXISTS session_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   at TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS reports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, outcome TEXT NOT NULL DEFAULT 'done', summary TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '', criteria TEXT NOT NULL DEFAULT '[]', verify TEXT NOT NULL DEFAULT '[]',
+  questions TEXT NOT NULL DEFAULT '[]', links TEXT NOT NULL DEFAULT '[]', follow_ups TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
+  changes TEXT, changes_at TEXT
+);
+CREATE TABLE IF NOT EXISTS attachments (
+  id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE, report_id INTEGER REFERENCES reports(id) ON DELETE SET NULL,
+  file TEXT NOT NULL, mime TEXT NOT NULL, bytes INTEGER NOT NULL, width INTEGER, height INTEGER,
+  caption TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS reports_task ON reports(task_id);
+CREATE INDEX IF NOT EXISTS attachments_task ON attachments(task_id);
 CREATE TABLE IF NOT EXISTS edges (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   from_task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -60,6 +75,11 @@ const g = globalThis as unknown as { __organizerDb?: DatabaseSync };
 
 export function dbPath(): string {
   return process.env.ORGANIZER_DB ?? path.join(process.cwd(), "data", "organizer.db");
+}
+
+/** Where images that agents attach are kept, next to the database. */
+export function attachmentsDir(): string {
+  return path.join(path.dirname(dbPath()), "attachments");
 }
 
 /** Per module instance, so a code reload in dev also runs new migrations on the cached connection. */
@@ -87,12 +107,15 @@ export function db(): DatabaseSync {
   return g.__organizerDb;
 }
 
-/** Adds columns introduced after a database was first created. */
+/** Adds tables and columns introduced after a database was first created. */
 function migrate(conn: DatabaseSync) {
+  // Again here, because in development a code reload keeps the open connection, which ran an older schema.
+  conn.exec(SCHEMA);
   const added: Record<string, [string, string][]> = {
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"]],
-    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"]],
+    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],
+    reports: [["changes", "TEXT"], ["changes_at", "TEXT"]],
   };
   for (const [table, columns] of Object.entries(added)) {
     const have = (conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
@@ -117,7 +140,7 @@ export function resetDatabase(mode: "sample" | "empty") {
   const conn = db();
   conn.exec("BEGIN");
   try {
-    for (const t of ["session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
+    for (const t of ["attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
       conn.exec(`DELETE FROM ${t}`);
     }
     conn.exec("DELETE FROM sqlite_sequence");
@@ -127,6 +150,7 @@ export function resetDatabase(mode: "sample" | "empty") {
     conn.exec("ROLLBACK");
     throw e;
   }
+  fs.rmSync(attachmentsDir(), { recursive: true, force: true });
 }
 
 export const DEFAULT_AREAS = [
@@ -174,15 +198,15 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
 
   const insTask = conn.prepare(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date,
-       estimate_min, labels, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       estimate_min, labels, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, done_when)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insSub = conn.prepare("INSERT INTO subtasks (task_id, title, done, sort) VALUES (?, ?, ?, ?)");
   const ids: Record<string, number> = {};
   type Seed = {
     key: string; area: string; project?: string; title: string; desc?: string; status?: string; pr?: number;
     due?: string; planned?: string; est?: number; labels?: string[]; agent?: string; sort?: number;
-    fx?: number; fy?: number; subs?: [string, boolean][];
+    fx?: number; fy?: number; subs?: [string, boolean][]; doneWhen?: string[];
   };
   const tasks: Seed[] = [
     { key: "WRK-27", area: "work", project: "q4", title: "Review Q3 budget draft", status: "progress", pr: 3, due: D(-1), planned: D(-2), est: 90, labels: ["finance"],
@@ -213,8 +237,11 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
     { key: "DEV-18", area: "dev", project: "organizer", title: "Project scaffold: Next.js and SQLite", status: "done", pr: 2, agent: "claude", sort: 1, fx: 0, fy: 0 },
     { key: "DEV-19", area: "dev", project: "organizer", title: "Task list and detail views", status: "done", pr: 2, agent: "claude", sort: 2, fx: 0, fy: 120 },
     { key: "DEV-21", area: "dev", project: "organizer", title: "MCP server skeleton", status: "review", pr: 2, due: D(0), agent: "claude", sort: 3, fx: 0, fy: 240, labels: ["mcp"],
-      desc: "Expose tasks, projects and time blocks over MCP so Claude Code and Codex can read and update them." },
-    { key: "DEV-22", area: "dev", project: "organizer", title: "Start sessions from the app", pr: 2, agent: "claude", sort: 4, fx: 0, fy: 380 },
+      desc: "Expose tasks, projects and time blocks over MCP so Claude Code and Codex can read and update them.",
+      doneWhen: ["/api/mcp answers tools/list with the task tools", "Requests without the token get 401", "Claude Code can create a task through it"] },
+    { key: "DEV-22", area: "dev", project: "organizer", title: "Start sessions from the app", pr: 2, agent: "claude", sort: 4, fx: 0, fy: 380,
+      desc: "A Start button on a task opens a terminal with Claude Code or Codex working on it, in the project's folder.",
+      doneWhen: ["Start in Claude Code opens Windows Terminal in the project folder", "The session shows as running on the task", "A screenshot of the task panel with the running session"] },
     { key: "DEV-23", area: "dev", project: "organizer", title: "Session tracking over MCP", pr: 3, agent: "claude", sort: 5, fx: 0, fy: 500 },
     { key: "DEV-24", area: "dev", project: "organizer", title: "Auto-planner for time blocks", pr: 3, agent: "codex", sort: 6, fx: 360, fy: 380 },
     { key: "DEV-25", area: "dev", project: "organizer", title: "Desktop build with Electron", pr: 3, agent: "claude", sort: 7, fx: 0, fy: 640 },
@@ -228,7 +255,7 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
     const r = insTask.run(
       t.key, t.area, t.project ?? null, t.title, t.desc ?? "", t.status ?? "todo", t.pr ?? 0, t.due ?? null, t.planned ?? null,
       t.est ?? 60, JSON.stringify(t.labels ?? []), t.agent ?? null, t.sort ?? 0, t.fx ?? null, t.fy ?? null,
-      ago(60 * 24 * 3), stamp, done ? ago(90) : null,
+      ago(60 * 24 * 3), stamp, done ? ago(90) : null, JSON.stringify(t.doneWhen ?? []),
     );
     ids[t.key] = Number(r.lastInsertRowid);
     (t.subs ?? []).forEach(([title, d], i) => insSub.run(ids[t.key], title, d ? 1 : 0, i));
@@ -268,4 +295,19 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
   insEv.run("seed21", ago(50), "started", "Session started in a new terminal");
   insEv.run("seed21", ago(49), "picked_up", "Claude read the task over MCP");
   insEv.run("seed21", ago(12), "finished", "MCP endpoint added at /api/mcp. Tests pass.");
+  conn.prepare(
+    `INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    "seed21", ids["DEV-21"], "done", "MCP endpoint added at /api/mcp. Tests pass.",
+    "- `src/app/api/mcp/route.ts` serves the MCP server with **mcp-handler**.\n- Tools for tasks, projects and time blocks live in `src/server/mcp/`.\n- Every request needs the bearer token from Settings.",
+    JSON.stringify([
+      { text: "/api/mcp answers tools/list with the task tools", verdict: "met", note: "12 tools listed." },
+      { text: "Requests without the token get 401", verdict: "met", note: "" },
+      { text: "Claude Code can create a task through it", verdict: "partly", note: "Tried with the MCP inspector, not with Claude Code yet." },
+    ]),
+    JSON.stringify(["Run npm run dev", "Open Settings → MCP server and copy the connect command", "Ask Claude Code to list your tasks"]),
+    JSON.stringify(["Should agents be allowed to delete tasks without asking?"]),
+    "[]", ago(12),
+  );
 }
