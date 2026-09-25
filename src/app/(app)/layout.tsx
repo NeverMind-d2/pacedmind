@@ -4,6 +4,7 @@ import { AppHeader } from "@/components/app-header";
 import { QuickAdd } from "@/components/quick-add";
 import { CommandPalette } from "@/components/command-palette";
 import { LiveRefresh } from "@/components/live-refresh";
+import { ImportOffer } from "@/components/import-projects";
 import { Toaster } from "@/components/ui";
 import * as repo from "@/server/repo";
 import { usage } from "@/server/views";
@@ -38,6 +39,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />
       <LiveRefresh />
+      {/* The first time PacedMind opens, it offers to bring your Claude Code and Codex projects over. */}
+      {!repo.getSettings().importOffered && <ImportOffer areas={areas} />}
     </div>
   );
 }

@@ -26,7 +26,10 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 
 ## Layout
 
-- `src/server/` is server-only: `db.ts` (schema and seed), `repo.ts` (all queries), `flow.ts` (which session starts after which), `launcher.ts` (opens a terminal with the agent), `auth.ts` (MCP token check), `views.ts` (view helpers).
+- `src/server/` is server-only: `db.ts` (schema and seed), `repo.ts` (all queries), `flow.ts` (which session starts after which), `launcher.ts` (starts a session in a terminal, the agent's desktop app or its cloud), `auth.ts` (MCP token check), `views.ts` (view helpers).
+  - `devices.ts`: the computers PacedMind runs on. Each install keeps its id in `device.json` next to the database, looks for the Claude Code and Codex CLIs, their desktop apps and their MCP config at start and every half hour, and can connect them to PacedMind.
+  - `import.ts`: finds the folders you work in with Claude Code and Codex (their own session records and configs, read-only) for the first-start import.
+  - `cloud.ts`: asks `codex cloud list --json` which Codex cloud tasks are ready. `shell.ts`: the agents' environment, quoting, running commands and opening links.
 - `src/app/api/mcp/route.ts` is the MCP server (`mcp-handler` v2). Every request needs `Authorization: Bearer <token>` (Settings → MCP server). The tools live in `src/server/mcp/`:
   - `planning.ts`: overview, areas, projects, tasks;
   - `calendar.ts`: events, agenda, reschedule_day, work hours;
@@ -59,6 +62,7 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 - Visual rules: use semantic tokens in `globals.css` for both the near-black dark palette and neutral light palette; avoid fixed neutral colors in components. Color means identity (areas and projects). A project's color is its own or its area's: always use `projectColor(p, areas)`. State is grayscale. The navy accent (`--color-accent*` tokens; never a fixed color, so both themes work) is only for today or now, selection, the one primary button, and "session finished, waiting for you". Muted red is only for overdue.
 - Agent terminals get the server's environment minus its own variables (`agentEnv()` in `launcher.ts`): no PORT, NODE_ENV, ELECTRON_RUN_AS_NODE or NEXT_*. URLs handed to agents use the port the server actually listens on (`process.env.PORT`).
 - Session flow modes on edges: `auto` (starts when the previous task is finished), `manual` (after the user marks it done), `session` (the agent continues in the same terminal), `time` (at `atTime`).
+- Where a session runs is its surface: `terminal` or `desktop` (the Claude or Codex app, opened with `claude://code/new` or `codex://new`, first message written but not sent) on a device, or `cloud` (`claude --cloud` in a terminal, `codex cloud exec` in the background with the project's `codexEnv`). A task's `runIn` null means the terminal when the CLI is there, else the app (`surfaceOf()`). Cloud sessions can't reach the MCP server: the user marks them finished, and Codex cloud tasks are checked by `cloud.ts`. A task can have its own `folder` and `deviceId`; otherwise its project's.
 - Dependencies drawn on the Timeline are the same edges (`linkTasksAction`): within one project, never a loop. Your own (`human`) tasks can have them too, but the flow never starts a session for one.
 - A task's `agent` (who does it, the `Doer` type) is `claude`, `codex`, `human` or null. `human` tasks are the user's: never in a flow (`keepYoursOutOfFlow` in `ops.ts`), never an agent session, and the auto-planner puts them in the user's time. Null means the project's default agent, else Claude Code; resolve it with `agentOf()` from `src/lib/types.ts`, never `task.agent ?? …`.
 - Flow canvas positions are free on a 20 px grid. The geometry and the "Tidy up" layout live in `src/lib/flow-layout.ts`, shared by the canvas and the server; no agent has a column.

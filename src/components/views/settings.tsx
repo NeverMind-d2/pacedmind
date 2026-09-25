@@ -1,11 +1,16 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { createProjectAction, resetDataAction, updateProjectAction, updateSettingsAction } from "@/app/actions";
+import { format } from "date-fns";
+import {
+  checkDeviceAction, connectAgentAction, createProjectAction, resetDataAction, updateProjectAction, updateSettingsAction,
+} from "@/app/actions";
 import { projectColor } from "@/lib/colors";
-import { AGENT_LABEL, type AgentId, type Area, type Project, type Settings } from "@/lib/types";
+import { parseLocal } from "@/lib/dates";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
-import { Icon } from "../icons";
+import { AGENT_LABEL, APP_LABEL, platformName, type AgentId, type Area, type Device, type Project, type Settings } from "@/lib/types";
+import { AgentIcon, Icon } from "../icons";
+import { ImportProjects } from "../import-projects";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
 
@@ -22,13 +27,47 @@ const TOOL_GROUPS: [string, string[]][] = [
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function Section({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
+function Section({ id, title, action, children, note }: { id?: string; title: string; action?: ReactNode; children: ReactNode; note?: ReactNode }) {
   return (
-    <section className="flex flex-col gap-2.5">
-      <h2 className="text-[13px] font-semibold text-fg2">{title}</h2>
+    <section id={id} className="flex scroll-mt-6 flex-col gap-2.5">
+      <div className="flex min-h-6 items-center gap-2">
+        <h2 className="flex-1 text-[13px] font-semibold text-fg2">{title}</h2>
+        {action}
+      </div>
       <div className="overflow-hidden rounded-lg border border-line2">{children}</div>
       {note && <p className="text-[12px] leading-relaxed text-mut2">{note}</p>}
     </section>
+  );
+}
+
+const MCP_TEXT = { connected: "Reports to PacedMind", elsewhere: "Reports to another PacedMind", missing: "Not connected" } as const;
+
+/** One agent on a device: its CLI, its desktop app, and whether sessions PacedMind didn't start can report back. */
+function AgentTools({ agent, device, here, pending, onConnect }: {
+  agent: AgentId; device: Device; here: boolean; pending: boolean; onConnect: (agent: AgentId) => void;
+}) {
+  const t = device.agents[agent];
+  const part = (on: boolean, text: string) => <span className={on ? "text-fg3" : "text-dim"}>{text}</span>;
+  return (
+    <div className="flex min-h-9 items-center gap-2.5 text-[12.5px]">
+      <AgentIcon agent={agent} size={14} className="text-fg3" />
+      <span className="w-[92px] shrink-0 text-fg2">{AGENT_LABEL[agent]}</span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+        {part(!!t.cli, t.cli ? `CLI ${t.cli.version}` : "No CLI")}
+        <span className="text-faint">·</span>
+        {part(!!t.app, t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent].toLowerCase()}`)}
+        <span className="text-faint">·</span>
+        {part(t.mcp === "connected", MCP_TEXT[t.mcp])}
+      </span>
+      {here && t.mcp !== "connected" && (t.cli || t.app || agent === "codex") && (
+        <Button size="sm" disabled={pending} onClick={() => onConnect(agent)}
+          title={agent === "claude"
+            ? "Adds PacedMind's MCP server to Claude Code for all projects, so the Claude app's sessions can report back"
+            : "Adds PacedMind's MCP server to ~/.codex/config.toml (kept as config.toml.pacedmind-backup), so the Codex app's sessions can report back"}>
+          Connect
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -47,18 +86,27 @@ function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(() => toast(`${what} copied`), () => toast("Couldn't copy", "error"));
 }
 
-export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessionsCount, platform }: {
-  settings: Settings; projects: Project[]; areas: Area[]; mcpUrl: string; dbFile: string; sessionsCount: number;
+export function SettingsView({ settings, projects, areas, devices, thisDeviceId, mcpUrl, dbFile, sessionsCount, platform }: {
+  settings: Settings; projects: Project[]; areas: Area[]; devices: Device[]; thisDeviceId: string; mcpUrl: string; dbFile: string;
+  sessionsCount: number;
   /** The server's system, which decides the terminals sessions can open in. */
   platform: NodeJS.Platform;
 }) {
-  const { run } = useAction();
+  const { run, pending } = useAction();
   const [showToken, setShowToken] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", areaId: "dev", folder: "", agent: "claude" as AgentId | null });
   const save = (patch: Partial<Settings>) => run(() => updateSettingsAction(patch), "Saved");
   const token = settings.mcpToken;
-  const claudeCmd = `claude mcp add --transport http organizer ${mcpUrl} --header "Authorization: Bearer ${token}"`;
-  const codexToml = `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcpUrl}"\nbearer_token_env_var = "ORGANIZER_TOKEN"`;
+  const claudeCmd = `claude mcp add --transport http --scope user organizer ${mcpUrl} --header "Authorization: Bearer ${token}"`;
+  // A header rather than bearer_token_env_var: the Codex app has no ORGANIZER_TOKEN to read.
+  const codexToml = `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcpUrl}"\nhttp_headers = { Authorization = "Bearer ${token}" }`;
+  const connect = (agent: AgentId) => {
+    const what = agent === "claude" ? "Claude Code, for all projects" : "Codex's config.toml";
+    if (confirm(`Add PacedMind (${mcpUrl}) to ${what}? Sessions you start yourself, and those in the ${APP_LABEL[agent]}, will report to this PacedMind.`)) {
+      run(() => connectAgentAction(agent));
+    }
+  };
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -72,6 +120,28 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
           <div className="flex flex-col gap-7">
             <Section title="Appearance">
               <Row label="Theme"><ThemeSelector /></Row>
+            </Section>
+
+            <Section id="devices" title="Devices"
+              action={<Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => checkDeviceAction())}><Icon name="refresh" size={12} />Check again</Button>}
+              note="Sessions run in a terminal or an agent's desktop app on a computer with PacedMind, or in the agent's cloud. PacedMind looks for Claude Code and Codex when it starts and every half hour. Connected, the desktop apps report back like terminal sessions.">
+              {devices.map((d) => {
+                const here = d.id === thisDeviceId;
+                return (
+                  <div key={d.id} className="flex flex-col gap-1 border-b border-line px-3.5 py-2.5 last:border-b-0">
+                    <div className="flex h-7 items-center gap-2.5">
+                      <Icon name="laptop" size={14} className="text-mut" />
+                      <span className="truncate text-[13px] font-medium text-fg">{d.name}</span>
+                      <span className="truncate text-[12px] text-mut2">
+                        {platformName(d.platform)}{here ? " · this computer" : ` · seen ${format(parseLocal(d.seenAt), "d MMM HH:mm")}`}
+                      </span>
+                    </div>
+                    {d.checkedAt
+                      ? (["claude", "codex"] as AgentId[]).map((a) => <AgentTools key={a} agent={a} device={d} here={here} pending={pending} onConnect={connect} />)
+                      : <p className="pb-1 text-[12px] text-mut2">Looking for Claude Code and Codex…</p>}
+                  </div>
+                );
+              })}
             </Section>
             <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished.">
               <Row label="Status">
@@ -96,7 +166,7 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
             <Section title="Connect your agents" note="Sessions you start from PacedMind are connected automatically. Set this up once to use PacedMind from sessions you start yourself.">
               <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
                 <div className="flex items-center gap-2.5">
-                  <Icon name="terminal" size={14} className="text-mut" />
+                  <AgentIcon agent="claude" size={14} className="text-fg3" />
                   <span className="flex-1 text-[13px] font-medium text-fg">Claude Code</span>
                   <Button size="sm" onClick={() => copy(claudeCmd, "Command")}>Copy command</Button>
                 </div>
@@ -104,12 +174,12 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
               </div>
               <div className="flex flex-col gap-2.5 p-3.5">
                 <div className="flex items-center gap-2.5">
-                  <Icon name="terminal" size={14} className="text-mut" />
+                  <AgentIcon agent="codex" size={14} className="text-fg3" />
                   <span className="flex-1 text-[13px] font-medium text-fg">Codex</span>
                   <Button size="sm" onClick={() => copy(codexToml, "Config")}>Copy config</Button>
                 </div>
                 <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{codexToml}</pre>
-                <p className="text-[12px] text-mut2">Codex reads the token from the <span className="font-mono">ORGANIZER_TOKEN</span> environment variable. Sessions started from PacedMind set it for you.</p>
+                <p className="text-[12px] text-mut2">The Codex CLI and the Codex app share this file. Sessions started from PacedMind don&apos;t need it.</p>
               </div>
             </Section>
 
@@ -142,7 +212,9 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
           </div>
 
           <div className="flex flex-col gap-7">
-            <Section title="Projects and folders" note="A session works in its project's folder. Tasks without a folder get a scratch folder next to the database.">
+            <Section title="Projects and folders"
+              action={<Button size="sm" variant="ghost" onClick={() => setImporting(true)}><Icon name="download" size={12} />Import from Claude and Codex</Button>}
+              note="A session works in its task's own folder, else its project's. Tasks without either get a scratch folder next to the database.">
               {projects.map((p) => {
                 return (
                   <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
@@ -216,6 +288,7 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
           </div>
         </div>
       </div>
+      {importing && <ImportProjects areas={areas} onClose={() => setImporting(false)} />}
     </div>
   );
 }

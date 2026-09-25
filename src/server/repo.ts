@@ -4,8 +4,8 @@ import { addDays } from "date-fns";
 import { db, tx } from "./db";
 import { nowStamp, parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AgentId, Area, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Priority, Project, Session, SessionEvent,
-  SessionStatus, Settings, Status, Subtask, Task,
+  AgentId, AgentTools, Area, CalEvent, Device, Doer, EdgeMode, EventOccurrence, FlowEdge, Priority, Project, Session, SessionEvent,
+  SessionStatus, Settings, Status, Subtask, Surface, Task,
 } from "@/lib/types";
 
 type Row = Record<string, unknown>;
@@ -74,8 +74,8 @@ export function deleteProject(id: string) {
 
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
-  folder: s(r.folder), agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id), flowOn: Number(r.flow_on) === 1,
-  sort: Number(r.sort),
+  folder: s(r.folder), deviceId: s(r.device_id), codexEnv: s(r.codex_env), agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id),
+  flowOn: Number(r.flow_on) === 1, sort: Number(r.sort),
 });
 
 export function listProjects(): Project[] {
@@ -88,22 +88,26 @@ export function getProject(id: string): Project | null {
 }
 
 export function createProject(input: {
-  name: string; areaId: string; folder?: string | null; agent?: AgentId | null; targetDate?: string | null; color?: string | null;
+  name: string; areaId: string; folder?: string | null; deviceId?: string | null; agent?: AgentId | null; targetDate?: string | null;
+  color?: string | null;
 }): Project {
   const base = slug(input.name, "project");
   let id = base;
   for (let i = 2; getProject(id); i++) id = `${base}-${i}`;
   const sort = Number((db().prepare("SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM projects").get() as Row).n);
   db().prepare(
-    `INSERT INTO projects (id, area_id, name, start_date, target_date, folder, agent, sort, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.folder ?? null, input.agent ?? null, sort, input.color ?? null);
+    `INSERT INTO projects (id, area_id, name, start_date, target_date, folder, device_id, agent, sort, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.folder ?? null, input.deviceId ?? null,
+    input.agent ?? null, sort, input.color ?? null,
+  );
   return getProject(id)!;
 }
 
 export function updateProject(id: string, patch: Partial<Omit<Project, "id">>) {
   const cols: Record<string, string> = {
-    areaId: "area_id", name: "name", color: "color", startDate: "start_date", targetDate: "target_date", folder: "folder", agent: "agent",
-    afterProjectId: "after_project_id", flowOn: "flow_on", sort: "sort",
+    areaId: "area_id", name: "name", color: "color", startDate: "start_date", targetDate: "target_date", folder: "folder",
+    deviceId: "device_id", codexEnv: "codex_env", agent: "agent", afterProjectId: "after_project_id", flowOn: "flow_on", sort: "sort",
   };
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
@@ -135,7 +139,8 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: JSON.parse(String(r.labels || "[]")),
-  reminder: s(r.reminder), agent: s(r.agent) as Doer | null, sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
+  reminder: s(r.reminder), agent: s(r.agent) as Doer | null, runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id),
+  folder: s(r.folder), sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
 });
 
@@ -195,10 +200,15 @@ export function createTask(input: TaskInput): Task {
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
   dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", labels: "labels", reminder: "reminder",
-  agent: "agent", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
+  agent: "agent", runIn: "run_in", deviceId: "device_id", folder: "folder", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
 };
 
-export function updateTask(id: number, patch: Partial<TaskInput & { reminder: string | null; sortOrder: number; flowX: number | null; flowY: number | null }>) {
+export type TaskPatch = Partial<TaskInput & {
+  reminder: string | null; sortOrder: number; flowX: number | null; flowY: number | null;
+  runIn: Surface | null; deviceId: string | null; folder: string | null;
+}>;
+
+export function updateTask(id: number, patch: TaskPatch) {
   const sets: string[] = [];
   const vals: (string | number | null)[] = [];
   for (const [k, v] of Object.entries(patch)) {
@@ -301,7 +311,8 @@ const stampMin = (d: Date) => `${toDateStr(d)}T${String(d.getHours()).padStart(2
 /* ---------- sessions ---------- */
 
 const toSession = (r: Row): Session => ({
-  id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, folder: s(r.folder), branch: s(r.branch),
+  id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
+  deviceId: s(r.device_id), folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
   note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id),
 });
@@ -323,19 +334,23 @@ export function latestSession(taskId: number): Session | null {
 
 export function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; branch?: string | null; status?: SessionStatus;
-  cliSessionId?: string | null; continuesSessionId?: string | null;
+  surface?: Surface; deviceId?: string | null; cliSessionId?: string | null; continuesSessionId?: string | null;
 }): Session {
   const id = crypto.randomBytes(4).toString("hex");
   db().prepare(
-    `INSERT INTO sessions (id, task_id, agent, folder, branch, status, started_at, cli_session_id, continues_session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, input.taskId, input.agent, input.folder, input.branch ?? null, input.status ?? "starting", nowStamp(),
-    input.cliSessionId ?? null, input.continuesSessionId ?? null);
+    `INSERT INTO sessions (id, task_id, agent, surface, device_id, folder, branch, status, started_at, cli_session_id, continues_session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, input.taskId, input.agent, input.surface ?? "terminal", input.deviceId ?? null, input.folder, input.branch ?? null,
+    input.status ?? "starting", nowStamp(), input.cliSessionId ?? null, input.continuesSessionId ?? null);
   return getSession(id)!;
 }
 
-export function updateSession(id: string, patch: Partial<Pick<Session, "status" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId">>) {
-  const cols: Record<string, string> = { status: "status", finishedAt: "finished_at", endedAt: "ended_at", note: "note", branch: "branch", cliSessionId: "cli_session_id" };
+export function updateSession(
+  id: string, patch: Partial<Pick<Session, "status" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url">>,
+) {
+  const cols: Record<string, string> = {
+    status: "status", finishedAt: "finished_at", endedAt: "ended_at", note: "note", branch: "branch", cliSessionId: "cli_session_id", url: "url",
+  };
   const sets: string[] = [];
   const vals: (string | null)[] = [];
   for (const [k, v] of Object.entries(patch)) {
@@ -387,11 +402,45 @@ export function setIncomingMode(toTaskId: number, mode: EdgeMode, atTime: string
   db().prepare("UPDATE edges SET mode = ?, at_time = ? WHERE to_task_id = ?").run(mode, mode === "time" ? atTime : null, toTaskId);
 }
 
+/* ---------- devices ---------- */
+
+const NO_TOOLS: AgentTools = { cli: null, app: null, mcp: "missing" };
+
+const toDevice = (r: Row): Device => {
+  const agents = JSON.parse(String(r.agents || "{}")) as Partial<Device["agents"]>;
+  return {
+    id: String(r.id), name: String(r.name), platform: String(r.platform),
+    agents: { claude: agents.claude ?? NO_TOOLS, codex: agents.codex ?? NO_TOOLS },
+    seenAt: String(r.seen_at), checkedAt: s(r.checked_at),
+  };
+};
+
+/** Computers where PacedMind is installed, the most recently seen first. */
+export function listDevices(): Device[] {
+  return (db().prepare("SELECT * FROM devices ORDER BY seen_at DESC").all() as Row[]).map(toDevice);
+}
+
+export function getDevice(id: string): Device | null {
+  const r = db().prepare("SELECT * FROM devices WHERE id = ?").get(id) as Row | undefined;
+  return r ? toDevice(r) : null;
+}
+
+/** Records a device checking in; `agents` and `checkedAt` only when it looked for the agents again. */
+export function saveDevice(d: { id: string; name: string; platform: string; agents?: Device["agents"]; checkedAt?: string }) {
+  const at = nowStamp();
+  db().prepare(
+    `INSERT INTO devices (id, name, platform, agents, seen_at, checked_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET name = excluded.name, platform = excluded.platform, seen_at = excluded.seen_at,
+       agents = CASE WHEN ? THEN excluded.agents ELSE devices.agents END,
+       checked_at = COALESCE(excluded.checked_at, devices.checked_at)`,
+  ).run(d.id, d.name, d.platform, JSON.stringify(d.agents ?? {}), at, d.checkedAt ?? null, d.agents ? 1 : 0);
+}
+
 /* ---------- settings ---------- */
 
 export const DEFAULT_SETTINGS: Omit<Settings, "mcpToken"> = {
   workStart: "09:00", workEnd: "17:00", lunchStart: "12:30", lunchEnd: "13:30", workDays: [1, 2, 3, 4, 5],
-  terminal: "wt", claudeCommand: "claude", codexCommand: "codex", port: 4319,
+  terminal: "wt", claudeCommand: "claude", codexCommand: "codex", port: 4319, importOffered: false,
 };
 
 export function getSettings(): Settings {

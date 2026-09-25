@@ -454,7 +454,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "update_task", {
     title: "Update task",
     description:
-      "Change anything about a task: title, description (replace or append), status, priority, dates, estimate, labels, project or area, agent, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area or agent. Setting status to done may start sessions that wait for it in a flow.",
+      "Change anything about a task: title, description (replace or append), status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run and their folder, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
@@ -471,6 +471,9 @@ export function registerPlanningTools(server: McpServer) {
       project: projectRef.nullable().optional().describe("Move to this project (and its area), or null to take it out of its project"),
       area: areaRef.nullable().optional().describe('Move to this area without a project, or null / "inbox" for the Inbox'),
       agent: doerSchema.nullable().optional().describe("human takes the task out of its flow for good"),
+      runs_in: z.enum(["terminal", "desktop", "cloud"]).nullable().optional()
+        .describe("Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. null: a terminal when the agent's CLI is installed, else its desktop app"),
+      folder: z.string().nullable().optional().describe("Absolute folder its sessions work in, when it isn't the project's; null for the project's folder"),
       add_subtasks: z.array(z.string()).optional(),
       complete_subtasks: z.array(z.string()).optional().describe("Sub-task numbers or titles to tick off"),
       reopen_subtasks: z.array(z.string()).optional(),
@@ -480,6 +483,11 @@ export function registerPlanningTools(server: McpServer) {
   }, (args) => {
     const t = findTask(args.task);
     if (args.title !== undefined && !args.title.trim()) fail("The title can't be empty.");
+    const folder = args.folder === undefined ? undefined : args.folder?.trim() || null;
+    if (folder) {
+      const problem = folderProblem(folder);
+      if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
+    }
     const { projectId, areaId } = moveTarget(t, args.project, args.area);
     let labels = args.labels ? cleanLabels(args.labels) : [...t.labels];
     if (args.add_labels) labels = cleanLabels([...labels, ...args.add_labels]);
@@ -509,6 +517,8 @@ export function registerPlanningTools(server: McpServer) {
         projectId,
         areaId,
         agent: args.agent,
+        runIn: args.runs_in,
+        folder,
       });
       for (const s of complete) repo.setSubtaskDone(s.id, true);
       for (const s of reopen) repo.setSubtaskDone(s.id, false);

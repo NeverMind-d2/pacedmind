@@ -1,24 +1,72 @@
 import "server-only";
 import { tx } from "./db";
 import * as repo from "./repo";
-import { afterDone } from "./flow";
-import type { LaunchResult } from "./launcher";
+import { afterDone, afterFinished } from "./flow";
+import { startSession, type LaunchResult } from "./launcher";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
-import type { AgentId } from "@/lib/types";
+import { AGENT_LABEL, type AgentId, type Session, type Task } from "@/lib/types";
 
 /* Operations shared by the Server Actions (the UI) and the MCP tools, so both behave the same. */
 
 /**
  * Call after a task's status became done: its finished sessions count as reviewed, and flows may
- * start the sessions that waited for it.
+ * start the sessions that waited for it. A cloud session never reports back, so marking its task done ends it too.
  */
 export function afterTaskDone(taskId: number): LaunchResult[] {
   for (const s of repo.listSessions("task_id = ? AND status = 'finished'", taskId)) {
     repo.updateSession(s.id, { status: "done" });
     repo.addSessionEvent(s.id, "done", "You marked it done");
   }
+  for (const s of repo.listSessions("task_id = ? AND surface = 'cloud' AND status IN ('starting', 'running')", taskId)) {
+    repo.updateSession(s.id, { status: "done", finishedAt: nowStamp() });
+    repo.addSessionEvent(s.id, "done", "You marked it done");
+  }
   return afterDone(taskId);
+}
+
+/** The session an agent works in on a task: the one it names, else the task's running one. */
+export function activeSession(taskId: number, sessionId?: string | null): Session | null {
+  if (sessionId) {
+    const s = repo.getSession(sessionId);
+    if (s && s.taskId === taskId) return s;
+  }
+  return repo.listSessions("task_id = ? AND status IN ('starting', 'running')", taskId)[0] ?? null;
+}
+
+/**
+ * The work on a task is finished and waits for your check: its session and the task say so, and the flow starts
+ * what waited for it. A "same session" connection continues in the same session when the agent reported it (`by`
+ * "agent"); when you or the cloud's status said so, that task starts in a new session instead.
+ */
+export function finishTask(taskId: number, sessionId: string | null, note: string, by: "agent" | "you" | "cloud"): {
+  session: Session | null; continueWith: Task | null; continued: Session | null; started: LaunchResult[];
+} {
+  const s = activeSession(taskId, sessionId);
+  if (s) {
+    repo.updateSession(s.id, { status: "finished", finishedAt: nowStamp(), note: note || null });
+    repo.addSessionEvent(s.id, "finished", by === "you" ? `You marked it finished${note ? `: ${note}` : ""}` : note);
+  }
+  repo.updateTask(taskId, { status: "review" });
+  const { continueWith, started } = afterFinished(taskId);
+  let continued: Session | null = null;
+  if (continueWith && by === "agent" && s?.surface !== "cloud") {
+    continued = repo.createSession({
+      taskId: continueWith.id, agent: s?.agent ?? "claude", surface: s?.surface ?? "terminal", deviceId: s?.deviceId ?? null,
+      folder: s?.folder ?? null, status: "running", cliSessionId: s?.cliSessionId ?? null, continuesSessionId: s?.id ?? null,
+    });
+    repo.addSessionEvent(continued.id, "started", `Continues session ${s?.id ?? ""} in the same ${s?.surface === "desktop" ? "app session" : "terminal"}`);
+    repo.updateTask(continueWith.id, { status: "progress" });
+  } else if (continueWith) {
+    started.push(startSession(continueWith.id, { agent: s?.agent }));
+  }
+  return { session: s, continueWith: continued ? continueWith : null, continued, started };
+}
+
+/** "Started WRK-3 in Claude Code" lines for sessions a flow started. */
+export function startedLines(started: LaunchResult[]): string[] {
+  return started.flatMap((r) =>
+    r.ok && r.session ? [`PacedMind started ${repo.getTask(r.session.taskId)?.key} in a new ${AGENT_LABEL[r.session.agent]} session.`] : []);
 }
 
 /** Closes a session by hand, e.g. when its terminal was closed or it got stuck before the agent checked in. */
