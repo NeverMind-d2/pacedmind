@@ -1,0 +1,143 @@
+---
+title: Troubleshooting
+description: Solutions for common problems with the desktop app, agent sessions, the MCP connection, flows, the planner and data.
+---
+
+## The app
+
+### PacedMind could not start
+
+The dialog *PacedMind could not start.* appears when the app's server stops while starting (*The server stopped while starting.*) or doesn't answer within 30 seconds (*The server did not answer within 30 seconds.*). It asks whether something else is using port 4319, the usual cause.
+
+1. Check whether another program uses the port. In PowerShell: `Get-NetTCPConnection -LocalPort 4319`. The owning process id is in the `OwningProcess` column.
+2. If it's a PacedMind server left over from a crash (`Organizer.exe`) that no longer answers, end it in Task Manager. A leftover server that still answers is reused on its own.
+3. Select **Try again**.
+
+**Open log** opens the server log and closes PacedMind; start it again after reading the log.
+
+### PacedMind's server stopped
+
+The dialog *PacedMind's server stopped.* shows the exit code and the log's location. **Restart** starts the server again; **Open log** opens the log and restarts the server too; **Quit** closes PacedMind.
+
+### The data looks empty, or the icon is blank
+
+Claude's and Codex's desktop apps keep a separate copy of `AppData` for the programs they start. When PacedMind is installed or started from a terminal inside one of them, it can open a second, separate database, and its shortcuts can lose their icon.
+
+* Quit that copy (tray icon → **Quit PacedMind**) and open PacedMind from the Start Menu.
+* Run `npm run desktop` from a terminal that wasn't started by those apps, such as Windows Terminal opened from the Start Menu.
+
+### The window doesn't open
+
+PacedMind may be running in the tray only: click its tray icon, or open it from the Start Menu, which brings the existing window forward. With **Start with Windows** on, PacedMind starts in the tray after signing in.
+
+### A page doesn't show the latest changes
+
+Views refresh on their own a few seconds after data changes, while the window is visible. Press <kbd>Ctrl</kbd>+<kbd>R</kbd> to reload.
+
+### "Organizer only answers on 127.0.0.1"
+
+PacedMind was opened through another address than `127.0.0.1` or `localhost`. Use `http://127.0.0.1:4319`. The server refuses other host names on purpose; see [Where your data lives](/getting-started/data#who-can-reach-it).
+
+## Agent sessions
+
+### A session couldn't start
+
+The task's details and **Sessions** show *Couldn't start:* and the reason, or a message appears when starting:
+
+| Message | Solution |
+| --- | --- |
+| *… already has a running session* | Open the running session, or close it with **Close session** first. |
+| *… is marked as yours. Hand it to Claude Code or Codex before starting a session.* | Set **Done by** to an agent. |
+| *Can't use the folder …: That folder doesn't exist.* | Correct the project's folder in **Settings → Projects and folders**. |
+| *… Use an absolute path, like C:\code\my-app.* | Enter the full path, starting with the drive letter. |
+| *… The path contains characters that can't be passed to a terminal safely …* | Move or rename the folder so its path has none of `"` `%` `!` `^` `&` `\|` `<` `>` `` ` `` `$`. |
+
+### The terminal opens, but the agent doesn't start
+
+The terminal shows an error such as *'claude' is not recognized as an internal or external command*. The agent isn't installed, or isn't on the `PATH` that PacedMind sees.
+
+* Check in a new terminal that `claude --version` or `codex --version` works.
+* Or enter the agent's full path in **Settings → Starting sessions** (**Claude command**, **Codex command**). The command is used as typed, so put a path with spaces in double quotes, such as `"C:\Program Files\Tools\claude.exe"`.
+* After installing an agent, quit and restart PacedMind, so it sees the new `PATH`.
+
+Then close the stuck session with **Close session** and start a new one.
+
+### A session hasn't checked in
+
+After 90 seconds without word from the agent, a running session shows *… hasn't checked in yet. It may be waiting for you in its terminal.* Switch to its terminal:
+
+* The agent may be asking a question: to trust the folder, to sign in, or to approve a tool. Answer it.
+* The agent may not reach PacedMind's MCP server. For Codex, check that `~/.codex/config.toml` has the `organizer` section; see [Connect Codex](/mcp/connect-codex).
+* If the agent is working but never called `start_task`, ask it to follow its first message.
+
+If the session can't recover, select **Close session** and start a new one.
+
+### A session stays "running" after its terminal closed
+
+Claude Code reports its exit to PacedMind; Codex doesn't. A Codex session, or a Claude Code session whose terminal was killed, stays running in PacedMind. Select **Close session** in the task's details or in **Sessions**. The task goes back to **Todo** if it was in progress.
+
+### Resume opens the wrong conversation, or none
+
+* **Claude Code** resumes by its conversation id, shown in **Sessions** as **Claude session**. If that conversation was deleted, start a **New session**.
+* **Codex** opens its own list of earlier sessions; pick the right one there.
+
+### An agent can't reach PacedMind
+
+* **PacedMind isn't running.** Agents can only connect while the app runs, in the window or the tray.
+* **The token changed.** After **Regenerate**, register Claude Code again, and set `ORGANIZER_TOKEN` again for your own Codex sessions. See [MCP server](/mcp#the-access-token).
+* **Wrong port.** The desktop app uses 4319; a development copy started with `npm run dev` uses 4320.
+* **Claude Code: the tools are missing in one project.** The server was registered for another project folder. Register it with `--scope user`. See [Connect Claude Code](/mcp/connect-claude-code).
+* **Codex: `ORGANIZER_TOKEN` isn't set** in the terminal where Codex runs. Set it with `setx` and open a new terminal.
+
+Requests without the right token get `401 Unauthorized`.
+
+## Flows
+
+### The next session didn't start
+
+Check, in order:
+
+1. **Was the flow on when the task before it finished?** PacedMind looks at **Automatically** and **Manually** connections only at that moment: when the agent hands the task back, or when it's marked done. Switching the flow on afterwards doesn't start what was missed; start it with **Start session now**.
+2. **Is the task before it ready?** **Automatically** needs it **In review** or **Done**; **Manually** needs it **Done**. **At a set time** also waits for the time, and is checked every minute.
+3. **Is the next task Todo or Backlog?** Tasks already in progress, in review or finished don't start again.
+4. **Is the next task yours?** Tasks for **You** never start a session.
+5. **Does it already have a running session?**
+6. **Does it wait for other tasks too?** A task starts only when every connection leading to it is ready.
+7. **Is it the first task of the flow?** Tasks without connections leading to them are started by hand.
+8. **Is it connected In the same session?** Such a task never gets a new terminal: the agent continues with it after handing back the task before it.
+
+If the session started but failed, the reason is in its details.
+
+### A dependency can't be drawn on the timeline
+
+The note while dragging explains the rule: dependencies stay within one project, can't form a loop, and can't make a finished task wait. See [Timeline](/views/timeline#dependencies).
+
+## Planning
+
+### The week view plans nothing
+
+* **Work days** or **Focus hours** in **Settings → Auto-plan** leave no time, or the week's activities fill it.
+* Your tasks have no due date, no planned day, and neither **Urgent** nor **High** priority, so the planner leaves them out.
+* The tasks are handed to Claude Code or Codex. The planner leaves those to the agents.
+* The tasks are in the backlog or in review.
+* The switch next to the **Auto-plan** heading is off: the panel then says *Auto-plan is off. Only fixed events are shown.*
+
+See [The auto-planner](/planning/auto-planner#what-gets-planned).
+
+### A task "didn't fit this week"
+
+Its estimate needs more time than the free focus time left. Lower the estimate, move it to a later week with **Planned**, free up time, or extend the work hours.
+
+## Data
+
+### A task kept its old key after moving
+
+Task keys never change, so links and agents keep finding the task. See [Tasks](/concepts/tasks#keys).
+
+### An activity can't be edited
+
+The app adds activities but doesn't edit them yet. Ask an agent to rename, move or delete it. See [Calendar activities](/concepts/activities#change-or-remove-an-activity).
+
+### Where are the logs and the data?
+
+The tray icon's menu has **Open data folder** and **Open server log**. See [Where your data lives](/getting-started/data).

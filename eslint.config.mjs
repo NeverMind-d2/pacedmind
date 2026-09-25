@@ -20,6 +20,8 @@ const eslintConfig = defineConfig([
     "site/.next/**",
     "site/out/**",
     "site/next-env.d.ts",
+    // The docs (docs/, its own Next.js project with its own ESLint config).
+    "docs/**",
   ]),
 ]);
 

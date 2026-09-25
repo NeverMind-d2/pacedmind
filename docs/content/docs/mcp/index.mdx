@@ -1,0 +1,92 @@
+---
+title: MCP server
+description: PacedMind's MCP server gives Claude Code, Codex and other MCP clients the whole planner, protected by an access token and reachable only from the same computer.
+---
+
+PacedMind includes a [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server. Through it, an AI agent can read and change the planner (areas, projects, tasks, calendar activities, the agenda, flows and sessions) and report on the sessions PacedMind starts.
+
+## Address and access
+
+| | |
+| --- | --- |
+| Address | `http://127.0.0.1:4319/api/mcp` |
+| Transport | Streamable HTTP |
+| Server name | `organizer` |
+| Authentication | `Authorization: Bearer` followed by the access token |
+
+The server runs inside the desktop app, whenever PacedMind is running, including in the tray. A development copy started with `npm run dev` serves its own at port 4320.
+
+**Settings → MCP server** shows:
+
+* **Status**: *Running with this app*.
+* **Address**, with **Copy**.
+* **Access token**, masked, with **Show**, **Copy** and **Regenerate**.
+
+Requests without the correct token get `401 Unauthorized`.
+
+## The access token
+
+Every installation creates its own token, starting with `org_`. It's stored in PacedMind's database, so updates keep it.
+
+**Regenerate** makes a new token after the confirmation *Make a new token? Agents set up with the old one lose access until you update them.* Afterwards:
+
+* sessions that PacedMind starts or resumes use the new token automatically;
+* sessions already running keep the old one, so their hand-back (`finish_task`) and Claude Code's report of a closed terminal are refused. Regenerate while no session runs; a running session gets the new token by closing it (**Close session**) and reopening it with **Resume in terminal**;
+* Claude Code, connected by hand, needs its connection added again with the new token;
+* Codex needs the new value in `ORGANIZER_TOKEN`.
+
+Regenerate the token if it was shared by mistake, for example in a screenshot or a log.
+
+## Security
+
+* The server listens on `127.0.0.1` only: other computers can't reach it.
+* It only answers requests addressed to `127.0.0.1` or `localhost`, so web pages can't reach it through a domain name that points to the computer.
+* Every MCP request needs the access token.
+* Claude Code sessions that PacedMind starts may use a fixed set of everyday tools without asking; everything that deletes, moves calendar events, changes projects or starts other sessions asks for approval in the agent's terminal first. Codex follows its own approval settings. See [Start, resume and close sessions](/agents/start-and-manage#what-agents-may-do-without-asking).
+
+## Connect an agent
+
+Sessions that PacedMind starts from a task are connected automatically for Claude Code; Codex needs one entry in its configuration. To use PacedMind from agent sessions you start yourself:
+
+* **[Connect Claude Code](/mcp/connect-claude-code)**: one command, copied from **Settings → Connect your agents**.
+* **[Connect Codex](/mcp/connect-codex)**: an entry in `~/.codex/config.toml` and the `ORGANIZER_TOKEN` variable.
+
+Other MCP clients that support streamable HTTP with a bearer token can connect the same way.
+
+## What agents are told
+
+On connecting, the server gives the agent these instructions:
+
+> PacedMind is the user's personal planner. Areas (like Work or Personal) hold projects; a task lives in a project, in an area, or in the Inbox. The calendar has fixed events, and an auto-planner fills free work time with focus blocks. Agent sessions (Claude Code or Codex) work on tasks and report back.
+>
+> * Call get_overview first: it gives the current date and time and the ids of areas and projects.
+> * Refer to tasks by key (WRK-12), to projects by id or name, to areas by id, name or key.
+> * Dates accept YYYY-MM-DD, YYYY-MM-DDTHH:mm or phrases like "tomorrow 9:00" or "next friday". Results show the date that was used; check it.
+> * "planned" is the day the user means to work on a task, "due" is its deadline. Priorities: urgent, high, medium, low, none.
+> * Give tasks descriptions with enough context to act on them later.
+> * Ask the user before deleting anything or starting agent sessions.
+> * If PacedMind started you on a task (your first message names a task and a session), call start_task first and finish_task when the work is ready for review. Never mark your own task done.
+
+The [agent skills](/skills) go into more detail.
+
+## The tools
+
+The server has 37 tools in seven groups, listed in **Settings → Tools agents can use**:
+
+| Group | Tools |
+| --- | --- |
+| Overview | `get_overview`, `get_settings`, `update_settings` |
+| Areas | `list_areas`, `create_area`, `update_area`, `delete_area` |
+| Projects | `list_projects`, `get_project`, `create_project`, `update_project`, `delete_project`, `reorder_tasks` |
+| Tasks | `list_tasks`, `get_task`, `create_task`, `create_tasks`, `update_task`, `bulk_update_tasks`, `delete_task` |
+| Calendar | `list_events`, `create_event`, `update_event`, `delete_event`, `get_agenda`, `reschedule_day` |
+| Flows | `get_flow`, `connect_tasks`, `disconnect_tasks`, `add_to_flow`, `remove_from_flow` |
+| Sessions | `list_sessions`, `start_session`, `close_session`, `get_next_task`, `start_task`, `finish_task` |
+
+See the [tool reference](/mcp/tools) for every tool and its parameters.
+
+## Pages in this section
+
+* **[Connect Claude Code](/mcp/connect-claude-code)**
+* **[Connect Codex](/mcp/connect-codex)**
+* **[Tool reference](/mcp/tools)**: conventions, then one page per group.

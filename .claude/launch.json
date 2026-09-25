@@ -14,6 +14,20 @@
       "runtimeArgs": ["run", "dev", "--prefix", "site"],
       "port": 4330,
       "url": "http://127.0.0.1:4330"
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "docs"],
+      "port": 4340,
+      "url": "http://127.0.0.1:4340"
+    },
+    {
+      "name": "docs-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["docs/scripts/serve.mjs", "--port", "4341"],
+      "port": 4341,
+      "url": "http://127.0.0.1:4341"
     }
   ]
 }

@@ -1,0 +1,116 @@
+# The VPS's whole Caddy config: the web app at app.pacedmind.com, and on pacedmind.com the home page
+# (site/out in /srv/pacedmind/site) and the docs (docs/out in /srv/pacedmind/docs, served at /docs),
+# both static. Works with Caddy 2.6.2, the version Ubuntu 26.04 ships.
+#
+# deploy.sh installs it as /etc/caddy/Caddyfile next to app.caddy (this folder's app.caddy, or
+# app-placeholder.caddy before the web app launches), after `caddy validate` has passed, and reloads
+# Caddy. Caddy gets and renews the HTTPS certificates itself and redirects http:// to https://.
+
+# The web app, or a redirect to the site before it launches.
+app.pacedmind.com {
+	import app.caddy
+}
+
+# The one canonical host is pacedmind.com; www is only a way in, in one hop from http:// too.
+www.pacedmind.com, http://www.pacedmind.com {
+	redir https://pacedmind.com{uri} permanent
+}
+
+pacedmind.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# One URL per page, in both apps: no index.html, no .html and no trailing slash. The home page is
+	# "/", and the docs' home page is "/docs". Redirects keep the query string ("?" only if there is one).
+	map {query} {query_suffix} {
+		"" ""
+		default "?{query}"
+	}
+	@rootindex path /index /index.html
+	redir @rootindex /{query_suffix} permanent
+	@index path_regexp index ^(/.+)/index(\.html)?$
+	redir @index {re.index.1}{query_suffix} permanent
+	@html path_regexp html ^(.+)\.html$
+	redir @html {re.html.1}{query_suffix} permanent
+	@slash path_regexp slash ^(.+?)/+$
+	redir @slash {re.slash.1}{query_suffix} permanent
+
+	# /docs/<page>.mdx is the page as Markdown, as on Fumadocs sites with a server.
+	@mdx path_regexp mdx ^/docs/(.+)\.mdx$
+	rewrite @mdx /docs/llms.mdx/{re.mdx.1}/content.md
+
+	# Content-hashed build files are cached for good, images for a day; pages and text files are
+	# checked again on every visit (the ETag keeps that cheap).
+	map {path} {cache_control} {
+		~^/(docs/)?_next/static/ "public, max-age=31536000, immutable"
+		~\.(png|jpe?g|webp|avif|gif|svg|ico|woff2?)$ "public, max-age=86400"
+		default "no-cache"
+	}
+	header Cache-Control {cache_control}
+
+	# Readable, but kept out of search results: the files Next.js fetches for client-side navigation
+	# (every .txt except robots.txt and llms.txt), the docs as Markdown for assistants, and the docs'
+	# search index.
+	@noindex {
+		path *.txt *.mdx /docs/llms.mdx/* /docs/api/search
+		not path /robots.txt /llms.txt /llms-full.txt /docs/robots.txt /docs/llms.txt /docs/llms-full.txt
+	}
+	header @noindex X-Robots-Tag noindex
+
+	# Types the file server can't tell from the extension.
+	@markdown path *.mdx /docs/llms.mdx/*
+	header @markdown Content-Type "text/markdown; charset=utf-8"
+	header /docs/api/search Content-Type application/json
+	# An inline path matcher has to start with "/", so a suffix needs a named matcher.
+	@manifest path *.webmanifest
+	header @manifest Content-Type application/manifest+json
+
+	# The docs. A section has both views.html and a views/ folder; /docs is docs/index.html.
+	@docs path /docs /docs/*
+	handle @docs {
+		root * /srv/pacedmind
+		try_files {path} {path}.html {path}/index.html
+		# The 404 page and Next's own not-found route aren't pages of their own: answer 404, never 200.
+		@notpage path /docs/404.html /docs/_not-found.html
+		error @notpage 404
+		file_server {
+			disable_canonical_uris
+		}
+	}
+
+	# The home page and everything else.
+	handle {
+		root * /srv/pacedmind/site
+		try_files {path} {path}.html {path}/index.html
+		@notpage path /404.html /_not-found.html
+		error @notpage 404
+		file_server {
+			disable_canonical_uris
+		}
+	}
+
+	# Unknown addresses get a 404 page with the 404 status: the docs' own under /docs, the site's
+	# everywhere else.
+	handle_errors {
+		@missing expression {err.status_code} == 404
+		handle @missing {
+			header Cache-Control no-cache
+			handle @docs {
+				root * /srv/pacedmind
+				rewrite * /docs/404.html
+				file_server
+			}
+			handle {
+				root * /srv/pacedmind/site
+				rewrite * /404.html
+				file_server
+			}
+		}
+	}
+}

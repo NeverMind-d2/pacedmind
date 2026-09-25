@@ -1,0 +1,44 @@
+---
+title: Planning and work hours
+description: How deadlines, planned days, priorities, estimates, activities and work hours come together into a plan, and where to see it.
+---
+
+PacedMind plans from what the tasks already say. There's no separate schedule to maintain: the auto-planner turns the tasks' dates, priorities and estimates into suggested **focus blocks** inside your work hours, around your calendar activities.
+
+## The inputs
+
+| Input | Role in the plan | Set in |
+| --- | --- | --- |
+| **Due date** | Overdue tasks come first, then the earliest deadlines. | Task details, quick add, calendar, timeline |
+| **Planned date** | A task isn't placed before its planned day. | Task details, calendar, timeline |
+| **Priority** | Breaks ties; **Urgent** and **High** tasks are planned even without a date. | Task details, quick add |
+| **Estimate** | How much time the task gets. | Task details, quick add |
+| **Done by** | Only your tasks are planned; agents' tasks get a check block after they finish. | Task details |
+| **Activities** | Busy time, kept free with a margin. | Quick add, agents |
+| **Work hours, break and work days** | The time the plan may use. | **Settings → Auto-plan** |
+
+## Where the plan shows
+
+* **[Calendar: week](/views/calendar-week)**: the focus blocks in the grid, and the **Auto-plan** panel with notes, the hours per area and what didn't fit.
+* **[Timeline](/views/timeline)**: the **Your time** row, with the planned hours per day.
+* **Agents**: `get_agenda` lists each day's activities, deadlines, planned tasks and focus blocks, with the free time left.
+
+## Change the plan
+
+Focus blocks can't be moved by hand; they follow the tasks. To change them:
+
+* move a task to another day: set its **Planned** date, or drag it in the calendar or on the timeline;
+* change its priority or its estimate;
+* hand it to an agent, or mark it as yours;
+* add an activity to block time, or change the work hours.
+
+The week view recomputes the plan every time it loads; **Replan the week** does it on demand.
+
+## Plan with an agent
+
+The **pacedmind-planning** skill plans a day or a week in conversation: it reads the agenda, proposes what to do when, and moves only what you agree to. It also handles requests such as *move X to Friday*, *clear my afternoon* or *I'm sick today*. See [Agent skills](/skills).
+
+## Pages in this section
+
+* **[The auto-planner](/planning/auto-planner)**: exactly which tasks it plans, in which order, and how it sizes and places the blocks.
+* **[Work hours and days](/planning/work-hours)**: the settings the plan uses.

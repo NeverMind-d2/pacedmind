@@ -1,0 +1,89 @@
+---
+title: Sessions
+description: "Reference for the session tools: list_sessions, start_session and close_session, and the protocol agents follow on a task: get_next_task, start_task and finish_task."
+---
+
+## `list_sessions`
+
+**Read-only. Allowed without asking.**
+
+Agent sessions, newest first. Each line shows the session id, the task, the agent, the state, the time and the agent's note: `Session 3f2a9c1b · DEV-21 MCP server skeleton · Claude Code · finished, waiting for the user's review · 2026-09-24 13:53:07 · MCP endpoint added at /api/mcp. Tests pass.`
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `status` | `waiting`, `running` or `all` | `waiting`: finished and needing review. Default `all`. |
+| `project` | string | Only sessions for tasks in this project. |
+| `task` | string | Only sessions for this task. |
+| `limit` | number | 1 to 200. Default 20. |
+
+The states read: *starting*, *running*, *finished, waiting for the user's review*, *reviewed and done*, *closed* and *failed*.
+
+## `start_session`
+
+**Opens a terminal on the user's computer. Agents ask the user first.**
+
+Opens a new terminal with Claude Code or Codex working on a task, in the project's folder, the same way as **Start in Claude Code** in the app. See [Start, resume and close sessions](/agents/start-and-manage).
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `agent` | `claude` or `codex` | no | Defaults to the task's agent, else the project's, else Claude Code. |
+
+Returns *Started DEV-22 in Claude Code (session 3f2a9c1b). A terminal opened on the user's computer.* Fails when the task already has a running session, when it's the user's own task, or when the project's folder can't be used.
+
+## `close_session`
+
+**Deletes. Agents ask the user first.**
+
+Marks a running session as closed, for example when its terminal was closed or it got stuck. The task goes back to **Todo** if it was in progress.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `session` | string | yes | The session id from `list_sessions`. |
+
+## The protocol for agents working on a task
+
+A session that PacedMind starts begins with a message naming the task and the session. The agent then follows three steps. The **pacedmind-agent-session** skill teaches them in detail. See [How a session runs](/agents/lifecycle).
+
+### `get_next_task`
+
+**Read-only. Allowed without asking.**
+
+The next task in a project that is ready to be worked on: the first task in roadmap order that is to do or in the backlog and whose connections leading to it are all satisfied. Returns its full details, or *Nothing in … is ready right now.*
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | yes | The project's id or name. |
+
+### `start_task`
+
+**Changes data. Allowed without asking.**
+
+Tells PacedMind that the agent is starting work on a task. The session becomes **Running** (*Claude Code read the task over MCP*) and the task **In progress**.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `session` | string | no | The session id from the agent's first message. |
+| `agent` | `claude` or `codex` | no | Used when PacedMind didn't start the session. |
+
+Returns the task's full details, the session id, and the instruction: work on the task, then call `finish_task` with the task, the session and a one-line note, and don't mark the task done.
+
+With a session id of that task, `start_task` sets that session back to **Running**, whatever its state. Without one, it uses the task's running session; when there's none, as when the agent was started outside PacedMind, it creates one (*Started outside PacedMind*). It refuses to create one for tasks that are the user's own.
+
+### `finish_task`
+
+**Changes data. Allowed without asking.**
+
+Tells PacedMind that the work is finished and ready for the user to check.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `session` | string | no | The session id. |
+| `note` | string | yes | One line about what changed. |
+
+The session becomes **Finished** with the note, and the task **In review**. The result says *Recorded. DEV-21 is finished and waits for the user's check.*, then one line for each session of the flow that starts now, such as *PacedMind started DEV-24 in a new Codex session.*, and then either:
+
+* *Next in this same session: DEV-22 · Start sessions from the app.* and *Call start_task with task DEV-22 and session 9c0d1e2f, then keep working.*, when a **Same session** connection continues;
+* *You can stop here.*, otherwise.

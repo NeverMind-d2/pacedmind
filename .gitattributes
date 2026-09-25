@@ -1,0 +1,3 @@
+# The deploy files run or are read on the Linux server (sh, systemd, Caddy): LF endings in every
+# checkout, also on Windows with core.autocrlf.
+deploy/** text eol=lf

@@ -97,29 +97,11 @@ export function ScreenDeck({ items }: { items: DeckItem[] }) {
   };
 
   return (
-    <section aria-label="PacedMind's views" className="mt-[88px] sm:mt-32"
+    <section aria-label="PacedMind's views"
       onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(document.hidden)}
       onFocus={() => setPaused(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaused(false); }}>
-      <div role="tablist" aria-label="Views" onKeyDown={onKey} className="flex gap-[22px] sm:gap-9">
-        {items.map((it, i) => {
-          const on = i === front;
-          return (
-            <button key={it.tab} ref={(el) => { tabs.current[i] = el; }} type="button" role="tab" id={`view-tab-${i}`} aria-selected={on}
-              aria-controls={`view-panel-${i}`} tabIndex={on ? 0 : -1} onClick={() => pick(i)}
-              className={`flex flex-col gap-2.5 text-[17px] transition-colors sm:text-[19px] ${on ? "text-ink" : "text-mut hover:text-text"}`}>
-              {it.tab}
-              <span className="block h-0.5 w-full overflow-hidden bg-line">
-                {on && (
-                  <span key={cycling ? front : "still"} className={`block h-full w-full bg-ink ${cycling ? "pace" : ""}`}
-                    style={cycling ? { animationDuration: `${HOLD}ms`, animationPlayState: paused ? "paused" : "running" } : undefined} />
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div ref={stageRef} className={`deck-stage relative mt-7 w-full sm:mt-12 ${sized ? "is-sized" : ""}`}
+      {/* The screens first; the tabs and the caption under them act as their controls. */}
+      <div ref={stageRef} className={`deck-stage relative w-full ${sized ? "is-sized" : ""}`}
         style={{ aspectRatio: `${STAGE.w} / ${STAGE.h}`, perspective: `${Math.max(900, 2400 * k)}px`, perspectiveOrigin: "60% 40%" }}>
         <div className="deck-layer absolute inset-0" style={{ transformStyle: "preserve-3d", transform: "rotateX(7deg) rotateY(10deg)" }}>
           {items.map((it, i) => {
@@ -143,12 +125,31 @@ export function ScreenDeck({ items }: { items: DeckItem[] }) {
         </div>
       </div>
 
-      <div className="grid max-w-[600px]">
+      <div role="tablist" aria-label="Views" onKeyDown={onKey} className="mt-6 flex gap-[22px] sm:mt-8 sm:gap-9">
+        {items.map((it, i) => {
+          const on = i === front;
+          return (
+            <button key={it.tab} ref={(el) => { tabs.current[i] = el; }} type="button" role="tab" id={`view-tab-${i}`} aria-selected={on}
+              aria-controls={`view-panel-${i}`} tabIndex={on ? 0 : -1} onClick={() => pick(i)}
+              className={`flex flex-col gap-2.5 text-[17px] transition-colors sm:text-[19px] ${on ? "text-ink" : "text-mut hover:text-text"}`}>
+              {it.tab}
+              <span className="block h-0.5 w-full overflow-hidden bg-line">
+                {on && (
+                  <span key={cycling ? front : "still"} className={`block h-full w-full bg-ink ${cycling ? "pace" : ""}`}
+                    style={cycling ? { animationDuration: `${HOLD}ms`, animationPlayState: paused ? "paused" : "running" } : undefined} />
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 grid max-w-[560px]">
         {items.map((it, i) => (
           <div key={it.tab} role="tabpanel" id={`view-panel-${i}`} aria-labelledby={`view-tab-${i}`} aria-hidden={i !== front}
             className="[grid-area:1/1] transition-opacity duration-500" style={{ opacity: i === front ? 1 : 0 }}>
-            <h2 className="text-[26px] leading-[1.2] font-light text-ink sm:text-[32px]">{it.title}</h2>
-            <p className="mt-2.5 text-[16px] leading-[1.6] text-mut sm:text-[18px]">{it.body}</p>
+            <h2 className="text-[19px] leading-[1.3] text-ink">{it.title}</h2>
+            <p className="mt-1.5 text-[16px] leading-[1.6] text-mut">{it.body}</p>
           </div>
         ))}
       </div>

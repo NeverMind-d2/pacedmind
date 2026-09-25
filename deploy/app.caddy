@@ -1,0 +1,3 @@
+# app.pacedmind.com once the web app runs: the app (pacedmind-web.service) on 127.0.0.1:3000.
+encode zstd gzip
+reverse_proxy 127.0.0.1:3000

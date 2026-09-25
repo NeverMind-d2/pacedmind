@@ -1,0 +1,61 @@
+---
+title: Where your data lives
+description: The files PacedMind keeps on the computer, who can reach its server, and how to back up, move or reset the data.
+---
+
+PacedMind keeps everything in one SQLite database on the computer: areas, projects, tasks, activities, flows, agent sessions and settings, including the MCP access token. The app's server reads and writes it; nothing is sent elsewhere.
+
+## File locations
+
+| What | Where |
+| --- | --- |
+| The database | `%APPDATA%\Organizer\data\organizer.db`, with `organizer.db-wal` and `organizer.db-shm` next to it |
+| Files for each agent session: the start script and, for Claude Code, its MCP and hook settings | `%APPDATA%\Organizer\data\sessions\<session id>\` |
+| Working folders for tasks without a project folder, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
+| Window size and position, the theme, and whether the tray hint was shown | `%APPDATA%\Organizer\window-state.json` |
+| The server log | `%APPDATA%\Organizer\logs\server.log` |
+| The app itself | `%LOCALAPPDATA%\Programs\Organizer\` |
+
+Two shortcuts help:
+
+* **Settings → Data** shows the database's full path and how many sessions it has recorded.
+* The tray icon's menu has **Open data folder** and **Open server log**.
+
+## Who can reach it
+
+The server listens on `127.0.0.1`, port 4319, so only programs on the same computer can connect. It also refuses requests that name any other host than `127.0.0.1` or `localhost`, so a web page can't reach it through a borrowed domain name. It answers those with *Organizer only answers on 127.0.0.1*.
+
+The MCP server at `http://127.0.0.1:4319/api/mcp` also needs the access token from **Settings → MCP server**. See [MCP server](/mcp).
+
+The session files contain the access token: the start script passes it to the agent, Claude Code's MCP configuration (`mcp.json`) uses it for the connection, and its settings file (`settings.json`) uses it for the hook that reports the end of the session. Keep the data folder private, and regenerate the token if it was shared by mistake. Sessions that are resumed afterwards get the new token.
+
+## Back up and restore
+
+The database is written continuously while PacedMind runs, so copy it only while the app is closed. Its recent changes can sit in `organizer.db-wal` rather than in `organizer.db`, so always copy all three `organizer.db*` files together:
+
+1. Right-click the tray icon and select **Quit PacedMind**.
+2. Copy the folder `%APPDATA%\Organizer\data`, or at least every `organizer.db*` file in it.
+3. Start PacedMind again.
+
+To restore, quit PacedMind, delete the `organizer.db*` files in `%APPDATA%\Organizer\data`, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
+
+The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects and folders** afterwards.
+
+## Reset
+
+**Settings → Data** has two buttons:
+
+| Button | Result |
+| --- | --- |
+| **Load sample data** | Replaces everything with an example workspace. Asks *Replace everything with the sample data?* first. |
+| **Start empty** | Deletes all tasks, projects, activities and sessions and restores the five default areas. Asks *Delete all tasks, projects, activities and sessions?* first. |
+
+Neither can be undone. Both keep the settings: work hours, how sessions start, and the MCP access token. They change the database only: the `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
+
+## Reinstalling and uninstalling
+
+Updating or reinstalling PacedMind never touches `%APPDATA%\Organizer`. Uninstalling doesn't either; delete that folder to remove the data. See [Install PacedMind](/getting-started/install#uninstall).
+
+## A development copy
+
+Running PacedMind from its source code with `npm run dev` starts a separate copy at `http://127.0.0.1:4320`. It uses its own database, `data\organizer.db` inside the source folder, filled with sample data on its first start. It never reads or changes the desktop app's data.
