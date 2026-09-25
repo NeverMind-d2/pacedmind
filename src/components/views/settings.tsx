@@ -1,9 +1,16 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { createProjectAction, resetDataAction, updateProjectAction, updateSettingsAction } from "@/app/actions";
+import {
+  connectClaudeAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
+  updateProjectAction, updateSettingsAction,
+} from "@/app/actions";
+import {
+  changePasswordAction, deleteAccountAction, removeFactorAction, revokeDeviceAction, signOutAction, signOutEverywhereAction,
+} from "@/app/auth/actions";
 import { projectColor } from "@/lib/colors";
-import { AGENT_LABEL, type AgentId, type Area, type Project, type Settings } from "@/lib/types";
+import { AGENT_LABEL, type AgentId, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings } from "@/lib/types";
 import { Icon } from "../icons";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -20,6 +27,12 @@ const TOOL_GROUPS: [string, string[]][] = [
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const REMOTE_TEXT: Record<RemoteStart, string> = {
+  off: "Sessions asked for from the web app or another computer are refused.",
+  ask: "Sessions asked for from the web app or another computer wait here until you allow them.",
+  auto: "Sessions asked for from the web app or another computer start right away. Asking always takes a fresh two-factor code.",
+};
 
 function Section({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
   return (
@@ -41,121 +54,267 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const input = "h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-2 text-[12.5px] text-fg2 outline-none focus:border-line-strong";
+const codeInput = cx(input, "max-w-[96px] flex-none text-center font-mono tracking-[0.2em]");
+const digits = (v: string) => v.replace(/\D/g, "").slice(0, 6);
 
 function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(() => toast(`${what} copied`), () => toast("Couldn't copy", "error"));
 }
 
-export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessionsCount }: {
-  settings: Settings; projects: Project[]; areas: Area[]; mcpUrl: string; dbFile: string; sessionsCount: number;
+function seen(iso: string | null): string {
+  if (!iso) return "never";
+  const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (min < 2) return "now";
+  if (min < 60) return `${min} min ago`;
+  if (min < 48 * 60) return `${Math.round(min / 60)} h ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+export interface AccountView {
+  email: string | null;
+  factors: { id: string; name: string; added: string }[];
+  backupCodes: boolean;
+}
+
+export function SettingsView({ settings, projects, areas, account, devices, device, mcp, legacy, sessionsCount }: {
+  settings: Settings; projects: Project[]; areas: Area[]; account: AccountView; devices: Device[];
+  /** This computer's own settings; null in the web app. */
+  device: DeviceSettings | null;
+  /** Null in the web app: agents connect to the desktop app, where their terminals run. */
+  mcp: { url: string; token: string } | null;
+  /** What this computer's local database from before accounts holds, if there is one. */
+  legacy: { file: string; areas: number; projects: number; tasks: number } | null;
+  sessionsCount: number;
 }) {
-  const { run } = useAction();
+  const { run, pending } = useAction();
+  const router = useRouter();
   const [showToken, setShowToken] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", areaId: "dev", folder: "", agent: "claude" as AgentId | null });
+  const defaultArea = areas.find((a) => a.key === "DEV")?.id ?? areas[0]?.id ?? "";
+  const [newProject, setNewProject] = useState({ name: "", areaId: defaultArea, folder: "", agent: "claude" as AgentId | null });
+  const [password, setPassword] = useState({ current: "", next: "", again: "", code: "" });
+  const [removing, setRemoving] = useState<{ id: string; code: string } | null>(null);
+  const [deleting, setDeleting] = useState({ email: "", code: "" });
   const save = (patch: Partial<Settings>) => run(() => updateSettingsAction(patch), "Saved");
-  const token = settings.mcpToken;
-  const claudeCmd = `claude mcp add --transport http organizer ${mcpUrl} --header "Authorization: Bearer ${token}"`;
-  const codexToml = `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcpUrl}"\nbearer_token_env_var = "ORGANIZER_TOKEN"`;
+  const saveDevice = (patch: Parameters<typeof updateDeviceSettingsAction>[0]) => run(() => updateDeviceSettingsAction(patch));
+  const token = mcp?.token ?? "";
+  const claudeCmd = mcp ? `claude mcp add --transport http --scope user organizer ${mcp.url} --header "Authorization: Bearer ${token}"` : "";
+  const codexToml = mcp ? `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcp.url}"\nbearer_token_env_var = "ORGANIZER_TOKEN"` : "";
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <Icon name="settings" className="text-mut" />
         <h1 className="text-[14px] font-semibold text-strong">Settings</h1>
-        <span className="text-mut2">Appearance, sessions, MCP and planning</span>
+        <span className="text-mut2">Account, security, this computer and planning</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-10 px-10 py-8">
           <div className="flex flex-col gap-7">
+            <Section title="Account" note="Your tasks, projects and calendar are stored in your PacedMind account.">
+              <Row label="Signed in as">
+                <span className="flex-1 truncate text-[12.5px] text-fg2">{account.email ?? "Unknown"}</span>
+                <Button size="sm" onClick={() => run(() => signOutAction())}>Sign out</Button>
+              </Row>
+              <Row label="Everywhere">
+                <span className="flex-1 text-[12.5px] text-fg3">Sign out every browser and computer, this one too.</span>
+                <Button size="sm" onClick={() => confirm("Sign out everywhere, including here?") && run(() => signOutEverywhereAction())}>Sign out all</Button>
+              </Row>
+            </Section>
+
+            <Section title="Two-factor sign-in"
+              note="Every sign-in asks for a code from an authenticator app, because PacedMind can start agents on your computers. Keep a second authenticator in case you lose your phone.">
+              {account.factors.map((f) => (
+                <Row key={f.id} label={f.name}>
+                  <span className="flex-1 text-[12.5px] text-fg3">Added {f.added}</span>
+                  {removing?.id === f.id ? (
+                    <>
+                      <input className={codeInput} value={removing.code} onChange={(e) => setRemoving({ id: f.id, code: digits(e.target.value) })}
+                        placeholder="Code" aria-label="A code from your other authenticator" inputMode="numeric" autoComplete="one-time-code" />
+                      <Button size="sm" disabled={pending} onClick={() => run(() => removeFactorAction(f.id, removing.code).then((r) => { if (r.ok) setRemoving(null); return r; }))}>Remove</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setRemoving(null)}>Cancel</Button>
+                    </>
+                  ) : (
+                    <Button size="sm" disabled={account.factors.length < 2} title={account.factors.length < 2 ? "Add another authenticator first" : undefined}
+                      onClick={() => setRemoving({ id: f.id, code: "" })}>Remove</Button>
+                  )}
+                </Row>
+              ))}
+              <Row label="Add">
+                <span className="flex-1 text-[12.5px] text-fg3">{account.factors.length < 2 ? "Add a second authenticator as a backup." : "Another phone or password manager."}</span>
+                <Button size="sm" onClick={() => router.push("/login/setup?add=1")}>Add authenticator</Button>
+              </Row>
+              {account.backupCodes && (
+                <Row label="Backup codes"><span className="text-[12.5px] text-fg3">Set up</span></Row>
+              )}
+            </Section>
+
+            <Section title="Password" note="Changing it needs your current password and a current two-factor code, and signs out your other devices.">
+              <Row label="Current">
+                <input type="password" className={input} value={password.current} onChange={(e) => setPassword((p) => ({ ...p, current: e.target.value }))}
+                  autoComplete="current-password" maxLength={72} aria-label="Current password" />
+              </Row>
+              <Row label="New password">
+                <input type="password" className={input} value={password.next} onChange={(e) => setPassword((p) => ({ ...p, next: e.target.value }))}
+                  autoComplete="new-password" maxLength={72} placeholder="At least 12 characters" aria-label="New password" />
+              </Row>
+              <Row label="Again">
+                <input type="password" className={input} value={password.again} onChange={(e) => setPassword((p) => ({ ...p, again: e.target.value }))}
+                  autoComplete="new-password" maxLength={72} aria-label="New password again" />
+              </Row>
+              <Row label="Code">
+                <input className={codeInput} value={password.code} onChange={(e) => setPassword((p) => ({ ...p, code: digits(e.target.value) }))}
+                  placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Two-factor code" />
+                <span className="flex-1" />
+                <Button disabled={pending || !password.current || !password.next || password.code.length !== 6} onClick={() => {
+                  if (password.next !== password.again) return toast("The two passwords don't match", "error");
+                  run(() => changePasswordAction(password.current, password.next, password.code)
+                    .then((r) => { if (r.ok) setPassword({ current: "", next: "", again: "", code: "" }); return r; }));
+                }}>Change password</Button>
+              </Row>
+            </Section>
+
+            <Section title="Computers" note="Computers with the PacedMind desktop app signed in to your account. Signing one out ends its session at once, and its agents lose access to PacedMind.">
+              {devices.length === 0 && <Row label="None yet"><span className="text-[12.5px] text-fg3">Sign in to the desktop app to add a computer.</span></Row>}
+              {devices.map((x) => (
+                <Row key={x.id} label={x.platform === "windows" ? "Windows" : x.platform === "macos" ? "Mac" : "Linux"}>
+                  <span className="flex-1 truncate text-[12.5px] text-fg2">
+                    {x.name}{device?.deviceId === x.id && <span className="ml-2 text-mut2">This computer</span>}
+                  </span>
+                  <span className="text-[12px] text-mut2">Seen {seen(x.lastSeenAt)}</span>
+                  <Button size="sm" onClick={() => confirm(`Sign ${x.name} out of PacedMind? Its agents lose access right away.`) && run(() => revokeDeviceAction(x.id))}>Sign out</Button>
+                </Row>
+              ))}
+            </Section>
+
             <Section title="Appearance">
               <Row label="Theme"><ThemeSelector /></Row>
             </Section>
-            <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished.">
-              <Row label="Status">
-                <span className="flex items-center gap-2 text-[12.5px] text-fg3"><span className="h-1.5 w-1.5 rounded-full bg-fg3" />Running with this app</span>
-              </Row>
-              <Row label="Address">
-                <span className="flex-1 truncate font-mono text-[12px] text-fg2">{mcpUrl}</span>
-                <Button size="sm" onClick={() => copy(mcpUrl, "Address")}>Copy</Button>
-              </Row>
-              <Row label="Access token">
-                <span className="flex-1 truncate font-mono text-[12px] text-fg2">{showToken ? token : `${token.slice(0, 4)}${"•".repeat(16)}${token.slice(-4)}`}</span>
-                <Button size="sm" onClick={() => setShowToken((s) => !s)}>{showToken ? "Hide" : "Show"}</Button>
-                <Button size="sm" onClick={() => copy(token, "Token")}>Copy</Button>
-                <Button size="sm" onClick={() => {
-                  if (!confirm("Make a new token? Agents set up with the old one lose access until you update them.")) return;
-                  const bytes = crypto.getRandomValues(new Uint8Array(18));
-                  save({ mcpToken: `org_${btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}` });
-                }}>Regenerate</Button>
-              </Row>
-            </Section>
 
-            <Section title="Connect your agents" note="Sessions you start from PacedMind are connected automatically. Set this up once to use PacedMind from sessions you start yourself.">
-              <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
-                <div className="flex items-center gap-2.5">
-                  <Icon name="terminal" size={14} className="text-mut" />
-                  <span className="flex-1 text-[13px] font-medium text-fg">Claude Code</span>
-                  <Button size="sm" onClick={() => copy(claudeCmd, "Command")}>Copy command</Button>
-                </div>
-                <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{claudeCmd}</pre>
-              </div>
-              <div className="flex flex-col gap-2.5 p-3.5">
-                <div className="flex items-center gap-2.5">
-                  <Icon name="terminal" size={14} className="text-mut" />
-                  <span className="flex-1 text-[13px] font-medium text-fg">Codex</span>
-                  <Button size="sm" onClick={() => copy(codexToml, "Config")}>Copy config</Button>
-                </div>
-                <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{codexToml}</pre>
-                <p className="text-[12px] text-mut2">Codex reads the token from the <span className="font-mono">ORGANIZER_TOKEN</span> environment variable. Sessions started from PacedMind set it for you.</p>
-              </div>
-            </Section>
-
-            <Section title="Starting sessions">
-              <Row label="Terminal">
-                <Segmented value={settings.terminal} onChange={(v) => save({ terminal: v })}
-                  options={[{ value: "wt", label: "Windows Terminal" }, { value: "cmd", label: "Command Prompt" }]} />
+            <Section title="Delete account" note="Deletes your account and everything in it: areas, projects, tasks, calendar, sessions and computers. It can't be undone.">
+              <Row label="Your email">
+                <input className={input} value={deleting.email} onChange={(e) => setDeleting((d) => ({ ...d, email: e.target.value }))} placeholder={account.email ?? ""} aria-label="Type your email to confirm" />
               </Row>
-              <Row label="Claude command">
-                <input className={input} defaultValue={settings.claudeCommand} aria-label="Claude command"
-                  onBlur={(e) => e.target.value.trim() && e.target.value !== settings.claudeCommand && save({ claudeCommand: e.target.value.trim() })} />
+              <Row label="Code">
+                <input className={codeInput} value={deleting.code} onChange={(e) => setDeleting((d) => ({ ...d, code: digits(e.target.value) }))}
+                  placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Two-factor code" />
+                <span className="flex-1" />
+                <Button disabled={pending || deleting.code.length !== 6 || !deleting.email}
+                  onClick={() => confirm("Delete your PacedMind account and all its data for good?") && run(() => deleteAccountAction(deleting.code, deleting.email))}>
+                  Delete account
+                </Button>
               </Row>
-              <Row label="Codex command">
-                <input className={input} defaultValue={settings.codexCommand} aria-label="Codex command"
-                  onBlur={(e) => e.target.value.trim() && e.target.value !== settings.codexCommand && save({ codexCommand: e.target.value.trim() })} />
-              </Row>
-            </Section>
-
-            <Section title="Tools agents can use"
-              note={<>Sessions started from PacedMind may read, add and update tasks without asking; anything else asks in their terminal first. Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
-              {TOOL_GROUPS.map(([group, names]) => (
-                <div key={group} className="flex items-start gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
-                  <span className="w-[72px] shrink-0 text-[12.5px] text-mut2">{group}</span>
-                  <span className="min-w-0 flex-1 font-mono text-[11.5px] leading-relaxed text-fg3">{names.join(", ")}</span>
-                </div>
-              ))}
             </Section>
           </div>
 
           <div className="flex flex-col gap-7">
-            <Section title="Projects and folders" note="A session works in its project's folder. Tasks without a folder get a scratch folder next to the database.">
-              {projects.map((p) => {
-                return (
-                  <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
-                    <div className="flex items-center gap-2.5">
-                      <Dot color={projectColor(p, areas)} size={7} />
-                      <span className="flex-1 truncate text-[13px] text-fg">{p.name}</span>
-                      <Menu align="right" width={170}
-                        trigger={<button type="button" className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[12px] text-mut hover:bg-hover">{p.agent ? AGENT_LABEL[p.agent] : "No agent"}<Icon name="chevronDown" size={11} /></button>}
-                        items={[{ value: null as AgentId | null, label: "No agent" }, { value: "claude" as AgentId | null, label: "Claude Code" }, { value: "codex" as AgentId | null, label: "Codex" }]}
-                        onSelect={(v) => run(() => updateProjectAction(p.id, { agent: v }), "Saved")} />
+            {!device && (
+              <Section title="Agent sessions" note="Claude Code and Codex run in terminals on your computers, so they connect to the PacedMind desktop app. From here you can ask a computer to start a session; it needs a fresh two-factor code, and the computer decides by its own setting.">
+                <Row label="Status"><span className="text-[12.5px] text-fg3">Handled by the desktop app</span></Row>
+              </Section>
+            )}
+
+            {device && <>
+              <Section title="This computer"
+                note={device.encrypted
+                  ? "What runs here is decided here. Agent commands, project folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain."
+                  : "What runs here is decided here. Agent commands, project folders, flow switches and access tokens stay on this computer. This development server keeps them unencrypted in data/."}>
+                <Row label="Name">
+                  <input className={input} defaultValue={device.name} maxLength={80} aria-label="This computer's name"
+                    onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.name && saveDevice({ name: e.target.value })} />
+                </Row>
+                <Row label="From elsewhere">
+                  <Segmented value={device.remoteStart} onChange={(v) => saveDevice({ remoteStart: v })}
+                    options={[{ value: "off", label: "Refuse" }, { value: "ask", label: "Ask me" }, { value: "auto", label: "Start" }]} />
+                </Row>
+                <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">{REMOTE_TEXT[device.remoteStart]} Agents asking over MCP always wait for you.</div>
+              </Section>
+
+              <Section title="Starting sessions">
+                <Row label="Terminal">
+                  <Segmented value={device.terminal} onChange={(v) => saveDevice({ terminal: v })}
+                    options={[{ value: "wt", label: "Windows Terminal" }, { value: "cmd", label: "Command Prompt" }]} />
+                </Row>
+                <Row label="Claude command">
+                  <input className={input} defaultValue={device.claudeCommand} aria-label="Claude command"
+                    onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.claudeCommand && saveDevice({ claudeCommand: e.target.value })} />
+                </Row>
+                <Row label="Codex command">
+                  <input className={input} defaultValue={device.codexCommand} aria-label="Codex command"
+                    onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.codexCommand && saveDevice({ codexCommand: e.target.value })} />
+                </Row>
+              </Section>
+            </>}
+
+            {mcp && <>
+              <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished. Sessions PacedMind starts get their own token, which works only for their task and only while they run.">
+                <Row label="Address">
+                  <span className="flex-1 truncate font-mono text-[12px] text-fg2">{mcp.url}</span>
+                  <Button size="sm" onClick={() => copy(mcp.url, "Address")}>Copy</Button>
+                </Row>
+                <Row label="Your token">
+                  <span className="flex-1 truncate font-mono text-[12px] text-fg2">{showToken ? token : `${token.slice(0, 5)}${"•".repeat(16)}${token.slice(-4)}`}</span>
+                  <Button size="sm" onClick={() => setShowToken((s) => !s)}>{showToken ? "Hide" : "Show"}</Button>
+                  <Button size="sm" onClick={() => copy(token, "Token")}>Copy</Button>
+                  <Button size="sm" onClick={() => confirm("Make a new token? Agents set up with the old one lose access until you connect them again.") && run(() => rotateMcpTokenAction())}>New token</Button>
+                </Row>
+              </Section>
+
+              <Section title="Connect your agents" note="For Claude Code and Codex you start yourself. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.">
+                <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <Icon name="terminal" size={14} className="text-mut" />
+                    <span className="flex-1 text-[13px] font-medium text-fg">Claude Code</span>
+                    <Button size="sm" disabled={pending} onClick={() => run(() => connectClaudeAction())}>Connect</Button>
+                    <Button size="sm" onClick={() => copy(claudeCmd, "Command")}>Copy command</Button>
+                  </div>
+                  <p className="text-[12px] text-mut2">Connect adds PacedMind to Claude Code for all your projects, with your token, without showing it.</p>
+                </div>
+                <div className="flex flex-col gap-2.5 p-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <Icon name="terminal" size={14} className="text-mut" />
+                    <span className="flex-1 text-[13px] font-medium text-fg">Codex</span>
+                    <Button size="sm" onClick={() => copy(codexToml, "Config")}>Copy config</Button>
+                  </div>
+                  <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{codexToml}</pre>
+                  <p className="text-[12px] text-mut2">Codex reads the token from the <span className="font-mono">ORGANIZER_TOKEN</span> environment variable. Sessions started from PacedMind set it for you, with their own token.</p>
+                </div>
+              </Section>
+
+              <Section title="Tools agents can use"
+                note={<>Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they&apos;re asked. Starting a session over MCP waits for you to allow it here. Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
+                {TOOL_GROUPS.map(([group, names]) => (
+                  <div key={group} className="flex items-start gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
+                    <span className="w-[72px] shrink-0 text-[12.5px] text-mut2">{group}</span>
+                    <span className="min-w-0 flex-1 font-mono text-[11.5px] leading-relaxed text-fg3">{names.join(", ")}</span>
+                  </div>
+                ))}
+              </Section>
+            </>}
+
+            <Section title={device ? "Projects on this computer" : "Projects"}
+              note={device
+                ? "A session works in its project's folder on this computer; without one it gets a scratch folder. A flow only starts sessions by itself when it's on here. Changing the folder turns the flow off."
+                : "Folders and flows are set in the desktop app, on the computer where the sessions run."}>
+              {projects.map((p) => (
+                <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
+                  <div className="flex items-center gap-2.5">
+                    <Dot color={projectColor(p, areas)} size={7} />
+                    <span className="flex-1 truncate text-[13px] text-fg">{p.name}</span>
+                    <Menu align="right" width={170}
+                      trigger={<button type="button" className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[12px] text-mut hover:bg-hover">{p.agent ? AGENT_LABEL[p.agent] : "No agent"}<Icon name="chevronDown" size={11} /></button>}
+                      items={[{ value: null as AgentId | null, label: "No agent" }, { value: "claude" as AgentId | null, label: "Claude Code" }, { value: "codex" as AgentId | null, label: "Codex" }]}
+                      onSelect={(v) => run(() => updateProjectAction(p.id, { agent: v }), "Saved")} />
+                    {device && <>
                       <span className="text-[12px] text-mut2">Flow</span>
                       <Switch on={p.flowOn} label={`Flow for ${p.name}`} onChange={(v) => run(() => updateProjectAction(p.id, { flowOn: v }), v ? "Flow on" : "Flow paused")} />
-                    </div>
+                    </>}
+                  </div>
+                  {device && (
                     <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder="C:\path\to\repo" aria-label={`Folder for ${p.name}`}
                       onBlur={(e) => (e.target.value.trim() || null) !== p.folder && run(() => updateProjectAction(p.id, { folder: e.target.value.trim() || null }), "Folder saved")} />
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              ))}
               <div className="flex flex-col gap-2 bg-raised px-3.5 py-3">
                 <div className="text-[12px] text-mut2">New project</div>
                 <div className="flex gap-2">
@@ -166,7 +325,7 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
                     onSelect={(v) => setNewProject((n) => ({ ...n, areaId: v }))} />
                 </div>
                 <div className="flex gap-2">
-                  <input className={cx(input, "font-mono text-[11.5px]")} placeholder="Folder (optional)" value={newProject.folder} onChange={(e) => setNewProject((n) => ({ ...n, folder: e.target.value }))} aria-label="Project folder" />
+                  {device && <input className={cx(input, "font-mono text-[11.5px]")} placeholder="Folder (optional)" value={newProject.folder} onChange={(e) => setNewProject((n) => ({ ...n, folder: e.target.value }))} aria-label="Project folder" />}
                   <Button onClick={() => {
                     run(() => createProjectAction({ ...newProject, folder: newProject.folder.trim() || null }), `Created ${newProject.name}`);
                     setNewProject((n) => ({ ...n, name: "", folder: "" }));
@@ -199,10 +358,16 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
               </Row>
             </Section>
 
-            <Section title="Data" note={`Everything is stored in one SQLite file on this computer. ${sessionsCount} sessions recorded so far.`}>
-              <Row label="Database">
-                <span className="flex-1 truncate font-mono text-[11.5px] text-fg3">{dbFile}</span>
-              </Row>
+            <Section title="Data" note={`Stored in your account, not on this computer. ${sessionsCount} sessions recorded so far.`}>
+              {legacy && legacy.tasks + legacy.projects > 0 && (
+                <Row label="This computer">
+                  <span className="flex-1 truncate text-[12.5px] text-fg3" title={legacy.file}>
+                    {legacy.tasks} tasks and {legacy.projects} projects from before accounts
+                  </span>
+                  <Button onClick={() => confirm("Import them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer.")
+                    && run(() => importLegacyAction())}>Import</Button>
+                </Row>
+              )}
               <Row label="Reset">
                 <Button onClick={() => confirm("Replace everything with the sample data?") && run(() => resetDataAction("sample"), "Sample data loaded")}>Load sample data</Button>
                 <Button onClick={() => confirm("Delete all tasks, projects, activities and sessions?") && run(() => resetDataAction("empty"), "Workspace cleared")}>Start empty</Button>

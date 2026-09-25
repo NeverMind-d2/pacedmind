@@ -2,15 +2,15 @@ import "server-only";
 import { format } from "date-fns";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
-import { tx } from "../db";
 import { mcpUrl } from "../launcher";
+import { agentCommandFor, deviceConfig } from "../device";
 import * as repo from "../repo";
 import { planTimeBlocks, type PlanResult } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, hhmm, minutesOf, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import { PRIORITY_LABEL, type CalEvent } from "@/lib/types";
 import {
   areaRef, dateInput, dateTimeInput, eventLine, fail, findAreaOrInbox, findEvent, fmtMinutes, fmtWhen, isOpen, names,
-  taskLine, todayLine, tool, when,
+  taskLine, todayLine, tool, when, type Names,
 } from "./common";
 
 const DAY_NAMES = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
@@ -18,9 +18,9 @@ const dayLabel = (d: string) => `${format(parseLocal(d), "EEE")} ${d}`;
 /** 1 = Monday … 7 = Sunday, as in the work-day settings. */
 const weekdayOf = (d: string) => ((parseLocal(d).getDay() + 6) % 7) + 1;
 
-function eventText(e: CalEvent): string {
+function eventText(e: CalEvent, n: Names): string {
   return `Event ${e.id} · ${e.title} · ${fmtWhen(e.start.slice(0, 10))} ${timeOf(e.start)}–${timeOf(e.end)}` +
-    `${e.areaId ? ` · ${names().area(e.areaId)}` : ""}${e.recurrence === "weekly" ? ` · weekly on ${format(parseLocal(e.start), "EEEE")}s` : ""}`;
+    `${e.areaId ? ` · ${n.area(e.areaId)}` : ""}${e.recurrence === "weekly" ? ` · weekly on ${format(parseLocal(e.start), "EEEE")}s` : ""}`;
 }
 
 /** An event's end: a time on the start's day ("18:30"), a date-time on the same day, or start + duration. */
@@ -58,15 +58,15 @@ export function registerCalendarTools(server: McpServer) {
       area: areaRef.optional(),
     }),
     kind: "read",
-  }, (args) => {
+  }, async (args) => {
     const from = args.from ? when(args.from, "drop") : toDateStr(new Date());
     const to = args.to ? when(args.to, "drop") : addDaysStr(from, 6);
     if (to < from) fail("to is before from.");
     if (dayDiff(from, to) > 92) fail("Ask for at most three months at a time.");
-    const area = args.area ? findAreaOrInbox(args.area) : undefined;
-    const n = names();
-    const weekly = new Set(repo.listEvents().filter((e) => e.recurrence === "weekly").map((e) => e.id));
-    const occ = repo.occurrences(from, to).filter((e) => area === undefined || e.areaId === (area?.id ?? null));
+    const area = args.area ? await findAreaOrInbox(args.area) : undefined;
+    const [n, list, all] = await Promise.all([names(), repo.listEvents(), repo.occurrences(from, to)]);
+    const weekly = new Set(list.filter((e) => e.recurrence === "weekly").map((e) => e.id));
+    const occ = all.filter((e) => area === undefined || e.areaId === (area?.id ?? null));
     if (!occ.length) return `No events from ${fmtWhen(from)} to ${fmtWhen(to)}.`;
     const days = [...new Set(occ.map((e) => dateOnly(e.start)))];
     return days.map((d) => `${dayLabel(d)}:\n${occ.filter((e) => dateOnly(e.start) === d).map((e) => `- ${eventLine(e, n, weekly.has(e.eventId))}`).join("\n")}`).join("\n\n");
@@ -85,13 +85,13 @@ export function registerCalendarTools(server: McpServer) {
       weekly: z.boolean().optional(),
     }),
     kind: "write",
-  }, (args) => {
+  }, async (args) => {
     if (!args.title.trim()) fail("An event needs a title.");
     const start = when(args.start, "required");
     const end = endFor(start, args.end, args.duration_minutes);
-    const areaId = args.area ? findAreaOrInbox(args.area)?.id ?? null : null;
-    const id = repo.createEvent({ title: args.title, areaId, start, end, recurrence: args.weekly ? "weekly" : null });
-    return `Created ${eventText(repo.getEvent(id)!)}.`;
+    const areaId = args.area ? (await findAreaOrInbox(args.area))?.id ?? null : null;
+    const id = await repo.createEvent({ title: args.title, areaId, start, end, recurrence: args.weekly ? "weekly" : null });
+    return `Created ${eventText((await repo.getEvent(id))!, await names())}.`;
   });
 
   tool(server, "update_event", {
@@ -111,8 +111,8 @@ export function registerCalendarTools(server: McpServer) {
       weekly: z.boolean().optional().describe("Turn repeating on or off"),
     }),
     kind: "write",
-  }, (args) => {
-    const e = findEvent(args.event);
+  }, async (args) => {
+    const e = await findEvent(args.event);
     const moves = [args.start, args.move_to_date, args.shift_days, args.shift_minutes].filter((x) => x !== undefined).length;
     if (moves > 1) fail("Use only one of start, move_to_date, shift_days and shift_minutes.");
     let start = e.start;
@@ -128,14 +128,14 @@ export function registerCalendarTools(server: McpServer) {
       ? endFor(start, args.end, args.duration_minutes)
       : endFor(start, undefined, durationOf(e));
     if (args.title !== undefined && !args.title.trim()) fail("The title can't be empty.");
-    repo.updateEvent(e.id, {
+    await repo.updateEvent(e.id, {
       title: args.title,
-      areaId: args.area === undefined ? undefined : findAreaOrInbox(args.area)?.id ?? null,
+      areaId: args.area === undefined ? undefined : (await findAreaOrInbox(args.area))?.id ?? null,
       start,
       end,
       recurrence: args.weekly === undefined ? undefined : args.weekly ? "weekly" : null,
     });
-    return `Updated ${eventText(repo.getEvent(e.id)!)}.`;
+    return `Updated ${eventText((await repo.getEvent(e.id))!, await names())}.`;
   });
 
   tool(server, "delete_event", {
@@ -143,10 +143,11 @@ export function registerCalendarTools(server: McpServer) {
     description: "Remove an event from the calendar. For a weekly event this removes every occurrence. Ask the user first.",
     input: z.object({ event: z.number().int() }),
     kind: "delete",
-  }, ({ event }) => {
-    const e = findEvent(event);
-    repo.deleteEvent(e.id);
-    return `Deleted ${eventText(e)}.`;
+  }, async ({ event }) => {
+    const e = await findEvent(event);
+    const n = await names();
+    await repo.deleteEvent(e.id);
+    return `Deleted ${eventText(e, n)}.`;
   });
 
   tool(server, "get_agenda", {
@@ -158,22 +159,26 @@ export function registerCalendarTools(server: McpServer) {
       to: dateInput.optional().describe("Defaults to from; at most 14 days"),
     }),
     kind: "read",
-  }, (args) => {
+  }, async (args) => {
     const now = new Date();
     const today = toDateStr(now);
     const from = args.from ? when(args.from, "drop") : today;
     const to = args.to ? when(args.to, "drop") : from;
     if (to < from) fail("to is before from.");
     if (dayDiff(from, to) > 13) fail("Ask for at most 14 days at a time.");
-    const n = names();
-    const tasks = repo.listTasks();
+    const [n, tasks, settings, list, sessions] = await Promise.all([
+      names(), repo.listTasks(), repo.getSettings(), repo.listEvents(), repo.listSessions(),
+    ]);
     const open = tasks.filter(isOpen);
-    const settings = repo.getSettings();
-    const weekly = new Set(repo.listEvents().filter((e) => e.recurrence === "weekly").map((e) => e.id));
-    const events = repo.occurrences(from, to);
+    const weekly = new Set(list.filter((e) => e.recurrence === "weekly").map((e) => e.id));
+    // Every occurrence from the earlier of from and today, so each day below picks its own from one list.
+    const start = from < today ? from : today;
+    const occ = await repo.occurrences(start, to >= today ? to : today);
+    const between = (a: string, b: string) => occ.filter((e) => dateOnly(e.start) >= a && dateOnly(e.start) <= b);
+    const events = between(from, to);
     let plan: PlanResult | null = null;
     if (to >= today) {
-      plan = planTimeBlocks({ tasks, sessions: repo.listSessions(), settings, now, events: repo.occurrences(today, to), days: dayDiff(today, to) + 1 });
+      plan = planTimeBlocks({ tasks, sessions, settings, now, events: between(today, to), days: dayDiff(today, to) + 1 });
     }
     const out = [todayLine(now)];
     for (let d = from; d <= to; d = addDaysStr(d, 1)) {
@@ -192,7 +197,7 @@ export function registerCalendarTools(server: McpServer) {
       if (planned.length) lines.push("Planned:", ...planned.map((t) => `- ${taskLine(t, n)}`));
       if (d >= today && workday) {
         const capacity = planTimeBlocks({
-          tasks: [], sessions: [], settings, now: d === today ? now : parseLocal(d), events: repo.occurrences(d, d), days: 1,
+          tasks: [], sessions: [], settings, now: d === today ? now : parseLocal(d), events: between(d, d), days: 1,
         }).capacityMinutes;
         const used = blocks.reduce((m, b) => m + minutesOf(b.end.slice(11, 16)) - minutesOf(b.start.slice(11, 16)), 0);
         lines.push(`Free focus time${d === today ? " left" : ""}: ${fmtMinutes(capacity)} · planned: ${fmtMinutes(used)}`);
@@ -223,51 +228,56 @@ export function registerCalendarTools(server: McpServer) {
       move_deadlines: z.boolean().optional().describe("Also move open tasks that are due that day (default false)"),
     }),
     kind: "write",
-  }, (args) => {
+  }, async (args) => {
     const from = when(args.from, "drop");
     const to = when(args.to, "drop");
     if (from === to) fail("from and to are the same day.");
     const include = args.include ?? "both";
-    const n = names();
+    const n = await names();
     const lines: string[] = [];
-    tx(() => {
-      if (include !== "events") {
-        const open = repo.listTasks().filter(isOpen);
-        for (const t of open.filter((x) => x.plannedDate === from)) {
-          repo.updateTask(t.id, { plannedDate: to });
-          lines.push(`Planned ${to}: ${taskLine(repo.getTask(t.id)!, n)}`);
-        }
-        if (args.move_deadlines) {
-          for (const t of open.filter((x) => x.dueDate && dateOnly(x.dueDate) === from)) {
-            const time = timeOf(t.dueDate);
-            repo.updateTask(t.id, { dueDate: time ? `${to}T${time}` : to });
-            lines.push(`Due ${to}: ${taskLine(repo.getTask(t.id)!, n)}`);
-          }
+    if (include !== "events") {
+      const open = (await repo.listTasks()).filter(isOpen);
+      for (const t of open.filter((x) => x.plannedDate === from)) {
+        await repo.updateTask(t.id, { plannedDate: to });
+        lines.push(`Planned ${to}: ${taskLine({ ...t, plannedDate: to }, n)}`);
+      }
+      if (args.move_deadlines) {
+        for (const t of open.filter((x) => x.dueDate && dateOnly(x.dueDate) === from)) {
+          const time = timeOf(t.dueDate);
+          const dueDate = time ? `${to}T${time}` : to;
+          await repo.updateTask(t.id, { dueDate });
+          lines.push(`Due ${to}: ${taskLine({ ...t, dueDate, plannedDate: t.plannedDate === from ? to : t.plannedDate }, n)}`);
         }
       }
-      if (include !== "tasks") {
-        for (const e of repo.listEvents().filter((x) => x.recurrence !== "weekly" && dateOnly(x.start) === from)) {
-          repo.updateEvent(e.id, { start: `${to}T${timeOf(e.start)}`, end: `${to}T${timeOf(e.end)}` });
-          lines.push(`Moved ${eventText(repo.getEvent(e.id)!)}`);
-        }
+    }
+    const list = await repo.listEvents();
+    if (include !== "tasks") {
+      for (const e of list.filter((x) => x.recurrence !== "weekly" && dateOnly(x.start) === from)) {
+        const moved = { ...e, start: `${to}T${timeOf(e.start)}`, end: `${to}T${timeOf(e.end)}` };
+        await repo.updateEvent(e.id, { start: moved.start, end: moved.end });
+        lines.push(`Moved ${eventText(moved, n)}`);
       }
-    });
-    const weeklyThatDay = include === "tasks" ? [] : repo.occurrences(from, from).filter((o) => repo.getEvent(o.eventId)?.recurrence === "weekly");
+    }
+    const weeklyIds = new Set(list.filter((e) => e.recurrence === "weekly").map((e) => e.id));
+    const weeklyThatDay = include === "tasks" ? [] : (await repo.occurrences(from, from)).filter((o) => weeklyIds.has(o.eventId));
     if (weeklyThatDay.length) lines.push(`Left in place (weekly): ${weeklyThatDay.map((o) => `${o.title} ${timeOf(o.start)}`).join(", ")}`);
     return lines.length ? `From ${fmtWhen(from)} to ${fmtWhen(to)}:\n${lines.join("\n")}` : `Nothing to move on ${fmtWhen(from)}.`;
   });
 
   tool(server, "get_settings", {
     title: "Get settings",
-    description: "Work hours and days the auto-planner uses, how agent sessions start, and the MCP address.",
+    description: "Work hours and days the auto-planner uses, how agent sessions start on this computer, and the MCP address.",
     input: z.object({}),
     kind: "read",
-  }, () => {
-    const s = repo.getSettings();
+  }, async () => {
+    const s = await repo.getSettings();
+    const d = deviceConfig();
+    const asked = { off: "refused", ask: "wait for the user to allow them on this computer", auto: "start right away" }[d.remoteStart];
     return [
       `Work hours: ${s.workStart}–${s.workEnd} · Break: ${s.lunchStart}–${s.lunchEnd}`,
       `Work days: ${s.workDays.map((d) => DAY_NAMES[d - 1]).join(", ")}`,
-      `Sessions open in: ${s.terminal === "wt" ? "Windows Terminal" : "Command Prompt"} · Claude Code command: ${s.claudeCommand} · Codex command: ${s.codexCommand}`,
+      `Sessions on this computer open in: ${d.terminal === "wt" ? "Windows Terminal" : "Command Prompt"} · Claude Code command: ${agentCommandFor("claude")} · Codex command: ${agentCommandFor("codex")}`,
+      `Sessions asked for over MCP wait for the user to allow them in PacedMind. Requests from the web app or another computer: ${asked}.`,
       `MCP address: ${mcpUrl()}`,
     ].join("\n");
   });
@@ -283,8 +293,8 @@ export function registerCalendarTools(server: McpServer) {
       work_days: z.array(z.string()).optional().describe('Days like ["mon", "tue", "wed", "thu", "fri"]'),
     }),
     kind: "write",
-  }, (args) => {
-    const s = repo.getSettings();
+  }, async (args) => {
+    const s = await repo.getSettings();
     const workStart = args.work_start ? readTime("work_start", args.work_start) : s.workStart;
     const workEnd = args.work_end ? readTime("work_end", args.work_end) : s.workEnd;
     const lunchStart = args.break_start ? readTime("break_start", args.break_start) : s.lunchStart;
@@ -298,7 +308,7 @@ export function registerCalendarTools(server: McpServer) {
         return i >= 0 ? i + 1 : fail(`Unknown day "${d}". Use mon, tue, wed, thu, fri, sat or sun.`);
       }))].sort();
     }
-    repo.setSettings({ workStart, workEnd, lunchStart, lunchEnd, workDays });
+    await repo.setSettings({ workStart, workEnd, lunchStart, lunchEnd, workDays });
     return `Work hours ${workStart}–${workEnd}, break ${lunchStart}–${lunchEnd}, work days ${workDays.map((d) => DAY_NAMES[d - 1]).join(", ")}.`;
   });
 }

@@ -15,24 +15,24 @@ export default async function TimelinePage(props: PageProps<"/timeline">) {
   const from = toDateStr(mondayOf(picked && !isNaN(picked.getTime()) ? picked : now));
   const zoom = ZOOMS.find((z) => z === sp.zoom) ?? "month";
 
-  const tasks = repo.listTasks();
-  const sessions = repo.listSessions();
-  const edges = repo.listEdges();
+  const [tasks, sessions, edges, areas, projects, settings] = await Promise.all([
+    repo.listTasks(), repo.listSessions(), repo.listEdges(), repo.listAreas(), repo.listProjects(), repo.getSettings(),
+  ]);
   const latest = latestSessions(sessions);
   return (
     <Timeline
       from={from}
       now={toStamp(now)}
       zoom={zoom}
-      areas={repo.listAreas()}
-      projects={repo.listProjects()}
+      areas={areas}
+      projects={projects}
       tasks={tasks}
       sessions={sessions}
       edges={edges}
       states={taskStates(tasks, latest, edges, now)}
-      loads={dayLoads(tasks, Object.values(latest), from, WIDEST, now)}
-      dayMinutes={workdayMinutes(repo.getSettings())}
-      ctx={taskContext(tasks)}
+      loads={await dayLoads(tasks, Object.values(latest), from, WIDEST, now)}
+      dayMinutes={workdayMinutes(settings)}
+      ctx={await taskContext(tasks)}
       initialKey={typeof sp.task === "string" ? sp.task : null}
     />
   );

@@ -23,7 +23,7 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const end = days[days.length - 1];
   const inGrid = (d: string | null) => !!d && dateOnly(d) >= start && dateOnly(d) <= end;
 
-  const all = repo.listTasks();
+  const [all, events] = await Promise.all([repo.listTasks(), repo.occurrences(start, end)]);
   const dated = all.filter((t) => t.status !== "canceled" && (inGrid(t.dueDate) || inGrid(t.plannedDate)));
   const undated = all.filter((t) => isOpen(t) && !t.dueDate && !t.plannedDate).sort(byUrgency);
   const shown = undated.slice(0, 15);
@@ -52,8 +52,8 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
       tasks={dated}
       undated={shown}
       undatedCount={undated.length}
-      events={repo.occurrences(start, end)}
-      ctx={taskContext([...dated, ...shown])}
+      events={events}
+      ctx={await taskContext([...dated, ...shown])}
       summary={summary}
       nav={{
         prev: `/calendar?m=${format(addMonths(first, -1), "yyyy-MM")}`,

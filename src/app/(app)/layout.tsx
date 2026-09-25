@@ -1,39 +1,54 @@
+import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { QuickAdd } from "@/components/quick-add";
 import { CommandPalette } from "@/components/command-palette";
 import { LiveRefresh } from "@/components/live-refresh";
+import { Approvals } from "@/components/approvals";
+import { RemoteStart } from "@/components/remote-start";
 import { Toaster } from "@/components/ui";
 import * as repo from "@/server/repo";
+import { MODE, authState } from "@/server/supabase";
+import { nextStep } from "@/server/auth-flow";
+import { approvalItems } from "@/server/requests";
 import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
+/** Every page of the app needs an account signed in with its second factor; the database insists on it too. */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   await connection();
-  const areas = repo.listAreas();
-  const projects = repo.listProjects();
-  const tasks = repo.listTasks();
+  const state = await authState();
+  const step = nextStep(state);
+  if (step) redirect(step);
+  const user = state!.user;
+  const [areas, projects, tasks, waiting, devices] = await Promise.all([
+    repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }),
+    MODE === "web" ? repo.listDevices() : [],
+  ]);
   const today = todayStr();
   const open = (t: (typeof tasks)[number]) => t.status !== "done" && t.status !== "canceled";
   const counts = {
     inbox: tasks.filter((t) => !t.areaId && !t.projectId && open(t)).length,
     today: tasks.filter((t) => open(t) && ((t.dueDate && dateOnly(t.dueDate) <= today) || t.plannedDate === today)).length,
-    sessions: repo.listSessions("status = 'finished'").length,
+    sessions: waiting.length,
   };
+  const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
   const paletteTasks = tasks.map((t) => ({
     key: t.key, title: t.title, status: t.status,
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
   }));
   return (
     <div className="flex h-full flex-col">
-      <AppHeader />
+      <AppHeader email={user.email ?? null} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
         <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel">{children}</main>
       </div>
+      {approvals.length > 0 && <Approvals items={approvals} />}
+      {MODE === "web" && <RemoteStart devices={devices} tasks={tasks.map((t) => ({ id: t.id, key: t.key, title: t.title }))} />}
       <QuickAdd areas={areas} projects={projects} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />

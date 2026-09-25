@@ -15,8 +15,9 @@ import {
 } from "@xyflow/react";
 import { format } from "date-fns";
 import {
-  connectAction, deleteEdgeAction, placeInFlowAction, removeFromFlowAction, setFlowOnAction, startSessionAction,
+  connectAction, deleteEdgeAction, placeInFlowAction, removeFromFlowAction, setFlowOnAction,
 } from "@/app/actions";
+import { startSessionOrAsk } from "@/components/remote-start";
 import { addToFlowAction, setAgentsAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
 import { Icon, StatusIcon } from "@/components/icons";
 import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast } from "@/components/ui";
@@ -730,7 +731,7 @@ function FlowEditor(props: FlowViewProps) {
         session={sessions[selectedTask.id]} graph={graph} flowOn={flowOn} now={now} defaultAt={defaultAt}
         onAgent={(agent) => setAgent(selectedTask, agent)}
         onStart={(mode, at) => setStart(selectedTask, mode, at)}
-        onStartNow={() => act(() => {}, () => startSessionAction(selectedTask.id, selectedTask.agent))}
+        onStartNow={() => act(() => {}, () => startSessionOrAsk(selectedTask.id, selectedTask.agent))}
         onRemove={() => remove(selectedTask)} />
     );
   } else if (selectedEdge) {

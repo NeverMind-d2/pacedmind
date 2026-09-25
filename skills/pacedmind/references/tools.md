@@ -2,6 +2,8 @@
 
 Every tool the `organizer` MCP server offers, grouped by purpose. The tool descriptions and parameter schemas the client shows you have the details. Tools marked (read) never change anything.
 
+A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent or place), `start_task` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
+
 ## Orientation
 
 - `get_overview` (read): the current date and time, areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and sessions waiting for review or running. Start here.
@@ -19,7 +21,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 
 - `list_projects` (read): each project with progress, target date, agent, folder, flow and "starts after". Optional area filter.
 - `get_project` (read): the project's tasks in roadmap order, grouped by status, plus the next ready task.
-- `create_project`: name and area, plus optional color, start_date, target_date, folder, agent, starts_after and flow_on.
+- `create_project`: name and area, plus optional color, start_date, target_date, folder (on this computer), agent and starts_after. Whether its flow starts sessions on its own is switched by the user in PacedMind.
 - `update_project`: any of the above, including moving the project to another area (its tasks move with it). `color: "area"` makes it follow the area's color. Pass null to clear a field.
 - `delete_project`: its tasks stay in the area. Ask first.
 - `reorder_tasks`: the roadmap order of a project's tasks.
@@ -61,7 +63,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 ## Agent sessions
 
 - `list_sessions` (read): filter by `waiting` (finished and needing review), `running` or `all`, and by project or task.
-- `start_session`: opens a terminal with Claude Code or Codex working on the task. Only when the user asks.
+- `start_session`: asks to open a terminal with Claude Code or Codex working on the task. Only when the user asks. PacedMind shows the request and the user allows it there; the terminal opens then (the request expires after 10 minutes).
 - `close_session`: marks a stuck or abandoned session closed, and the task goes back to todo.
 
 ## Protocol for agents working on a task

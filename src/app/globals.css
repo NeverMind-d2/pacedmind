@@ -152,6 +152,12 @@ html[data-theme="light"] {
   gap: 2px;
 }
 
+/* The account menu sits at the right end of the header, left of the window buttons. */
+.app-titlebar__account {
+  -webkit-app-region: no-drag;
+  margin-left: auto;
+}
+
 .app-titlebar__button {
   display: flex;
   align-items: center;

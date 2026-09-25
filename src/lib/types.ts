@@ -8,6 +8,16 @@ export type Doer = AgentId | "human";
 export type EdgeMode = "auto" | "manual" | "session" | "time";
 export type SessionStatus = "starting" | "running" | "finished" | "done" | "closed" | "failed";
 
+/** A session that is (about to be) at work in a terminal. */
+export const isLiveSession = (s: { status: SessionStatus }) => s.status === "starting" || s.status === "running";
+export const LIVE_STATUSES: SessionStatus[] = ["starting", "running"];
+
+/**
+ * What a desktop app does with a session asked for from elsewhere (the web app, another computer): refuse
+ * it, ask you on that computer first, or start it right away (the request always needs a fresh 2FA code).
+ */
+export type RemoteStart = "off" | "ask" | "auto";
+
 export interface Area {
   id: string;
   name: string;
@@ -24,9 +34,11 @@ export interface Project {
   color: string | null;
   startDate: string | null;
   targetDate: string | null;
+  /** Where its sessions run on this computer; set in the desktop app, never stored in the cloud. */
   folder: string | null;
   agent: AgentId | null;
   afterProjectId: string | null;
+  /** Whether its flow may start sessions on this computer by itself (a switch in the desktop app). */
   flowOn: boolean;
   sort: number;
 }
@@ -88,6 +100,8 @@ export interface Session {
   id: string;
   taskId: number;
   agent: AgentId;
+  /** The computer it runs on. */
+  deviceId: string | null;
   folder: string | null;
   branch: string | null;
   status: SessionStatus;
@@ -116,17 +130,54 @@ export interface FlowEdge {
   atTime: string | null;
 }
 
+/** Planning settings, stored with the account. How sessions start is per computer (DeviceSettings). */
 export interface Settings {
   workStart: string;
   workEnd: string;
   lunchStart: string;
   lunchEnd: string;
   workDays: number[];
+}
+
+/** What the desktop app on this computer decides for itself (src/server/device.ts), as Settings shows it. */
+export interface DeviceSettings {
+  name: string;
   terminal: "wt" | "cmd";
   claudeCommand: string;
   codexCommand: string;
-  mcpToken: string;
-  port: number;
+  remoteStart: RemoteStart;
+  /** This computer's id in the account's list, once registered. */
+  deviceId: string | null;
+  /** Whether the app's secrets on disk are encrypted with a key from the OS keychain. */
+  encrypted: boolean;
+}
+
+/** A computer with the desktop app, signed in to the account. */
+export interface Device {
+  id: string;
+  name: string;
+  platform: "windows" | "macos" | "linux";
+  remoteStart: RemoteStart;
+  createdAt: string;
+  lastSeenAt: string | null;
+  revokedAt: string | null;
+}
+
+export type LaunchRequestStatus = "pending" | "launched" | "denied" | "expired" | "failed" | "canceled";
+
+/** A session asked for from elsewhere, waiting for (or decided by) the desktop app on `deviceId`. */
+export interface LaunchRequest {
+  id: string;
+  deviceId: string;
+  taskId: number;
+  agent: AgentId;
+  requestedVia: string;
+  requestedAt: string;
+  expiresAt: string;
+  status: LaunchRequestStatus;
+  decidedAt: string | null;
+  sessionId: string | null;
+  note: string | null;
 }
 
 /** What task lists and the detail panel need besides the tasks themselves. */

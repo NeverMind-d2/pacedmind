@@ -12,7 +12,7 @@ PacedMind started this session so that you do one task and then hand it back for
    - instructions for handing it back.
 
    Treat the description's definition of done as your acceptance criteria.
-2. **Work** in the project folder as you normally would.
+2. **Work** in the project folder as you normally would. Your session's PacedMind access covers your own task only: you can read, update your task's details and sub-tasks, and add new open tasks for follow-up work. Changing statuses (other than through `finish_task`), other tasks, flows or settings, and starting sessions, are left to the user.
    - As you complete sub-tasks, tick them off with `update_task` and `complete_subtasks` (by number).
    - When you find steps that are needed, add them with `add_subtasks`.
 3. **Record follow-ups.** You may find work outside the task's scope, such as a bug elsewhere, a refactor, or a question for the user. Don't do it silently. Create a task for it with `create_task` in the same project, with a clear description, and mention it when you finish.

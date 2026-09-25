@@ -1,9 +1,8 @@
 import "server-only";
-import { db } from "./db";
 import * as repo from "./repo";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
-import { agentOf, type Session, type Status, type Task } from "@/lib/types";
+import { agentOf, type Session, type SessionEvent, type Status, type Task } from "@/lib/types";
 
 const EARLIER_LIMIT = 30;
 const active = (s: Session) => s.status === "starting" || s.status === "running";
@@ -15,19 +14,13 @@ export function taskHref(t: Task): string {
   return `/inbox?task=${t.key}`;
 }
 
-/** When each session was marked done: its latest "done" event. */
-function doneTimes(): Map<string, string> {
-  const rows = db().prepare("SELECT session_id, MAX(at) AS at FROM session_events WHERE kind = 'done' GROUP BY session_id").all();
-  return new Map(rows.map((r) => [String(r.session_id), String(r.at)]));
-}
-
 /** Everything the Sessions screen shows, grouped the way it lists them. */
-export function sessionList(selected: string | null): { groups: SessionGroup[]; initialId: string | null; startable: StartableTask[] } {
-  const all = repo.listSessions();
-  const tasks = new Map(repo.listTasks().map((t) => [t.id, t]));
-  const projects = new Map(repo.listProjects().map((p) => [p.id, p]));
-  const edges = repo.listEdges();
-  const done = doneTimes();
+export async function sessionList(selected: string | null): Promise<{ groups: SessionGroup[]; initialId: string | null; startable: StartableTask[] }> {
+  const [all, taskList, projectList, edges, done] = await Promise.all([
+    repo.listSessions(), repo.listTasks(), repo.listProjects(), repo.listEdges(), repo.doneTimes(),
+  ]);
+  const tasks = new Map(taskList.map((t) => [t.id, t]));
+  const projects = new Map(projectList.map((p) => [p.id, p]));
   const byId = new Map(all.map((s) => [s.id, s]));
   const busy = new Set(all.filter(active).map((s) => s.taskId));
   const today = todayStr();
@@ -38,10 +31,11 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
       ? done.get(s.id) ?? s.endedAt ?? s.finishedAt ?? tasks.get(s.taskId)?.completedAt ?? s.startedAt
       : s.endedAt ?? s.finishedAt ?? s.startedAt;
 
+  let eventsOf: Record<string, SessionEvent[]> = {};
   const item = (s: Session): SessionItem => {
     const task = tasks.get(s.taskId);
     const project = task?.projectId ? projects.get(task.projectId) : undefined;
-    const events = repo.sessionEvents(s.id);
+    const events = eventsOf[s.id] ?? [];
     const prev = s.continuesSessionId ? byId.get(s.continuesSessionId) : undefined;
     const next = task
       ? edges
@@ -89,6 +83,7 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
   // A link to an older session still opens it.
   const linked = selected ? earlier.slice(EARLIER_LIMIT).find((s) => s.id === selected) : undefined;
   if (linked) shownEarlier.push(linked);
+  eventsOf = await repo.sessionEventsFor([...finished, ...running, ...endedToday, ...shownEarlier].map((s) => s.id));
 
   const groups: SessionGroup[] = (
     [

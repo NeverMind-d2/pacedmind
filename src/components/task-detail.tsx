@@ -4,8 +4,9 @@ import { useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
   addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, markSessionDoneAction, resumeSessionAction,
-  startSessionAction, toggleSubtaskAction, updateTaskAction,
+  toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
+import { startSessionOrAsk } from "./remote-start";
 import { dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
   AGENT_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf, type AgentId, type Doer, type Priority, type Session, type SessionEvent,
@@ -173,14 +174,14 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             ) : (
               <div className="flex px-2">
                 <div className="flex h-[26px] overflow-hidden rounded-md border border-ctl">
-                  <button type="button" disabled={pending} onClick={() => run(() => startSessionAction(task.id, agent))}
+                  <button type="button" disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent))}
                     className="flex items-center gap-1.5 px-2.5 text-[12px] text-fg hover:bg-hover">
                     <Icon name="terminal" size={13} />Start in {AGENT_LABEL[agent]}
                   </button>
                   <Menu align="right" width={180}
                     trigger={<button type="button" aria-label="Choose agent" className="flex h-full w-6 items-center justify-center border-l border-ctl text-mut hover:bg-hover"><Icon name="chevronDown" size={12} /></button>}
                     items={(["claude", "codex"] as AgentId[]).map((a) => ({ value: a, label: `Start in ${AGENT_LABEL[a]}` }))}
-                    onSelect={(a) => run(() => startSessionAction(task.id, a))} />
+                    onSelect={(a) => run(() => startSessionOrAsk(task.id, a))} />
                 </div>
               </div>
             )}
@@ -200,7 +201,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="terminal" size={13} />Resume in terminal</Button>
               )}
               {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
-                <Button onClick={() => run(() => startSessionAction(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
+                <Button onClick={() => run(() => startSessionOrAsk(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
               )}
               {session.status === "finished" && (
                 <Button variant="primary" onClick={() => run(() => markSessionDoneAction(session.id))}>Mark done</Button>

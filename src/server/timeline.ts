@@ -33,7 +33,7 @@ export interface ProjectStats {
 }
 
 /** The newest session per task id. */
-export function latestSessions(sessions = repo.listSessions()): Record<number, Session> {
+export function latestSessions(sessions: Session[]): Record<number, Session> {
   const out: Record<number, Session> = {};
   for (const s of sessions) if (!out[s.taskId]) out[s.taskId] = s;
   return out;
@@ -58,7 +58,7 @@ export function workdayMinutes(s: Settings): number {
 }
 
 /** Your time per day between from and from + days: auto-planned blocks from today on, finished work before today. */
-export function dayLoads(tasks: Task[], sessions: Session[], from: string, days: number, now = new Date()): Record<string, DayLoad> {
+export async function dayLoads(tasks: Task[], sessions: Session[], from: string, days: number, now = new Date()): Promise<Record<string, DayLoad>> {
   const today = toDateStr(now);
   const out: Record<string, DayLoad> = {};
   const add = (day: string, kind: keyof DayLoad, minutes: number) => {
@@ -68,7 +68,7 @@ export function dayLoads(tasks: Task[], sessions: Session[], from: string, days:
   const horizon = Math.min(400, dayDiff(today, addDaysStr(from, days)));
   if (horizon > 0) {
     const plan = planTimeBlocks({
-      tasks, sessions, now, days: horizon, settings: repo.getSettings(), events: repo.occurrences(today, addDaysStr(today, horizon)),
+      tasks, sessions, now, days: horizon, settings: await repo.getSettings(), events: await repo.occurrences(today, addDaysStr(today, horizon)),
     });
     for (const b of plan.blocks) add(dateOnly(b.start), "planned", minutesOf(timeOf(b.end)!) - minutesOf(timeOf(b.start)!));
   }

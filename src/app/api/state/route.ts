@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
-import { db } from "@/server/db";
 import * as repo from "@/server/repo";
+import { MODE, authState } from "@/server/supabase";
+import { nextStep } from "@/server/auth-flow";
+import { approvalItems } from "@/server/requests";
 
 export const dynamic = "force-dynamic";
 
@@ -8,14 +10,31 @@ export const dynamic = "force-dynamic";
 const boot = crypto.randomBytes(4).toString("hex");
 
 /**
- * Polled by open pages (to refresh when an agent changed something over MCP) and by the desktop app
- * (to notify when a session finishes). `version` changes after any write to the database.
+ * Polled by open pages (to refresh when an agent changed something over MCP) and by the desktop app (to
+ * notify when a session finishes or waits to be allowed). `version` changes after any write to the
+ * account's data, and when someone signs in, verifies a code or signs out. In the desktop app only its own
+ * window and main process can ask (proxy.ts); in the web app, only a signed-in browser.
  */
-export function GET() {
-  const { changes } = db().prepare("SELECT total_changes() AS changes").get() as { changes: number };
-  const waiting = repo.listSessions("status = 'finished'").map((s) => {
-    const task = repo.getTask(s.taskId);
+export async function GET() {
+  const noStore = { headers: { "Cache-Control": "no-store" } };
+  const state = await authState();
+  const step = nextStep(state);
+  if (step) return Response.json({ version: `${boot}-${step}`, waiting: [], approvals: [], signedIn: false }, noStore);
+  const [version, finished, tasks] = await Promise.all([repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listTasks()]);
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const waiting = finished.map((s) => {
+    const task = byId.get(s.taskId);
     return { id: s.id, key: task?.key ?? null, title: task?.title ?? null, note: s.note, finishedAt: s.finishedAt };
   });
-  return Response.json({ version: `${boot}-${changes}`, waiting }, { headers: { "Cache-Control": "no-store" } });
+  const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
+  const approvalKey = approvals.map((a) => a.id).join(",");
+  return Response.json(
+    {
+      version: `${boot}-${state!.user.id.slice(0, 8)}-${version}-${crypto.createHash("sha1").update(approvalKey).digest("hex").slice(0, 8)}`,
+      waiting,
+      approvals: approvals.map((a) => ({ id: a.id, key: a.key, title: a.title, agent: a.agent, from: a.from })),
+      signedIn: true,
+    },
+    noStore,
+  );
 }

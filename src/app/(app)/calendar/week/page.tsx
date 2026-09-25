@@ -4,7 +4,7 @@ import { planWeek } from "@/server/calendar";
 import * as repo from "@/server/repo";
 import { taskContext } from "@/server/views";
 import { addDaysStr, dateOnly, fmtShort, mondayOf, parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
-import type { Session } from "@/lib/types";
+import { isLiveSession, type Session } from "@/lib/types";
 
 export default async function WeekPage(props: PageProps<"/calendar/week">) {
   const sp = await props.searchParams;
@@ -16,13 +16,11 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
   const days = Array.from({ length: 7 }, (_, i) => addDaysStr(start, i));
   const current = start <= today && today <= end;
 
-  const all = repo.listTasks();
-  const sessions = repo.listSessions();
-  const settings = repo.getSettings();
-  const plan = planWeek({ start, end, now, tasks: all, sessions, settings });
+  const [all, sessions, settings, events] = await Promise.all([repo.listTasks(), repo.listSessions(), repo.getSettings(), repo.occurrences(start, end)]);
+  const plan = await planWeek({ start, end, now, tasks: all, sessions, settings });
 
   const keyOf = new Map(all.map((t) => [t.id, t.key]));
-  const stopOf = (s: Session) => s.finishedAt ?? s.endedAt ?? (s.status === "running" || s.status === "starting" ? null : s.startedAt);
+  const stopOf = (s: Session) => s.finishedAt ?? s.endedAt ?? (isLiveSession(s) ? null : s.startedAt);
   const inWeek = sessions.filter((s) => {
     const stop = stopOf(s);
     return keyOf.has(s.taskId) && s.status !== "failed" && dateOnly(s.startedAt) <= end && (!stop || dateOnly(stop) >= start);
@@ -45,7 +43,7 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
       now={toDateTimeStr(now)}
       subtitle={`${from} to ${fmtShort(end)} · week ${getISOWeek(parseLocal(start))}`}
       current={current}
-      events={repo.occurrences(start, end)}
+      events={events}
       plan={plan}
       lanes={lanes}
       tasks={tasks}
@@ -53,7 +51,7 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
         workStart: settings.workStart, workEnd: settings.workEnd, lunchStart: settings.lunchStart, lunchEnd: settings.lunchEnd,
         workDays: settings.workDays,
       }}
-      ctx={taskContext(tasks)}
+      ctx={await taskContext(tasks)}
       nav={{
         prev: `/calendar/week?w=${addDaysStr(start, -7)}`,
         next: `/calendar/week?w=${addDaysStr(start, 7)}`,

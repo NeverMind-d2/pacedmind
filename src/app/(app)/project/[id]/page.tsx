@@ -9,11 +9,11 @@ import { fmtShort } from "@/lib/dates";
 export default async function ProjectPage(props: PageProps<"/project/[id]">) {
   const { id } = await props.params;
   const sp = await props.searchParams;
-  const project = repo.getProject(id);
+  const project = await repo.getProject(id);
   // Deleted (maybe just now, from its own menu): show the overview instead of a 404.
   if (!project) redirect("/projects");
-  const area = repo.listAreas().find((a) => a.id === project.areaId);
-  const tasks = repo.listTasks("project_id = ?", id);
+  const [areas, tasks] = await Promise.all([repo.listAreas(), repo.listTasks({ projectId: id })]);
+  const area = areas.find((a) => a.id === project.areaId);
   const link = "inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover";
   return (
     <TaskList
@@ -21,7 +21,7 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
       title={project.name}
       subtitle={[area?.name, project.targetDate && `target ${fmtShort(project.targetDate)}`].filter(Boolean).join(" · ")}
       groups={groupByStatus(tasks)}
-      ctx={taskContext(tasks)}
+      ctx={await taskContext(tasks)}
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ projectId: id }}
       headerRight={

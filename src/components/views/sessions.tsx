@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { closeSessionAction, markSessionDoneAction, resumeSessionAction, startSessionAction } from "@/app/actions";
+import { closeSessionAction, markSessionDoneAction, resumeSessionAction } from "@/app/actions";
+import { startSessionOrAsk } from "@/components/remote-start";
 import { Icon } from "@/components/icons";
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
@@ -187,7 +188,7 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
                 label: <><span className="mr-2 font-mono text-[11px] text-mut2">{t.key}</span>{t.title}</>,
                 hint: agentShort(t.agent),
               }))}
-              onSelect={(id) => run(() => startSessionAction(id))} />
+              onSelect={(id) => run(() => startSessionOrAsk(id))} />
           )}
         </div>
 
@@ -350,7 +351,7 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
               </Link>
             </span>
             {s.next.canStart && (
-              <Button size="sm" disabled={pending} onClick={() => run(() => startSessionAction(s.next!.id))}>Start session</Button>
+              <Button size="sm" disabled={pending} onClick={() => run(() => startSessionOrAsk(s.next!.id))}>Start session</Button>
             )}
           </div>
         )}

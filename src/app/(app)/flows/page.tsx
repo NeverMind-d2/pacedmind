@@ -3,16 +3,16 @@ import { Icon } from "@/components/icons";
 import * as repo from "@/server/repo";
 import { projectColor } from "@/lib/colors";
 import { nowStamp, parseLocal } from "@/lib/dates";
-import { agentOf, type Session } from "@/lib/types";
+import { agentOf, isLiveSession, type Session } from "@/lib/types";
 
 const ms = (stamp: string) => parseLocal(stamp).getTime();
 
 export default async function FlowsPage(props: PageProps<"/flows">) {
   const sp = await props.searchParams;
   const want = typeof sp.p === "string" ? sp.p : null;
-  const projects = repo.listProjects();
-  const areas = repo.listAreas();
-  const all = repo.listTasks();
+  const [projects, areas, all, allEdges, allSessions, settings] = await Promise.all([
+    repo.listProjects(), repo.listAreas(), repo.listTasks(), repo.listEdges(), repo.listSessions(), repo.getSettings(),
+  ]);
   const inFlow = (id: string) => all.filter((t) => t.projectId === id && t.flowX !== null && t.flowY !== null).length;
   const project = projects.find((p) => p.id === want) ?? projects.find((p) => inFlow(p.id) > 0) ?? projects.find((p) => p.agent) ?? projects[0];
 
@@ -35,8 +35,9 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
 
   const tasks = all.filter((t) => t.projectId === project.id);
   const ids = new Set(tasks.map((t) => t.id));
-  const edges = repo.listEdges().filter((e) => ids.has(e.fromTaskId) && ids.has(e.toTaskId));
-  const sessions = repo.listSessions().filter((s) => ids.has(s.taskId));
+  const edges = allEdges.filter((e) => ids.has(e.fromTaskId) && ids.has(e.toTaskId));
+  const sessions = allSessions.filter((s) => ids.has(s.taskId));
+  const sessionById = new Map(allSessions.map((s) => [s.id, s]));
   const latest: Record<number, Session> = {};
   for (const s of sessions) latest[s.taskId] ??= s;
 
@@ -44,14 +45,14 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   const continuedFrom: Record<number, string> = {};
   for (const s of Object.values(latest)) {
     if (!s.continuesSessionId) continue;
-    const prev = repo.getSession(s.continuesSessionId);
+    const prev = sessionById.get(s.continuesSessionId);
     const key = prev ? all.find((t) => t.id === prev.taskId)?.key : undefined;
     if (key) continuedFrom[s.taskId] = key;
   }
 
   // A running session counts as started by the flow when it began right after one of its triggers fired.
   const autoStarted = Object.values(latest)
-    .filter((s) => (s.status === "running" || s.status === "starting") && !s.continuesSessionId)
+    .filter((s) => isLiveSession(s) && !s.continuesSessionId)
     .filter((s) => {
       const start = ms(s.startedAt);
       return edges.some((e) => {
@@ -75,7 +76,6 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
     }] : [];
   });
   const yours = tasks.filter((t) => t.agent === "human" && t.status !== "done" && t.status !== "canceled").length;
-  const settings = repo.getSettings();
 
   return (
     <FlowView

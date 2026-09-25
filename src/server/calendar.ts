@@ -61,20 +61,20 @@ const blockMinutes = (b: PlannedBlock) => minutesOf(b.end.slice(11, 16)) - minut
  * Auto-plans from now to the end of the given week. Earlier days fill up first, so a later week only
  * gets what is left over. Returns null for weeks that are already over.
  */
-export function planWeek({ start, end, now, tasks, sessions, settings }: {
+export async function planWeek({ start, end, now, tasks, sessions, settings }: {
   start: string;
   end: string;
   now: Date;
   tasks: Task[];
   sessions: Session[];
   settings: Settings;
-}): WeekPlan | null {
+}): Promise<WeekPlan | null> {
   const today = toDateStr(now);
   if (end < today) return null;
-  const result = planTimeBlocks({ tasks, sessions, settings, now, events: repo.occurrences(today, end), days: dayDiff(today, end) + 1 });
+  const result = planTimeBlocks({ tasks, sessions, settings, now, events: await repo.occurrences(today, end), days: dayDiff(today, end) + 1 });
   const blocks = result.blocks.filter((b) => dateOnly(b.start) >= start);
   const capacityMinutes = start > today
-    ? planTimeBlocks({ tasks: [], sessions: [], settings, now: parseLocal(start), events: repo.occurrences(start, end), days: 7 }).capacityMinutes
+    ? planTimeBlocks({ tasks: [], sessions: [], settings, now: parseLocal(start), events: await repo.occurrences(start, end), days: 7 }).capacityMinutes
     : result.capacityMinutes;
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const meantForThisWeek = (t: Task) => (t.plannedDate ? t.plannedDate <= end : !t.dueDate || dateOnly(t.dueDate) <= end);

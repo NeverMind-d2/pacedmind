@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
   // local data/ folder that file tracing copies in. (Don't use outputFileTracingExcludes for that:
   // its patterns match anywhere in a path, so "dist/**" also drops node_modules/next/dist files.)
   output: "standalone",
+  poweredByHeader: false,
 };
 
 export default nextConfig;

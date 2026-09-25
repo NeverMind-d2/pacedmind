@@ -2,15 +2,15 @@ import "server-only";
 import * as repo from "./repo";
 import type { Area, Project, Session, SessionEvent, Task, TaskContext, Usage } from "@/lib/types";
 
-export function taskContext(tasks: Task[]): TaskContext {
+export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const ids = new Set(tasks.map((t) => t.id));
+  const [all, areas, projects] = await Promise.all([repo.listSessions(), repo.listAreas(), repo.listProjects()]);
   const sessions: Record<number, Session> = {};
-  for (const s of repo.listSessions()) {
+  for (const s of all) {
     if (ids.has(s.taskId) && !sessions[s.taskId]) sessions[s.taskId] = s;
   }
-  const sessionEvents: Record<string, SessionEvent[]> = {};
-  for (const s of Object.values(sessions)) sessionEvents[s.id] = repo.sessionEvents(s.id);
-  return { areas: repo.listAreas(), projects: repo.listProjects(), sessions, sessionEvents };
+  const sessionEvents: Record<string, SessionEvent[]> = await repo.sessionEventsFor(Object.values(sessions).map((s) => s.id));
+  return { areas, projects, sessions, sessionEvents };
 }
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";

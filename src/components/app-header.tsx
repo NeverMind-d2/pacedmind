@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useSyncExternalStore, useTransition } from "react";
+import { signOutAction } from "@/app/auth/actions";
 import { BrandWordmark } from "./brand-wordmark";
 import { Icon } from "./icons";
+import { Popover, PopoverItem, PopoverLabel, PopoverSeparator, type Anchor } from "./popover";
 
 type NavigationState = EventTarget & { canGoBack: boolean; canGoForward: boolean };
 const navigation = () => (window as Window & { navigation?: NavigationState }).navigation;
@@ -30,7 +33,7 @@ function navigationSnapshot() {
 const initialNavigation = () => 0;
 
 /** Shared app header; Electron supplies the native window buttons over its right edge. */
-export function AppHeader() {
+export function AppHeader({ email }: { email: string | null }) {
   const history = useSyncExternalStore(subscribe, navigationSnapshot, initialNavigation);
   return (
     <header className="app-titlebar" aria-label="PacedMind">
@@ -48,7 +51,40 @@ export function AppHeader() {
         <Link href="/today" aria-label="PacedMind — Today" className="app-titlebar__home">
           <BrandWordmark className="w-[112px]" />
         </Link>
+        {email && <AccountMenu email={email} />}
       </div>
     </header>
+  );
+}
+
+const MENU_WIDTH = 240;
+
+/** The signed-in account, with Settings and Sign out. A portal popover, because the header clips its overflow. */
+function AccountMenu({ email }: { email: string }) {
+  const router = useRouter();
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
+  const [pending, start] = useTransition();
+  return (
+    <div className="app-titlebar__account">
+      <button type="button" className="app-titlebar__button" aria-label={`Account: ${email}`} title={email} aria-haspopup="menu"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          // Below the button, right-aligned with it.
+          setAnchor(anchor ? null : { x: r.right - MENU_WIDTH - 6, y: r.bottom + 4 });
+        }}>
+        <span className="flex h-6 w-6 items-center justify-center rounded-full border border-line2 text-[11px] font-medium uppercase text-fg2">{email[0]}</span>
+      </button>
+      {anchor && (
+        <Popover anchor={anchor} width={MENU_WIDTH} onClose={() => setAnchor(null)}>
+          <PopoverLabel>Signed in as</PopoverLabel>
+          <div className="truncate px-2 pb-1.5 text-[12.5px] text-fg2">{email}</div>
+          <PopoverSeparator />
+          <PopoverItem icon={<Icon name="settings" size={13} />} onClick={() => { setAnchor(null); router.push("/settings"); }}>Settings</PopoverItem>
+          <PopoverItem icon={<Icon name="arrowRight" size={13} />} onClick={() => start(() => signOutAction())}>
+            {pending ? "Signing out…" : "Sign out"}
+          </PopoverItem>
+        </Popover>
+      )}
+    </div>
   );
 }

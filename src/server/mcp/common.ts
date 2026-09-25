@@ -4,6 +4,8 @@ import { format } from "date-fns";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as repo from "../repo";
+import { SESSION_TOOLS } from "./agent-tools";
+import { caller } from "./principal";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
@@ -22,13 +24,18 @@ export function fail(message: string): never {
 
 type Kind = "read" | "write" | "delete" | "launch";
 
-/** Registers a tool whose handler returns text; thrown errors become MCP tool errors. */
+/**
+ * Registers a tool whose handler returns text; thrown errors become MCP tool errors. A session PacedMind
+ * started only gets the tools in SESSION_TOOLS: the others aren't listed for it and refuse its calls.
+ */
 export function tool<S extends z.ZodObject>(
   server: McpServer,
   name: string,
   spec: { title: string; description: string; input: S; kind: Kind },
   run: (args: z.infer<S>) => string | Promise<string>,
 ) {
+  const ownerOnly = !SESSION_TOOLS.has(name);
+  if (ownerOnly && caller().kind === "session") return;
   server.registerTool(
     name,
     {
@@ -44,6 +51,9 @@ export function tool<S extends z.ZodObject>(
     },
     (async (args: z.infer<S>) => {
       try {
+        if (ownerOnly && caller().kind === "session") {
+          fail(`Sessions that PacedMind started can't use ${name}. Ask the user to do it in PacedMind.`);
+        }
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
         const text = e instanceof ToolError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
@@ -57,7 +67,7 @@ export function tool<S extends z.ZodObject>(
 
 export const taskRef = z.string().describe("Task key, such as WRK-12");
 export const projectRef = z.string().describe("Project id or name");
-export const areaRef = z.string().describe("Area id, name or key (e.g. work, Work or WRK)");
+export const areaRef = z.string().describe("Area name, key or id (e.g. Work or WRK)");
 export const dateInput = z.string().describe('A date: YYYY-MM-DD, or words like "today", "tomorrow", "next friday", "in 2 weeks"');
 export const dateTimeInput = z.string().describe('A date with an optional time: YYYY-MM-DD, YYYY-MM-DDTHH:mm, or words like "friday 10:00"');
 
@@ -81,9 +91,9 @@ export const doerSchema = z.enum(["claude", "codex", "human"])
 
 const listNames = (xs: string[]) => (xs.length ? xs.join(", ") : "none yet");
 
-export function findArea(query: string): Area {
+export async function findArea(query: string): Promise<Area> {
   const q = query.trim().toLowerCase();
-  const areas = repo.listAreas();
+  const areas = await repo.listAreas();
   const exact = areas.find((a) => a.id === q || a.key.toLowerCase() === q || a.name.toLowerCase() === q);
   if (exact) return exact;
   const partial = areas.filter((a) => a.name.toLowerCase().includes(q));
@@ -93,14 +103,14 @@ export function findArea(query: string): Area {
 }
 
 /** An area, or null for the Inbox ("inbox", "none"). */
-export function findAreaOrInbox(query: string | null): Area | null {
+export async function findAreaOrInbox(query: string | null): Promise<Area | null> {
   if (query === null || /^(inbox|none|no area)$/i.test(query.trim())) return null;
   return findArea(query);
 }
 
-export function findProject(query: string): Project {
+export async function findProject(query: string): Promise<Project> {
   const q = query.trim().toLowerCase();
-  const projects = repo.listProjects();
+  const projects = await repo.listProjects();
   const exact = projects.find((p) => p.id === q || p.name.toLowerCase() === q);
   if (exact) return exact;
   const partial = projects.filter((p) => p.name.toLowerCase().includes(q));
@@ -109,16 +119,16 @@ export function findProject(query: string): Project {
   return fail(`No project matches "${query}". Projects: ${listNames(projects.map((p) => `${p.name} (${p.id})`))}.`);
 }
 
-export function findTask(query: string): Task {
-  return repo.getTask(query.trim()) ?? fail(`No task ${query}. Task keys look like WRK-12; list_tasks finds them.`);
+export async function findTask(query: string): Promise<Task> {
+  return (await repo.getTask(query.trim())) ?? fail(`No task ${query}. Task keys look like WRK-12; list_tasks finds them.`);
 }
 
-export function findEvent(id: number): CalEvent {
-  return repo.getEvent(id) ?? fail(`No event ${id}. list_events shows event ids.`);
+export async function findEvent(id: number): Promise<CalEvent> {
+  return (await repo.getEvent(id)) ?? fail(`No event ${id}. list_events shows event ids.`);
 }
 
-export function findSession(id: string): Session {
-  return repo.getSession(id.trim()) ?? fail(`No session ${id}. list_sessions shows session ids.`);
+export async function findSession(id: string): Promise<Session> {
+  return (await repo.getSession(id.trim())) ?? fail(`No session ${id}. list_sessions shows session ids.`);
 }
 
 /* ---------- dates ---------- */
@@ -190,9 +200,10 @@ export const PALETTE_NAMES = PALETTE.map((c) => c.name).join(", ");
 /* ---------- describing things ---------- */
 
 /** Name lookups for one tool call. */
-export function names() {
-  const areas = new Map(repo.listAreas().map((a) => [a.id, a]));
-  const projects = new Map(repo.listProjects().map((p) => [p.id, p]));
+export async function names() {
+  const [areaList, projectList] = await Promise.all([repo.listAreas(), repo.listProjects()]);
+  const areas = new Map(areaList.map((a) => [a.id, a]));
+  const projects = new Map(projectList.map((p) => [p.id, p]));
   return {
     areas,
     projects,
@@ -203,7 +214,7 @@ export function names() {
   };
 }
 
-export type Names = ReturnType<typeof names>;
+export type Names = Awaited<ReturnType<typeof names>>;
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";
 
@@ -218,13 +229,13 @@ export function taskLine(t: Task, n: Names): string {
   return parts.join(" · ");
 }
 
-export function describeTask(t: Task, n: Names = names()): string {
-  const edges = repo.listEdges();
-  const keyOf = (id: number) => repo.getTask(id)?.key ?? `#${id}`;
+export async function describeTask(t: Task, given?: Names): Promise<string> {
+  const [n, edges, tasks, session] = await Promise.all([given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id)]);
+  const keys = new Map(tasks.map((x) => [x.id, x.key]));
+  const keyOf = (id: number) => keys.get(id) ?? `#${id}`;
   const after = edges.filter((e) => e.toTaskId === t.id).map((e) => `${keyOf(e.fromTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
   const next = edges.filter((e) => e.fromTaskId === t.id).map((e) => `${keyOf(e.toTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
   const project = t.projectId ? n.projects.get(t.projectId) : undefined;
-  const session = repo.latestSession(t.id);
   return [
     `${t.key} · ${t.title}`,
     `Status: ${STATUS_LABEL[t.status]} · Priority: ${PRIORITY_LABEL[t.priority]}`,

@@ -48,9 +48,9 @@ A flow runs a project's tasks as agent sessions, one after another. Use it for w
    - **same_session**: the same agent continues in the same terminal and keeps its context. Good for closely related steps.
    - **at_time**: waits until a set time, for example to run overnight.
 3. Check the result with `get_flow`.
-4. Nothing starts on its own until the project's flow is on (`update_project` with `flow_on: true`). Turn it on only when the user asks, because it starts agents on their computer.
+4. Nothing starts on its own until the project's flow is on. Only the user can switch it on, in PacedMind's Flows page on the computer where the sessions run, because it starts agents there unattended. Tell them the flow is ready when it is.
 
-The user starts the first task of a flow with the Start button in PacedMind. You can do it with `start_session` if the user asks you to.
+The user starts the first task of a flow with the Start button in PacedMind. If the user asks you to, `start_session` sends the request; they allow it in PacedMind.
 
 ## Keep projects healthy
 

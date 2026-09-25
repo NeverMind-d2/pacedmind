@@ -7,7 +7,7 @@ import { dateOnly, todayStr } from "@/lib/dates";
 export default async function TodayPage(props: PageProps<"/today">) {
   const sp = await props.searchParams;
   const today = todayStr();
-  const tasks = repo.listTasks();
+  const [tasks, schedule] = await Promise.all([repo.listTasks(), repo.occurrences(today, today)]);
   const byUrgency = (a: (typeof tasks)[number], b: (typeof tasks)[number]) =>
     Number(a.status === "done") - Number(b.status === "done") || (a.priority || 5) - (b.priority || 5) || (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
   const overdue = tasks.filter((t) => isOpen(t) && t.dueDate && dateOnly(t.dueDate) < today).sort((a, b) => a.dueDate!.localeCompare(b.dueDate!));
@@ -28,8 +28,8 @@ export default async function TodayPage(props: PageProps<"/today">) {
       title="Today"
       subtitle={format(new Date(), "EEE, d MMM")}
       groups={groups}
-      schedule={repo.occurrences(today, today)}
-      ctx={taskContext([...overdue, ...dueToday, ...planned])}
+      schedule={schedule}
+      ctx={await taskContext([...overdue, ...dueToday, ...planned])}
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ plannedDate: today }}
       empty="Nothing is due or planned for today"

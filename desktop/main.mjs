@@ -1,9 +1,9 @@
 // PacedMind desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
 // shows it in a window and keeps running in the tray, so agents can still report back after the
 // window is closed. Built and installed by scripts/build-desktop.mjs.
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeTheme, screen, session, shell } from "electron";
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeTheme, safeStorage, screen, session, shell } from "electron";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
@@ -39,6 +39,35 @@ let serverReady = false;
 const notifications = new Set();
 
 const dataDir = () => path.join(app.getPath("userData"), "data");
+
+/*
+ * Keys between this process and the server it starts (see src/server/ui-key.ts and secure-file.ts):
+ * - The window key, new every run: only this app's window (a cookie) and this process (a header) may use
+ *   the server's pages and actions, not other programs on the computer or the agents it starts.
+ * - The data key, kept in the OS keychain (safeStorage: DPAPI on Windows), encrypts the server's secrets on
+ *   disk: the account's session, MCP tokens, agent commands and project folders.
+ * Both reach the server as environment variables, which it keeps out of agent terminals.
+ */
+const UI_KEY = randomBytes(32).toString("base64url");
+const UI_COOKIE = "pm_ui";
+const UI_HEADER = "x-pacedmind-ui";
+
+function dataKey() {
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  const file = path.join(dataDir(), "data-key.bin");
+  try {
+    return safeStorage.decryptString(fs.readFileSync(file));
+  } catch {
+    if (fs.existsSync(file)) {
+      // A key we can't read (another Windows user's, or a changed keychain) would lock the old files for good.
+      fs.renameSync(file, `${file}.unreadable-${Date.now()}`);
+    }
+  }
+  const key = randomBytes(32).toString("base64");
+  fs.mkdirSync(dataDir(), { recursive: true });
+  fs.writeFileSync(file, safeStorage.encryptString(key));
+  return key;
+}
 const logFile = () => path.join(app.getPath("logs"), "server.log");
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
 const loginArgs = { name: "Organizer", path: process.execPath, args: ["--hidden"] };
@@ -49,7 +78,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function getJson(pathname) {
   return new Promise((resolve) => {
-    const req = http.get(`${ORIGIN}${pathname}`, { timeout: 1500 }, (res) => {
+    const req = http.get(`${ORIGIN}${pathname}`, { timeout: 1500, headers: { [UI_HEADER]: UI_KEY } }, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (c) => (body += c));
@@ -65,6 +94,21 @@ function getJson(pathname) {
     req.on("error", () => resolve(null));
   });
 }
+
+/** Whether the server on the port is the one this app started: only it can sign a random value with this run's key. */
+async function isOurServer() {
+  const nonce = randomBytes(16).toString("hex");
+  const answer = await getJson(`/api/health?proof=${nonce}`);
+  return !!answer && answer.proof === createHmac("sha256", UI_KEY).update(nonce).digest("hex");
+}
+
+const sameOrigin = (url) => {
+  try {
+    return new URL(url).origin === ORIGIN;
+  } catch {
+    return false;
+  }
+};
 
 function readState() {
   try {
@@ -109,8 +153,13 @@ const page = (text) =>
 /* ---------- the server ---------- */
 
 async function startServer() {
-  // Already answering, e.g. a server left behind by a crash: use it.
-  if (await getJson("/api/state")) return;
+  // Something already answers on the port. Ours (a restart) can prove it; a server left behind by a crash has
+  // another key and exits once it notices its parent is gone; anything else must never get this window.
+  for (let i = 0; i < 100 && (await getJson("/api/health")); i++) {
+    if (await isOurServer()) return;
+    await sleep(100);
+  }
+  if (await getJson("/api/health")) throw new Error(`Another program answers on port ${PORT}.`);
 
   fs.mkdirSync(dataDir(), { recursive: true });
   fs.mkdirSync(path.dirname(logFile()), { recursive: true });
@@ -121,6 +170,8 @@ async function startServer() {
   }
   const log = fs.openSync(logFile(), "a");
   fs.writeSync(log, `\n--- ${new Date().toISOString()} starting PacedMind ${app.getVersion()}\n`);
+  const dataKeyValue = dataKey();
+  if (!dataKeyValue) fs.writeSync(log, "The OS keychain isn't available: secrets on disk are not encrypted.\n");
 
   const child = spawn(process.execPath, [path.join(SERVER_DIR, "server.js")], {
     cwd: SERVER_DIR,
@@ -133,6 +184,8 @@ async function startServer() {
       ORGANIZER_DB: path.join(dataDir(), "organizer.db"),
       ORGANIZER_SEED: "empty",
       ORGANIZER_EXIT_WITH_PARENT: "1",
+      ORGANIZER_UI_SECRET: UI_KEY,
+      ...(dataKeyValue ? { ORGANIZER_DATA_KEY: dataKeyValue } : {}),
       NEXT_TELEMETRY_DISABLED: "1",
     },
     // stdin stays open as a lifeline: the server exits when it closes (see src/instrumentation.ts).
@@ -149,7 +202,7 @@ async function startServer() {
   });
 
   for (let i = 0; i < 300 && !exited; i++) {
-    if (await getJson("/api/state")) return;
+    if (await isOurServer()) return;
     await sleep(100);
   }
   throw new Error(exited ? "The server stopped while starting." : "The server did not answer within 30 seconds.");
@@ -252,7 +305,8 @@ function createWindow() {
     return { action: "deny" };
   });
   wc.on("will-navigate", (e, url) => {
-    if (!url.startsWith(ORIGIN) && !url.startsWith("data:")) {
+    // Exactly this origin: "127.0.0.1:43190" or "127.0.0.1:4319@elsewhere" also start with it.
+    if (!sameOrigin(url) && !url.startsWith("data:")) {
       e.preventDefault();
       openOutside(url);
     }
@@ -332,20 +386,42 @@ function appMenu() {
   );
 }
 
-/** Watches for sessions that finished, tells you with a notification and keeps the tray tooltip current. */
+/**
+ * Watches for sessions that finished and for sessions waiting to be allowed, tells you with a
+ * notification and keeps the tray tooltip current.
+ */
 function watchSessions() {
   let known = null;
+  let asked = new Set();
   const check = async () => {
     if (!serverReady) return;
     const state = await getJson("/api/state");
     if (!state) return;
     const waiting = state.waiting ?? [];
+    const approvals = state.approvals ?? [];
     if (known) for (const s of waiting) if (!known.has(s.id)) notify(s);
+    for (const a of approvals) if (!asked.has(a.id)) notifyApproval(a);
     known = new Set(waiting.map((s) => s.id));
-    tray?.setToolTip(waiting.length ? `PacedMind · ${waiting.length} waiting for you` : "PacedMind");
+    asked = new Set(approvals.map((a) => a.id));
+    const count = waiting.length + approvals.length;
+    tray?.setToolTip(count ? `PacedMind · ${count} waiting for you` : "PacedMind");
   };
   check();
   setInterval(check, 5000);
+}
+
+/** A session asked for over MCP or from elsewhere: nothing starts until you allow it in the window. */
+function notifyApproval(a) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({
+    title: `Start ${a.key ?? "a session"} with ${a.agent}?`,
+    body: [a.title, `Asked by ${a.from}. Open PacedMind to allow or refuse it.`].filter(Boolean).join("\n"),
+    icon: ICON_PNG,
+  });
+  notifications.add(n);
+  n.on("click", () => showWindow());
+  n.on("close", () => notifications.delete(n));
+  n.show();
 }
 
 function notify(s) {
@@ -366,6 +442,8 @@ function notify(s) {
 async function boot() {
   try {
     await startServer();
+    // The window's key, as a cookie only this app's window has; it's gone when the app quits.
+    await session.defaultSession.cookies.set({ url: ORIGIN, name: UI_COOKIE, value: UI_KEY, httpOnly: true, sameSite: "strict" });
     serverReady = true;
     if (win) {
       const window = win;
