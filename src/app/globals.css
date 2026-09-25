@@ -15,7 +15,7 @@
   --color-fg3: #c4c4ca;
   --color-mut: #a1a1a8;
   --color-mut2: #85858c;
-  --color-dim: #5e5e64;
+  --color-dim: #78787e; /* The lowest that still reads: 4.5:1 on bg, panel and raised (WCAG AA). */
   --color-faint: #48484d;
   --color-accent: #95abd9;
   --color-accent-strong: #2e4b91;
@@ -56,7 +56,7 @@ html[data-theme="light"] {
   --color-fg3: #50505c;
   --color-mut: #61616e;
   --color-mut2: #6d6d7a;
-  --color-dim: #777785;
+  --color-dim: #6f6f7d; /* 4.5:1 on bg, panel and raised (WCAG AA). */
   --color-faint: #90909c;
   --color-accent: #172f6f;
   --color-accent-strong: #172f6f;

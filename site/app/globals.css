@@ -26,7 +26,7 @@
   --color-app-fg3: #50505c;
   --color-app-mut: #61616e;
   --color-app-mut2: #6d6d7a;
-  --color-app-dim: #777785;
+  --color-app-dim: #6f6f7d;
   --color-app-accent: #172f6f;
   --color-app-accent-fg: #172f6f;
 
@@ -61,7 +61,7 @@
     --color-app-fg3: #c4c4ca;
     --color-app-mut: #a1a1a8;
     --color-app-mut2: #85858c;
-    --color-app-dim: #5e5e64;
+    --color-app-dim: #78787e;
     --color-app-accent: #95abd9;
     --color-app-accent-fg: #bbcbeb;
   }
