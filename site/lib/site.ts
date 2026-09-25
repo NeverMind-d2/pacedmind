@@ -2,11 +2,13 @@
 // http:// and www.pacedmind.com here (deploy/).
 const url = "https://pacedmind.com";
 
-/** Public addresses: the site, its docs and the downloads. */
+/** Public addresses: the site, its docs, the web app and the downloads. */
 export const SITE = {
   url,
   // The documentation, a separate app served from the same domain.
   docs: "/docs",
+  // The web app, where PacedMind Cloud accounts sign in (it sends visitors without a session to its sign-in page).
+  app: "https://app.pacedmind.com",
   // The current installers, which `npm run release` uploads (deploy/Caddyfile leads these to them).
   downloads: {
     windows: `${url}/download/windows`,
@@ -37,4 +39,9 @@ export function absoluteUrl(path: string) {
 /** Makes Umami count a click on a download button as a "Download" event, with the system and where the button is. */
 export function downloadEvent(os: "windows" | "mac", place: "hero" | "pricing") {
   return { "data-umami-event": "Download", "data-umami-event-os": os, "data-umami-event-place": place };
+}
+
+/** Makes Umami count a click on a link to the web app as a "Sign in" event, with where the link is. */
+export function signInEvent(place: "header" | "footer") {
+  return { "data-umami-event": "Sign in", "data-umami-event-place": place };
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import prices from "@/prices.json";
-import { SITE, downloadEvent } from "@/lib/site";
+import { SITE, downloadEvent, signInEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
 import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
@@ -35,9 +35,12 @@ export default function Home() {
       <JsonLd data={graph(softwareApplication(), faqPage(FAQ))} />
       <header className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="PacedMind" className="rounded-[7px]"><Emblem size={30} /></Link>
-        <nav className="flex gap-[30px] text-[16px] text-mut">
+        <nav className="flex items-center gap-[30px] text-[16px] text-mut">
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
+          <a href={SITE.app} className="rounded-[10px] border border-line px-4 py-2 font-medium text-ink hover:border-mut" {...signInEvent("header")}>
+            Sign in
+          </a>
         </nav>
       </header>
 
@@ -113,6 +116,7 @@ export default function Home() {
           <span className="flex items-center gap-3 text-text"><Emblem size={20} />PacedMind</span>
           <div className="flex gap-6">
             <a href={SITE.docs} className="hover:text-ink">Docs</a>
+            <a href={SITE.app} className="hover:text-ink" {...signInEvent("footer")}>Sign in</a>
             <span>© 2026</span>
           </div>
         </div>
