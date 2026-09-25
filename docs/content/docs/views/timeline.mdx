@@ -1,0 +1,109 @@
+---
+title: Timeline
+description: The timeline shows areas, projects and tasks as bars over weeks. Drag a bar's edges to change when it starts or is due, drag the bar to move it, and draw dependencies between tasks.
+---
+
+The **Timeline** lays out the work over time, grouped by area: each project and each task is a bar. It shows at a glance what runs when, what waits for what, and how much of your own time each day holds.
+
+<img src="/docs/screenshots/timeline.png" alt="The Timeline with the Your time row, areas, projects and task bars" width="1920" height="1200" loading="lazy" />
+
+## The header
+
+* The range shown, such as *21 Sep to 18 Oct 2026*. It always starts on a Monday.
+* **Earlier** and **Later** move by one screen; **Today** returns to the current week.
+* **Week**, **Month** and **Quarter** set the zoom: 7, 28 or 91 days. **Month** is the default.
+
+The bar under the header chooses what to **Show**:
+
+| Layer | Shows |
+| --- | --- |
+| **Tasks** | The task bars. |
+| **Sessions** | Thin lines under the task bars for the agent sessions that ran on them. |
+| **Time blocks** | The **Your time** row at the top. |
+| **Deadlines** | A flag at each deadline. |
+| **Dependencies** | The lines between tasks that wait for each other. |
+
+## Rows
+
+The left column lists *Areas, projects and tasks*:
+
+* **Your time** (*hours planned per day*): one small bar per day. For today and later days, it's the focus time the auto-planner plans for you; for past days, the estimates of your tasks finished that day. A full bar is a full working day. Hover a bar for the hours.
+* **Areas**, with a separate **Inbox** group for tasks without an area. Select an area's name to collapse it.
+* **Projects**, with a progress ring and *done of total*. A project row expands to its tasks; it starts expanded when any of its tasks has a date or a session.
+* **Tasks**, with their key and title. Select a task's row or bar to open its details.
+
+Open tasks always have a row. Finished tasks appear only while their bar or a session is in view; canceled tasks never appear.
+
+## How bars are placed
+
+**A project's bar** runs from its start date to its target date. Without them, it spans its tasks. The filled part shows the share of done tasks, and a label shows the percentage, or *Starts 5 Oct* for a project that hasn't started yet. A hollow diamond marks the target date.
+
+**A task's bar**:
+
+* **starts** on its planned day; without one, on the day its first session started, or else on the day it was created. A task that hasn't started, has no planned day and waits for other tasks starts after them.
+* **ends** at its deadline, including the time of day. Without a deadline, the estimate sets the length, counting 8 hours per day, and at least one day.
+
+Bars outside the range show a small date at the edge, such as *‹ 12 Sep* or *30 Oct ›*. A navy line marks now; weekends are shaded.
+
+## How bars look
+
+The color is the area's or the project's; the fill and the outline show the state:
+
+| Look | State |
+| --- | --- |
+| Faint, with a check mark | Done |
+| Navy outline, and a navy dot after the bar | An agent finished; waiting for your review |
+| Solid fill | In progress, in review, or a session is running |
+| Dashed outline, no fill | Backlog |
+| Dashed outline, light fill | Todo |
+
+The label inside or next to the bar gives the state in a few words: *In progress*, *Claude Code, running*, *Finished 12:22*, *Waits for 21 and 22*, *Manual start*, *Same session*, *Ready*, *Planned*, *Due 17:00*. Hover the bar for the full sentence, such as *When you mark DEV-21 done* or *Finished 12:22, waiting for you*.
+
+The **Sessions** layer draws each session as a line under the bar: in the area's color while it runs, navy when it finished and waits for review, faded when done, and gray when it was closed or failed. Hover it for the agent, the times and the state.
+
+## Change dates by dragging
+
+Open tasks can be changed on the bars themselves. Hovering a bar shows a grip at each end.
+
+| Drag | Changes |
+| --- | --- |
+| **The start edge** (*Drag to change when it starts*) | The planned date. |
+| **The end edge** (*Drag to change when it's due*) | The due date. A deadline keeps its time of day. |
+| **The whole bar** | Both: the planned date and the due date move by the same number of days. |
+
+Bars move in whole days and never get shorter than one day. While dragging, the label shows the new date, such as *Starts Tue, 22 Sep* or *Due Fri, 25 Sep*. Releasing saves it, with a message such as *WRK-31 is now due Fri, 25 Sep* or *Moved WRK-31 to Tue, 22 Sep*.
+
+A bar without a deadline ends where its estimate runs out. Dragging its start edge then also makes that end its deadline, so the end stays where it was.
+
+A click without a drag opens the task.
+
+## Dependencies
+
+A dependency makes one task wait for another: it starts after the first one is finished. Dependencies are the same connections that a project's [flow](/views/flows) uses, so they follow the same rules. When the project's flow is on, a dependency can start the waiting task's agent session, as a connection on the canvas would. The **Flows** canvas shows a dependency when both tasks are on it.
+
+### Draw a dependency
+
+1. Hover an open task's bar, with the **Dependencies** layer on. A small dot appears before its start and after its end.
+2. Drag from a dot to another task's row:
+   * from the **end dot** (*Drag to a task that waits for this one*): the other task waits for this one;
+   * from the **start dot** (*Drag to a task this one waits for*): this task waits for the other one.
+3. Release. A dashed navy line follows the pointer while dragging. The message confirms the new dependency, such as *DEV-23 now waits for DEV-22*.
+
+The line turns gray and a note explains why when a dependency isn't allowed:
+
+| Note | Rule |
+| --- | --- |
+| *DEV-23 already waits for DEV-22* | The dependency exists. |
+| *DEV-23 is done already* | Finished and canceled tasks can't start waiting. |
+| *… are in different projects. Dependencies stay within one project.* | Both tasks must be in the same project, or both outside any project. |
+| *… already waits for …, so this would make a loop* | No circles. |
+
+A new dependency takes the way the waiting task already starts in its flow (automatically, manually, and so on), or **Automatically** when it has no other connection. See [Automate with flows](/agents/flows).
+
+### Remove a dependency
+
+Click a dependency line. A menu names it, such as *DEV-23 waits for DEV-22*, and offers **Remove dependency**. The message confirms: *DEV-23 no longer waits for DEV-22*.
+
+### Dependencies for your own tasks
+
+Tasks that are yours can have dependencies too, to show what they wait for. PacedMind never starts a session for them; the bar says *Ready* when everything before it is finished.

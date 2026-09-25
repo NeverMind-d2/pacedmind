@@ -1,0 +1,102 @@
+---
+title: Calendar and agenda
+description: "Reference for the calendar tools: list_events, create_event, update_event, delete_event, get_agenda and reschedule_day."
+---
+
+Calendar events are the **activities** of the app: fixed entries such as meetings, workouts and appointments, one-off or weekly. See [Calendar activities](/concepts/activities).
+
+## `list_events`
+
+**Read-only. Allowed without asking.**
+
+The activities between two dates, including every occurrence of weekly ones, grouped by day. Each line shows the time, title, area, *weekly* when it repeats, and the event id for `update_event` and `delete_event`: `18:00–20:00 Climbing with Tomek · Health · weekly [event 4]`.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `from` | date | Defaults to today. |
+| `to` | date | Defaults to six days after `from`. At most about three months after it. |
+| `area` | string | Only activities in this area; `none` for those without an area. |
+
+## `create_event`
+
+**Changes data.**
+
+Adds an activity. The auto-planner keeps focus time around it. Weekly activities repeat on the same weekday.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `title` | string | yes | The activity's title. |
+| `start` | date with time | yes | Such as `2026-09-26T14:00` or *friday 14:00*. A time is required. |
+| `end` | string | no | The end time, such as `15:30`, or a date and time on the same day. |
+| `duration_minutes` | number | no | Used when `end` is left out. 5 to 1440; default 60. |
+| `area` | string | no | The area. |
+| `weekly` | boolean | no | Repeat every week. |
+
+An activity starts and ends on the same day: *The event would run past midnight. Events stay within one day.* The end must come after the start.
+
+## `update_event`
+
+**Changes data.**
+
+Renames an activity, changes its area, or moves it. For a weekly activity, this changes the whole series.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `event` | number, required | The event id from `list_events`. |
+| `title` | string | The new title. |
+| `area` | string or `null` | An area, or `null` or `none` for no area. |
+| `start` | date with time | A new start. The length stays, unless `end` or `duration_minutes` is given. |
+| `move_to_date` | date | The same times, on another day. |
+| `shift_days` | number | Moves it by this many days, -366 to 366. |
+| `shift_minutes` | number | Moves it earlier (negative) or later on the same day. |
+| `end` | string | A new end time, or a date and time on the same day. |
+| `duration_minutes` | number | A new length. |
+| `weekly` | boolean | Turns weekly repetition on or off. |
+
+Use only one of `start`, `move_to_date`, `shift_days` and `shift_minutes` at a time. `shift_minutes` can't move an activity into another day: *That would move the event into another day. Use shift_days or move_to_date for that.*
+
+## `delete_event`
+
+**Deletes. Agents ask the user first.**
+
+Removes an activity. For a weekly activity, this removes every occurrence.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `event` | number | yes | The event id. |
+
+## `get_agenda`
+
+**Read-only. Allowed without asking.**
+
+A day-by-day plan: activities, the auto-planner's focus blocks, tasks due and planned, and the free focus time left. Agents use it to plan a day or a week.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `from` | date | Defaults to today. |
+| `to` | date | Defaults to `from`. At most 14 days in total. |
+
+For each day, the result lists:
+
+* the weekday and date, *(today)*, and *day off* for days outside the work days;
+* **Calendar**: the activities, with their event ids;
+* **Focus blocks (auto-planned)**: such as `09:00–10:30 WRK-31 Prepare slides for Q4 planning`, and `Review DEV-21 (an agent finished it)` for check blocks;
+* **Due** and **Planned**: the tasks;
+* *Free focus time left: 3h 30m · planned: 2h 45m*, on work days from today on.
+
+After the days come the **Overdue** tasks (when the range includes today), the tasks that *Didn't fit into free focus time*, and a reminder of how focus blocks are made: open tasks without an agent, with a due date, a planned day or urgent or high priority, most urgent first, inside the work hours. Blocks change when those tasks change.
+
+## `reschedule_day`
+
+**Changes data.**
+
+Moves one day's plans to another day: open tasks planned for that day, one-off activities at the same times, and optionally deadlines. Weekly activities stay where they are.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `from` | date | yes | The day to clear. |
+| `to` | date | yes | The day to move to. |
+| `include` | `tasks`, `events` or `both` | no | What to move. Default `both`. |
+| `move_deadlines` | boolean | no | Also move open tasks due that day, keeping their time. Default `false`. |
+
+Returns every change, such as `Planned 2026-09-25: …` and `Moved Event 7 · …`, and *Left in place (weekly): Gym 07:30*. With nothing to move: *Nothing to move on 2026-09-24 (Thu).*

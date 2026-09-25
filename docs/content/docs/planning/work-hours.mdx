@@ -1,0 +1,39 @@
+---
+title: Work hours and days
+description: The focus hours, break and work days that the auto-planner fills, their defaults, and how to change them in Settings or through an agent.
+---
+
+The auto-planner only places tasks inside your work hours, on your work days. They're set in **Settings → Auto-plan**: *The week view fills free focus time between these hours, around your fixed activities.*
+
+| Setting | Meaning | Default |
+| --- | --- | --- |
+| **Focus hours** | When work time starts and ends each work day. | 09:00 to 17:00 |
+| **Keep free** | A daily break the planner leaves empty, such as lunch. | 12:30 to 13:30 |
+| **Work days** | The days the planner uses. Select a day to switch it on or off. | Mon to Fri |
+
+Changes save when a field loses focus, confirmed by *Saved*, and apply the next time a plan is made.
+
+## Where they show
+
+* The **week view** shades the days that aren't work days and lists the hours under **Rules** in its **Auto-plan** panel. **Change** there opens **Settings**.
+* The **Timeline**'s **Your time** row uses the length of a work day, the focus hours minus the break, as a full bar.
+* The **Flows** editor uses the start of the work hours as the default time for **At a set time**: the next work day at that hour.
+
+## Change them through an agent
+
+Agents read the settings with `get_settings` and change them with `update_settings`:
+
+```text
+update_settings
+  work_start: "08:30"
+  work_end: "16:30"
+  break_start: "12:00"
+  break_end: "12:45"
+  work_days: ["mon", "tue", "wed", "thu"]
+```
+
+The work hours must start before they end, and so must the break. Times use the 24-hour `HH:mm` format; days are `mon` to `sun`.
+
+## Time outside work hours
+
+Activities outside the work hours still show in the calendar, but they don't reduce the focus time. Tasks can still be planned for any day, including days off; the auto-planner just won't place focus blocks on those days.

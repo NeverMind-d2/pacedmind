@@ -1,0 +1,78 @@
+---
+title: Tasks
+description: Task keys, the six statuses, priorities, labels, estimates, descriptions and sub-tasks, and the difference between canceling and deleting.
+---
+
+A task is one piece of work. Besides its title, it has a key, a status, a priority, two dates, an estimate, labels, a description, sub-tasks, and someone who does it.
+
+## Keys
+
+Every task gets a key when it's created: the area's key and the next number, such as **WRK-12**. The number is one more than the highest in use, so deleting the newest task frees its number for the next one. Tasks created in the Inbox, without an area, get **INB** keys, such as INB-3.
+
+A key never changes. Moving a task to another area or project keeps its key, so WRK-12 can end up in the Personal area. Agents and the command menu find tasks by key, in any letter case.
+
+## Status
+
+| Status | Meaning | Set by |
+| --- | --- | --- |
+| **Backlog** | Kept for later; not planned yet. | You |
+| **Todo** | To do. New tasks start here. | You; also **Close session**, for a task in progress |
+| **In progress** | Being worked on. | You; PacedMind when a session starts on the task |
+| **In review** | Finished by an agent, waiting for you to check it. | The agent, when it hands the task back |
+| **Done** | Finished and checked. | You |
+| **Canceled** | Won't be done, but kept for the record. | You |
+
+Each status has its own icon: a dashed circle for **Backlog**, an empty circle for **Todo**, a half-filled circle for **In progress**, a three-quarters-filled circle for **In review**, a navy circle with a check mark for **Done**, and a gray circle with a cross for **Canceled**.
+
+Click a task's status icon in a list to mark it done, or to set a done or canceled task back to **Todo**. The details panel offers all six statuses.
+
+Done and canceled tasks leave the Inbox and Upcoming. **Today** keeps a task that was due today and got done today, crossed out, until the day ends. In area and project lists, finished tasks collect in the **Done** and **Canceled** groups, which start collapsed. Marking a task done records when; any other status clears that time.
+
+Marking a task done can start agent sessions that wait for it in a flow. See [Automate with flows](/agents/flows).
+
+## Priority
+
+| Priority | Use it for |
+| --- | --- |
+| **Urgent** | What must happen today, or causes harm if it slips. |
+| **High** | This week's important work. |
+| **Medium** | Normal work that has a place in the plan. |
+| **Low** | Nice to have. |
+| **No priority** | The default. |
+
+**Urgent** shows as an exclamation mark in a square; **High**, **Medium** and **Low** as three, two and one lit bars; no priority as three faint bars. The Inbox and the area and project lists sort by priority within each status group, **Urgent** first; **Today** and **Upcoming** sort by date and time first. See [Views](/views). The auto-planner also plans **Urgent** and **High** tasks that have no dates. See [The auto-planner](/planning/auto-planner).
+
+## Labels
+
+Labels are short lowercase words, such as *finance* or *car*. Add them in the details panel (**+ Add**, then <kbd>Enter</kbd>) or type them with `#` in quick add, as in *#finance*. A task row shows its first two labels. Click a label in the details panel to remove it. Agents can filter tasks by label.
+
+## Estimate
+
+The estimate is how long the task takes, in minutes. New tasks get 60 minutes. The details panel offers 15, 30, 45, 60, 90, 120, 180 and 240 minutes; quick add reads phrases like *for 30m* or *for 2h*, and agents can set any value from 5 minutes to 24 hours.
+
+The estimate decides:
+
+* how much focus time the auto-planner reserves for the task (for a task in progress, only the share of its sub-tasks still open, but at least a quarter);
+* how long its bar is on the **Timeline** when it has no deadline, counting 8 hours per day.
+
+## Description and sub-tasks
+
+The **description** holds what won't be obvious later: context, links, constraints and what done looks like. For work an agent will do, write the acceptance criteria there; the agent reads them when it picks the task up.
+
+**Sub-tasks** are checklist items. Add them in the details panel (**+ Add sub-task**, then <kbd>Enter</kbd>), tick them off, or hover one and select its **×** to delete it. The panel shows how many are done. Agents working on a task tick off sub-tasks as they go and add the ones they discover.
+
+## Where a task lives
+
+A task is in a project, directly in an area, or in the Inbox. In the details panel:
+
+* Choosing a **Project** also sets the task's area to the project's area.
+* **No project** takes the task out of its project and leaves it in the area.
+* Choosing another **Area** keeps the task's project. To move a task out of a project into another area, or to the Inbox (**Inbox, no area**), choose **No project** first.
+
+A task created in a project gets the project's default agent as its doer. See [Who does a task](/concepts/done-by).
+
+## Cancel or delete
+
+**Canceled** keeps the task, its history and its sessions, out of the way. Deleting removes the task together with its sub-tasks, its session records and its flow connections, and can't be undone.
+
+Delete a task from its details panel (the trash button), from its menu in the calendar (**Delete task**), or through an agent. The details panel asks *Delete WRK-12?* first; the calendar menu asks for a second click.

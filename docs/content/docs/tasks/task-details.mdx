@@ -1,0 +1,83 @@
+---
+title: The task details panel
+description: Every field of the task details panel, the agent session card with its buttons, sub-tasks, and the task's activity history.
+---
+
+Clicking a task's title opens its details on the right side of the view: in task lists, on **Upcoming**, on the **Timeline** and on the **Roadmap**, from a focus block or a session lane in the calendar's week view, and through **Open task** in the month view's task menu. Changes save as they're made. The **×** button (**Close details**), a second click on the task, or <kbd>Esc</kbd> outside a text field closes the panel.
+
+<img src="/docs/screenshots/task-details.png" alt="The details panel of a task, with its fields, the Start in Claude Code button and sub-tasks" width="1920" height="1200" loading="lazy" />
+
+## The header
+
+The top line shows where the task lives: its area (or **Inbox**), its project (or **No project**) and its key. On the right:
+
+* the trash button (**Delete task**), which asks *Delete WRK-12?* before deleting the task for good;
+* **×**, which closes the panel.
+
+## Title and description
+
+* **Title**: click to edit. <kbd>Enter</kbd> or clicking elsewhere saves it.
+* **Description**: *Add description…*. Saved when the cursor leaves the field. Plain text; agents often write Markdown here.
+
+## Fields
+
+| Field | Choices |
+| --- | --- |
+| **Status** | **Backlog**, **Todo**, **In progress**, **In review**, **Done**, **Canceled**. See [Tasks](/concepts/tasks#status). |
+| **Priority** | **Urgent**, **High**, **Medium**, **Low**, **No priority**. |
+| **Due date** | *Add a deadline*. A date and, optionally, a time. Shows the distance, such as *in 3 days*, in red when overdue. |
+| **Planned** | *Pick a day to work on it*. A day, without a time. |
+| **Estimate** | 15, 30, 45, 60, 90, 120, 180 or 240 minutes. |
+| **Area** | **Inbox, no area**, or an area. |
+| **Project** | *Add to project*: **No project**, or a project. Choosing a project also sets the area. |
+| **Done by** | **You**, **Claude Code**, **Codex**, or the project default. See [Who does a task](/concepts/done-by). |
+| **Labels** | The labels, and **+ Add**: type a label and press <kbd>Enter</kbd>. Click a label to remove it. |
+| **Session** | The latest agent session, or a button to start one. See below. |
+
+The date fields open a picker with **Today**, **Tomorrow**, **In a week** and a date field; **Due date** also has a time field. **Clear** appears once a date is set.
+
+## The Session field
+
+What the **Session** field shows depends on the task:
+
+* **A session exists**: the agent and the session's state, such as *Claude Code finished*. Selecting it opens the session in **Sessions**. After a session that failed to start, the field offers to start one again.
+* **The task is yours**: *None, this one is yours*. No session can start.
+* **Otherwise**: **Start in Claude Code** (or **Codex**, the task's agent), with an arrow (**Choose agent**) that offers **Start in Claude Code** and **Start in Codex**.
+
+Starting opens a new terminal with the agent working on the task: *Session started in a new terminal*. See [Start, resume and close sessions](/agents/start-and-manage).
+
+## The session card
+
+Once a task has a session, a card under the fields shows its state:
+
+| State | Card text |
+| --- | --- |
+| Running | *Running in Claude Code since 14:05* |
+| Running, no word from the agent after 90 seconds | *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.* |
+| Finished | *Claude Code finished at 14:40 · waiting for you*, with the agent's note in quotes |
+| Done | *Claude Code finished, marked done* |
+| Closed | *Closed before the agent finished* |
+| Failed | *Couldn't start:* and the reason |
+
+The card also shows the session's folder and branch name, and these buttons:
+
+| Button | When | Result |
+| --- | --- | --- |
+| **Resume in terminal** | The session isn't running and didn't fail. | Opens a terminal in the session's folder again. Claude Code continues the same conversation. |
+| **New session** | The session is closed, done or failed, and the task isn't done. | Starts a fresh session. |
+| **Mark done** | The agent finished. | Marks the task done after your review. This can start the next sessions of a flow. |
+| **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, then marks the session closed and sets an in-progress task back to **Todo**. |
+
+See [Review finished work](/agents/review).
+
+## Sub-tasks
+
+The **Sub-tasks** section lists the checklist, with a counter such as *2 / 4* and a progress bar.
+
+* Click a sub-task's circle to tick it off, or to reopen it.
+* Hover a sub-task and select its **×** (**Delete sub-task**) to remove it.
+* Type in **+ Add sub-task** and press <kbd>Enter</kbd> to add one.
+
+## Activity
+
+The bottom of the panel lists what happened to the task, with times: *Created*, what PacedMind heard from the latest session (such as *Started Claude Code in a new terminal* and *Claude Code read the task over MCP*), and *Marked done*.

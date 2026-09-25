@@ -1,0 +1,81 @@
+---
+title: First launch
+description: Open PacedMind for the first time, find your way around the window and the sidebar, and set up areas, projects and work hours.
+---
+
+Open PacedMind from the Start Menu or from its desktop shortcut. The window shows *Starting PacedMind…* while the app's server starts, then opens **Today**.
+
+## The window
+
+The window has three parts:
+
+* **The header**, across the top: **Go back** and **Go forward** buttons (<kbd>Alt</kbd>+<kbd>Left</kbd> and <kbd>Alt</kbd>+<kbd>Right</kbd>), and the PacedMind wordmark, which returns to **Today**. The window's own minimize, maximize and close buttons sit at its right end.
+* **The sidebar**, on the left.
+* **The main panel**, which shows the selected view. Opening a task adds its details panel on the right.
+
+Pages refresh on their own when data changes elsewhere, for example when an agent reports progress over MCP.
+
+## The sidebar
+
+From top to bottom:
+
+| Element | What it does |
+| --- | --- |
+| **Search** (<kbd>Ctrl</kbd>+<kbd>K</kbd>) | Opens the command menu to find tasks, projects and pages. See [Search and the command menu](/tasks/search). |
+| Pen button (<kbd>C</kbd>) | Opens quick add for a new task. See [Quick add](/tasks/quick-add). |
+| **Inbox** | Tasks without an area or project. The number counts the open ones. |
+| **Today** | What's overdue, due today or planned for today. The number counts those open tasks. |
+| **Upcoming** | The next 14 days, and project target dates. |
+| **Calendar** | Month and week views, with auto-planned focus time in the week. |
+| **Timeline** | Areas, projects and tasks as bars over time. |
+| **Projects** | All areas and projects with their progress. |
+| **Roadmap** | Project dates and the order of a project's tasks. |
+| **Flows** | The editor for a project's chain of agent sessions. |
+| **Sessions** | Claude Code and Codex sessions. The number counts finished sessions that wait for review. |
+| **Areas** | One row per area, with its key (such as **WRK**). |
+| **Projects** | One row per project, with a progress ring and its target date. |
+| **Settings** | Appearance, the MCP server, sessions, folders, work hours and data. |
+| Sun or moon button | Switches between the dark and the light theme. |
+
+Right-click an area or a project, or use its **…** button, for its menu: rename, change the color, open its tasks, and more. See [Areas and projects](/concepts/areas-and-projects).
+
+## What the first start contains
+
+A new installation starts with five areas and nothing else:
+
+| Area | Key |
+| --- | --- |
+| Work | WRK |
+| Personal | PER |
+| Health | HLT |
+| Learning | LRN |
+| Dev | DEV |
+
+Rename, recolor or delete them, and add others. Task keys come from the area key: the first task in Work is WRK-1.
+
+## Closing the window
+
+Closing the window doesn't quit PacedMind. It keeps running in the Windows notification area (the tray), so agents can still report back and PacedMind can notify when a session finishes. The first time, a notification says so: *PacedMind is still running*.
+
+* To open the window again, click the tray icon or open PacedMind from the Start Menu.
+* To quit, right-click the tray icon and select **Quit PacedMind**.
+* To start PacedMind with Windows, right-click the tray icon and select **Start with Windows**. It then starts in the tray, without a window.
+
+See [Desktop app](/desktop-app) for the tray, notifications and the window.
+
+## First steps
+
+1. **Adjust the areas.** Keep the ones that fit, rename the others, and add areas from the **+** next to **Areas** in the sidebar. See [Areas and projects](/concepts/areas-and-projects).
+2. **Create a project.** Use the **+** next to **Projects** in the sidebar and pick its area. Give it a target date on the **Projects** page.
+3. **Add tasks.** Press <kbd>C</kbd> anywhere and type, for example, *Send invoice to Acme friday 10:00 !high #finance*. See [Quick add](/tasks/quick-add).
+4. **Set the work hours.** In **Settings → Auto-plan**, set the focus hours, the break and the work days. The auto-planner fills that time with tasks. See [Work hours and days](/planning/work-hours).
+5. **Prepare agent work (optional).** In **Settings → Projects and folders**, give a code project its folder and default agent, then open a task and select **Start in Claude Code**. See [Agent sessions](/agents).
+6. **Connect agents started outside PacedMind (optional).** Copy the command from **Settings → Connect your agents**. See [MCP server](/mcp).
+
+## Explore with sample data
+
+**Settings → Data → Load sample data** replaces everything with an example workspace: projects in each area, tasks with dates and sub-tasks, weekly activities, and a project with an agent flow and a finished session. **Start empty** goes back to the five default areas.
+
+Both ask for confirmation and replace all areas, projects, tasks, activities and sessions. They can't be undone. Settings, including work hours and the MCP access token, stay as they are.
+
+The example projects **Organizer app** and **ChessV2** come with folders from PacedMind's own development setup, which don't fit another computer. Change or clear them in **Settings → Projects and folders** before starting agent sessions on their tasks.

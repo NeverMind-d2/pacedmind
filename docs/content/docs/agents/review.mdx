@@ -1,0 +1,46 @@
+---
+title: Review finished work
+description: Where finished agent sessions show up, how to review them, and what Mark done changes.
+---
+
+When an agent hands a task back, the session is **finished, waiting for you** and the task is **In review**. The agent never marks its own task done: that's yours to do after looking at the result. In a flow, tasks connected **Manually** wait for that; tasks connected **Automatically**, **In the same session** or **At a set time** can already start when the task is in review.
+
+## Where finished sessions show up
+
+| Place | Sign |
+| --- | --- |
+| Desktop notification | *DEV-21 is finished*, with the task's title and the agent's note. Click it to open the session. |
+| Tray icon | Its tooltip reads *PacedMind · 2 waiting for you*. |
+| Sidebar | The **Sessions** count. |
+| **Sessions** | The **Finished, waiting for you** group, newest first. |
+| Task rows | *Session finished*, with a navy dot. |
+| Task details | *Claude Code finished at 12:22 · waiting for you*, with the note and **Mark done**. |
+| **Roadmap** | *2 finished sessions waiting for you* in the header, and **Open session** on the task's row. |
+| **Flows** | The session's state reads *Waiting for you*, and its note *Finished 12:22, check it and mark done*. |
+| **Timeline** | A navy outline around the task's bar and a navy dot after it. |
+| **Calendar**, week | A 45-minute block to check the result, *Check DEV-21*, planned in your focus time. |
+
+## Review a session
+
+1. Open the session: from the notification, from **Sessions**, or from the task's details.
+2. Read the agent's note. It says what changed and where to look first.
+3. Check the work: switch to the agent's terminal, which stays open, and look at the changed files in the session's folder. **Resume in terminal** reopens the conversation if its terminal was closed.
+4. Decide:
+   * **Mark done** when the result is right.
+   * To ask for changes, continue the conversation in the terminal. The agent hands the task back again, with a new note, when it's done. If it picks the task up again with `start_task` first, the session shows as **Running** in the meantime.
+   * To start over with a fresh agent: for a running session, select **Close session**, then **New session**. For a finished session, start a new one from **Sessions** (**Start session**) or with **Start session now** in **Flows**; the finished one keeps waiting for review until the task is marked done.
+
+## What Mark done does
+
+**Mark done**, in the task's details or in **Sessions**, marks the task **Done**. Setting the status to **Done** any other way, including by the status icon in a list, has the same effect. Then:
+
+* the task's finished sessions become **Done** (*You marked it done*) and leave the waiting count;
+* the check block leaves the week plan;
+* in a flow, tasks connected **Manually** after this one can start, and so can any task whose other connections were already satisfied;
+* if this was the last task of the project's flow, projects that start after it begin their flows.
+
+The message names the sessions that started, such as *Started DEV-23, DEV-24*. See [Automate with flows](/agents/flows).
+
+## Follow-up work
+
+Agents record work they found outside the task as new tasks in the same project, and mention them in their note. They appear in the project's task list and, when they're for an agent, in the **Flows** list **Add to the flow**.

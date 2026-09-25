@@ -1,0 +1,52 @@
+---
+title: Working with tasks
+description: Add, open, edit, complete and delete tasks, and read the task lists that most views are built from.
+---
+
+Most views show tasks as lists: **Inbox**, **Today**, **Upcoming**, and the pages of each area and project. The lists work the same way everywhere.
+
+## Add a task
+
+* Press <kbd>C</kbd> anywhere, outside a text field, or select the pen button next to **Search** in the sidebar. Quick add then starts empty: without an area, project or `@project`, the task goes to the Inbox.
+* Select **New task** in a list's header (on the Inbox, **Today**, and the area and project pages). The task goes where the list is: a project list adds it to the project, **Today** plans it for today.
+* Select the **+** at the right of a group's header. On **Today** and **Upcoming**, the task is planned for that group's day.
+
+See [Quick add](/tasks/quick-add) for what can be typed in one line.
+
+## Read a task list
+
+A list's header shows its name, a short summary, such as the area key and the number of open tasks, and **New task**. Tasks are grouped: by status on the Inbox and the area and project pages, by date on **Today** and **Upcoming**. Select a group's name to collapse or expand it; the **Done** and **Canceled** groups start collapsed.
+
+Each row shows, from left to right:
+
+| Part | Meaning |
+| --- | --- |
+| Priority icon | An exclamation mark for **Urgent**; three, two or one lit bars for **High**, **Medium** and **Low**; three faint bars for no priority. |
+| Key | Such as WRK-12. |
+| Status icon | Click it to mark the task done, or to set a finished task back to **Todo**. |
+| Title | Click it to open the task's details. |
+| Session | *Claude Code running* while a session works on the task, and *Session finished* with a navy dot when it waits for review. |
+| Labels | The first two labels. |
+| Deadline | The due date, red when overdue. See [Due and planned dates](/concepts/dates#overdue). |
+
+An empty list says so, for example *Your inbox is clear*, with a reminder that <kbd>C</kbd> adds a task anywhere.
+
+## Open and edit a task
+
+Click a task's title to open the details panel on the right. It shows and edits everything about the task: title, description, status, priority, dates, estimate, area, project, who does it, labels, the agent session, sub-tasks and the task's activity. Select **×**, click the task's title again, or press <kbd>Esc</kbd> outside a text field to close it. See [The task details panel](/tasks/task-details).
+
+A task's link opens its list with the task selected, for example from the command menu or from **Open task** in **Sessions**.
+
+## Complete a task
+
+Click the status icon in the row, or set **Status** to **Done** in the details panel. A task that an agent worked on waits in **In review** until you check the result and mark it done. Marking a task done can start the next agent session in a flow. See [Review finished work](/agents/review).
+
+## Delete a task
+
+Select the trash button in the details panel and confirm. Deleting also removes the task's sub-tasks, session records and flow connections, and can't be undone; setting the status to **Canceled** keeps a record instead.
+
+## Pages in this section
+
+* **[Quick add](/tasks/quick-add)**: the new task dialog, and the dates, priorities, labels and projects it reads from the title.
+* **[The task details panel](/tasks/task-details)**: every field, the session card, sub-tasks and activity.
+* **[Search and the command menu](/tasks/search)**: finding tasks and projects, and going to the main pages.

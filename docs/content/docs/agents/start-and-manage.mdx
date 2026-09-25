@@ -1,0 +1,97 @@
+---
+title: Start, resume and close sessions
+description: Where agent sessions start from, which agent and folder they use, how the terminal and the agent command are set up, what agents may do without asking, and how to resume or close a session.
+---
+
+## Start a session
+
+A session can start from several places:
+
+| From | How |
+| --- | --- |
+| A task's details | **Start in Claude Code** (or **Codex**) under **Session**. The arrow next to it (**Choose agent**) picks the other agent. |
+| **Sessions** | **Start session** in the header, then a task. |
+| **Sessions**, a finished session | **Start session** next to *Next in* the project, for the next task in the flow. |
+| **Flows** | Select a session and choose **Start session now**. |
+| A flow | Automatically, when the task's turn comes and the flow is on. See [Automate with flows](/agents/flows). |
+| An agent | With the MCP tool `start_session`, when you ask it to. Agents ask first, because it opens a terminal on your computer. |
+
+The message *Session started in a new terminal* confirms the start. A session can't start when:
+
+* the task already has a running session (*DEV-22 already has a running session*);
+* the task is yours (*DEV-22 is marked as yours. Hand it to Claude Code or Codex before starting a session.*);
+* the project's folder is unusable (see below).
+
+## Which agent runs
+
+Unless an agent is chosen at the start, a session runs with the task's own agent (its **Done by**), else the project's default agent, else Claude Code. Starting a session also sets the task's **Done by** to the agent that ran it.
+
+## Where a session works
+
+A session works in its **project's folder**, set in **Settings → Projects and folders** or in the **Roadmap**'s session panel. The folder must be an absolute path to an existing folder, without the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`. Otherwise the start is refused, before any session is recorded, with a message such as:
+
+* *Can't use the folder C:\code\app: That folder doesn't exist. Change it in Settings.*
+* *… Use an absolute path, like C:\code\my-app. Change it in Settings.*
+* *… That path is a file, not a folder. Change it in Settings.*
+* *… The path contains characters that can't be passed to a terminal safely*, with the list of characters, *Change it in Settings.*
+
+A task without a project folder gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`. The **Flows** panel shows it as *PacedMind workspace*.
+
+Every session also gets a branch name, `agent/` and the task key, such as `agent/dev-22`. PacedMind records it with the session; it doesn't create or switch branches itself.
+
+## The terminal
+
+**Settings → Starting sessions → Terminal** chooses where sessions open:
+
+* **Windows Terminal** (the default): a new tab in a Windows Terminal window reserved for PacedMind's sessions. If Windows Terminal can't start, the session opens in a Command Prompt window instead.
+* **Command Prompt**: a new Command Prompt window per session.
+
+The tab or window is titled with the key and the agent, such as *DEV-22 · Claude Code*. The terminal starts in the session's folder, with the environment variable `ORGANIZER_TOKEN` set to PacedMind's MCP access token. PacedMind leaves out its own server's variables, such as `PORT` and `NODE_ENV`, so the agent's builds, tests and dev servers behave as they would in any terminal.
+
+## The agent command
+
+**Settings → Starting sessions** has the command for each agent: `claude` and `codex` by default. Change them to add options or to use a full path, for example when the agent isn't on the `PATH` of programs started from PacedMind.
+
+**Claude Code** starts with:
+
+* the connection to PacedMind's MCP server, under the name `organizer`;
+* a hook that tells PacedMind when the terminal session ends;
+* permission to use PacedMind's everyday tools without asking (below);
+* a conversation id, so that **Resume in terminal** can continue the same conversation;
+* the conversation named after the task, such as *DEV-22 Start sessions from the app*;
+* the first message, which names the task and the session.
+
+**Codex** starts with the first message only. It reaches PacedMind through the `organizer` entry in its own configuration, `~/.codex/config.toml`, which has to be added once, and the `ORGANIZER_TOKEN` variable the terminal sets. Without that entry, a Codex session can't call `start_task` and never checks in. See [Connect Codex](/mcp/connect-codex).
+
+## What agents may do without asking
+
+Claude Code sessions started by PacedMind may use these MCP tools without asking you first:
+
+* reading: `get_overview`, `list_areas`, `list_projects`, `get_project`, `list_tasks`, `get_task`, `list_events`, `get_agenda`, `get_flow`, `list_sessions`, `get_settings`, `get_next_task`;
+* the session protocol: `start_task`, `finish_task`;
+* adding and updating tasks: `create_task`, `update_task`.
+
+Everything else, such as deleting, moving calendar events, changing projects or starting other sessions, asks for your approval in the agent's terminal first. For Claude Code, PacedMind passes this list at start; for Codex, its own approval settings apply.
+
+## Resume a session
+
+**Resume in terminal**, in the task's details or in **Sessions**, opens a new terminal in the session's folder for a session that isn't running:
+
+* **Claude Code** continues the same conversation, with its full history.
+* **Codex** opens its list of earlier sessions to pick from.
+
+PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. Resuming works for sessions PacedMind started; for a session an agent reported on its own (*Started outside PacedMind*), start a new session instead.
+
+## Close a session
+
+**Close session**, for a running session, asks *Close this session in PacedMind? The terminal stays open.*, then marks the session **Closed** and sets a task in progress back to **Todo**. Use it when:
+
+* a Codex terminal was closed (Codex doesn't report that on its own);
+* a session got stuck before the agent checked in;
+* the work should stop and start over.
+
+After a closed, done or failed session, **New session** in the task's details starts a fresh one, as long as the task isn't done.
+
+## One running session per task
+
+A task has at most one running session. The flow doesn't start a session for a task that has one, and starting another by hand says *DEV-22 already has a running session*.

@@ -28,6 +28,10 @@ Open http://127.0.0.1:4320. The dev server uses its own database, `data/organize
 
 The public home page is in `site/`, a separate static Next.js project with its own dependencies. See [site/README.md](site/README.md), including how to keep the Cloud price in step with Spotify.
 
+## Documentation
+
+The user guide is in `docs/`, a separate static Fumadocs site served at pacedmind.com/docs, with its own dependencies. See [docs/README.md](docs/README.md).
+
 ## Agents and MCP
 
 The MCP server runs at `http://127.0.0.1:4319/api/mcp` in the desktop app (`4320` for the dev server) and needs the access token shown in **Settings → MCP server**.

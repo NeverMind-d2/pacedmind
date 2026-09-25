@@ -1,0 +1,106 @@
+---
+title: Flows
+description: The flow editor lays out a project's tasks as agent sessions on a free grid, decides which agent runs each one, and connects them so sessions start one after another.
+---
+
+A flow lays out a project's tasks as agent sessions and decides which one starts after which. **Flows** is the editor: a canvas with the project's sessions, a list of tasks to add, and a panel for the selected session or connection. What the connections do is explained in [Automate with flows](/agents/flows).
+
+<img src="/docs/screenshots/flows.png" alt="The flow editor with the task list on the left, connected sessions on the canvas and the help panel on the right" width="1920" height="1200" loading="lazy" />
+
+## The header
+
+| Element | What it does |
+| --- | --- |
+| Project name | A menu of all projects, with *3 in flow* next to those that have a flow. |
+| **Roadmap** / **Flow** | Switches to the same project's [roadmap](/views/roadmap). |
+| Summary | Counts the sessions, such as *2 done · 1 running · 1 waiting for you · 3 not started*, or *Nothing in the flow yet*. |
+| Agents | On wide windows: what Claude Code and Codex are doing in this flow, such as *1 running, 1 waiting for you* or *idle*. |
+| Zoom | **Zoom out**, the zoom level, **Zoom in**, and **Fit**, which shows the whole flow. |
+| **Tidy up** | Lines the sessions up in the order they run (*Line the sessions up in the order they run*). |
+| **Flow on** / **Paused** | The switch that lets the flow start sessions on its own. |
+
+Switching the flow on confirms *Flow is on. Sessions start on their own when the one before is ready.* Switching it off: *Flow paused. Nothing starts on its own.*
+
+## Add tasks to the flow
+
+The panel on the left, **Add to the flow**, lists the project's open tasks that aren't on the canvas yet. **Search tasks** filters them by key or title.
+
+* **Drag a task onto the canvas** to place it there. Dropped just below another session, it runs after that one: the preview says *Drop to run after DEV-21* and draws the connection. Elsewhere it says *Drop to add it here, run by Claude Code*.
+* **Click a task** to add it at the end of the flow (*Added DEV-26 to the flow*).
+
+Tasks that are yours never appear in the list; the panel notes, for example, *2 tasks are yours, so they stay out of the flow*. Setting a task on the canvas to **You** (under **Done by** in its details) takes it off the flow and deletes its connections: *DEV-26 is yours now, so it left the flow*. The panel's bottom part is the legend for the connection lines: **Automatically**, **After you mark it done**, **Same session, no stop** and **At a set time**.
+
+## The canvas
+
+The canvas is a free grid. Sessions sit anywhere on it and snap to the grid when dropped; their position has no meaning for who runs them or when.
+
+* Drag a session to move it.
+* Scroll to pan. Zoom between 30% and 150% with the zoom controls, <kbd>Ctrl</kbd> + mouse wheel, or a pinch on a touchpad.
+* Click empty canvas to clear the selection.
+
+An empty canvas says *Drag tasks here to build the flow*.
+
+### Sessions
+
+Each session is a card with:
+
+* the state icon and the key, and the state on the right: *Not started*, *In progress*, *Running 12 min*, *Waiting for you*, *Done*, *Canceled*, *Stopped* or *Didn't start*;
+* the task's title;
+* the agent chip, **Claude Code** or **Codex**, and a note about how it starts or what happened, such as *Starts when DEV-21 finishes*, *Started on its own at 14:05* or *Finished 12:22, check it and mark done*.
+
+Click the agent chip to hand the session to the other agent (*Claude Code runs this. Click to hand it to Codex.*). Sessions that share one terminal change agent together, and the message says so.
+
+Sessions chained by **Same session** connections, with the same agent, sit in a box labeled *One Claude Code session* (or Codex).
+
+### Connections
+
+To make one session start after another, drag from the dot under the first card to the dot above the second. A dashed navy line follows the pointer. A connection can't link a session to itself, repeat an existing connection, or close a loop.
+
+A new connection starts **Automatically**. Its label on the line shows how the next session starts: **Auto**, **Manual**, **Same session**, or the day and time for a timed start. Click the label (*Change how it starts*) to select the session it leads to and change it in the panel.
+
+Select a session or a connection and press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to remove it. Removing a session takes it off the canvas and deletes its connections, which also removes them as dependencies from the **Timeline**; the task itself stays (*Removed DEV-26 from the flow*). <kbd>Esc</kbd> clears the selection.
+
+### Tidy up
+
+**Tidy up** arranges the sessions from top to bottom in the order they run: each session one row below the last one it waits for, under the sessions it follows, with branches side by side. It then fits the flow into view.
+
+## The session panel
+
+Selecting a session opens its panel on the right. The top line shows the key, the project and **Open task**, followed by the title and the current state.
+
+**Session**:
+
+| Field | Shows |
+| --- | --- |
+| **Agent** | **Claude Code** or **Codex**, to switch. |
+| **Folder** | The project's folder, or *PacedMind workspace* when the project has none. |
+| **Branch** | The branch name recorded for the session, such as *agent/dev-22*, or *Same branch as DEV-22* for a session that continues another one. |
+| **Last run** | The latest session, such as *Finished 12:22, waiting for you*. Select it to open it in **Sessions**. |
+
+**Starts**, for sessions that have a connection leading to them:
+
+| Option | Description in the panel |
+| --- | --- |
+| **Automatically** | *A new Claude Code session starts as soon as DEV-21 finishes.* |
+| **Manually** | *Starts after you mark DEV-21 done.* |
+| **In the same session** | *Claude carries on from DEV-21 in the same terminal, without stopping.* Choosing it hands the session to the agent of the one before, if it differs. |
+| **At a set time** | The day and time, *once DEV-21 is done*. A date and time field appears; it defaults to the next work day at the start of the work hours. |
+
+Choosing a mode sets it for every connection leading to the session. When those differ, the panel says *Its connections start in different ways. Pick one to use for all of them.* A session without connections says *Nothing leads here, so you start it yourself.*
+
+**When it finishes** lists what happens next, such as *DEV-23 starts on its own* or *DEV-24 starts after you mark DEV-21 done*. When the flow is paused, it adds *The flow is paused, so these don't start on their own.*
+
+At the bottom:
+
+* **Start session now** opens the agent in a new terminal right away (*Open Claude Code in a new terminal*). It's unavailable while a session runs or when the task is done or canceled.
+* **Remove from flow** takes the session off the canvas and deletes its connections.
+
+## The connection panel
+
+Selecting a connection shows its two keys, what it does (*DEV-23 starts after you mark DEV-22 done.*), how it starts, **Change how DEV-23 starts**, and **Remove connection** (<kbd>Delete</kbd>).
+
+With nothing selected, the panel shows three hints on using the editor.
+
+## Which project opens
+
+**Flows** opens the project from its link (**Open flow** in a project's menu, **Flow** on a project page), else the first project with sessions in a flow, else the first project with a default agent, else the first project. Without projects, it explains that a flow lays out a project's tasks as agent sessions, and asks to create a project first.

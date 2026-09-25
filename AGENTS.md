@@ -36,7 +36,8 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 - When adding or renaming a tool, also update:
   - `skills/pacedmind/references/tools.md`;
   - `TOOL_GROUPS` in `views/settings.tsx`;
-  - `AGENT_ALLOWED_TOOLS` in `src/server/mcp/agent-tools.ts` (tools that launched sessions may use without asking; keep deletes and launches out).
+  - `AGENT_ALLOWED_TOOLS` in `src/server/mcp/agent-tools.ts` (tools that launched sessions may use without asking; keep deletes and launches out);
+  - the public tool reference in `docs/content/docs/mcp/`.
 - `skills/` holds the agent skills for these tools; `npm run skills` installs them for Claude Code and Codex.
 - `src/server/ops.ts` has the operations shared by Server Actions and MCP tools (task done, close session, flow placement and tidy, loop checks). `src/server/folders.ts` validates project folders before they reach a terminal script.
 - `src/app/api/sessions/[id]/ended` is called by the Claude Code `SessionEnd` hook that the launcher installs per session.
@@ -47,6 +48,7 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 - `src/lib/` is shared by client and server: types, dates, colors (`colors.ts`), the quick-add parser (`parse.ts`), the auto-planner (`planner.ts`).
 - `src/components/` holds the UI kit (`ui.tsx`, `icons.tsx`, `popover.tsx`, `dialog.tsx`), task UI (`task-list`, `task-row`, `task-detail`, `quick-add`) and the area/project menus (`entity-menu.tsx`, used by the sidebar and `/projects`). Views live in `src/components/views/`.
 - `site/` is the public website, a separate static Next.js project (own `package.json`, `npm run dev` on port 4330, `npm run build` to `site/out`). Its Cloud price per country matches Spotify Premium Individual: `site/prices.json`, checked with `npm run prices`. See `site/README.md`.
+- `docs/` is the end-user documentation, a separate static Fumadocs project served at pacedmind.com/docs (own `package.json`, `npm run dev` on port 4340, `npm run build` to `docs/out`). Its pages describe the UI labels, messages and MCP tools as the code has them, so update them with the code. See `docs/AGENTS.md`.
 
 ## Conventions
 

@@ -1,0 +1,67 @@
+---
+title: Connect Claude Code
+description: Register PacedMind's MCP server in Claude Code, for one project or for all of them, check the connection, and update it after a new token.
+---
+
+Claude Code sessions that PacedMind starts from a task are connected automatically. For Claude Code sessions you start yourself, register PacedMind's MCP server once.
+
+## With the command from Settings
+
+1. Open **Settings → Connect your agents** and select **Copy command** next to **Claude Code**. The command contains the address and the access token:
+
+   ```powershell
+   claude mcp add --transport http organizer http://127.0.0.1:4319/api/mcp --header "Authorization: Bearer org_..."
+   ```
+
+2. Paste it into a terminal and run it.
+
+As copied, the command registers PacedMind for the project folder the terminal is in, Claude Code's default. To use PacedMind in every project, add `--scope user`:
+
+```powershell
+claude mcp add --scope user --transport http organizer http://127.0.0.1:4319/api/mcp --header "Authorization: Bearer org_..."
+```
+
+Keep the name `organizer`: PacedMind's skills and the sessions it starts refer to the server by that name.
+
+## With npm run connect
+
+From PacedMind's source folder, one command registers the installed app for all projects:
+
+```powershell
+npm run connect
+```
+
+It reads the access token from the app's database without printing it, and replaces an earlier registration for all projects (`--scope user`), so it's also the way to refresh the token. A registration made for one project folder with the copied command stays as it is, and takes precedence in that folder: remove it with `claude mcp remove organizer` run in that folder. `npm run connect -- --remove` removes the registration for all projects. The desktop app must have been started at least once.
+
+## Check the connection
+
+* In a terminal, `claude mcp list` lists `organizer` with its state.
+* In Claude Code, `/mcp` shows the server and its tools.
+
+The tools appear in Claude Code as `mcp__organizer__` followed by the tool name, such as `mcp__organizer__get_overview`. Claude Code asks for approval the first time a session uses each tool, unless the tool is allowed in its settings.
+
+Ask something that needs the planner to try it, such as *What's on my plate today in PacedMind?* With the [agent skills](/skills) installed, Claude Code also knows how to plan, triage and set up projects with the tools.
+
+## After regenerating the token
+
+A new token in **Settings → MCP server** disconnects Claude Code until it has the new one:
+
+1. Remove the old registration with `claude mcp remove organizer`, adding `--scope user` if it was registered for all projects.
+2. Run the updated command from **Settings → Connect your agents**.
+
+For a registration made for all projects, `npm run connect` does both steps at once.
+
+## Remove the connection
+
+```powershell
+claude mcp remove organizer
+```
+
+Add `--scope user` when it was registered for all projects.
+
+## Problems
+
+* **`claude mcp list` shows the server as failed**: PacedMind isn't running, the port is wrong (4319 for the desktop app, 4320 for a development copy), or the token changed. Start PacedMind and register it again.
+* **The tools don't appear in a project**: the server was registered for another project folder. Register it with `--scope user`.
+
+More in [Troubleshooting](/troubleshooting#an-agent-cant-reach-pacedmind).

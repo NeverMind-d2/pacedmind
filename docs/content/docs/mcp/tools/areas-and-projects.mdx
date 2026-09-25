@@ -1,0 +1,136 @@
+---
+title: Areas and projects
+description: "Reference for the area and project tools: list_areas, create_area, update_area, delete_area, list_projects, get_project, create_project, update_project, delete_project and reorder_tasks."
+---
+
+## `list_areas`
+
+**Read-only. Allowed without asking.**
+
+Lists the areas, the top level of the planner. Each line has the name, id, key, color, and the number of projects and open tasks.
+
+No parameters.
+
+## `create_area`
+
+**Changes data.**
+
+Adds an area. Its key, used in task keys such as WRK-12, is made from the name.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | yes | The area's name. |
+| `color` | string | no | A palette name or a hex color. Defaults to a palette color no other area uses. |
+
+Returns the new area with its id and key, such as *Created area Finance · id finance · key FNN · Olive.*
+
+## `update_area`
+
+**Changes data.**
+
+Renames an area or changes its color. The key stays the same, so existing task keys don't change.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `area` | string | yes | The area's id, name or key. |
+| `name` | string | no | The new name. |
+| `color` | string | no | A palette name or a hex color. |
+
+## `delete_area`
+
+**Deletes. Agents ask the user first.**
+
+Deletes an area and its projects. Their tasks are kept and move to the Inbox.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `area` | string | yes | The area's id, name or key. |
+
+Returns what happened, such as *Deleted area Learning. Deleted its projects: Spanish B1. 3 tasks moved to the Inbox.*
+
+## `list_projects`
+
+**Read-only. Allowed without asking.**
+
+Lists the projects with their area, progress, target date, color, agent, folder, flow and the project they start after.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `area` | string | no | Only projects in this area. |
+
+Each line reads, for example: `Q4 planning (id q4) · Work · 2 open of 3 · 33% done · target 2026-10-01 (Thu)`.
+
+## `get_project`
+
+**Read-only. Allowed without asking.**
+
+A project's details and its tasks in roadmap order, grouped by status (**In review**, **In progress**, **Todo**, **Backlog**), plus the next task that is ready to be worked on.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | yes | The project's id or name. |
+| `include_done` | boolean | no | Also list done and canceled tasks. Without it, the result only counts them. |
+
+## `create_project`
+
+**Changes data.**
+
+Adds a project to an area.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `name` | string | yes | The project's name. |
+| `area` | string | yes | The area's id, name or key. |
+| `color` | string | no | A palette name or a hex color. Without it, the project uses the area's color. |
+| `start_date` | date | no | Defaults to today. |
+| `target_date` | date | no | When it should be finished. |
+| `folder` | string | no | The absolute path of the folder agent sessions work in. It must exist. |
+| `agent` | `claude` or `codex` | no | The default agent for the project's tasks. |
+| `starts_after` | string | no | Another project that must be finished first. |
+| `flow_on` | boolean | no | Lets the project's flow start agent sessions on its own. |
+
+Errors include *Can't use the folder …* with the reason, such as *That folder doesn't exist.*
+
+## `update_project`
+
+**Changes data.**
+
+Changes a project. Parameters left out keep their value; `null` clears a field.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | yes | The project's id or name. |
+| `name` | string | no | The new name. |
+| `area` | string | no | Moves the project, and all its tasks, to this area. |
+| `color` | string | no | A palette name, a hex color, or `area` to use the area's color again. |
+| `start_date` | date or `null` | no | The start date. |
+| `target_date` | date or `null` | no | The target date. |
+| `folder` | string or `null` | no | The absolute folder path for agent sessions. |
+| `agent` | `claude`, `codex` or `null` | no | The default agent. |
+| `flow_on` | boolean | no | Switches the flow on or off. |
+| `starts_after` | string or `null` | no | A project that must be finished first, or `null` for none. |
+
+A project can't start after itself or after a project that waits for it: *… can't start after …: they would wait for each other.*
+
+## `delete_project`
+
+**Deletes. Agents ask the user first.**
+
+Deletes a project. Its tasks stay in the project's area without a project.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | yes | The project's id or name. |
+
+## `reorder_tasks`
+
+**Changes data.**
+
+Sets the roadmap order of a project's tasks: the order shown in **Roadmap** and used by `get_next_task`.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | yes | The project's id or name. |
+| `order` | string list | yes | Task keys that should come first, in order. The other tasks keep their order after them. |
+
+Returns the new numbered order.
