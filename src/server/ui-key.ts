@@ -26,14 +26,14 @@ export function uiKey(): string {
   if (fromApp && fromApp.length >= 32) return fromApp;
   const file = devKeyFile();
   try {
-    const saved = fs.readFileSync(file, "utf8").trim();
+    const saved = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8").trim();
     if (saved.length >= 32) return saved;
   } catch {
     // First start: make one.
   }
   const key = crypto.randomBytes(32).toString("base64url");
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, key, { mode: 0o600 });
+  fs.mkdirSync(path.dirname(/*turbopackIgnore: true*/ file), { recursive: true });
+  fs.writeFileSync(/*turbopackIgnore: true*/ file, key, { mode: 0o600 });
   return key;
 }
 

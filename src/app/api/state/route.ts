@@ -18,7 +18,8 @@ const boot = crypto.randomBytes(4).toString("hex");
 export async function GET() {
   const noStore = { headers: { "Cache-Control": "no-store" } };
   const state = await authState();
-  const step = nextStep(state);
+  // Without an account, the desktop app shows this computer's own data; signing in counts as a change.
+  const step = state || MODE === "web" ? nextStep(state) : null;
   if (step) return Response.json({ version: `${boot}-${step}`, waiting: [], approvals: [], signedIn: false }, noStore);
   const [version, finished, tasks] = await Promise.all([repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listTasks()]);
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -35,10 +36,10 @@ export async function GET() {
   const approvalKey = approvals.map((a) => a.id).join(",");
   return Response.json(
     {
-      version: `${boot}-${state!.user.id.slice(0, 8)}-${version}-${crypto.createHash("sha1").update(approvalKey).digest("hex").slice(0, 8)}`,
+      version: `${boot}-${state ? state.user.id.slice(0, 8) : "local"}-${version}-${crypto.createHash("sha1").update(approvalKey).digest("hex").slice(0, 8)}`,
       waiting,
       approvals: approvals.map((a) => ({ id: a.id, key: a.key, title: a.title, agent: a.agent, from: a.from })),
-      signedIn: true,
+      signedIn: !!state,
     },
     noStore,
   );

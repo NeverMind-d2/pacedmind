@@ -116,16 +116,18 @@ export interface AccountView {
 }
 
 export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform }: {
-  settings: Settings; projects: Project[]; areas: Area[]; account: AccountView;
-  /** The computers signed in to the account, this one first. */
+  settings: Settings; projects: Project[]; areas: Area[];
+  /** The signed-in account; null without one, when the desktop app keeps this computer's own data. */
+  account: AccountView | null;
+  /** The computers signed in to the account, this one first; without an account, just this one. */
   devices: Device[];
-  /** This computer's id in the account's list; null in the web app, or until it registered. */
+  /** This computer's id in the account's list ("" without an account); null in the web app, or until it registered. */
   thisDeviceId: string | null;
   /** This computer's own settings; null in the web app. */
   device: DeviceSettings | null;
   /** Null in the web app: agents connect to the desktop app, where their terminals run. */
   mcp: { url: string; token: string } | null;
-  /** What this computer's local database from before accounts holds, if there is one. */
+  /** What this computer's own data holds, to move into the signed-in account; null without an account. */
   legacy: { file: string; areas: number; projects: number; tasks: number } | null;
   sessionsCount: number;
   /** The server's system, which decides the terminals sessions can open in. */
@@ -163,6 +165,16 @@ export function SettingsView({ settings, projects, areas, account, devices, this
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-10 px-10 py-8">
           <div className="flex flex-col gap-7">
+            {!account && (
+              <Section title="PacedMind Cloud" note="Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.">
+                <Row label="Account">
+                  <span className="flex-1 text-[12.5px] text-fg3">Not signed in</span>
+                  <Button size="sm" onClick={() => router.push("/login")}>Sign in</Button>
+                </Row>
+              </Section>
+            )}
+
+            {account && <>
             <Section title="Account" note="Your tasks, projects and calendar are stored in your PacedMind account.">
               <Row label="Signed in as">
                 <span className="flex-1 truncate text-[12.5px] text-fg2">{account.email ?? "Unknown"}</span>
@@ -225,13 +237,16 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                 }}>Change password</Button>
               </Row>
             </Section>
+            </>}
 
-            <Section id="devices" title="Computers"
+            <Section id="devices" title={account ? "Computers" : "Agents on this computer"}
               action={device && <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => checkDeviceAction())}><Icon name="refresh" size={12} />Check again</Button>}
-              note="Computers with the PacedMind desktop app signed in to your account, and what each found of Claude Code and Codex (it looks when it starts and every half hour). Connected, the agents' desktop apps report back like terminal sessions. Signing a computer out ends its session at once, and its agents lose access to PacedMind.">
+              note={account
+                ? "Computers with the PacedMind desktop app signed in to your account, and what each found of Claude Code and Codex (it looks when it starts and every half hour). Connected, the agents' desktop apps report back like terminal sessions. Signing a computer out ends its session at once, and its agents lose access to PacedMind."
+                : "What PacedMind found of Claude Code and Codex here (it looks when it starts and every half hour). Connected, the agents' desktop apps report back like terminal sessions."}>
               {devices.length === 0 && <Row label="None yet"><span className="text-[12.5px] text-fg3">Sign in to the desktop app to add a computer.</span></Row>}
               {devices.map((d) => {
-                const here = !!thisDeviceId && d.id === thisDeviceId;
+                const here = thisDeviceId !== null && d.id === thisDeviceId;
                 return (
                   <div key={d.id} className="flex flex-col gap-1 border-b border-line px-3.5 py-2.5 last:border-b-0">
                     <div className="flex h-7 items-center gap-2.5">
@@ -240,7 +255,9 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                       <span className="flex-1 truncate text-[12px] text-mut2">
                         {platformName(d.platform)}{here ? " · this computer" : ` · seen ${seen(d.lastSeenAt)}`}
                       </span>
-                      <Button size="sm" onClick={() => confirm(`Sign ${d.name} out of PacedMind? Its agents lose access right away.`) && run(() => revokeDeviceAction(d.id))}>Sign out</Button>
+                      {account && (
+                        <Button size="sm" onClick={() => confirm(`Sign ${d.name} out of PacedMind? Its agents lose access right away.`) && run(() => revokeDeviceAction(d.id))}>Sign out</Button>
+                      )}
                     </div>
                     {d.checkedAt
                       ? (["claude", "codex"] as AgentId[]).map((a) => <AgentTools key={a} agent={a} device={d} here={here} pending={pending} onConnect={connect} />)
@@ -254,6 +271,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
               <Row label="Theme"><ThemeSelector /></Row>
             </Section>
 
+            {account && (
             <Section title="Delete account" note="Deletes your account and everything in it: areas, projects, tasks, calendar, sessions and computers. It can't be undone.">
               <Row label="Your email">
                 <input className={input} value={deleting.email} onChange={(e) => setDeleting((d) => ({ ...d, email: e.target.value }))} placeholder={account.email ?? ""} aria-label="Type your email to confirm" />
@@ -268,6 +286,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                 </Button>
               </Row>
             </Section>
+            )}
           </div>
 
           <div className="flex flex-col gap-7">
@@ -286,11 +305,13 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   <input className={input} defaultValue={device.name} maxLength={80} aria-label="This computer's name"
                     onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.name && saveDevice({ name: e.target.value })} />
                 </Row>
-                <Row label="From elsewhere">
-                  <Segmented value={device.remoteStart} onChange={(v) => saveDevice({ remoteStart: v })}
-                    options={[{ value: "off", label: "Refuse" }, { value: "ask", label: "Ask me" }, { value: "auto", label: "Start" }]} />
-                </Row>
-                <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">{REMOTE_TEXT[device.remoteStart]} Agents asking over MCP always wait for you.</div>
+                {account && <>
+                  <Row label="From elsewhere">
+                    <Segmented value={device.remoteStart} onChange={(v) => saveDevice({ remoteStart: v })}
+                      options={[{ value: "off", label: "Refuse" }, { value: "ask", label: "Ask me" }, { value: "auto", label: "Start" }]} />
+                  </Row>
+                  <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">{REMOTE_TEXT[device.remoteStart]} Agents asking over MCP always wait for you.</div>
+                </>}
               </Section>
 
               <Section title="Starting sessions">
@@ -426,14 +447,16 @@ export function SettingsView({ settings, projects, areas, account, devices, this
               </Row>
             </Section>
 
-            <Section title="Data" note={`Stored in your account, not on this computer. Images agents attach stay on the computer they were saved on. ${sessionsCount} sessions recorded so far.`}>
+            <Section title="Data" note={account
+              ? `Stored in your account, not on this computer. Images agents attach stay on the computer they were saved on. ${sessionsCount} sessions recorded so far.`
+              : `Stored on this computer, in PacedMind's data folder. ${sessionsCount} sessions recorded so far.`}>
               {legacy && legacy.tasks + legacy.projects > 0 && (
                 <Row label="This computer">
                   <span className="flex-1 truncate text-[12.5px] text-fg3" title={legacy.file}>
-                    {legacy.tasks} tasks and {legacy.projects} projects from before accounts
+                    {legacy.tasks} tasks and {legacy.projects} projects kept here without an account
                   </span>
-                  <Button onClick={() => confirm("Import them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer.")
-                    && run(() => importLegacyAction())}>Import</Button>
+                  <Button onClick={() => confirm("Move them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer. A copy stays on this computer, without its flows.")
+                    && run(() => importLegacyAction())}>Move to account</Button>
                 </Row>
               )}
               <Row label="Reset">

@@ -12,7 +12,7 @@ import { dataDir } from "./device";
  */
 
 /** Where this computer keeps the images agents attach, next to the app's other data. */
-export const attachmentsDir = () => path.join(dataDir(), "attachments");
+export const attachmentsDir = () => path.join(/*turbopackIgnore: true*/ dataDir(), "attachments");
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -90,7 +90,7 @@ export function resolveImagePath(input: string, base: string | null): string {
     if (drive) p = `${drive[1].toUpperCase()}:${drive[2] ?? "/"}`;
     else if (p === "/tmp" || p.startsWith("/tmp/")) p = path.join(os.tmpdir(), p.slice(4));
   }
-  return path.resolve(base ?? process.cwd(), p);
+  return path.resolve(/*turbopackIgnore: true*/ base ?? process.cwd(), p);
 }
 
 /** Checks that `source` is a PNG, JPEG, GIF or WebP image and keeps a copy of it. Throws ImageError with a fixable message. */
@@ -98,6 +98,11 @@ export function storeImage(input: string, base: string | null): StoredImage {
   if (!input.trim()) throw new ImageError("The image path is empty.");
   const source = resolveImagePath(input, base);
   const shown = source === path.normalize(input.trim()) ? source : `${input.trim()} (read as ${source})`;
+  // A network path (\\server\share, //server/share, and Windows' \\?\ and \\.\ forms) would make Windows sign in
+  // to that server as you, handing it your password's hash, before PacedMind even looked at the file.
+  if (/^[\\/]{2}/.test(source) || /^[\\/]{2}/.test(input.trim().replace(/^["']/, ""))) {
+    throw new ImageError(`${input.trim()} is on another computer. Save the image on this one and pass that path.`);
+  }
   let stat: fs.Stats;
   try {
     // turbopackIgnore: a path chosen at run time would make the build trace (and ship) the whole project.

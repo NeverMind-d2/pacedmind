@@ -3,6 +3,8 @@
 import { refresh } from "next/cache";
 import * as repo from "@/server/repo";
 import { importLegacy, resetAccount } from "@/server/account";
+import { usesCloud } from "@/server/scope";
+import { resetLocal } from "@/server/store/local-db";
 import { checkThisDevice, deviceIdFor, runsHere } from "@/server/devices";
 import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
 import {
@@ -448,19 +450,22 @@ export async function dismissImportAction(): Promise<Result> {
 
 /* ---------- data ---------- */
 
+/** Starts the data in use over: the account's, or without an account this computer's own. */
 export async function resetDataAction(mode: "sample" | "empty") {
   await guard();
-  await resetAccount(mode);
+  if (await usesCloud()) await resetAccount(mode);
+  else resetLocal(mode);
   return done();
 }
 
-/** Brings the data PacedMind kept on this computer before accounts into the signed-in account. */
+/** Copies this computer's own data (what PacedMind keeps without an account) into the signed-in account. */
 export async function importLegacyAction(): Promise<Result> {
   await guard();
-  if (MODE !== "desktop") return { ok: false, error: "Import from the desktop app that has the data." };
+  if (MODE !== "desktop") return { ok: false, error: "Move it from the desktop app on the computer that has it." };
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
   try {
     const n = await importLegacy();
-    return done({ ok: true, message: `Imported ${n.tasks} tasks, ${n.projects} projects and ${n.areas} areas` });
+    return done({ ok: true, message: `Moved ${n.tasks} tasks, ${n.projects} projects and ${n.areas} areas to your account` });
   } catch (e) {
     return { ok: false, error: errorOf(e) };
   }

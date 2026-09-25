@@ -1,16 +1,22 @@
 import "server-only";
 import fs from "node:fs";
-import path from "node:path";
 import crypto from "node:crypto";
 import { addDays, addMinutes } from "date-fns";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { requireAal2, supabase } from "./supabase";
 import { removeImageFiles } from "./attachments";
-import { commandProblem, deviceConfig, setFlowArmed, setProjectFolder, setTaskFolder, updateDevice } from "./device";
+import {
+  commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder, updateDevice,
+} from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot } from "./repo";
-import { toDateStr, toStamp } from "@/lib/dates";
+import { localDbPath } from "./store/local-db";
+import { deriveKey } from "./store/shared";
+import { nowStamp, toDateStr, toStamp } from "@/lib/dates";
 
-/* An account's data as a whole: starting over, sample data, and bringing over the data PacedMind kept on this computer before the cloud. */
+/*
+ * An account's data as a whole: starting over, sample data, and moving over this computer's own data (what
+ * PacedMind keeps without an account, store/local-db.ts).
+ */
 
 type Row = Record<string, unknown>;
 
@@ -31,16 +37,16 @@ export const DEFAULT_AREAS = [
 /** Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay. */
 async function clearAccount(db: SupabaseClient) {
   const { id } = (await requireAal2()).user;
-  // The images this computer keeps for the account's tasks go with them.
+  // The images this computer keeps for the account's tasks go with them, and so do its folders and flow switches.
   const device = deviceConfig().deviceId;
   const files = device ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
+  const projects = (check(await db.from("projects").select("id")) as Row[]).map((r) => String(r.id));
   // Deleting tasks takes their sub-tasks, sessions, reports, images and connections along; areas take their projects.
   for (const table of ["tasks", "events", "projects", "areas", "key_counters"]) {
     check(await db.from(table).delete().eq("user_id", id));
   }
   removeImageFiles(files);
-  // So do this computer's folders and flow switches for them.
-  updateDevice({ folders: {}, taskFolders: {}, armed: [], confirmed: {} });
+  forgetAll("cloud", projects);
 }
 
 /** Starts the account over with the default areas, and optionally the sample data. */
@@ -168,16 +174,11 @@ async function seedSample(db: SupabaseClient, areaId: Map<string, string>) {
   ]));
 }
 
-/* ---------- data from before the cloud ---------- */
+/* ---------- this computer's own data ---------- */
 
-/** The SQLite file PacedMind used on this computer before accounts: the desktop app's, or the dev server's. */
-export function legacyDbPath(): string {
-  return process.env.ORGANIZER_DB ?? path.join(process.cwd(), "data", "organizer.db");
-}
-
-/** What the local database holds, or null when there is none. */
+/** What this computer's own data holds (the free plan's, or an earlier version's), or null when there is none. */
 export async function legacySummary(): Promise<{ file: string; areas: number; projects: number; tasks: number } | null> {
-  const file = legacyDbPath();
+  const file = localDbPath();
   // The user's data file, not part of the app: keep build tracing out of it.
   if (!fs.existsSync(/*turbopackIgnore: true*/ file)) return null;
   const { DatabaseSync } = await import("node:sqlite");
@@ -193,11 +194,11 @@ export async function legacySummary(): Promise<{ file: string; areas: number; pr
 }
 
 /**
- * Copies the local database into the signed-in account. Only into an account without projects or tasks:
- * its default areas are replaced by the local ones. Task keys, dates, sessions and their reports come along,
- * and the images agents attached stay in this computer's data folder; project and task folders, flow
- * switches and agent commands stay on this computer (device.ts). The old MCP token doesn't: agents connect
- * again with this computer's new one.
+ * Copies this computer's own data into the signed-in account. Only into an account without projects or
+ * tasks: its default areas are replaced by the local ones. Task keys, dates, sessions and their reports come
+ * along, and the images agents attached stay in this computer's data folder. Project and task folders and
+ * flow switches stay this computer's settings (device.ts) and move to the copies; the originals' flows are
+ * switched off, so they can't start sessions after the move. The data itself stays here too.
  */
 export async function importLegacy(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
@@ -206,7 +207,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
   const projectsNow = check(await db.from("projects").select("id").limit(1)) as Row[];
   if (busy.length || projectsNow.length) throw new Error("Your account already has projects or tasks. Importing works on an empty account.");
 
-  const file = legacyDbPath();
+  const file = localDbPath();
   if (!fs.existsSync(/*turbopackIgnore: true*/ file)) throw new Error("There is no local PacedMind data on this computer.");
   const { DatabaseSync } = await import("node:sqlite");
   const conn = new DatabaseSync(file, { readOnly: true });
@@ -227,7 +228,17 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const settings = all("SELECT key, value FROM settings");
 
     await clearAccount(db);
+    // The local database never checked what it kept: every value is held to what the cloud accepts, so one odd
+    // row can't stop the move halfway.
     const s = (v: unknown) => (v == null ? null : String(v));
+    const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+    const match = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : null);
+    const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | null => (allowed.includes(v as T) ? (v as T) : null);
+    const int = (v: unknown, min: number, max: number, fallback: number) => {
+      const x = Math.round(Number(v));
+      return Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : fallback;
+    };
+    const num = (v: unknown) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
     const jsonList = (v: unknown): unknown[] => {
       try {
         const x = JSON.parse(String(v ?? "[]"));
@@ -236,122 +247,191 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         return [];
       }
     };
-    const SURFACES = new Set(["terminal", "desktop", "cloud"]);
+    const texts = (v: unknown, max: number) => jsonList(v).filter((x): x is string => typeof x === "string").map((x) => x.slice(0, max)).slice(0, 50);
+    const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+    const MINUTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+    const DAY = /^\d{4}-\d{2}-\d{2}$/;
+    const COLOR = /^#[0-9A-Fa-f]{6}$/;
+    const now = nowStamp();
+    const SURFACES = ["terminal", "desktop", "cloud"] as const;
     // The local database only knew this computer: a project or task that ran on a chosen computer runs here.
     const here = deviceConfig().deviceId;
 
-    const newAreas = check(await db.from("areas").insert(areas.map((a) => ({
-      name: String(a.name), key: String(a.key), color: String(a.color), sort: Number(a.sort),
-    }))).select("id, key")) as Row[];
-    const areaKey = new Map(areas.map((a) => [String(a.id), String(a.key)]));
+    // Areas keep their keys, so tasks keep theirs; a key the cloud can't take gets a new one.
+    const keys = new Set<string>();
+    const areaRows = areas.map((a) => {
+      let key = String(a.key ?? "").toUpperCase();
+      if (!/^[A-Z][A-Z0-9]{1,7}$/.test(key) || keys.has(key)) key = deriveKey(String(a.name ?? ""), keys);
+      keys.add(key);
+      return { old: String(a.id), row: { name: clip(a.name, 80) || "Area", key, color: match(a.color, COLOR) ?? "#7D93B5", sort: int(a.sort, -1e6, 1e6, 0) } };
+    });
+    const newAreas = check(await db.from("areas").insert(areaRows.map((a) => a.row)).select("id, key")) as Row[];
     const areaByKey = new Map(newAreas.map((a) => [String(a.key), String(a.id)]));
-    const areaId = (old: unknown) => (old == null ? null : areaByKey.get(areaKey.get(String(old)) ?? "") ?? null);
+    const areaIds = new Map(areaRows.map((a) => [a.old, areaByKey.get(a.row.key) ?? null]));
+    const areaId = (old: unknown) => (old == null ? null : areaIds.get(String(old)) ?? null);
 
     const projectId = new Map<string, string>();
     const flowsOn: string[] = [];
     for (const p of projects) {
+      const area = areaId(p.area_id);
+      if (!area) continue;
       const env = typeof p.codex_env === "string" ? p.codex_env.trim() : "";
       const r = check(await db.from("projects").insert({
-        area_id: areaId(p.area_id), name: String(p.name), color: s(p.color), start_date: s(p.start_date), target_date: s(p.target_date),
-        agent: s(p.agent), sort: Number(p.sort), codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null,
+        area_id: area, name: clip(p.name, 120) || "Project", color: match(p.color, COLOR), start_date: match(p.start_date, DAY),
+        target_date: match(p.target_date, DAY), agent: oneOf(p.agent, ["claude", "codex"]), sort: int(p.sort, -1e6, 1e6, 0),
+        codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null,
       }).select("id").single()) as Row;
       projectId.set(String(p.id), String(r.id));
-      // The folder and the flow switch belonged to this computer all along; they stay here, not in the cloud.
-      if (p.folder && !setProjectFolder(String(r.id), String(p.folder)) && Number(p.flow_on) === 1) flowsOn.push(String(r.id));
+      // The folder and the flow switch belonged to this computer all along; they stay here, not in the cloud. An
+      // earlier version kept them in its database, this one in this computer's settings.
+      const folder = (typeof p.folder === "string" && p.folder.trim()) || projectFolder(String(p.id));
+      const placed = folder ? !setProjectFolder(String(r.id), folder) : true;
+      if (placed && (Number(p.flow_on) === 1 || flowArmed(String(p.id)))) flowsOn.push(String(r.id));
     }
     for (const p of projects.filter((x) => x.after_project_id != null)) {
       const after = projectId.get(String(p.after_project_id));
-      if (after) check(await db.from("projects").update({ after_project_id: after }).eq("id", projectId.get(String(p.id))!));
+      const self = projectId.get(String(p.id));
+      if (after && self && after !== self) check(await db.from("projects").update({ after_project_id: after }).eq("id", self));
     }
 
+    const labelsOf = (v: unknown) => {
+      const out: string[] = [];
+      let size = 0;
+      for (const l of texts(v, 100)) {
+        if (size + l.length > 2000) break;
+        out.push(l);
+        size += l.length;
+      }
+      return out;
+    };
+    const taskRow = (t: Row, key: string) => ({
+      key, area_id: areaId(t.area_id), project_id: t.project_id == null ? null : projectId.get(String(t.project_id)) ?? null,
+      title: clip(t.title, 500) || "Untitled", description: String(t.description ?? "").slice(0, 100000),
+      status: oneOf(t.status, ["backlog", "todo", "progress", "review", "done", "canceled"]) ?? "todo", priority: int(t.priority, 0, 4, 0),
+      due_date: match(t.due_date, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/), planned_date: match(t.planned_date, DAY),
+      estimate_min: int(t.estimate_min, 0, 10080, 60), labels: labelsOf(t.labels),
+      reminder: match(t.reminder, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/), agent: oneOf(t.agent, ["claude", "codex", "human"]),
+      sort_order: int(t.sort_order, -1e9, 1e9, 0), flow_x: num(t.flow_x), flow_y: num(t.flow_y),
+      created_at: match(t.created_at, STAMP) ?? now, updated_at: match(t.updated_at, STAMP) ?? now, completed_at: match(t.completed_at, STAMP),
+      done_when: cleanDoneWhen(texts(t.done_when, 400)), run_in: oneOf(t.run_in, SURFACES), device_id: t.device_id ? here : null,
+    });
+    const KEY = /^[A-Z][A-Z0-9]{1,7}-[1-9][0-9]{0,8}$/;
+    const seen = new Set<string>();
+    const keyed: Row[] = [];
+    const unkeyed: Row[] = [];
+    for (const t of tasks) {
+      const key = String(t.key ?? "").toUpperCase();
+      if (KEY.test(key) && !seen.has(key)) {
+        seen.add(key);
+        keyed.push(t);
+      } else unkeyed.push(t);
+    }
     const taskId = new Map<number, number>();
-    for (let i = 0; i < tasks.length; i += 200) {
-      const chunk = tasks.slice(i, i + 200);
-      const rows = check(await db.from("tasks").insert(chunk.map((t) => ({
-        key: String(t.key).toUpperCase(), area_id: areaId(t.area_id), project_id: t.project_id == null ? null : projectId.get(String(t.project_id)) ?? null,
-        title: String(t.title), description: String(t.description ?? ""), status: String(t.status), priority: Number(t.priority),
-        due_date: s(t.due_date), planned_date: s(t.planned_date), estimate_min: Number(t.estimate_min), labels: JSON.parse(String(t.labels || "[]")),
-        reminder: s(t.reminder), agent: s(t.agent), sort_order: Number(t.sort_order), flow_x: t.flow_x == null ? null : Number(t.flow_x),
-        flow_y: t.flow_y == null ? null : Number(t.flow_y), created_at: String(t.created_at), updated_at: String(t.updated_at), completed_at: s(t.completed_at),
-        done_when: cleanDoneWhen(jsonList(t.done_when).filter((x): x is string => typeof x === "string")),
-        run_in: SURFACES.has(String(t.run_in)) ? String(t.run_in) : null, device_id: t.device_id ? here : null,
-      }))).select("id, key")) as Row[];
+    for (let i = 0; i < keyed.length; i += 200) {
+      const chunk = keyed.slice(i, i + 200);
+      const rows = check(await db.from("tasks").insert(chunk.map((t) => taskRow(t, String(t.key).toUpperCase()))).select("id, key")) as Row[];
       const byKey = new Map(rows.map((r) => [String(r.key), Number(r.id)]));
       for (const t of chunk) taskId.set(Number(t.id), byKey.get(String(t.key).toUpperCase())!);
     }
+    // The database gives a task whose key it can't take a new one, in its area.
+    for (const t of unkeyed) taskId.set(Number(t.id), Number((check(await db.from("tasks").insert(taskRow(t, "")).select("id").single()) as Row).id));
     const task = (old: unknown) => taskId.get(Number(old));
     // A task's own folder was this computer's too.
     for (const t of tasks) {
       const id = task(t.id);
-      if (id && typeof t.folder === "string" && t.folder.trim()) setTaskFolder(id, t.folder.trim());
+      const folder = (typeof t.folder === "string" && t.folder.trim()) || taskFolder("local", Number(t.id));
+      if (id && folder) setTaskFolder("cloud", id, folder);
     }
 
-    const subs = subtasks.filter((x) => task(x.task_id)).map((x) => ({ task_id: task(x.task_id), title: String(x.title), done: Number(x.done) === 1, sort: Number(x.sort) }));
+    const subs = subtasks.filter((x) => task(x.task_id) && clip(x.title, 500))
+      .map((x) => ({ task_id: task(x.task_id), title: clip(x.title, 500), done: Number(x.done) === 1, sort: int(x.sort, -1e6, 1e6, 0) }));
     for (let i = 0; i < subs.length; i += 500) check(await db.from("subtasks").insert(subs.slice(i, i + 500)));
 
-    const evs = events.map((e) => ({ title: String(e.title), area_id: areaId(e.area_id), start_at: String(e.start_at), end_at: String(e.end_at), recurrence: s(e.recurrence) }));
+    const evs = events.filter((e) => match(e.start_at, MINUTE) && match(e.end_at, MINUTE)).map((e) => ({
+      title: clip(e.title, 200) || "Event", area_id: areaId(e.area_id), start_at: String(e.start_at), end_at: String(e.end_at),
+      recurrence: oneOf(e.recurrence, ["weekly"]),
+    }));
     for (let i = 0; i < evs.length; i += 500) check(await db.from("events").insert(evs.slice(i, i + 500)));
 
     // Sessions get new ids in the shape the cloud accepts, and "same session" links follow them.
     const sessionId = new Map<string, string>();
-    const kept = sessions.filter((x) => task(x.task_id));
+    const kept = sessions.filter((x) => task(x.task_id) && (x.agent === "claude" || x.agent === "codex"));
     for (const x of kept) sessionId.set(String(x.id), crypto.randomBytes(8).toString("hex"));
-    const uuid = (v: unknown) => (typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v) ? v : null);
-    const known = new Set(["starting", "running", "finished", "done", "closed", "failed"]);
-    for (const x of kept) {
-      check(await db.from("sessions").insert({
-        id: sessionId.get(String(x.id)), task_id: task(x.task_id), agent: String(x.agent), device_id: here,
-        surface: SURFACES.has(String(x.surface)) ? String(x.surface) : "terminal",
-        url: typeof x.url === "string" && /^https:\/\/[^\s<>"']{1,1000}$/.test(x.url) ? x.url : null,
-        folder: s(x.folder), branch: s(x.branch), status: known.has(String(x.status)) ? String(x.status) : "closed",
-        started_at: String(x.started_at), finished_at: s(x.finished_at), ended_at: s(x.ended_at), note: s(x.note)?.slice(0, 2000) ?? null,
-        cli_session_id: uuid(x.cli_session_id),
-        continues_session_id: x.continues_session_id ? sessionId.get(String(x.continues_session_id)) ?? null : null,
-      }));
-    }
-    const sevs = sessionEvents.filter((e) => sessionId.has(String(e.session_id))).map((e) => ({
-      session_id: sessionId.get(String(e.session_id)), at: String(e.at), kind: String(e.kind), text: String(e.text ?? ""),
+    const uuid = (v: unknown) => match(v, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    const sessionRows = kept.map((x) => ({
+      id: sessionId.get(String(x.id)), task_id: task(x.task_id), agent: String(x.agent), device_id: here,
+      surface: oneOf(x.surface, SURFACES) ?? "terminal", url: typeof x.url === "string" && x.url.length <= 1000 && /^https:\/\/[^\s<>"']+$/.test(x.url) ? x.url : null,
+      folder: s(x.folder)?.slice(0, 1000) ?? null, branch: s(x.branch)?.slice(0, 200) ?? null,
+      status: oneOf(x.status, ["starting", "running", "finished", "done", "closed", "failed"]) ?? "closed",
+      started_at: match(x.started_at, STAMP) ?? now, finished_at: match(x.finished_at, STAMP), ended_at: match(x.ended_at, STAMP),
+      note: s(x.note)?.slice(0, 2000) ?? null, cli_session_id: uuid(x.cli_session_id),
+      continues_session_id: x.continues_session_id ? sessionId.get(String(x.continues_session_id)) ?? null : null,
+    }));
+    for (let i = 0; i < sessionRows.length; i += 200) check(await db.from("sessions").insert(sessionRows.slice(i, i + 200)));
+    const sevs = sessionEvents.filter((e) => sessionId.has(String(e.session_id)) && match(e.at, STAMP) && match(e.kind, /^[a-z_]{1,40}$/)).map((e) => ({
+      session_id: sessionId.get(String(e.session_id)), at: String(e.at), kind: String(e.kind), text: String(e.text ?? "").slice(0, 2000),
     }));
     for (let i = 0; i < sevs.length; i += 500) check(await db.from("session_events").insert(sevs.slice(i, i + 500)));
 
     // Reports, and the images agents attached: the files are in this computer's data folder already.
     const reportId = new Map<number, number>();
-    const text = (v: unknown, max: number) => String(v ?? "").slice(0, max);
+    const criteria = (v: unknown) => jsonList(v).filter((c): c is Row => !!c && typeof c === "object" && typeof (c as Row).text === "string").slice(0, 50)
+      .map((c) => ({ text: String(c.text).slice(0, 400), verdict: oneOf(c.verdict, ["met", "partly", "not_met"]), note: clip(c.note, 2000) }));
+    const links = (v: unknown) => jsonList(v).filter((l): l is Row => !!l && typeof l === "object" && typeof (l as Row).url === "string"
+      && /^https?:\/\//i.test(String((l as Row).url))).slice(0, 50).map((l) => ({ label: clip(l.label, 200), url: String(l.url).slice(0, 2000) }));
     for (const r of reports) {
       const sid = sessionId.get(String(r.session_id));
       const tid = task(r.task_id);
       if (!sid || !tid) continue;
       const row = check(await db.from("reports").insert({
-        session_id: sid, task_id: tid, outcome: ["done", "partial", "blocked"].includes(String(r.outcome)) ? String(r.outcome) : "done",
-        summary: text(r.summary, 2000).trim() || "Handed back", details: text(r.details, 100000),
-        criteria: jsonList(r.criteria).slice(0, 50), verify: jsonList(r.verify).slice(0, 50), questions: jsonList(r.questions).slice(0, 50),
-        links: jsonList(r.links).slice(0, 50), follow_ups: jsonList(r.follow_ups).slice(0, 50), created_at: String(r.created_at),
-        changes: r.changes ? text(r.changes, 20000) : null, changes_at: r.changes ? s(r.changes_at) : null,
+        session_id: sid, task_id: tid, outcome: oneOf(r.outcome, ["done", "partial", "blocked"]) ?? "done",
+        summary: clip(r.summary, 2000) || "Handed back", details: String(r.details ?? "").slice(0, 100000),
+        criteria: criteria(r.criteria), verify: texts(r.verify, 2000), questions: texts(r.questions, 2000), links: links(r.links),
+        follow_ups: texts(r.follow_ups, 40).filter((k) => KEY.test(k)), created_at: match(r.created_at, STAMP) ?? now,
+        changes: clip(r.changes, 20000) || null, changes_at: clip(r.changes, 20000) ? match(r.changes_at, STAMP) : null,
       }).select("id").single()) as Row;
       reportId.set(Number(r.id), Number(row.id));
     }
-    const images = attachments.filter((a) => /^[0-9a-f]{16}$/.test(String(a.id)) && task(a.task_id) && /^[0-9a-f]{16}\.(png|jpg|gif|webp)$/.test(String(a.file)))
+    const MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const;
+    const size = (v: unknown) => {
+      const x = num(v);
+      return x !== null && x >= 1 && x <= 1_000_000 ? Math.round(x) : null;
+    };
+    const images = attachments.filter((a) => /^[0-9a-f]{16}$/.test(String(a.id)) && task(a.task_id) && /^[0-9a-f]{16}\.(png|jpg|gif|webp)$/.test(String(a.file))
+      && oneOf(a.mime, MIMES) && Number(a.bytes) >= 1 && Number(a.bytes) <= 20971520)
       .map((a) => ({
         id: String(a.id), task_id: task(a.task_id), session_id: a.session_id == null ? null : sessionId.get(String(a.session_id)) ?? null,
         report_id: a.report_id == null ? null : reportId.get(Number(a.report_id)) ?? null, device_id: here,
-        file: String(a.file), mime: String(a.mime), bytes: Number(a.bytes), width: a.width == null ? null : Number(a.width),
-        height: a.height == null ? null : Number(a.height), caption: text(a.caption, 500), created_at: String(a.created_at),
+        file: String(a.file), mime: String(a.mime), bytes: Math.round(Number(a.bytes)), width: size(a.width), height: size(a.height),
+        caption: clip(a.caption, 500), created_at: match(a.created_at, STAMP) ?? now,
       }));
     for (let i = 0; i < images.length; i += 200) check(await db.from("attachments").insert(images.slice(i, i + 200)));
 
-    const links = edges.filter((e) => task(e.from_task_id) && task(e.to_task_id)).map((e) => ({
-      from_task_id: task(e.from_task_id), to_task_id: task(e.to_task_id), mode: String(e.mode), at_time: s(e.at_time),
+    const connections = edges.filter((e) => task(e.from_task_id) && task(e.to_task_id) && task(e.from_task_id) !== task(e.to_task_id)).map((e) => ({
+      from_task_id: task(e.from_task_id), to_task_id: task(e.to_task_id), mode: oneOf(e.mode, ["auto", "manual", "session", "time"]) ?? "auto",
+      at_time: e.mode === "time" ? match(e.at_time, MINUTE) : null,
     }));
-    if (links.length) check(await db.from("edges").insert(links));
+    for (let i = 0; i < connections.length; i += 500) check(await db.from("edges").insert(connections.slice(i, i + 500)));
     // A flow that was on stays on, with the connections it already ran with on this computer; one added
-    // later from elsewhere asks first.
+    // later from elsewhere asks first. This computer's own copies no longer start anything.
     for (const id of flowsOn) setFlowArmed(id, true, await flowSnapshot(id));
+    forgetAll("local", projects.map((p) => String(p.id)));
 
-    // Planning settings go to the account; how sessions start stays on this computer. The old MCP token
-    // doesn't come along: connect your agents again from Settings.
-    const PLANNING = new Set(["workStart", "workEnd", "lunchStart", "lunchEnd", "workDays"]);
-    const old: Record<string, unknown> = Object.fromEntries(settings.map((x) => [String(x.key), JSON.parse(String(x.value))]));
-    const values = Object.entries(old).filter(([k]) => PLANNING.has(k)).map(([key, value]) => ({ user_id: userId, key, value }));
+    // Planning settings go to the account; how sessions start stays on this computer (an earlier version kept
+    // that in its database too).
+    const old: Record<string, unknown> = Object.fromEntries(settings.map((x) => {
+      try {
+        return [String(x.key), JSON.parse(String(x.value))];
+      } catch {
+        return [String(x.key), null];
+      }
+    }));
+    const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const values = [
+      ...(["workStart", "workEnd", "lunchStart", "lunchEnd"] as const).filter((k) => typeof old[k] === "string" && HHMM.test(old[k] as string))
+        .map((key) => ({ user_id: userId, key, value: old[key] })),
+      ...(Array.isArray(old.workDays) && old.workDays.length <= 7 ? [{ user_id: userId, key: "workDays", value: old.workDays }] : []),
+    ];
     if (values.length) check(await db.from("settings").upsert(values, { onConflict: "user_id,key" }));
     updateDevice({
       ...(old.terminal === "wt" || old.terminal === "cmd" || old.terminal === "terminal" || old.terminal === "iterm" ? { terminal: old.terminal } : {}),
@@ -360,7 +440,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       ...(old.importOffered === true ? { importOffered: true } : {}),
     });
 
-    return { areas: areas.length, projects: projects.length, tasks: tasks.length };
+    return { areas: areas.length, projects: projectId.size, tasks: taskId.size };
   } finally {
     conn.close();
   }

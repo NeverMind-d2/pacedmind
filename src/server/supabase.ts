@@ -29,7 +29,7 @@ const AUTH_OPTIONS = { flowType: "pkce" as const, experimental: { recoveryCodes:
 /* ---------- desktop: one account, session in an encrypted file ---------- */
 
 type Store = Record<string, string>;
-const sessionFile = () => path.join(dataDir(), "session.json");
+const sessionFile = () => path.join(/*turbopackIgnore: true*/ dataDir(), "session.json");
 
 const fileStorage = {
   getItem: (key: string) => readSecureJson<Store>(sessionFile())?.[key] ?? null,

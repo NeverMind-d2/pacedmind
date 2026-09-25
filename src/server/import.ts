@@ -151,7 +151,7 @@ function claudeAppHits(): Hit[] {
 
 function claudeCliHits(): Hit[] {
   const config = readJson(path.join(claudeConfigDir(), ".claude.json")) as { projects?: Record<string, unknown> } | null;
-  const transcripts = path.join(claudeConfigDir(), ".claude", "projects");
+  const transcripts = path.join(/*turbopackIgnore: true*/ claudeConfigDir(), ".claude", "projects");
   return Object.keys(config?.projects ?? {}).map((folder) => {
     // Claude Code names a project's transcript folder after its path, with every other character as "-".
     const dir = path.join(transcripts, folder.replace(/[^a-zA-Z0-9]/g, "-"));
@@ -171,7 +171,7 @@ function codexAppHits(): Hit[] {
 function codexCliHits(): Hit[] {
   const hits: Hit[] = [];
   try {
-    const toml = fs.readFileSync(path.join(codexHome(), "config.toml"), "utf8");
+    const toml = fs.readFileSync(path.join(/*turbopackIgnore: true*/ codexHome(), "config.toml"), "utf8");
     for (const m of toml.matchAll(/^\[projects\.(?:'([^']+)'|"((?:[^"\\]|\\.)+)")\]/gm)) {
       const folder = m[1] ?? unquote(m[2]);
       if (folder) hits.push({ folder, source: "codex-cli", at: 0 });
@@ -182,7 +182,7 @@ function codexCliHits(): Hit[] {
   // Each transcript starts with a line that names the folder it ran in.
   const walk = (dir: string, depth: number): string[] =>
     depth ? subdirs(dir).flatMap((d) => walk(d, depth - 1)) : files(dir, (f) => f.startsWith("rollout-") && f.endsWith(".jsonl"));
-  for (const file of walk(path.join(codexHome(), "sessions"), 3)) {
+  for (const file of walk(path.join(/*turbopackIgnore: true*/ codexHome(), "sessions"), 3)) {
     let head = "";
     try {
       const fd = fs.openSync(file, "r");

@@ -11,12 +11,13 @@ npm run desktop
 
 This builds the app, installs it and starts it. Run the same command again after changing the code: it closes the running app, replaces it and starts the new version.
 
-- **Windows:** it installs to `%LOCALAPPDATA%\Programs\Organizer` and adds **PacedMind** to the Start Menu and the desktop. Its settings for this computer live in `%APPDATA%\Organizer\data`.
-- **macOS:** it installs `PacedMind.app` in the Applications folder of your home folder (`~/Applications`). Its settings for this computer live in `~/Library/Application Support/Organizer/data`.
-- Sign in with your PacedMind account on first start. Every account uses two-factor sign-in: the first time you set up an authenticator app, and every sign-in asks for its code. Your data lives in your account, so it's kept when you reinstall. Data from before accounts (`organizer.db` in that data folder) can be imported once from **Settings → Data**.
+- **Windows:** it installs to `%LOCALAPPDATA%\Programs\Organizer` and adds **PacedMind** to the Start Menu and the desktop. Its data and settings for this computer live in `%APPDATA%\Organizer\data`.
+- **macOS:** it installs `PacedMind.app` in the Applications folder of your home folder (`~/Applications`). Its data and settings for this computer live in `~/Library/Application Support/Organizer/data`.
+- It works without an account: your tasks, projects and calendar stay on this computer, in `organizer.db` in that data folder (the free One device plan).
+- To use them on other computers too, sign in to PacedMind Cloud from **Settings**. Every Cloud account uses two-factor sign-in: the first time you set up an authenticator app, and every sign-in asks for its code. **Settings → Data** then moves this computer's data into the account. Signing out goes back to this computer's own data.
 - Closing the window keeps PacedMind running in the tray (the menu bar on macOS), so agents can still report back. It shows a notification when a session finishes, and when a session asked for elsewhere waits for you to allow it. Quit from the icon's menu, which also has **Start with Windows** (**Open at Login** on macOS).
 - The app serves itself at http://127.0.0.1:4319. Only this computer can reach it, and only the app's own window can use it. Its sign-in, tokens and settings for this computer are encrypted with a key from the system's keychain.
-- To uninstall on Windows, run `Organizer.exe --uninstall` from the install folder (removes the shortcuts and the login item), then delete the folder. On macOS, turn off **Open at Login** and move `PacedMind.app` to the Bin. Delete the data folder to remove this computer's settings as well; your data stays in your account.
+- To uninstall on Windows, run `Organizer.exe --uninstall` from the install folder (removes the shortcuts and the login item), then delete the folder. On macOS, turn off **Open at Login** and move `PacedMind.app` to the Bin. Delete the data folder to remove this computer's data and settings as well; what's in your Cloud account stays there.
 
 ## Releases
 

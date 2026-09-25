@@ -50,7 +50,7 @@ export function connectClaudeCode(): { ok: boolean; error?: string; message?: st
 export function connectCodex(): { ok: boolean; error?: string; message?: string } {
   const token = deviceConfig().ownerToken;
   if (!/^[\w-]+$/.test(token)) return { ok: false, error: "PacedMind's MCP token has characters Codex's config can't take. Make a new one first." };
-  const file = path.join(process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "config.toml");
+  const file = path.join(/*turbopackIgnore: true*/ process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "config.toml");
   try {
     const before = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     const eol = before.includes("\r\n") ? "\r\n" : "\n";

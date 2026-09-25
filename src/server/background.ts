@@ -25,14 +25,18 @@ export function startBackground() {
   setTimeout(check, 3_000);
   setInterval(check, CHECK_EVERY);
 
-  /** Runs `work` for the signed-in account; does nothing until someone finished signing in with 2FA. */
+  /**
+   * Runs `work` for the data in use: the signed-in account's once it passed its second factor (nothing while
+   * someone is still signing in), or without an account this computer's own.
+   */
   const every = (ms: number, name: string, work: () => Promise<unknown>) => {
     let busy = false;
     return setInterval(async () => {
       if (busy) return;
       busy = true;
       try {
-        if ((await authState())?.aal === "aal2") await work();
+        const state = await authState();
+        if (!state || state.aal === "aal2") await work();
       } catch (e) {
         // Signed out halfway (e.g. from another device): the next round simply waits for a sign-in.
         if (!(e instanceof NotSignedIn)) console.error(`[organizer] ${name} failed`, e);
@@ -42,7 +46,7 @@ export function startBackground() {
     }, ms);
   };
   // This computer in the account (registration, sign-out from elsewhere, requests to start sessions, what it
-  // found of the agents), and flows reacting to tasks finished elsewhere.
+  // found of the agents; each does nothing without one), and flows reacting to tasks finished elsewhere.
   g.__organizerSync = every(5_000, "account sync", async () => {
     await syncDevice();
     await saveToolsOnce();

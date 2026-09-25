@@ -223,7 +223,8 @@ export async function signOutAction(): Promise<void> {
   const db = await supabase();
   await db.auth.signOut({ scope: "local" });
   refresh();
-  redirect("/login");
+  // The desktop app goes on with this computer's own data.
+  redirect(MODE === "desktop" ? "/today" : "/login");
 }
 
 /** Signs out every browser and computer, this one included. */
@@ -233,7 +234,7 @@ export async function signOutEverywhereAction(): Promise<void> {
   if (MODE === "desktop") cutOffAgents();
   await db.auth.signOut({ scope: "global" });
   refresh();
-  redirect("/login");
+  redirect(MODE === "desktop" ? "/today" : "/login");
 }
 
 /** Signs a computer out of the account: its session ends at once and its agents lose access. */
@@ -249,7 +250,7 @@ export async function revokeDeviceAction(deviceId: string): Promise<AuthResult> 
     cutOffAgents();
     await (await supabase()).auth.signOut({ scope: "local" });
     refresh();
-    redirect("/login");
+    redirect("/today");
   }
   refresh();
   return { ok: true, message: "Signed out that computer." };
@@ -266,5 +267,5 @@ export async function deleteAccountAction(code: string, confirmEmail: string): P
   if (error) return { ok: false, error: refusedStepUp(error.message) ? STEP_UP_REFUSED : explain(error.message) };
   await db.auth.signOut({ scope: "local" });
   refresh();
-  redirect("/login");
+  redirect(MODE === "desktop" ? "/today" : "/login");
 }

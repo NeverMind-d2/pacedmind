@@ -19,13 +19,16 @@ import { dateOnly, todayStr } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
-/** Every page of the app needs an account signed in with its second factor; the database insists on it too. */
+/**
+ * The app's frame. Signed in to PacedMind Cloud, every page needs the account's second factor (the database
+ * insists on it too); the web app needs an account. Without one, the desktop app shows this computer's own data.
+ */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   await connection();
   const state = await authState();
-  const step = nextStep(state);
+  const step = state || MODE === "web" ? nextStep(state) : null;
   if (step) redirect(step);
-  const user = state!.user;
+  const user = state?.user ?? null;
   const [areas, projects, tasks, waiting, all] = await Promise.all([
     repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }), repo.listDevices(),
   ]);
@@ -46,7 +49,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   }));
   return (
     <div className="flex h-full flex-col">
-      <AppHeader email={user.email ?? null} />
+      <AppHeader email={user?.email ?? null} />
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
         <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel">{children}</main>

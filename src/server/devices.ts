@@ -155,7 +155,7 @@ function claudeMcp(url: string, token: string): McpLink {
 /** The [mcp_servers.organizer] table of Codex's config.toml with its sub-tables, or null. */
 export function codexOrganizerTable(): string | null {
   try {
-    const toml = fs.readFileSync(path.join(codexHome(), "config.toml"), "utf8");
+    const toml = fs.readFileSync(path.join(/*turbopackIgnore: true*/ codexHome(), "config.toml"), "utf8");
     return toml.match(/^\[mcp_servers\.organizer\][^\n]*(?:\n(?!\[(?!mcp_servers\.organizer\.))[^\n]*)*/m)?.[0] ?? null;
   } catch {
     return null;

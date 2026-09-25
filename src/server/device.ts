@@ -28,7 +28,10 @@ export interface DeviceConfig {
   codexCommand: string;
   /** Project id → the folder its sessions run in. */
   folders: Record<string, string>;
-  /** Task id → its own folder (a workspace), for tasks that don't run in their project's folder. */
+  /**
+   * Task → its own folder (a workspace), for tasks that don't run in their project's folder. Keyed by
+   * taskFolderKey: the account's tasks and this computer's own (the free plan's) are numbered separately.
+   */
   taskFolders: Record<string, string>;
   /** Projects whose flows may start sessions on this computer by themselves. */
   armed: string[];
@@ -54,7 +57,7 @@ export interface DeviceConfig {
 export const dataDir = () =>
   process.env.ORGANIZER_DB ? path.dirname(process.env.ORGANIZER_DB) : path.join(/*turbopackIgnore: true*/ process.cwd(), "data");
 
-const file = () => path.join(dataDir(), "device.json");
+const file = () => path.join(/*turbopackIgnore: true*/ dataDir(), "device.json");
 
 const newOwnerToken = () => `pm_${crypto.randomBytes(32).toString("base64url")}`;
 const hash = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
@@ -96,15 +99,20 @@ export function updateDevice(patch: Partial<DeviceConfig>) {
 }
 
 /**
- * Makes sure the settings belong to `userId`. When another account signs in on this computer, its folders,
- * flow switches, registration and tokens start over, so nothing carries across accounts.
+ * Makes sure the settings belong to `userId`. The first account to sign in on this computer takes over what
+ * was set up here without one (the free plan's folders, flow switches, agent commands and MCP token), so
+ * moving this computer's data to Cloud keeps them; the free plan's sessions lose their tokens, since their
+ * sessions stay behind. When another account signs in later, everything starts over, so nothing carries
+ * across accounts.
  */
 export function deviceFor(userId: string): DeviceConfig {
   const current = deviceConfig();
   if (current.userId === userId) return current;
-  const fresh = defaults(userId, current);
-  save(fresh);
-  return fresh;
+  const next = current.userId === null
+    ? { ...current, userId, deviceId: null, claimedSession: null, sessionTokens: {} }
+    : defaults(userId, current);
+  save(next);
+  return next;
 }
 
 /* ---------- commands and terminal ---------- */
@@ -152,31 +160,53 @@ export function setProjectFolder(projectId: string, folder: string | null): stri
   return null;
 }
 
+/** Which tasks a task id belongs to: the signed-in account's (Cloud), or this computer's own. */
+export type TaskScope = "cloud" | "local";
+
+/** Both number their tasks from 1, so this computer's own tasks get a prefix. */
+const taskFolderKey = (scope: TaskScope, taskId: number) => (scope === "local" ? `local:${taskId}` : String(taskId));
+
 /** A task's own folder on this computer, when it doesn't run in its project's. */
-export const taskFolder = (taskId: number): string | null => deviceConfig().taskFolders?.[String(taskId)] ?? null;
+export const taskFolder = (scope: TaskScope, taskId: number): string | null => deviceConfig().taskFolders?.[taskFolderKey(scope, taskId)] ?? null;
 
 /** Sets or clears a task's own folder on this computer. Returns why it can't, or null. */
-export function setTaskFolder(taskId: number, folder: string | null): string | null {
+export function setTaskFolder(scope: TaskScope, taskId: number, folder: string | null): string | null {
   const d = deviceConfig();
   const taskFolders = { ...(d.taskFolders ?? {}) };
+  const key = taskFolderKey(scope, taskId);
   if (folder) {
     const problem = folderProblem(folder);
     if (problem) return problem;
-    taskFolders[String(taskId)] = folder;
+    taskFolders[key] = folder;
   } else {
-    delete taskFolders[String(taskId)];
+    delete taskFolders[key];
   }
   save({ ...d, taskFolders });
   return null;
 }
 
 /** Forgets a deleted task's folder. */
-export function forgetTask(taskId: number) {
+export function forgetTask(scope: TaskScope, taskId: number) {
   const d = deviceConfig();
-  if (!d.taskFolders?.[String(taskId)]) return;
+  const key = taskFolderKey(scope, taskId);
+  if (!d.taskFolders?.[key]) return;
   const taskFolders = { ...d.taskFolders };
-  delete taskFolders[String(taskId)];
+  delete taskFolders[key];
   save({ ...d, taskFolders });
+}
+
+/**
+ * Forgets the folders and flow switches of these projects, and every task folder of `scope`: after the
+ * account's data or this computer's own was started over, or this computer's was moved to Cloud.
+ */
+export function forgetAll(scope: TaskScope, projectIds: string[]) {
+  const d = deviceConfig();
+  const gone = new Set(projectIds);
+  const local = (key: string) => key.startsWith("local:");
+  const folders = Object.fromEntries(Object.entries(d.folders).filter(([id]) => !gone.has(id)));
+  const taskFolders = Object.fromEntries(Object.entries(d.taskFolders ?? {}).filter(([key]) => local(key) !== (scope === "local")));
+  const confirmed = Object.fromEntries(Object.entries(d.confirmed ?? {}).filter(([id]) => !gone.has(id)));
+  save({ ...d, folders, taskFolders, armed: d.armed.filter((id) => !gone.has(id)), confirmed });
 }
 
 export const flowArmed = (projectId: string | null | undefined) => !!projectId && deviceConfig().armed.includes(projectId);

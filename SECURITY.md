@@ -2,6 +2,8 @@
 
 PacedMind starts Claude Code and Codex in terminals on your computers. Anyone who could make it start a session could run code on your computer, so the design assumes the worst about everything outside the computer: the cloud database, the web app, a stolen password, a stolen browser session, and even the agents' own conversations.
 
+Without an account (the free One device plan), the desktop app keeps its data in a SQLite file next to its settings (`src/server/store/local.ts`), and nothing leaves the computer. Everything under "Your computer", "Agents" and "Starting sessions" applies the same way; "Accounts" and "Your data" are about PacedMind Cloud, which the app switches to once you sign in (`src/server/scope.ts`).
+
 ## What protects what
 
 ### Accounts
@@ -22,14 +24,16 @@ PacedMind starts Claude Code and Codex in terminals on your computers. Anyone wh
 ### Your computer
 
 - **Nothing in the cloud decides what runs.** The agent commands, the terminal, each project's folder, whether a project's flow may start sessions, and the MCP tokens are this computer's own settings (`src/server/device.ts`), changed only from the desktop app's window. The launcher checks the task's key and title from the cloud against strict patterns (or reduces them to letters and digits) before they reach a command line, refuses folders with characters a terminal would act on, and never takes a folder or a command from a database row.
-- **Only the app's window can use the app.** The server answers on 127.0.0.1 only, refuses other Host names (DNS rebinding), and refuses every page, Server Action and API call that doesn't carry the window key: the desktop app makes a new key each run and gives it to its window as an HttpOnly cookie. Other programs on the computer, other Windows users, and the agents PacedMind starts can't drive it. Every Server Action checks the key and the two-factor session again (`guardAction()`). Before trusting a server with its window, the app has it sign a random value with that key, so another program listening on the port can't pose as PacedMind.
+- **Only the app's window can use the app.** The server answers on 127.0.0.1 only, refuses other Host names (DNS rebinding), and refuses every page, Server Action and API call that doesn't carry the window key: the desktop app makes a new key each run and gives it to its window as an HttpOnly cookie. Other programs on the computer, other Windows users, and the agents PacedMind starts can't drive it. Every Server Action checks the key again, and while you're signed in to Cloud the two-factor session too (`guardAction()`). Before trusting a server with its window, the app has it sign a random value with that key, so another program listening on the port can't pose as PacedMind.
 - **Secrets are encrypted at rest.** The sign-in session and this computer's settings (`session.json`, `device.json` in `%APPDATA%\Organizer\data`) are encrypted with AES-256-GCM, with a key the desktop app keeps in the OS keychain (Windows DPAPI through Electron `safeStorage`). An unencrypted or unreadable file there is set aside, not trusted.
 - **A strict Content Security Policy** with a nonce per request, plus `frame-ancestors 'none'`, `nosniff`, `no-referrer` and a restrictive `Permissions-Policy`: task titles and descriptions come from the cloud, and a page running foreign script could otherwise start sessions.
 
 ### Agents
 
 - **Each session gets its own MCP token.** It can read, add open tasks, edit its own task's details, and report with `start_task`/`finish_task`; it can't see or call anything else (no deleting, flows, settings, other tasks' status, or starting sessions), whatever it is asked to do. The agent needs the token in its session's own config files while it runs; they're deleted when the session ends, and PacedMind itself keeps only a hash. The token stops working when the agent calls `finish_task` (unless the same terminal continues with the next task), when you mark the task done or close the session, when the terminal closes (Claude Code's `SessionEnd` hook), when this computer signs out, and after 24 hours at the latest (Codex has no end-of-session hook).
-- **Your own agents** (Claude Code or Codex you start yourself) use the owner token from Settings. They can use every tool, but `start_session` only asks: nothing opens until you click **Allow** in the app, and it refuses if the task, agent or folder changed after you saw the request.
+- **Your own agents** (Claude Code or Codex you start yourself) use the owner token from Settings. They can use every tool, but `start_session` and `request_changes` only ask: nothing opens until you click **Allow** in the app, and it refuses if the task, agent or folder changed after you saw the request.
+- **Sessions in the Claude and Codex desktop apps** use the owner token too: the apps read PacedMind from their own settings (**Connect** in Settings), which can't hold a token per session. PacedMind opens the app with the first message written but not sent, so nothing runs until you send it; after that, the agent has your agents' rights, not a session's.
+- **Images an agent attaches** are read from this computer only: a network path (`\\server\share`) is refused before Windows would sign in to that server as you.
 - **MCP refuses browsers.** Requests carrying an `Origin` header are refused, and the endpoint only exists in the desktop app.
 - The server instructions tell agents that task text is the user's notes, not instructions.
 
@@ -38,7 +42,7 @@ PacedMind starts Claude Code and Codex in terminals on your computers. Anyone wh
 | Started by | What happens |
 |---|---|
 | You, in the desktop app | Starts right away. |
-| A flow that's on for that project, on that computer | Starts when its turn comes, along the connections you confirmed on this computer: the ones the flow had when you switched it on, and any you drew in the app since. A connection added elsewhere (an agent, the web app, another computer) asks you first. Changing the project's folder switches the flow off. |
+| A flow that's on for that project, on that computer | Starts when its turn comes, along the connections you confirmed on this computer: the ones the flow had when you switched it on, and any you drew in the app since. A connection added elsewhere (an agent, the web app, another computer) asks you first, and so does a task that would run in the agent's cloud (that sends the project there, and where a task runs can be changed from the web app). Changing the project's or the task's folder switches the flow off. |
 | An agent over MCP | Waits for you to allow it in the app (a notification too). Expires after 10 minutes. |
 | The web app or another computer | Needs a fresh two-factor code (checked by the database, as above). Then the computer's own setting decides: **Refuse**, **Ask me** (the default: waits for you there), or **Start**. Expires after 10 minutes; each request is acted on once. |
 
@@ -73,5 +77,5 @@ The database side is applied (`supabase/migrations/`). These project settings li
 
 ## Checking it
 
-- `supabase/tests/security.sql` runs 25 checks with two made-up accounts and rolls everything back: two-factor sessions, other accounts' rows, revoked sessions, cross-account references, unsafe task keys and settings, privileges, launch requests (fresh codes, authenticators added mid-session, deciding once), taking over a computer, account deletion. Run it (SQL editor or the Supabase MCP) after changing policies or grants; every line should match its `(want …)`.
+- `supabase/tests/security.sql` runs 40 checks with two made-up accounts and rolls everything back: two-factor sessions, other accounts' rows, revoked sessions, cross-account references, unsafe task keys and settings, privileges, launch requests (fresh codes, authenticators added mid-session, deciding once), taking over a computer, reports and images (other accounts, image file names, session links, Codex environments), account deletion. Run it (SQL editor or the Supabase MCP) after changing policies or grants; every line should match its `(want …)`.
 - `npx next build` and `npm run typecheck`.

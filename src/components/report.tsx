@@ -268,8 +268,9 @@ export function Lightbox({ images, start, onClose }: { images: Attachment[]; sta
         <span className="hidden font-mono text-[11px] text-dim sm:inline">
           {a.width && a.height ? `${a.width}×${a.height} · ` : ""}{format(parseLocal(a.createdAt), "d MMM HH:mm")}
         </span>
-        <a href={imageUrl(a)} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-mut hover:bg-hover hover:text-fg2">
-          <Icon name="external" size={13} />Open
+        {/* Saved, not opened: only PacedMind's own window may load it (proxy.ts), so a browser would be refused. */}
+        <a href={imageUrl(a)} download className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-mut hover:bg-hover hover:text-fg2">
+          <Icon name="download" size={13} />Save
         </a>
         <button type="button" aria-label="Close (Esc)" title="Close (Esc)" onClick={onClose}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2">

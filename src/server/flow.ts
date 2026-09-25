@@ -1,17 +1,18 @@
 import "server-only";
 import * as repo from "./repo";
-import { startSession, type LaunchResult } from "./launcher";
+import { plannedSurface, startSession, type LaunchResult } from "./launcher";
 import { confirmedFlow } from "./device";
 import { askFromFlow } from "./requests";
 import { toDateTimeStr } from "@/lib/dates";
-import { LIVE_STATUSES, type FlowEdge, type Status, type Task } from "@/lib/types";
+import { LIVE_STATUSES, agentOf, type FlowEdge, type Status, type Task } from "@/lib/types";
 
 /*
  * Which session starts after which. Flows only ever start sessions in the desktop app, and only for projects
  * whose flow you switched on on this computer (Project.flowOn comes from device.ts, not from the cloud).
  * Even then they only start by themselves along connections you confirmed here: the ones the flow had when
  * you switched it on, or that you drew in this window since. A connection added elsewhere (by an agent,
- * in the web app, on another computer) turns the start into a request you allow in the app.
+ * in the web app, on another computer) turns the start into a request you allow in the app. So does a task
+ * that would run in the agent's cloud.
  */
 
 /** Whether every one of these connections was confirmed on this computer for the target's project. */
@@ -43,6 +44,20 @@ function incoming(taskId: number, edges: FlowEdge[]) {
   return edges.filter((e) => e.toTaskId === taskId);
 }
 
+/**
+ * Starts a task's session for its flow, or asks you when it would run in the agent's cloud: that sends the
+ * project there, and where a task runs can be changed elsewhere (in the web app), which confirming a flow's
+ * connections doesn't cover.
+ */
+async function startFromFlow(task: Task): Promise<LaunchResult | null> {
+  const project = task.projectId ? await repo.getProject(task.projectId) : null;
+  if (plannedSurface(task, agentOf(task, project?.agent) ?? "claude") === "cloud") {
+    await askFromFlow(task);
+    return null;
+  }
+  return startSession(task.id, { reason: "flow" });
+}
+
 async function snapshot() {
   const [edges, list, held] = await Promise.all([repo.listEdges(), repo.listTasks(), repo.heldTaskIds()]);
   return { edges, tasks: new Map(list.map((t) => [t.id, t])), held };
@@ -65,7 +80,7 @@ async function maybeStart(target: Task, { edges, tasks, held }: Snapshot): Promi
     await askFromFlow(target);
     return null;
   }
-  return startSession(target.id, { reason: "flow" });
+  return startFromFlow(target);
 }
 
 /**
@@ -86,7 +101,7 @@ async function startAfterHold(target: Task, edge: FlowEdge, { edges, tasks, held
     await askFromFlow(target);
     return null;
   }
-  return startSession(target.id, { reason: "flow" });
+  return startFromFlow(target);
 }
 
 /**
@@ -150,9 +165,13 @@ async function startNextProject(projectId: string, edges: FlowEdge[], tasks: Map
   for (const p of (await repo.listProjects()).filter((x) => x.afterProjectId === projectId && x.flowOn)) {
     // "Starts after" counts only as you confirmed it here.
     const sure = confirmedFlow(p.id)?.after === projectId;
-    for (const r of rootsOf(p.id, edges, tasks)) {
-      if (sure) out.push(await startSession(r.id, { reason: "flow" }));
-      else await askFromFlow(r);
+    for (const t of rootsOf(p.id, edges, tasks)) {
+      if (!sure) {
+        await askFromFlow(t);
+        continue;
+      }
+      const r = await startFromFlow(t);
+      if (r) out.push(r);
     }
   }
   return out;
@@ -187,8 +206,12 @@ export async function afterFlowOn(projectId: string): Promise<LaunchResult[]> {
     const sure = confirmedFlow(projectId)?.after === before;
     for (const t of rootsOf(projectId, edges, tasks)) {
       if ((await repo.listSessions({ taskId: t.id, status: LIVE_STATUSES })).length) continue;
-      if (sure) started.push(await startSession(t.id, { reason: "flow" }));
-      else await askFromFlow(t);
+      if (!sure) {
+        await askFromFlow(t);
+        continue;
+      }
+      const r = await startFromFlow(t);
+      if (r) started.push(r);
     }
   }
   return started;

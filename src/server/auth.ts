@@ -6,7 +6,8 @@ import { MODE, authState } from "./supabase";
 /*
  * Who may use MCP. Agents reach it only in the desktop app, where their terminals run, and only with a
  * token: the owner token (Settings, for Claude Code and Codex you start yourself) or the token of one
- * session PacedMind started, which works for that session's tools until its terminal closes.
+ * session PacedMind started, which works for that session's tools until its terminal closes. They use the
+ * signed-in account's data once it passed its second factor, or without an account this computer's own.
  */
 
 const bearer = (req: Request) => {
@@ -21,10 +22,10 @@ export async function authorizeMcp(req: Request): Promise<Principal | Response> 
   // don't. Refusing it keeps web pages out even if one learned a token.
   if (req.headers.get("origin")) return new Response("Forbidden", { status: 403 });
   const state = await authState();
-  if (!state || state.aal !== "aal2") {
-    return new Response("PacedMind is signed out. Sign in to the desktop app, with your two-factor code, first.", { status: 503 });
+  if (state && state.aal !== "aal2") {
+    return new Response("PacedMind is signing in. Enter your two-factor code in the desktop app first.", { status: 503 });
   }
-  deviceFor(state.user.id);
+  if (state) deviceFor(state.user.id);
   const who = principalFor(bearer(req));
   if (!who) return new Response("Unauthorized", { status: 401 });
   if (who.kind === "session") {
@@ -44,7 +45,7 @@ export async function authorizeMcp(req: Request): Promise<Principal | Response> 
 export async function authorizeHook(req: Request): Promise<Principal | null> {
   if (MODE !== "desktop" || req.headers.get("origin")) return null;
   const state = await authState();
-  if (!state || state.aal !== "aal2") return null;
-  deviceFor(state.user.id);
+  if (state && state.aal !== "aal2") return null;
+  if (state) deviceFor(state.user.id);
   return principalFor(bearer(req));
 }

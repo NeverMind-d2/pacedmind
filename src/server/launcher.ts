@@ -7,8 +7,9 @@ import { cliCommand, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheck
 import { folderProblem } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
-import { MODE, requireAal2 } from "./supabase";
-import { dataDir, deviceConfig, deviceFor, issueSessionToken, projectFolder, taskFolder } from "./device";
+import { MODE } from "./supabase";
+import { activeDevice } from "./scope";
+import { dataDir, deviceConfig, issueSessionToken, projectFolder } from "./device";
 import { agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
 import { terminalFor } from "@/lib/terminals";
@@ -57,8 +58,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 /** The only links a Codex cloud session's record may send the browser to. */
 const CODEX_TASK_URL = /^https:\/\/chatgpt\.com\/codex\/tasks\/[\w-]+$/;
 
-/** Keeps text safe for .cmd files, Windows Terminal and shell scripts: letters, digits and . , : _ - · only. */
-const safe = (s: string, max = 400) => s.replace(/[^\p{L}\p{N} .,:_\-·]/gu, "").replace(/\s+/g, " ").trim().slice(0, max);
+/**
+ * Keeps text safe for .cmd files, Windows Terminal and shell scripts, inside double quotes: letters, digits,
+ * spaces and . , : _ - · / only. Line breaks become spaces first, so lines don't run together.
+ */
+const safe = (s: string, max = 400) => s.replace(/\s+/g, " ").replace(/[^\p{L}\p{N} .,:_\-·/]/gu, "").replace(/ {2,}/g, " ").trim().slice(0, max);
 
 export function kickoffPrompt(task: Task, sessionId: string): string {
   return safe(
@@ -92,7 +96,7 @@ export function cloudPrompt(task: Task): string {
 
 function sessionDir(id: string): string {
   if (!SESSION_ID.test(id)) throw new Error("Invalid session id");
-  const dir = path.join(dataDir(), "sessions", id);
+  const dir = path.join(/*turbopackIgnore: true*/ dataDir(), "sessions", id);
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   return dir;
 }
@@ -236,13 +240,13 @@ function openMacTerminal(dir: string, folder: string, title: string, token: stri
  * Where a task's sessions run here: its own folder on this computer, else its project's, else a scratch folder per
  * task. All three come from this computer's settings.
  */
-export function plannedFolder(task: { id: number; key: string; projectId: string | null }): string | null {
+export function plannedFolder(task: { key: string; projectId: string | null; folder: string | null }): string | null {
   if (!TASK_KEY.test(task.key)) return null;
-  return taskFolder(task.id) ?? projectFolder(task.projectId) ?? path.join(dataDir(), "workspaces", task.key.toLowerCase());
+  return task.folder ?? projectFolder(task.projectId) ?? path.join(dataDir(), "workspaces", task.key.toLowerCase());
 }
 
 function resolveFolder(task: Task): { folder?: string; error?: string } {
-  const own = taskFolder(task.id);
+  const own = task.folder;
   const set = own ?? projectFolder(task.projectId);
   if (set) {
     const problem = folderProblem(set);
@@ -259,7 +263,7 @@ export function forgetSessionFiles(sessionIds: string[]) {
   for (const id of sessionIds) {
     if (!SESSION_ID.test(id)) continue;
     try {
-      fs.rmSync(path.join(dataDir(), "sessions", id), { recursive: true, force: true });
+      fs.rmSync(path.join(/*turbopackIgnore: true*/ dataDir(), "sessions", id), { recursive: true, force: true });
     } catch {
       // A terminal still reading its start script keeps it; it goes with the next cleanup.
     }
@@ -334,8 +338,7 @@ export function startSession(
 ): Promise<LaunchResult> {
   return exclusive(async () => {
     if (MODE !== "desktop") return { ok: false, error: "Sessions start in the PacedMind desktop app." };
-    const state = await requireAal2();
-    const device = deviceFor(state.user.id);
+    const device = await activeDevice();
     const task = await repo.getTask(taskId);
     if (!task) return { ok: false, error: "Task not found" };
     const bad = checkTask(task);
@@ -434,8 +437,7 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
   return exclusive(async () => {
     if (MODE !== "desktop") return { ok: false, error: "Resume it from the PacedMind desktop app, which opens terminals on your computer." };
     if (!SESSION_ID.test(sessionId)) return { ok: false, error: "Session not found" };
-    const state = await requireAal2();
-    const device = deviceFor(state.user.id);
+    const device = await activeDevice();
     const session = await repo.getSession(sessionId);
     if (!session) return { ok: false, error: "Session not found" };
     // Cloud sessions can be picked up from any computer; the others only where they ran.
@@ -470,10 +472,14 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     } else {
       const token = issueSessionToken(session.id, task.id);
       const { command, conversation } = agentCommand(dir, session, task, "resume", token);
+      // Live again before its terminal opens, so however fast the agent calls, its token works: a closed session
+      // runs again, and with no conversation to go back to, a new one started.
+      const before = { status: session.status, endedAt: session.endedAt, cliSessionId: session.cliSessionId };
+      await repo.updateSession(session.id, {
+        endedAt: null, cliSessionId: conversation, ...(session.status === "closed" || session.status === "failed" ? { status: "running" as const } : {}),
+      });
       failed = openTerminal(dir, folder, title, command, token, device.terminal);
-      // With no conversation to go back to, a new one started.
-      if (!failed && conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: conversation, endedAt: null });
-      else if (!failed) await repo.updateSession(session.id, { endedAt: null });
+      if (failed) await repo.updateSession(session.id, before);
       text = "Reopened in a terminal";
     }
     if (failed) return { ok: false, error: failed };
@@ -502,8 +508,7 @@ export function reopenProblem(session: Session): string | null {
 export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
   return exclusive(async () => {
     if (!SESSION_ID.test(sessionId)) return { ok: false, error: "Session not found" };
-    const state = await requireAal2();
-    const device = deviceFor(state.user.id);
+    const device = await activeDevice();
     const session = await repo.getSession(sessionId);
     if (!session) return { ok: false, error: "Session not found" };
     const task = await repo.getTask(session.taskId);
@@ -517,9 +522,13 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     const dir = sessionDir(session.id);
     const token = issueSessionToken(session.id, task.id);
     const { command, conversation } = agentCommand(dir, session, task, "changes", token);
-    const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), command, token, device.terminal);
-    if (failed) return { ok: false, error: failed };
+    // The new conversation counts before its terminal opens, so a terminal still open on the old one can't end the session.
     if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: conversation });
+    const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), command, token, device.terminal);
+    if (failed) {
+      if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: session.cliSessionId });
+      return { ok: false, error: failed };
+    }
     return { ok: true, session: (await repo.getSession(session.id))!, message: `Sent to ${AGENT_LABEL[session.agent]} in a new terminal` };
   });
 }

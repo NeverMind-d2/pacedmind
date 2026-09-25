@@ -176,17 +176,18 @@ export async function requestChanges(sessionId: string, changes: string): Promis
     sessionId: s.id, taskId: s.taskId, outcome: "done", summary: (s.note || "Handed back without a report").slice(0, 2000),
     createdAt: s.finishedAt ?? undefined,
   });
-  // Written before the terminal opens, so the agent finds it however fast it starts.
+  // Written before the terminal opens, so the agent finds it however fast it starts; so is the session running
+  // again, or the agent's first call would find it ended. The hand-back's time stays on its report.
   await repo.setReportChanges(reportId, text, nowStamp());
+  await repo.updateSession(s.id, { status: "running", finishedAt: null, endedAt: null });
   const r = await reopenForChanges(s.id);
   if (!r.ok) {
     // Nothing changes when the terminal doesn't open: the request goes, and so does a report made for it.
+    await repo.updateSession(s.id, { status: s.status, finishedAt: s.finishedAt, endedAt: s.endedAt });
     if (report) await repo.setReportChanges(reportId, report.changes ?? null, report.changesAt ?? null);
     else await repo.deleteReport(reportId);
     return r;
   }
-  // Running again: the hand-back's time stays on its report.
-  await repo.updateSession(s.id, { status: "running", finishedAt: null, endedAt: null });
   await repo.addSessionEvent(s.id, "changes_requested", `You asked for changes: ${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}`);
   await repo.updateTask(s.taskId, { status: "progress" });
   return { ok: true, session: (await repo.getSession(s.id))!, message: r.message };

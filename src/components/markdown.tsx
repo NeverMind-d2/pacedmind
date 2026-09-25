@@ -67,7 +67,8 @@ function blocks(src: string): Block[] {
   return out;
 }
 
-const INLINE = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s)<>]+[^\s)<>.,;:!?'"])|(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])|(?<!\w)_([^_\s][^_]*?)_(?!\w)/g;
+// Link text and addresses have a length limit, so a long run of unclosed brackets can't make a text slow to show.
+const INLINE = /`([^`]+)`|\*\*([^*]+)\*\*|\[([^\]]{1,300})\]\((https?:\/\/[^)\s]{1,2000})\)|(https?:\/\/[^\s)<>]+[^\s)<>.,;:!?'"])|(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])|(?<!\w)_([^_\s][^_]*?)_(?!\w)/g;
 
 const linkClass = "text-fg2 underline decoration-line-strong underline-offset-2 hover:decoration-fg3";
 
