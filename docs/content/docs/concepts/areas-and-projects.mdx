@@ -86,11 +86,11 @@ Selecting a project opens its task list, grouped by status. The header shows the
 
 A project's folder is where Claude Code or Codex works when PacedMind starts a session for one of its tasks. It must be:
 
-* an absolute path, such as `C:\code\my-app`;
+* an absolute path, such as `C:\code\my-app` on Windows or `/Users/anna/code/my-app` on macOS;
 * an existing folder, not a file;
-* free of the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`, which can't be passed to a terminal safely.
+* free of the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`, and on macOS of `\`, which can't be passed to a terminal safely.
 
-**Settings** and the **Roadmap** panel save any text. A folder that breaks these rules shows its problem when a session starts, as *Can't use the folder …* with the reason and *Change it in Settings.* Agents setting a folder over MCP get the same check right away.
+**Settings** and the **Roadmap** panel save any text. A folder that breaks these rules shows its problem when a session starts, as *Can't use the folder …* with the reason. Agents setting a folder over MCP get the same check right away.
 
 Tasks in a project without a folder, and tasks outside projects, get a scratch folder per task in PacedMind's data folder. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-works).
 

@@ -30,11 +30,11 @@ Unless an agent is chosen at the start, a session runs with the task's own agent
 
 A session works in its **project's folder**, set in **Settings → Projects and folders** or in the **Roadmap**'s session panel. The folder must be an absolute path to an existing folder, without the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`. Otherwise the start is refused, before any session is recorded, with a message such as:
 
-* *Can't use the folder C:\code\app: That folder doesn't exist. Change it in Settings.*
-* *… Use an absolute path, like C:\Users\Anna\code\my-app. Change it in Settings.* The example is a `code` folder in your own home folder, such as `/Users/anna/code/my-app` on macOS.
-* *… That path is a file, not a folder. Change it in Settings.*
-* *… The path contains characters that can't be passed to a terminal safely*, with the list of characters, *Change it in Settings.*
-* On macOS: *… The path contains a backslash, which can't be passed to a terminal safely. Change it in Settings.*
+* *Can't use the folder C:\code\app: That folder doesn't exist.*
+* *… Use an absolute path, like C:\Users\Anna\code\my-app.* The example is a `code` folder in your own home folder, such as `/Users/anna/code/my-app` on macOS.
+* *… That path is a file, not a folder.*
+* *… The path contains characters that can't be passed to a terminal safely*, with the list of characters.
+* On macOS: *… The path contains a backslash, which can't be passed to a terminal safely.*
 
 A task without a project folder gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The **Flows** panel shows it as *PacedMind workspace*.
 
