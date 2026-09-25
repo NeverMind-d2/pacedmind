@@ -230,6 +230,18 @@ export interface DeviceSettings {
   importOffered: boolean;
 }
 
+/**
+ * Whether an agent's command-line tool is signed in, as the tool itself says (`claude auth status`, `codex login status`):
+ * "unknown" when there's no CLI or it didn't say. Only these words travel: never an email, an organization, a path or a key.
+ */
+export interface AgentLogin {
+  state: "in" | "out" | "unknown";
+  /** How it signed in, as a short word such as "claude.ai", "api-key" or "chatgpt". */
+  method?: string;
+  /** The subscription it signed in with, when the CLI says, such as "pro" or "max". */
+  plan?: string;
+}
+
 /** What PacedMind found on a computer for one agent. */
 export interface AgentTools {
   /** The command-line tool, when it answered `--version`; `path` when it isn't on the PATH but was found where installers put it. */
@@ -238,40 +250,97 @@ export interface AgentTools {
   app: { version: string | null } | null;
   /** Whether sessions PacedMind doesn't set up itself (the desktop app) can reach PacedMind's MCP server. */
   mcp: McpLink;
+  /** Whether the CLI is signed in (Claude Code on the web and Codex cloud start from it). */
+  login: AgentLogin;
 }
 
-export const NO_AGENT_TOOLS: AgentTools = { cli: null, app: null, mcp: "missing" };
+export const NO_AGENT_TOOLS: AgentTools = { cli: null, app: null, mcp: "missing", login: { state: "unknown" } };
 
 /** A computer with the desktop app, signed in to the account. Sessions run on it in a terminal or an agent's desktop app. */
 export interface Device {
   id: string;
   name: string;
   platform: "windows" | "macos" | "linux";
+  /** What it does with sessions asked for from elsewhere, as it last said (it decides on the computer itself). */
   remoteStart: RemoteStart;
   /** What it found for each agent when it last looked; nothing found until the first check finished. */
   agents: Record<AgentId, AgentTools>;
   createdAt: string;
+  /** When it last said it's there (every minute while it runs): see deviceOnline. */
   lastSeenAt: string | null;
   /** When it last looked for the agents; null until the first check finished. */
   checkedAt: string | null;
   revokedAt: string | null;
+  /** The account's default computer: sessions go there when neither the task nor its project names one. At most one. */
+  isDefault: boolean;
+  /** PacedMind's version on it, as it last said; null until it did. */
+  appVersion: string | null;
+  /** Projects whose flow is switched on at that computer, as it last said. For display: each computer decides for itself. */
+  flowsOn: string[];
+}
+
+/** A computer counts as online when it said so in the last two minutes (it does every minute while it runs). */
+export const DEVICE_ONLINE_MS = 2 * 60_000;
+
+export function deviceOnline(d: { lastSeenAt: string | null; revokedAt: string | null }, now = Date.now()): boolean {
+  return !d.revokedAt && !!d.lastSeenAt && now - Date.parse(d.lastSeenAt) < DEVICE_ONLINE_MS;
 }
 
 export type LaunchRequestStatus = "pending" | "launched" | "denied" | "expired" | "failed" | "canceled";
 
+/**
+ * What a request asks the computer to do: start a session for the task, resume the session `targetSessionId`, or send
+ * that session back to its agent with `changes`. Resuming and changes go only to the computer the session ran on.
+ */
+export type LaunchRequestKind = "start" | "resume" | "changes";
+
 /** A session asked for from elsewhere, waiting for (or decided by) the desktop app on `deviceId`. */
 export interface LaunchRequest {
   id: string;
+  kind: LaunchRequestKind;
   deviceId: string;
   taskId: number;
   agent: AgentId;
+  /**
+   * Where it runs. start: null means where the task says. resume: null means where it ran; "desktop" moves a Claude
+   * Code conversation from a terminal into the Claude app. changes: always a terminal.
+   */
+  surface: Surface | null;
+  /** The session to resume or send back (resume, changes). */
+  targetSessionId: string | null;
+  /** What should change, as the user wrote it (changes only). Untrusted: the agent reads it, nothing runs it. */
+  changes: string | null;
   requestedVia: string;
   requestedAt: string;
   expiresAt: string;
   status: LaunchRequestStatus;
   decidedAt: string | null;
+  /** The session it started, resumed or sent back, once it did. */
   sessionId: string | null;
   note: string | null;
+}
+
+/** A request of the last half hour as `/api/state` reports it, for "Waiting for X", "Started on X", "Refused by X". */
+export interface LaunchRequestView {
+  id: string;
+  kind: LaunchRequestKind;
+  taskId: number;
+  /** Null when the task is gone. */
+  taskKey: string | null;
+  /** The session it resumes or sends back (resume, changes). */
+  targetSessionId: string | null;
+  /** The session it started, resumed or sent back, once it did. */
+  sessionId: string | null;
+  deviceId: string;
+  /** Null when the computer is gone from the account's list. */
+  deviceName: string | null;
+  /** "expired" also for a request still waiting past its time (a computer that was off never answered it). */
+  status: LaunchRequestStatus;
+  note: string | null;
+  /** ISO timestamps. */
+  createdAt: string;
+  expiresAt: string;
+  decidedAt: string | null;
 }
 
 /** What task lists and the detail panel need besides the tasks themselves. */
@@ -287,8 +356,15 @@ export interface TaskContext {
   pending: Record<string, Attachment[]>;
   /** Session ids whose agent can take changes from here now (Request changes). */
   changesOk: Record<string, boolean>;
+  /**
+   * Session ids whose agent can take changes through a request to the computer the session ran on, with that
+   * computer's id: in the web app, or for another computer's session (requestChangesRemoteAction).
+   */
+  changesVia?: Record<string, string>;
   /** In the desktop app, which keeps this computer's folders and starts sessions here; false in the web app. */
   desktop?: boolean;
+  /** This computer's id in the account's list (desktop app, signed in and registered); null otherwise. */
+  deviceId?: string | null;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */

@@ -1,24 +1,32 @@
 import "server-only";
 import crypto from "node:crypto";
 import * as repo from "./repo";
-import { forgetSessionFiles, plannedFolder, plannedSurface, startSession, type LaunchResult } from "./launcher";
+import {
+  forgetSessionFiles, plannedFolder, plannedSurface, resumeProblem, resumeSession, startSession, type LaunchResult,
+} from "./launcher";
 import { deviceConfig, deviceFor, revokeAllSessionTokens, thisPlatform, updateDevice } from "./device";
 import { approvals, clearApprovals, handledRequests, type Approval } from "./approval-store";
-import { requestChanges } from "./ops";
+import { APP_VERSION, deviceIdFor, flowsOnHere, runsHere } from "./devices";
+import { changesProblem, requestChanges } from "./ops";
 import { MODE, authState, supabase } from "./supabase";
-import { AGENT_LABEL, SURFACE_LABEL, agentOf, type AgentId, type Session, type Surface, type Task } from "@/lib/types";
+import { cleanDeviceName } from "./store/shared";
+import {
+  AGENT_LABEL, SURFACE_LABEL, agentOf,
+  type AgentId, type LaunchRequest, type LaunchRequestKind, type RemoteStart, type Session, type Surface, type Task,
+} from "@/lib/types";
 
 /*
  * Sessions asked for from outside this computer's PacedMind window: from the web app or another computer
  * (a launch request in the cloud, which the database only accepts with a two-factor code from the last five
  * minutes, from an authenticator older than the asking session), from an agent over MCP, or from a flow along
- * a connection you haven't confirmed here. What happens to requests from elsewhere is this computer's
- * setting (device.ts):
+ * a connection you haven't confirmed here. A request from elsewhere starts a session, resumes one that ran here,
+ * or sends one that ran here back to its agent with changes. What happens to it is this computer's setting
+ * (device.ts):
  * - off: refused;
  * - ask (the default): the request waits here until you allow or refuse it in the app;
- * - auto: started right away.
- * Agents over MCP and unconfirmed flow connections always wait for you. Each approval keeps the task, agent
- * and folder you were shown, and launching refuses if any of them changed in between.
+ * - auto: acted on right away, except anything that runs in the agent's cloud, which always waits for you.
+ * Agents over MCP and unconfirmed flow connections always wait for you. Each approval keeps the task, agent,
+ * folder and way it runs that you were shown, and acting refuses if any of them changed in between.
  */
 
 const TTL_MS = 10 * 60_000;
@@ -31,14 +39,20 @@ export function pendingApprovals(): Approval[] {
   return [...approvals().values()].sort((a, b) => a.requestedAt - b.requestedAt);
 }
 
-/** What the app shows for a waiting request: which task, which agent, where it would run, who asked. */
+/** What the app shows for a waiting request: what it asks, which task, which agent, where it would run, who asked. */
 export interface ApprovalItem {
   id: string;
+  /** Start a session, resume one, or send one back to its agent with changes. */
+  kind: LaunchRequestKind;
   key: string;
   title: string;
+  /** The agent and where it runs, in words ("Claude Code · Terminal"). */
   agent: string;
+  surface: Surface;
   folder: string;
   from: string;
+  /** For kind "changes": what should change, as the user wrote it (untrusted text, shown as it is). */
+  changes: string | null;
   requestedAt: number;
   expiresAt: number;
 }
@@ -52,28 +66,33 @@ const FROM_TEXT: Record<Approval["from"], string> = {
 export function approvalItems(tasks: Task[]): ApprovalItem[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return pendingApprovals().map((a) => ({
-    id: a.id, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`, folder: a.folder,
-    from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”` : FROM_TEXT[a.from],
+    id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
+    surface: a.surface, folder: a.folder,
+    from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”`
+      : a.resume ? `${FROM_TEXT[a.from]}, resuming its session` : FROM_TEXT[a.from],
+    changes: a.changes?.text ?? null,
     requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
 }
 
 const excerpt = (text: string) => (text.length > 200 ? `${text.slice(0, 200).trimEnd()}…` : text);
 
-/** Puts a request in front of you, with what it would run right now. Null when the task can't run here at all. */
+type Times = { at: number; until: number };
+
+/** Puts a request to start a session in front of you, with what it would run right now. Null when the task can't run here at all. */
 async function ask(
-  task: Task, agent: AgentId | null, from: Approval["from"], requestId: string | null, times?: { at: number; until: number }, surface?: Surface,
+  task: Task, agent: AgentId | null, from: Approval["from"], requestId: string | null, times?: Times, surface?: Surface,
 ): Promise<Approval | null> {
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
   const who = agent ?? agentOf(task, project?.agent);
   const folder = plannedFolder(task);
   if (!who || !folder) return null;
-  const same = pendingApprovals().find((a) => a.taskId === task.id && a.from === from && a.requestId === requestId && !a.changes);
+  const same = pendingApprovals().find((a) => a.kind === "start" && a.taskId === task.id && a.from === from && a.requestId === requestId);
   if (same) return same;
   const now = Date.now();
   const a: Approval = {
-    id: requestId ?? crypto.randomUUID(), requestId, from, taskId: task.id, key: task.key, agent: who, folder, surface: surface ?? plannedSurface(task, who),
-    requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
+    id: requestId ?? crypto.randomUUID(), requestId, from, kind: "start", taskId: task.id, key: task.key, agent: who, folder,
+    surface: surface ?? plannedSurface(task, who), requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
   };
   approvals().set(a.id, a);
   return a;
@@ -86,17 +105,37 @@ export const askFromAgent = (task: Task, agent: AgentId | null, surface?: Surfac
 export const askFromFlow = (task: Task) => ask(task, null, "flow", null);
 
 /**
- * An agent asked over MCP to send a session back to work with changes (request_changes): reopening it runs an agent
- * here, so it waits for you like a session it asks for. The changes are written when you allow it.
+ * Asks you to send a session back to work with changes: an agent's request_changes over MCP, or (with `origin`) a
+ * request from the web app or another computer. Reopening it runs an agent here, so it waits for you like a session
+ * it asks for. The changes are written when you allow it. A newer request for the same session replaces the older one.
  */
-export async function askForChanges(session: Session, task: Task, text: string): Promise<Approval | null> {
+export async function askForChanges(
+  session: Session, task: Task, text: string, origin?: { requestId: string; times: Times },
+): Promise<Approval | null> {
   const folder = plannedFolder(task);
   if (!folder) return null;
-  for (const [id, x] of approvals()) if (x.changes?.sessionId === session.id) approvals().delete(id);
+  for (const [id, x] of approvals()) {
+    if (x.changes?.sessionId !== session.id) continue;
+    approvals().delete(id);
+    if (x.requestId) await repo.settleLaunchRequest(x.requestId, "failed", { note: "A newer request for the same session replaced it" });
+  }
   const now = Date.now();
   const a: Approval = {
-    id: crypto.randomUUID(), requestId: null, from: "agent", taskId: task.id, key: task.key, agent: session.agent, folder, surface: "terminal",
-    changes: { sessionId: session.id, text }, requestedAt: now, expiresAt: now + TTL_MS,
+    id: origin?.requestId ?? crypto.randomUUID(), requestId: origin?.requestId ?? null, from: origin ? "elsewhere" : "agent", kind: "changes",
+    taskId: task.id, key: task.key, agent: session.agent, folder, surface: "terminal", changes: { sessionId: session.id, text },
+    requestedAt: origin?.times.at ?? now, expiresAt: origin?.times.until ?? now + TTL_MS,
+  };
+  approvals().set(a.id, a);
+  return a;
+}
+
+/** Asks you to resume a session that ran here, as the web app or another computer asked (`to` "desktop": in the Claude app). */
+function askResume(session: Session, task: Task, to: Surface | undefined, requestId: string, times: Times): Approval | null {
+  const folder = plannedFolder(task);
+  if (!folder) return null;
+  const a: Approval = {
+    id: requestId, requestId, from: "elsewhere", kind: "resume", taskId: task.id, key: task.key, agent: session.agent, folder,
+    surface: to ?? session.surface, resume: { sessionId: session.id, ...(to ? { to } : {}) }, requestedAt: times.at, expiresAt: times.until,
   };
   approvals().set(a.id, a);
   return a;
@@ -106,18 +145,27 @@ export async function approve(id: string): Promise<LaunchResult> {
   const a = approvals().get(id);
   approvals().delete(id);
   if (!a || a.expiresAt <= Date.now()) return { ok: false, error: "That request expired. Ask for the session again." };
-  if (a.changes) {
-    const task = await repo.getTask(a.taskId);
-    if (!task || task.key !== a.key || plannedFolder(task) !== a.folder) {
-      return { ok: false, error: `${a.key} changed after you saw the request (its task or folder). Ask for the changes again.` };
-    }
-    return requestChanges(a.changes.sessionId, a.changes.text);
-  }
-  const r = await startSession(a.taskId, {
-    agent: a.agent, surface: a.surface, reason: "approved", expect: { key: a.key, agent: a.agent, folder: a.folder, surface: a.surface },
-  });
+  const r = await act(a);
   if (a.requestId) await repo.settleLaunchRequest(a.requestId, r.ok ? "launched" : "failed", { sessionId: r.session?.id, note: r.error });
   return r;
+}
+
+/** Does what you allowed, as long as the task, its folder and the session are still what you were shown. */
+async function act(a: Approval): Promise<LaunchResult> {
+  const again = a.kind === "changes" ? "Ask for the changes again." : a.kind === "resume" ? "Ask to resume it again." : "Ask for the session again.";
+  if (a.changes || a.resume) {
+    const sessionId = a.changes?.sessionId ?? a.resume!.sessionId;
+    const task = await repo.getTask(a.taskId);
+    if (!task || task.key !== a.key || plannedFolder(task) !== a.folder) {
+      return { ok: false, error: `${a.key} changed after you saw the request (its task or folder). ${again}` };
+    }
+    const session = await repo.getSession(sessionId);
+    if (!session || session.taskId !== a.taskId) return { ok: false, error: `That session is gone. ${again}` };
+    return a.changes ? requestChanges(sessionId, a.changes.text) : resumeSession(sessionId, a.resume!.to);
+  }
+  return startSession(a.taskId, {
+    agent: a.agent, surface: a.surface, reason: "approved", expect: { key: a.key, agent: a.agent, folder: a.folder, surface: a.surface },
+  });
 }
 
 export async function deny(id: string) {
@@ -126,11 +174,21 @@ export async function deny(id: string) {
   if (a?.requestId) await repo.settleLaunchRequest(a.requestId, "denied", { note: "Refused on the computer" });
 }
 
-const g = globalThis as unknown as { __pacedmindSeen?: number };
+const g = globalThis as unknown as {
+  __pacedmindSeen?: number;
+  /** This computer's name in the account's list as last seen, to tell a name given elsewhere from one given here. */
+  __pacedmindRowName?: string;
+  /** The flows the account's list shows as on here, as last written or seen. */
+  __pacedmindFlowsSent?: string;
+};
+
+/** The account's projects whose flow is on here, as the account's list keeps them. */
+const cloudFlows = () => flowsOnHere(true).slice(0, 200);
 
 /**
  * The desktop app's side of the account, every few seconds: registers this computer, notices when it was
- * signed out from elsewhere, and handles the launch requests sent to it, each exactly once.
+ * signed out from elsewhere, keeps its entry current (still here, its name, version and flows), and handles the
+ * launch requests sent to it, each exactly once.
  */
 export async function syncDevice(): Promise<void> {
   if (MODE !== "desktop") return;
@@ -158,8 +216,31 @@ export async function syncDevice(): Promise<void> {
   if (!g.__pacedmindSeen || now - g.__pacedmindSeen > 60_000) {
     const me = await repo.getDevice(d.deviceId!);
     if (!me || me.revokedAt) return signOutHere();
-    await repo.updateDeviceRow(d.deviceId!, { lastSeen: true, ...(me.remoteStart !== d.remoteStart ? { remoteStart: d.remoteStart } : {}) });
+    // A name given in the web app or on another computer becomes this computer's name here too; one given here that
+    // didn't reach the account (it was offline) goes there now.
+    let pushName = false;
+    const adopted = cleanDeviceName(me.name);
+    if (adopted !== cleanDeviceName(d.name)) {
+      if (adopted && (g.__pacedmindRowName === undefined || me.name !== g.__pacedmindRowName)) updateDevice({ name: adopted });
+      else pushName = !!cleanDeviceName(d.name);
+      d = deviceConfig();
+    }
+    await repo.updateDeviceRow(d.deviceId!, {
+      lastSeen: true,
+      ...(me.remoteStart !== d.remoteStart ? { remoteStart: d.remoteStart } : {}),
+      ...(pushName ? { name: d.name } : {}),
+      ...(APP_VERSION && me.appVersion !== APP_VERSION ? { appVersion: APP_VERSION } : {}),
+    });
+    g.__pacedmindRowName = pushName ? cleanDeviceName(d.name) : me.name;
+    g.__pacedmindFlowsSent = me.flowsOn.join(",");
     g.__pacedmindSeen = now;
+  }
+
+  // Which projects' flows are on here, for the account's list (display only), soon after a switch changes.
+  const flows = cloudFlows();
+  if (g.__pacedmindFlowsSent !== flows.join(",")) {
+    await repo.updateDeviceRow(d.deviceId!, { flowsOn: flows });
+    g.__pacedmindFlowsSent = flows.join(",");
   }
 
   const pending = await repo.listLaunchRequests({ deviceId: d.deviceId!, status: ["pending"] });
@@ -174,26 +255,62 @@ export async function syncDevice(): Promise<void> {
     }
     // Whatever happens next, this request is this computer's to decide once.
     handledRequests().add(r.id);
-    const settle = (status: "launched" | "failed" | "denied" | "expired", extra?: { sessionId?: string | null; note?: string | null }) =>
-      repo.settleLaunchRequest(r.id, status, extra);
-    if (Date.parse(r.expiresAt) <= now) {
-      await settle("expired");
-      continue;
-    }
-    if (d.remoteStart === "off") {
-      await settle("denied", { note: "Starting sessions from elsewhere is off on this computer" });
-      continue;
-    }
-    const task = await repo.getTask(r.taskId);
-    if (!task) {
-      await settle("failed", { note: "The task is gone" });
-    } else if (d.remoteStart === "auto") {
-      const res = await startSession(r.taskId, { agent: r.agent, reason: "remote" });
-      await settle(res.ok ? "launched" : "failed", { sessionId: res.session?.id, note: res.error });
-    } else if (!(await ask(task, r.agent, "elsewhere", r.id, { at: Date.parse(r.requestedAt), until: Date.parse(r.expiresAt) }))) {
-      await settle("failed", { note: "That task can't run on this computer" });
-    }
+    await handle(r, d.remoteStart, d.deviceId!, now);
   }
+}
+
+/**
+ * Decides one request from elsewhere by this computer's setting, after checking it can run here at all. Everything is
+ * checked again when it runs (startSession, resumeSession, requestChanges), and the outcome goes back to the request.
+ */
+async function handle(r: LaunchRequest, setting: RemoteStart, here: string, now: number) {
+  const settle = (status: "launched" | "failed" | "denied" | "expired", extra?: { sessionId?: string | null; note?: string | null }) =>
+    repo.settleLaunchRequest(r.id, status, extra);
+  if (Date.parse(r.expiresAt) <= now) return settle("expired");
+  if (setting === "off") return settle("denied", { note: "Taking sessions from elsewhere is off on this computer" });
+  const task = await repo.getTask(r.taskId);
+  if (!task) return settle("failed", { note: "The task is gone" });
+  if (task.agent === "human") return settle("failed", { note: `${task.key} is marked as yours` });
+  const times = { at: Date.parse(r.requestedAt), until: Date.parse(r.expiresAt) };
+  const done = (res: LaunchResult, sessionId?: string) =>
+    settle(res.ok ? "launched" : "failed", { sessionId: res.ok ? res.session?.id ?? sessionId : null, note: res.error });
+
+  if (r.kind === "start") {
+    const project = task.projectId ? await repo.getProject(task.projectId) : null;
+    if (!runsHere(deviceIdFor(task.deviceId, project?.deviceId))) return settle("failed", { note: `${task.key} runs on another computer` });
+    const surface = r.surface ?? plannedSurface(task, r.agent);
+    const folder = plannedFolder(task);
+    // A session in the agent's cloud sends the project there, so it always waits for you, whatever the setting.
+    if (setting === "auto" && surface !== "cloud" && folder) {
+      return done(await startSession(task.id, { agent: r.agent, surface, reason: "remote", expect: { key: task.key, agent: r.agent, folder, surface } }));
+    }
+    if (!(await ask(task, r.agent, "elsewhere", r.id, times, surface))) await settle("failed", { note: "That task can't run on this computer" });
+    return;
+  }
+
+  // Resuming and changes: the session has to be this computer's and the request's task's (the database checked that
+  // too), and a conversation only goes on where it is.
+  const session = r.targetSessionId ? await repo.getSession(r.targetSessionId) : null;
+  if (!session || session.taskId !== task.id || session.agent !== r.agent || session.deviceId !== here) {
+    return settle("failed", { note: "That session didn't run on this computer" });
+  }
+
+  if (r.kind === "resume") {
+    const to = r.surface === "desktop" ? "desktop" : undefined;
+    const problem = resumeProblem(session, to);
+    if (problem) return settle("failed", { note: problem });
+    // Pulling a cloud session in runs its work here, so it waits for you too.
+    if (setting === "auto" && session.surface !== "cloud") return done(await resumeSession(session.id, to), session.id);
+    if (!askResume(session, task, to, r.id, times)) await settle("failed", { note: "That task can't run on this computer" });
+    return;
+  }
+
+  // The changes are the user's words for the agent: they go on its report, where start_task reads them, never on a command line.
+  const text = (r.changes ?? "").trim().slice(0, 20000);
+  const problem = text ? await changesProblem(session) : "No changes were written";
+  if (problem) return settle("failed", { note: problem });
+  if (setting === "auto") return done(await requestChanges(session.id, text), session.id);
+  if (!(await askForChanges(session, task, text, { requestId: r.id, times }))) await settle("failed", { note: "That task can't run on this computer" });
 }
 
 /** Signing out here, or this computer signed out from elsewhere: its agents lose PacedMind at once. */
@@ -207,5 +324,7 @@ async function signOutHere() {
   cutOffAgents();
   updateDevice({ deviceId: null, claimedSession: null });
   g.__pacedmindSeen = undefined;
+  g.__pacedmindRowName = undefined;
+  g.__pacedmindFlowsSent = undefined;
   await (await supabase()).auth.signOut({ scope: "local" });
 }

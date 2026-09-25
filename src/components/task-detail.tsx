@@ -4,9 +4,10 @@ import { useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
   addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction, requestChangesAction,
-  resumeSessionAction, toggleSubtaskAction, updateTaskAction,
+  toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
-import { startSessionOrAsk } from "./remote-start";
+import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
+import { RequestStatus, useComputer } from "./request-status";
 import { dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, VERDICT_LABEL, agentOf,
@@ -107,6 +108,12 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   // marked done. Sessions in the apps or the cloud take them where they run (changesProblem on the server decides).
   const [asking, setAsking] = useState(false);
   const canAsk = !!session && !!ctx.changesOk[session.id];
+  // A session goes on where it ran: in the web app (which has no computer) and for another computer's session, its
+  // buttons ask that computer, and the changes go there as a request (changesVia).
+  const elsewhere = !!session && (!ctx.desktop || (!!session.deviceId && !!ctx.deviceId && session.deviceId !== ctx.deviceId));
+  const ranOn = useComputer(session?.deviceId)?.name ?? "its computer";
+  const changesVia = session ? ctx.changesVia?.[session.id] ?? null : null;
+  const forThisTask = (r: { taskId: number }) => r.taskId === task.id;
   const pager = reports.length > 1 && (
     <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
       <button type="button" aria-label="Older report" disabled={viewing >= reports.length - 1} onClick={() => setViewing((v) => v + 1)}
@@ -177,11 +184,15 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 })} />
             ) : (
               <div className="flex flex-wrap gap-2">
-                {!active && session.status !== "failed" && session.surface === "terminal" && (
-                  <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="terminal" size={13} />Resume in terminal</Button>
+                {/* Elsewhere it resumes where it ran; a session that ran on no computer of the account can't. */}
+                {!active && session.status !== "failed" && session.surface === "terminal" && (!elsewhere || !!session.deviceId) && (
+                  <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(session))}>
+                    <Icon name="terminal" size={13} />{elsewhere ? `Resume on ${ranOn}` : "Resume in terminal"}
+                  </Button>
                 )}
-                {session.surface === "desktop" && session.status !== "failed" && (
-                  <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="appWindow" size={13} />Open the {APP_LABEL[session.agent]}</Button>
+                {/* Showing an app's window only helps at that computer. */}
+                {session.surface === "desktop" && session.status !== "failed" && !elsewhere && (
+                  <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(session))}><Icon name="appWindow" size={13} />Open the {APP_LABEL[session.agent]}</Button>
                 )}
                 {session.surface === "cloud" && session.url && (
                   <a href={session.url} target="_blank" rel="noreferrer"
@@ -189,12 +200,14 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                     <Icon name="cloud" size={13} />Open in the cloud
                   </a>
                 )}
-                {canAsk && <Button onClick={() => setAsking(true)}><Icon name="pen" size={13} />Request changes</Button>}
+                {(canAsk || changesVia) && (
+                  <Button onClick={() => (canAsk ? setAsking(true) : askForChangesOn(session, changesVia!))}><Icon name="pen" size={13} />Request changes</Button>
+                )}
                 {active && session.surface !== "terminal" && (
                   <Button onClick={() => run(() => finishSessionAction(session.id))}><Icon name="check" size={13} />Mark finished</Button>
                 )}
                 {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
-                  <Button onClick={() => run(() => startSessionOrAsk(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
+                  <Button disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent, task.runIn))}><Icon name="plus" size={13} />New session</Button>
                 )}
                 {session.status === "finished" && (
                   <Button variant="primary" onClick={() => run(() => markSessionDoneAction(session.id))}>Mark done</Button>
@@ -206,6 +219,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 )}
               </div>
             )}
+            {/* What became of a request to a computer for this task: waiting, started, refused… */}
+            <RequestStatus match={forThisTask} />
           </div>
         )}
 
@@ -301,10 +316,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             ) : !agent ? (
               <span className="px-2 text-mut2">None, this one is yours</span>
             ) : (
-              <div className="flex px-2">
+              <div className="flex flex-col items-start gap-1.5 px-2">
                 {/* No overflow-hidden here: it would clip the menu. The halves round their own corners. */}
                 <div className="flex h-[26px] rounded-md border border-ctl">
-                  <button type="button" disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent, task.runIn ?? undefined))}
+                  <button type="button" disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent, task.runIn))}
                     title={task.runIn ? `Runs ${placeOf(agent, task.runIn)}` : "Runs in a terminal when the CLI is installed, else in the desktop app"}
                     className="flex items-center gap-1.5 rounded-l-[5px] px-2.5 text-[12px] text-fg hover:bg-hover">
                     <AgentIcon agent={agent} size={12} />Start with {AGENT_LABEL[agent]}
@@ -319,6 +334,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                       run(() => startSessionOrAsk(task.id, a, s));
                     }} />
                 </div>
+                {/* With a session, its card shows this. */}
+                {!session && <RequestStatus match={forThisTask} />}
               </div>
             )}
           </Prop>

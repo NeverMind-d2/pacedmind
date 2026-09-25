@@ -2,6 +2,7 @@ import { FlowView, type FlowDevice, type FlowSession, type FlowTask } from "@/co
 import { Icon } from "@/components/icons";
 import { thisDevice } from "@/server/devices";
 import * as repo from "@/server/repo";
+import { MODE } from "@/server/supabase";
 import { projectColor } from "@/lib/colors";
 import { nowStamp, parseLocal } from "@/lib/dates";
 import { agentOf, isLiveSession } from "@/lib/types";
@@ -73,18 +74,23 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
     })
     .map((s) => s.taskId);
 
-  // This computer first, then the other computers signed in to the account.
-  const [me, others, held] = await Promise.all([thisDevice(), repo.listDevices(), repo.heldOutcomes()]);
-  const devices: FlowDevice[] = [me, ...others.filter((d) => d.id !== me.id && !d.revokedAt)].map((d) => ({
-    id: d.id, name: d.name, here: d.id === me.id, checked: !!d.checkedAt, agents: d.agents,
+  // This computer first (the desktop app's: the web app has no computer of its own), then the other computers signed
+  // in to the account. A task that names no computer runs on this one, or in the web app on the account's default.
+  const [me, others, held] = await Promise.all([MODE === "desktop" ? thisDevice() : null, repo.listDevices(), repo.heldOutcomes()]);
+  const signedIn = others.filter((d) => d.id !== me?.id && !d.revokedAt);
+  const devices: FlowDevice[] = [...(me ? [me] : []), ...signedIn].map((d) => ({
+    id: d.id, name: d.name, here: d.id === me?.id, checked: !!d.checkedAt, agents: d.agents, isDefault: d.isDefault,
   }));
+  const fallback = me?.id ?? signedIn.find((d) => d.isDefault)?.id ?? signedIn[0]?.id ?? "";
+  // Each computer switches a project's flow on for itself and tells the account (display only): where else it's on.
+  const flowsOnAt = signedIn.filter((d) => d.flowsOn.includes(project.id)).map((d) => d.name);
 
   // Tasks that are yours ("human") never run as agent sessions, so they aren't offered to the flow.
   const flowTasks: FlowTask[] = tasks.flatMap((t) => {
     const agent = agentOf(t, project.agent);
     return agent ? [{
       id: t.id, key: t.key, title: t.title, status: t.status, agent,
-      runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? me.id, folder: t.folder ?? project.folder, ownFolder: !!t.folder,
+      runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? fallback, folder: t.folder ?? project.folder, ownFolder: !!t.folder,
       flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt, held: held.get(t.id) ?? null,
     }] : [];
   });
@@ -98,6 +104,8 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
         codexEnv: project.codexEnv,
       }}
       projects={projects.map((p) => ({ id: p.id, name: p.name, color: projectColor(p, areas), inFlow: inFlow(p.id) }))}
+      desktop={MODE === "desktop"}
+      flowsOnAt={flowsOnAt}
       devices={devices}
       tasks={flowTasks}
       yours={yours}

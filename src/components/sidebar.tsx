@@ -23,6 +23,8 @@ const NAV: { href: string; label: string; icon: IconName; count?: "inbox" | "tod
   { href: "/roadmap", label: "Roadmap", icon: "roadmap" },
   { href: "/flows", label: "Flows", icon: "flow" },
   { href: "/sessions", label: "Sessions", icon: "terminal", count: "sessions" },
+  // Where sessions run: the account's computers (without an account, this one).
+  { href: "/computers", label: "Computers", icon: "laptop" },
 ];
 
 export function openQuickAdd() {

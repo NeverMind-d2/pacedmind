@@ -18,7 +18,8 @@ type Entry = { id: string; label: string; hint?: string; icon: React.ReactNode; 
 const PAGES: [string, string, IconName][] = [
   ["Today", "/today", "sun"], ["Inbox", "/inbox", "inbox"], ["Upcoming", "/upcoming", "clock"],
   ["Calendar", "/calendar", "calendar"], ["Week", "/calendar/week", "calendar"], ["Timeline", "/timeline", "timeline"],
-  ["Roadmap", "/roadmap", "roadmap"], ["Flows", "/flows", "flow"], ["Sessions", "/sessions", "terminal"], ["Settings", "/settings", "settings"],
+  ["Roadmap", "/roadmap", "roadmap"], ["Flows", "/flows", "flow"], ["Sessions", "/sessions", "terminal"], ["Computers", "/computers", "laptop"],
+  ["Settings", "/settings", "settings"],
 ];
 
 export function CommandPalette({ tasks, projects }: { tasks: PaletteTask[]; projects: { id: string; name: string }[] }) {

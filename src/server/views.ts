@@ -1,6 +1,8 @@
 import "server-only";
-import { changesProblemIn } from "./ops";
+import { thisDeviceId } from "./devices";
+import { changesProblemIn, changesViaIn } from "./ops";
 import * as repo from "./repo";
+import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
 import { isLiveSession, type Area, type Project, type Session, type Task, type TaskContext, type Usage } from "@/lib/types";
 
@@ -15,14 +17,19 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const [sessionEvents, reports, pending] = await Promise.all([repo.sessionEventsFor(shown), repo.reportsForTasks([...ids]), repo.pendingImages(shown)]);
   const live = new Set(all.filter(isLiveSession).map((s) => s.taskId));
   const byId = new Map(tasks.map((t) => [t.id, t]));
-  const changesOk = Object.fromEntries(
-    Object.values(sessions).filter((s) => s.status === "finished" || s.status === "done").map((s) => [
-      s.id, !changesProblemIn(s, { task: byId.get(s.taskId), live: live.has(s.taskId), newest: reports.get(s.taskId)?.[0] }),
-    ]),
-  );
+  const changesOk: Record<string, boolean> = {};
+  // Changes for a session that ran elsewhere go to its computer as a request (requestChangesRemoteAction).
+  const changesVia: Record<string, string> = {};
+  for (const s of Object.values(sessions)) {
+    if (s.status !== "finished" && s.status !== "done") continue;
+    const ctx = { task: byId.get(s.taskId), live: live.has(s.taskId), newest: reports.get(s.taskId)?.[0] };
+    changesOk[s.id] = !changesProblemIn(s, ctx);
+    const via = changesViaIn(s, ctx);
+    if (via) changesVia[s.id] = via;
+  }
   return {
-    areas, projects, sessions, sessionEvents, reports: Object.fromEntries(reports), pending: Object.fromEntries(pending), changesOk,
-    desktop: MODE === "desktop",
+    areas, projects, sessions, sessionEvents, reports: Object.fromEntries(reports), pending: Object.fromEntries(pending), changesOk, changesVia,
+    desktop: MODE === "desktop", deviceId: MODE === "desktop" && (await usesCloud()) ? thisDeviceId() : null,
   };
 }
 

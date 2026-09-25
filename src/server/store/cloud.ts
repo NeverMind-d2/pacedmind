@@ -7,16 +7,16 @@ import {
   deviceConfig, flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import {
-  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences, linksOf,
-  snapshotOf, strings,
-  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey,
+  expandOccurrences, linksOf, loginOf, snapshotOf, strings,
+  type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
   type AgentId, type AgentTools, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
-  type FlowEdge, type LaunchRequest, type LaunchRequestStatus, type Priority, type Project, type RemoteStart, type Report,
-  type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask,
+  type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type Priority, type Project, type RemoteStart,
+  type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask,
   type Surface, type Task,
 } from "@/lib/types";
 
@@ -766,7 +766,7 @@ export async function setSettings(patch: Partial<Settings>) {
 
 /* ---------- computers and requests to start sessions ---------- */
 
-const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at";
+const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on";
 
 /**
  * What a computer found of one agent, as the cloud has it: for display only. The launcher uses what this
@@ -778,8 +778,10 @@ function toolsOf(v: unknown): AgentTools {
   const cli = t.cli && typeof t.cli === "object" && typeof (t.cli as Row).version === "string" ? { version: String((t.cli as Row).version) } : null;
   const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
   const mcp = t.mcp === "connected" || t.mcp === "elsewhere" ? t.mcp : "missing";
-  return { cli, app, mcp };
+  return { cli, app, mcp, login: loginOf(t.login) };
 }
+
+const isUuidValue = (v: unknown): v is string => typeof v === "string" && isUuid(v);
 
 const toDevice = (r: Row): Device => {
   const agents = (r.agents && typeof r.agents === "object" ? r.agents : {}) as Row;
@@ -787,13 +789,21 @@ const toDevice = (r: Row): Device => {
     id: String(r.id), name: String(r.name), platform: String(r.platform) as Device["platform"], remoteStart: String(r.remote_start) as RemoteStart,
     agents: { claude: toolsOf(agents.claude), codex: toolsOf(agents.codex) },
     createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), checkedAt: s(r.checked_at), revokedAt: s(r.revoked_at),
+    isDefault: r.is_default === true, appVersion: s(r.app_version),
+    flowsOn: Array.isArray(r.flows_on) ? r.flows_on.filter(isUuidValue) : [],
   };
 };
 
-/** Records what this computer found of the agents, for Settings on every computer (without where the tools are). */
+/**
+ * Records what this computer found of the agents, for Settings on every computer: versions, whether the apps reach
+ * PacedMind, and whether each CLI is signed in (the state, and the method and plan as single words). Never where the
+ * tools are, and never an email, an organization or a key.
+ */
 export async function saveDeviceTools(id: string, agents: Device["agents"]) {
   if (!isUuid(id)) return;
-  const plain = Object.fromEntries(Object.entries(agents).map(([agent, t]) => [agent, { cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp }]));
+  const plain = Object.fromEntries(Object.entries(agents).map(([agent, t]) => [agent, {
+    cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login),
+  }]));
   const db = await accountDb();
   check(await db.from("devices").update({ agents: plain, checked_at: new Date().toISOString() }).eq("id", id));
 }
@@ -815,9 +825,27 @@ export async function getDevice(id: string): Promise<Device | null> {
 /** Adds this computer to the account's list, pointing at the current auth session (so revoking ends it). */
 export async function registerDevice(name: string, platform: Device["platform"]): Promise<string> {
   const db = await accountDb();
-  const { data, error } = await db.rpc("register_device", { device_name: name.slice(0, 80) || "Computer", device_platform: platform });
+  const { data, error } = await db.rpc("register_device", { device_name: cleanDeviceName(name) || "Computer", device_platform: platform });
   if (error) throw new Error(error.message);
   return String(data);
+}
+
+/** Renames one of the account's computers, from any of its sessions (the web app, another computer). The computer takes the name over. */
+export async function renameDevice(id: string, name: string) {
+  const clean = cleanDeviceName(name);
+  if (!isUuid(id)) throw new Error("Unknown computer");
+  if (!clean) throw new Error("Give the computer a name");
+  const db = await accountDb();
+  const r = one(await db.from("devices").update({ name: clean }).eq("id", id).is("revoked_at", null).select("id").maybeSingle());
+  if (!r) throw new Error("That computer isn't signed in to PacedMind.");
+}
+
+/** Makes a signed-in computer the account's default; the one that was the default stops being it (a database trigger). */
+export async function setDefaultDevice(id: string) {
+  if (!isUuid(id)) throw new Error("Unknown computer");
+  const db = await accountDb();
+  const r = one(await db.from("devices").update({ is_default: true }).eq("id", id).is("revoked_at", null).select("id").maybeSingle());
+  if (!r) throw new Error("That computer isn't signed in to PacedMind.");
 }
 
 /** Points this computer's entry at the current auth session, after signing in again. */
@@ -835,39 +863,59 @@ export async function revokeDevice(id: string) {
   if (error) throw new Error(error.message);
 }
 
-export async function updateDeviceRow(id: string, patch: { name?: string; remoteStart?: RemoteStart; lastSeen?: boolean }) {
+/**
+ * What this computer reports about its own entry (the database takes these only from the computer's own sign-in):
+ * its name as set in its window, its setting for requests from elsewhere, that it's still there, PacedMind's version,
+ * and the projects whose flow is on here. Values in the wrong shape are left out rather than failing the rest.
+ */
+export async function updateDeviceRow(id: string, patch: {
+  name?: string; remoteStart?: RemoteStart; lastSeen?: boolean; appVersion?: string; flowsOn?: string[];
+}) {
   const values: Row = {};
-  if (patch.name?.trim()) values.name = patch.name.trim().slice(0, 80);
+  const name = patch.name === undefined ? "" : cleanDeviceName(patch.name);
+  if (name) values.name = name;
   if (patch.remoteStart) values.remote_start = patch.remoteStart;
   if (patch.lastSeen) values.last_seen_at = new Date().toISOString();
+  if (patch.appVersion !== undefined && appVersionOk(patch.appVersion)) values.app_version = patch.appVersion;
+  if (patch.flowsOn) values.flows_on = [...new Set(patch.flowsOn.filter(isUuid))].sort().slice(0, 200);
   if (!Object.keys(values).length || !isUuid(id)) return;
   const db = await accountDb();
   check(await db.from("devices").update(values).eq("id", id));
 }
 
+const KINDS = new Set<string>(["start", "resume", "changes"]);
+const SURFACES = new Set<string>(["terminal", "desktop", "cloud"]);
+
 const toRequest = (r: Row): LaunchRequest => ({
-  id: String(r.id), deviceId: String(r.device_id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId,
+  id: String(r.id), kind: (KINDS.has(String(r.kind)) ? String(r.kind) : "start") as LaunchRequestKind,
+  deviceId: String(r.device_id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId,
+  surface: SURFACES.has(String(r.surface)) ? (String(r.surface) as Surface) : null,
+  targetSessionId: s(r.target_session_id), changes: s(r.changes),
   requestedVia: String(r.requested_via), requestedAt: String(r.requested_at), expiresAt: String(r.expires_at),
   status: String(r.status) as LaunchRequestStatus, decidedAt: s(r.decided_at), sessionId: s(r.session_id), note: s(r.note),
 });
 
-export async function listLaunchRequests(filter: { deviceId?: string; status?: LaunchRequestStatus[]; taskId?: number } = {}): Promise<LaunchRequest[]> {
+/** The account's requests to its computers, newest first (at most 200). */
+export async function listLaunchRequests(filter: LaunchRequestFilter = {}): Promise<LaunchRequest[]> {
   const db = await accountDb();
   let q = db.from("launch_requests").select("*");
   if (filter.deviceId) q = q.eq("device_id", filter.deviceId);
   if (filter.status) q = q.in("status", filter.status);
   if (filter.taskId !== undefined) q = q.eq("task_id", filter.taskId);
-  return many(await q.order("requested_at", { ascending: false }).limit(200)).map(toRequest);
+  if (filter.since) q = q.gte("requested_at", filter.since);
+  return many(await q.order("requested_at", { ascending: false }).limit(filter.limit ?? 200)).map(toRequest);
 }
 
 /**
- * Asks a computer to start a session. The database only accepts it from a session whose second factor was
- * verified in the last five minutes, and sets its status and expiry itself.
+ * Asks a computer to start a session, resume one, or send one back with changes. The database only accepts it from
+ * a session whose second factor was verified in the last five minutes, only for a session that ran on that computer
+ * (resume, changes), and sets its status and expiry itself.
  */
-export async function createLaunchRequest(input: { deviceId: string; taskId: number; agent: AgentId; via: string }): Promise<LaunchRequest> {
+export async function createLaunchRequest(input: LaunchRequestInput): Promise<LaunchRequest> {
   const db = await accountDb();
   const r = one(await db.from("launch_requests").insert({
-    device_id: input.deviceId, task_id: input.taskId, agent: input.agent, requested_via: input.via,
+    device_id: input.deviceId, task_id: input.taskId, agent: input.agent, requested_via: input.via, kind: input.kind ?? "start",
+    surface: input.surface ?? null, target_session_id: input.targetSessionId ?? null, changes: input.changes ?? null,
   }).select().single());
   return toRequest(r!);
 }

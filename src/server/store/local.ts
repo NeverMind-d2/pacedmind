@@ -658,7 +658,10 @@ const CLOUD_ONLY = "Sign in to PacedMind Cloud to use PacedMind on more than one
 /** What this computer found of the agents stays in memory (devices.ts); there's no list of computers to keep it in. */
 export async function saveDeviceTools() {}
 
-/** Other computers: none, without an account. Settings shows this one from devices.ts. */
+/**
+ * Other computers: none, without an account. This one is thisDevice() in devices.ts (Settings and the Flows page show
+ * it from there): the default by being the only one, named in this computer's settings.
+ */
 export async function listDevices(): Promise<Device[]> {
   return [];
 }
@@ -676,6 +679,14 @@ export async function claimDevice() {
 }
 
 export async function revokeDevice() {
+  throw new Error(CLOUD_ONLY);
+}
+
+/** This computer's name is its own setting (device.ts), which renameDeviceAction changes; there's no list to rename it in. */
+export async function renameDevice() {}
+
+/** The only computer is the default already. */
+export async function setDefaultDevice() {
   throw new Error(CLOUD_ONLY);
 }
 

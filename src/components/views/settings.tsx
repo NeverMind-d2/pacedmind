@@ -1,19 +1,20 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
-  checkDeviceAction, connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
+  connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
   updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
-  changePasswordAction, deleteAccountAction, removeFactorAction, revokeDeviceAction, signOutAction, signOutEverywhereAction,
+  changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
 } from "@/app/auth/actions";
 import { projectColor } from "@/lib/colors";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
-  AGENT_LABEL, APP_LABEL, platformName,
-  type AgentId, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings,
+  AGENT_LABEL, APP_LABEL, deviceOnline,
+  type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings,
 } from "@/lib/types";
 import { AgentIcon, Icon } from "../icons";
 import { ImportProjects } from "../import-projects";
@@ -52,35 +53,10 @@ function Section({ id, title, action, children, note }: { id?: string; title: st
   );
 }
 
-const MCP_TEXT = { connected: "Reports to PacedMind", elsewhere: "Reports to another PacedMind", missing: "Not connected" } as const;
-
-/** One agent on a computer: its CLI, its desktop app, and whether sessions PacedMind didn't start can report back. */
-function AgentTools({ agent, device, here, pending, onConnect }: {
-  agent: AgentId; device: Device; here: boolean; pending: boolean; onConnect: (agent: AgentId) => void;
-}) {
-  const t = device.agents[agent];
-  const part = (on: boolean, text: string) => <span className={on ? "text-fg3" : "text-dim"}>{text}</span>;
-  return (
-    <div className="flex min-h-9 items-center gap-2.5 text-[12.5px] max-sm:flex-wrap max-sm:py-1.5">
-      <AgentIcon agent={agent} size={14} className="text-fg3" />
-      <span className="w-[92px] shrink-0 text-fg2 max-sm:w-auto max-sm:flex-1">{AGENT_LABEL[agent]}</span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] max-sm:order-last max-sm:basis-full max-sm:pl-6">
-        {part(!!t.cli, t.cli ? `CLI ${t.cli.version}` : "No CLI")}
-        <span className="text-faint">·</span>
-        {part(!!t.app, t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent]}`)}
-        <span className="text-faint">·</span>
-        {part(t.mcp === "connected", MCP_TEXT[t.mcp])}
-      </span>
-      {here && t.mcp !== "connected" && (t.cli || t.app || agent === "codex") && (
-        <Button size="sm" disabled={pending} onClick={() => onConnect(agent)}
-          title={agent === "claude"
-            ? "Adds PacedMind's MCP server to Claude Code for all projects, with your token, so the Claude app's sessions can report back"
-            : "Adds PacedMind's MCP server to ~/.codex/config.toml (kept as config.toml.pacedmind-backup), so the Codex app's sessions can report back"}>
-          Connect
-        </Button>
-      )}
-    </div>
-  );
+/** What this computer found of an agent, in a line: "CLI 2.1.282 · Claude app 1.4". */
+function foundHere(agent: AgentId, t: AgentTools): string {
+  const parts = [t.cli && `CLI ${t.cli.version}`, t.app && `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}`].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Not found";
 }
 
 /** A label and its controls; on a phone the label goes above them. */
@@ -99,15 +75,6 @@ const digits = (v: string) => v.replace(/\D/g, "").slice(0, 6);
 
 function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(() => toast(`${what} copied`), () => toast("Couldn't copy", "error"));
-}
-
-function seen(iso: string | null): string {
-  if (!iso) return "never";
-  const min = Math.round((Date.now() - Date.parse(iso)) / 60_000);
-  if (min < 2) return "now";
-  if (min < 60) return `${min} min ago`;
-  if (min < 48 * 60) return `${Math.round(min / 60)} h ago`;
-  return new Date(iso).toLocaleDateString();
 }
 
 export interface AccountView {
@@ -240,32 +207,36 @@ export function SettingsView({ settings, projects, areas, account, devices, this
             </Section>
             </>}
 
-            <Section id="devices" title={account ? "Computers" : "Agents on this computer"}
-              action={device && <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => checkDeviceAction())}><Icon name="refresh" size={12} />Check again</Button>}
+            {/* A summary: the Computers page shows each computer's agents, flows and sessions, and manages them. */}
+            <Section id="devices" title="Computers"
+              action={
+                <Link href="/computers" className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-mut hover:bg-hover hover:text-fg2">
+                  Open Computers<Icon name="chevronRight" size={11} strokeWidth={2.2} />
+                </Link>
+              }
               note={account
-                ? "Computers with the PacedMind desktop app signed in to your account, and what each found of Claude Code and Codex (it looks when it starts and every half hour). Connected, the agents' desktop apps report back like terminal sessions. Signing a computer out ends its session at once, and its agents lose access to PacedMind."
-                : "What PacedMind found of Claude Code and Codex here (it looks when it starts and every half hour). Connected, the agents' desktop apps report back like terminal sessions."}>
-              {devices.length === 0 && <Row label="None yet"><span className="text-[12.5px] text-fg3">Sign in to the desktop app to add a computer.</span></Row>}
-              {devices.map((d) => {
-                const here = thisDeviceId !== null && d.id === thisDeviceId;
-                return (
-                  <div key={d.id} className="flex flex-col gap-1 border-b border-line px-3.5 py-2.5 last:border-b-0">
-                    <div className="flex h-7 items-center gap-2.5">
-                      <Icon name="laptop" size={14} className="text-mut" />
-                      <span className="truncate text-[13px] font-medium text-fg">{d.name}</span>
-                      <span className="flex-1 truncate text-[12px] text-mut2">
-                        {platformName(d.platform)}{here ? " · this computer" : ` · seen ${seen(d.lastSeenAt)}`}
-                      </span>
-                      {account && (
-                        <Button size="sm" onClick={() => confirm(`Sign ${d.name} out of PacedMind? Its agents lose access right away.`) && run(() => revokeDeviceAction(d.id))}>Sign out</Button>
-                      )}
-                    </div>
-                    {d.checkedAt
-                      ? (["claude", "codex"] as AgentId[]).map((a) => <AgentTools key={a} agent={a} device={d} here={here} pending={pending} onConnect={connect} />)
-                      : <p className="pb-1 text-[12px] text-mut2">{here ? "Looking for Claude Code and Codex…" : "Hasn't looked for Claude Code and Codex yet."}</p>}
-                  </div>
-                );
-              })}
+                ? "The Computers page shows what each computer has of Claude Code and Codex, its flows and its sessions. There you rename computers, choose the default and sign one out."
+                : "What PacedMind found here; it looks when it starts and every half hour. The Computers page has more: cloud and sign-in for each agent, and this computer's flows and sessions."}>
+              {account ? (
+                <>
+                  <Row label="Signed in">
+                    <span className="flex-1 text-[12.5px] text-fg3" suppressHydrationWarning>
+                      {devices.length
+                        ? `${devices.length} ${devices.length === 1 ? "computer" : "computers"}, ${devices.filter((d) => d.id === thisDeviceId || deviceOnline(d)).length} online`
+                        : "None yet. Sign in to the desktop app on a computer to add it."}
+                    </span>
+                  </Row>
+                  {devices.length > 0 && (
+                    <Row label="Default">
+                      <span className="flex-1 truncate text-[12.5px] text-fg3">{devices.find((d) => d.isDefault)?.name ?? "None"}</span>
+                    </Row>
+                  )}
+                </>
+              ) : devices[0] && (["claude", "codex"] as AgentId[]).map((a) => (
+                <Row key={a} label={AGENT_LABEL[a]}>
+                  <span className="flex-1 truncate text-[12.5px] text-fg3">{devices[0].checkedAt ? foundHere(a, devices[0].agents[a]) : "Looking…"}</span>
+                </Row>
+              ))}
             </Section>
 
             <Section title="Appearance">
@@ -298,7 +269,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
             )}
 
             {device && <>
-              <Section title="This computer"
+              <Section id="this-computer" title="This computer"
                 note={device.encrypted
                   ? "What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain."
                   : "What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer. This development server keeps them unencrypted in data/."}>
@@ -347,7 +318,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                 </Row>
               </Section>
 
-              <Section title="Connect your agents" note="For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.">
+              <Section id="connect" title="Connect your agents" note="For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.">
                 <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
                   <div className="flex items-center gap-2.5">
                     <AgentIcon agent="claude" size={14} className="text-fg3" />

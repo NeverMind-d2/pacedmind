@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction, resumeSessionAction } from "@/app/actions";
-import { startSessionOrAsk } from "@/components/remote-start";
+import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
+import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "@/components/remote-start";
+import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, useClock, useLaunchState } from "@/components/request-status";
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { Gallery, RequestChangesForm, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
@@ -48,6 +49,13 @@ export interface SessionItem {
   pending: Attachment[];
   /** Whether its agent can take changes from here now (changesProblem on the server). */
   canRequestChanges: boolean;
+  /**
+   * The computer to send changes to when they can't go from here (the web app, another computer's session):
+   * requestChangesRemoteAction. Null when they go from here, or nowhere.
+   */
+  changesVia?: string | null;
+  /** The computer it ran on (or that sent it to the cloud); null for this computer's own data without an account. */
+  deviceId?: string | null;
   /** The next task in the flow after this one. */
   next: { id: number; key: string; title: string; href: string; canStart: boolean } | null;
 }
@@ -240,11 +248,12 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
                 label: <><span className="mr-2 font-mono text-[11px] text-mut2">{t.key}</span>{t.title}</>,
                 hint: agentShort(t.agent),
               }))}
-              onSelect={(id) => run(() => startSessionOrAsk(id))} />
+              onSelect={(id) => run(() => startSessionOrAsk(id, startable.find((t) => t.id === id)?.agent))} />
           )}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
+          <Asked tasks={[...startable, ...all.flatMap((s) => (s.task ? [s.task] : []))]} />
           {groups.map((g) => (
             <div key={g.id}>
               <GroupHeader name={g.name} count={g.items.length} collapsed={!!collapsed[g.id]}
@@ -265,7 +274,10 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
           )}
         </div>
       </section>
-      {selected && <Detail key={selected.id} s={selected} now={now} onSelect={select} chosen={chosen} onClose={backToList} />}
+      {selected && (
+        <Detail key={selected.id} s={selected} now={now} onSelect={select} chosen={chosen} onClose={backToList}
+          agentFor={(id) => startable.find((t) => t.id === id)?.agent} />
+      )}
     </div>
   );
 }
@@ -278,6 +290,42 @@ function GroupHeader({ name, count, collapsed, onToggle }: { name: string; count
         <span>{name}</span>
         <span className="font-normal text-mut2">{count}</span>
       </button>
+    </div>
+  );
+}
+
+/**
+ * Sessions asked of the account's computers that haven't become sessions here yet: waiting for the computer, or
+ * refused, expired or failed in the last ten minutes. One that started shows as a session instead.
+ */
+function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] }) {
+  const { requests, computers } = useLaunchState();
+  const now = useClock();
+  const [, setClosed] = useState(0);
+  const rows = requests.filter((r) => r.kind === "start" && statusAt(r, now) !== "launched" && requestShown(r, now));
+  if (!rows.length) return null;
+  return (
+    <div>
+      <div className="flex h-[34px] items-center gap-2 border-b border-line bg-raised pl-5 pr-4 text-[12.5px] font-medium text-fg2">
+        <span className="w-3" />
+        <span>Sent to your computers</span>
+        <span className="font-normal text-mut2">{rows.length}</span>
+      </div>
+      {rows.map((r) => {
+        const task = tasks.find((t) => t.id === r.taskId);
+        return (
+          // On a phone the chip goes under the task, which has the width to itself.
+          <div key={r.id} className="flex min-h-[42px] items-center gap-3 border-b border-hover px-5 py-1.5 @max-md:flex-wrap @max-md:gap-x-2 @max-md:gap-y-1 @max-md:py-2">
+            <span className="w-3.5 shrink-0 @max-md:hidden" />
+            <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2 @max-md:w-auto">{r.taskKey ?? "—"}</span>
+            <span className="min-w-0 flex-1 truncate text-fg3">{task?.title ?? "Deleted task"}</span>
+            <span className="flex min-w-0 max-w-full @max-md:basis-full">
+              <RequestChip request={r} now={now} computer={computers.find((d) => d.id === r.deviceId)} link={false}
+                onClose={() => { dismissRequest(r.id); setClosed((n) => n + 1); }} />
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -311,8 +359,10 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
   );
 }
 
-function Detail({ s, now, onSelect, chosen, onClose }: {
+function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   s: SessionItem; now: number; onSelect: (id: string) => void; chosen: boolean; onClose: () => void;
+  /** Who runs a task, when the page knows (for starting the next one on a computer). */
+  agentFor: (taskId: number) => AgentId | undefined;
 }) {
   const { run, pending } = useAction();
   const active = isActive(s);
@@ -321,6 +371,12 @@ function Detail({ s, now, onSelect, chosen, onClose }: {
   const [asking, setAsking] = useState(false);
   // Only where the server would take them: a terminal on this computer, the task's latest report, not your own task.
   const canAsk = s.canRequestChanges;
+  // A session goes on where it ran. The frame lists the account's computers other than this one (the web app has
+  // none of its own), so one of those is elsewhere: its buttons ask it through the "Run on a computer" sheet.
+  const { computers } = useLaunchState();
+  const elsewhere = !!s.deviceId && computers.some((d) => d.id === s.deviceId);
+  const on = s.device ?? "its computer";
+  const ref = { id: s.id, taskId: s.task?.id ?? 0, agent: s.agent, surface: s.surface, cliSessionId: s.cliSessionId };
   const worked = workedFor(s, now);
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
@@ -431,17 +487,21 @@ function Detail({ s, now, onSelect, chosen, onClose }: {
         )}
         <div className={cx("flex flex-wrap items-center gap-2", asking && canAsk && "hidden")}>
           {!active && s.status !== "failed" && s.surface === "terminal" && (
-            <Button disabled={pending} onClick={() => run(() => resumeSessionAction(s.id))}>
-              <Icon name="terminal" size={13} strokeWidth={2} />Resume in terminal
+            <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))} className="min-w-0 max-w-full">
+              <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" />
+              <span className="truncate">{elsewhere ? `Resume on ${on}` : "Resume in terminal"}</span>
             </Button>
           )}
           {s.surface === "terminal" && s.agent === "claude" && s.cliSessionId && s.status !== "failed" && (
-            <Button disabled={pending} title="Moves this Claude Code conversation into the Claude app" onClick={() => run(() => resumeSessionAction(s.id, "desktop"))}>
-              <Icon name="appWindow" size={13} strokeWidth={2} />Continue in {APP_LABEL.claude}
+            <Button disabled={pending} title="Moves this Claude Code conversation into the Claude app" onClick={() => run(() => resumeSessionOrAsk(ref, "desktop"))}
+              className="min-w-0 max-w-full">
+              <Icon name="appWindow" size={13} strokeWidth={2} className="shrink-0" />
+              <span className="truncate">{elsewhere ? `Continue in ${APP_LABEL.claude} on ${on}` : `Continue in ${APP_LABEL.claude}`}</span>
             </Button>
           )}
-          {s.surface === "desktop" && s.status !== "failed" && (
-            <Button disabled={pending} onClick={() => run(() => resumeSessionAction(s.id))}>
+          {/* Showing an app's window only helps at that computer. */}
+          {s.surface === "desktop" && s.status !== "failed" && !elsewhere && (
+            <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))}>
               <Icon name="appWindow" size={13} strokeWidth={2} />Open the {APP_LABEL[s.agent]}
             </Button>
           )}
@@ -451,8 +511,9 @@ function Detail({ s, now, onSelect, chosen, onClose }: {
               <Icon name="cloud" size={13} strokeWidth={2} />{s.url.includes("/tasks/") ? "Open the task" : `Open ${CLOUD_LABEL[s.agent]}`}
             </a>
           )}
+          {/* The desktop app pulls it in here; the web app asks the computer that sent it. */}
           {s.surface === "cloud" && s.agent === "claude" && s.status !== "failed" && (
-            <Button disabled={pending} title="Pulls the cloud session and its branch into a terminal (claude --teleport)" onClick={() => run(() => resumeSessionAction(s.id))}>
+            <Button disabled={pending} title="Pulls the cloud session and its branch into a terminal (claude --teleport)" onClick={() => run(() => resumeSessionOrAsk(ref))}>
               <Icon name="terminal" size={13} strokeWidth={2} />Pull into terminal
             </Button>
           )}
@@ -462,8 +523,8 @@ function Detail({ s, now, onSelect, chosen, onClose }: {
               <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
             </Button>
           )}
-          {canAsk && (
-            <Button disabled={pending} onClick={() => setAsking(true)}>
+          {(canAsk || s.changesVia) && (
+            <Button disabled={pending} onClick={() => (canAsk ? setAsking(true) : askForChangesOn(ref, s.changesVia!))}>
               <Icon name="pen" size={13} strokeWidth={2} />Request changes
             </Button>
           )}
@@ -477,17 +538,22 @@ function Detail({ s, now, onSelect, chosen, onClose }: {
             <Button variant="primary" disabled={pending} onClick={() => run(() => markSessionDoneAction(s.id))}>Mark done</Button>
           )}
         </div>
+        {/* A request to resume this session or send it back, and what became of it. */}
+        <RequestStatus match={(r) => r.targetSessionId === s.id} link={false} />
         {s.next && (
-          <div className="flex items-center gap-2 text-[12px] text-mut2">
-            <span className="min-w-0 flex-1 truncate">
-              Next in {s.project?.name ?? "the flow"}:{" "}
-              <Link href={s.next.href} className="text-fg3 hover:text-strong">
-                <span className="font-mono text-[11px]">{s.next.key}</span> {s.next.title}
-              </Link>
-            </span>
-            {s.next.canStart && (
-              <Button size="sm" disabled={pending} onClick={() => run(() => startSessionOrAsk(s.next!.id))}>Start session</Button>
-            )}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 text-[12px] text-mut2">
+              <span className="min-w-0 flex-1 truncate">
+                Next in {s.project?.name ?? "the flow"}:{" "}
+                <Link href={s.next.href} className="text-fg3 hover:text-strong">
+                  <span className="font-mono text-[11px]">{s.next.key}</span> {s.next.title}
+                </Link>
+              </span>
+              {s.next.canStart && (
+                <Button size="sm" disabled={pending} onClick={() => run(() => startSessionOrAsk(s.next!.id, agentFor(s.next!.id)))}>Start session</Button>
+              )}
+            </div>
+            <RequestStatus match={(r) => r.kind === "start" && r.taskId === s.next!.id} />
           </div>
         )}
       </div>

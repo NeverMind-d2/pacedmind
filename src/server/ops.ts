@@ -3,7 +3,7 @@ import * as repo from "./repo";
 import type { StoredImage } from "./attachments";
 import { revokeSessionTokens } from "./device";
 import { afterDone, afterFinished, afterFlowOn } from "./flow";
-import { forgetSessionFiles, reopenForChanges, reopenProblem, startSession, type LaunchResult } from "./launcher";
+import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, startSession, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
@@ -133,28 +133,43 @@ export async function closeSession(sessionId: string): Promise<boolean> {
 
 /**
  * Why the user can't send changes to this session's agent right now, or null, from what the caller already has:
- * the session's task, whether the task has a running session, and its newest report. The app offers Request changes
- * only where this is null, so the button and requestChanges agree.
+ * the session's task, whether the task has a running session, and its newest report. `where` "here" (the default):
+ * whether this computer can reopen it itself; "remote": whether a request to the computer the session ran on can
+ * (the web app, or another computer's session), which that computer checks again with "here". The app offers
+ * Request changes only where this is null, so the button and requestChanges agree.
  */
-export function changesProblemIn(s: Session, ctx: { task: Task | null | undefined; live: boolean; newest: Report | null | undefined }): string | null {
+export function changesProblemIn(
+  s: Session, ctx: { task: Task | null | undefined; live: boolean; newest: Report | null | undefined }, where: "here" | "remote" = "here",
+): string | null {
   if (s.status !== "finished" && s.status !== "done") return "The agent hasn't handed this task back yet";
   const task = ctx.task;
   if (!task) return "The task is gone";
   if (task.agent === "human") return `${task.key} is marked as yours. Hand it to Claude Code or Codex first.`;
   if (ctx.live) return "This task already has a running session";
-  const elsewhere = reopenProblem(s);
+  const elsewhere = where === "here"
+    ? reopenProblem(s)
+    : (changesSurfaceProblem(s) ?? (s.deviceId ? null : "This session didn't run on a computer of your account, so there's nowhere to send the changes."));
   if (elsewhere) return elsewhere;
   // The agent reads the changes with the task's latest report (start_task), so they can only go on that one.
   if (ctx.newest && ctx.newest.sessionId !== s.id) return `${task.key} has a newer report. Ask for the changes on that one.`;
   return null;
 }
 
+/**
+ * The computer to send changes to for a session that can't take them from here (the web app, another computer's
+ * session), or null: when this computer can reopen it itself, or nobody can.
+ */
+export function changesViaIn(s: Session, ctx: { task: Task | null | undefined; live: boolean; newest: Report | null | undefined }): string | null {
+  if (!s.deviceId || !changesProblemIn(s, ctx) || changesProblemIn(s, ctx, "remote")) return null;
+  return s.deviceId;
+}
+
 /** changesProblemIn for one session, looking up what it needs. */
-export async function changesProblem(s: Session): Promise<string | null> {
+export async function changesProblem(s: Session, where: "here" | "remote" = "here"): Promise<string | null> {
   const [task, live, newest] = await Promise.all([
     repo.getTask(s.taskId), repo.listSessions({ taskId: s.taskId, status: LIVE_STATUSES }), repo.latestReport(s.taskId),
   ]);
-  return changesProblemIn(s, { task, live: live.length > 0, newest });
+  return changesProblemIn(s, { task, live: live.length > 0, newest }, where);
 }
 
 /**

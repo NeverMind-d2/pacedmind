@@ -12,8 +12,8 @@ import * as local from "./store/local";
  */
 
 export {
-  CODEX_ENV, DEFAULT_SETTINGS, cleanDoneWhen, codexEnvProblem, edgeSignature,
-  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature,
+  type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./store/shared";
 
 type Store = typeof cloud;
@@ -124,6 +124,8 @@ export const getDevice = via("getDevice");
 export const registerDevice = via("registerDevice");
 export const claimDevice = via("claimDevice");
 export const revokeDevice = via("revokeDevice");
+export const renameDevice = via("renameDevice");
+export const setDefaultDevice = via("setDefaultDevice");
 export const updateDeviceRow = via("updateDeviceRow");
 export const listLaunchRequests = via("listLaunchRequests");
 export const createLaunchRequest = via("createLaunchRequest");

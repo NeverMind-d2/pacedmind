@@ -7,13 +7,17 @@ do $test$
 declare
   a uuid := gen_random_uuid(); b uuid := gen_random_uuid();
   -- sa and sb: sessions an hour old that verified an authenticator from yesterday. sa_new: a session that
-  -- verified an authenticator added after it started (what a stolen session could do).
+  -- verified an authenticator added after it started (what a stolen session could do). sa2: another sign-in of
+  -- account a (the web app, or a second computer).
   sa uuid := gen_random_uuid(); sb uuid := gen_random_uuid(); sa_new uuid := gen_random_uuid(); sb2 uuid := gen_random_uuid();
+  sa2 uuid := gen_random_uuid();
   fa uuid := gen_random_uuid(); fa_new uuid := gen_random_uuid(); fb uuid := gen_random_uuid();
-  area_a uuid; area_b uuid; dev uuid; dev_b uuid; tid bigint; tkey text; req uuid; rid bigint;
+  area_a uuid; area_b uuid; dev uuid; dev2 uuid; dev_b uuid; tid bigint; tid2 bigint; tkey text; req uuid; rid bigint;
+  sid text := '0123456789abcdef';
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
   claims_aal1 text; claims_aal2_old text; claims_aal2_fresh text; claims_bad_session text; claims_new_factor text;
+  claims_a2_old text; claims_a2_fresh text; claims_b_old text; claims_b_fresh text;
 begin
   insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   values ('00000000-0000-0000-0000-000000000000', a, 'authenticated', 'authenticated', 'rls-test-a@example.invalid', '', now(), '{}', '{}', now() - interval '2 days', now()),
@@ -26,7 +30,8 @@ begin
   values (sa, a, now() - interval '1 hour', now(), 'aal2', fa),
          (sa_new, a, now() - interval '1 hour', now(), 'aal2', fa_new),
          (sb, b, now() - interval '1 hour', now(), 'aal2', fb),
-         (sb2, b, now() - interval '1 hour', now(), 'aal2', fb);
+         (sb2, b, now() - interval '1 hour', now(), 'aal2', fb),
+         (sa2, a, now() - interval '1 hour', now(), 'aal2', fa);
   select id into area_a from public.areas where user_id = a and key = 'WRK';
   select id into area_b from public.areas where user_id = b and key = 'WRK';
   select count(*) into n from public.areas where user_id = a; out := out || '[setup] default areas for new user=' || n || E'\n';
@@ -36,6 +41,10 @@ begin
   claims_aal2_fresh := json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sa, 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 30)))::text;
   claims_bad_session := json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', gen_random_uuid(), 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s)))::text;
   claims_new_factor := json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sa_new, 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 30)))::text;
+  claims_a2_old := json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sa2, 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text;
+  claims_a2_fresh := json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sa2, 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 30)))::text;
+  claims_b_old := json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb, 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text;
+  claims_b_fresh := json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb, 'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 30)))::text;
 
   -- 1. password only (aal1) reads nothing
   begin
@@ -273,6 +282,280 @@ begin
     out := out || '19 FAIL anon read reports=' || n || E'\n';
     reset role;
   exception when others then out := out || '19 anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
+
+  -- 20. the account's first computer is its default, and there is only ever one
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    dev2 := public.register_device('Second PC', 'macos');
+    select count(*) into n from public.devices where is_default; out := out || '20 defaults after a second computer=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.devices where id = dev and is_default; out := out || '20a the first computer is the default=' || n || ' (want 1)' || E'\n';
+    update public.devices set is_default = true where id = dev2;
+    select count(*) into n from public.devices where is_default; out := out || '20b defaults after picking another=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.devices where id = dev2 and is_default; out := out || '20c the one picked is the default=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '20 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    begin
+      update public.devices set is_default = true;
+    exception when others then null;
+    end;
+    select count(*) into n from public.devices where is_default; out := out || '20d defaults after asking for every computer=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '20d ERROR ' || sqlerrm || E'\n'; end;
+
+  -- 21. another sign-in of the account (the web app, another computer) may rename a computer and pick the default,
+  --     but only the computer itself reports when it was seen, what it found, its version, its flows and its setting
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set name = 'Renamed PC' where id = dev;
+    get diagnostics n = row_count; out := out || '21 another sign-in renamed the computer=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '21 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set agents = '{"claude": {"cli": {"version": "9.9.9"}}}' where id = dev;
+    out := out || '21a FAIL another sign-in changed what the computer found' || E'\n';
+    reset role;
+  exception when others then out := out || '21a another sign-in''s agents refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    -- clock_timestamp: now() is the same all through this one transaction.
+    update public.devices set last_seen_at = clock_timestamp() + interval '1 minute' where id = dev;
+    out := out || '21b FAIL another sign-in made the computer look online' || E'\n';
+    reset role;
+  exception when others then out := out || '21b another sign-in''s last seen refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set app_version = '9.9.9' where id = dev;
+    out := out || '21c FAIL another sign-in changed the computer''s version' || E'\n';
+    reset role;
+  exception when others then out := out || '21c another sign-in''s version refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set flows_on = array[gen_random_uuid()] where id = dev;
+    out := out || '21d FAIL another sign-in changed the computer''s flows' || E'\n';
+    reset role;
+  exception when others then out := out || '21d another sign-in''s flows refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set remote_start = 'auto' where id = dev;
+    out := out || '21e FAIL another sign-in changed the computer''s setting for requests' || E'\n';
+    reset role;
+  exception when others then out := out || '21e another sign-in''s setting refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set app_version = '0.2.0', flows_on = array[gen_random_uuid()], last_seen_at = now(), remote_start = 'ask', checked_at = now()
+      where id = dev;
+    get diagnostics n = row_count; out := out || '21f the computer reported on itself=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '21f ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set platform = 'linux' where id = dev;
+    out := out || '21g FAIL a computer''s platform changed' || E'\n';
+    reset role;
+  exception when others then out := out || '21g platform refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set auth_session_id = sa2 where id = dev;
+    out := out || '21h FAIL a computer''s sign-in taken over by an update' || E'\n';
+    reset role;
+  exception when others then out := out || '21h sign-in refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set revoked_at = null where id = dev2;
+    out := out || '21i FAIL a computer''s sign-out changed by an update' || E'\n';
+    reset role;
+  exception when others then out := out || '21i sign-out refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    update public.devices set name = 'Not yours', is_default = true where id = dev;
+    get diagnostics n = row_count; out := out || '21j other account renamed the computer=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '21j ERROR ' || sqlerrm || E'\n'; end;
+
+  -- 22. what a computer reports is held to plain shapes
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set app_version = '1.0.0 && calc' where id = dev;
+    out := out || '22 FAIL a version with shell characters accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '22 version rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set flows_on = (select array_agg(gen_random_uuid()) from generate_series(1, 201)) where id = dev;
+    out := out || '22a FAIL 201 flows accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '22a 201 flows rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set name = E'PC\r\ncalc' where id = dev;
+    out := out || '22b FAIL a name with a line break accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '22b name rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+
+  -- 23. resuming a session or sending it back with changes goes only to the computer it ran on, for its own task and
+  --     agent, with a fresh code, and each kind has its own shape
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.tasks (key, area_id, title, created_at, updated_at) values ('', area_a, 'Second', '2026-09-25T10:00:00', '2026-09-25T10:00:00') returning id into tid2;
+    reset role;
+  exception when others then out := out || '23 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, surface) values (dev, tid, 'claude', 'start', 'desktop');
+    get diagnostics n = row_count; out := out || '23a start in the app accepted=' || n || ' (want 1)' || E'\n';
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev, tid, 'claude', 'resume', sid);
+    get diagnostics n = row_count; out := out || '23b resume on the computer it ran on accepted=' || n || ' (want 1)' || E'\n';
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, E'  Make the button blue.\n');
+    select count(*) into n from public.launch_requests where kind = 'changes' and changes = 'Make the button blue.' and status = 'pending';
+    out := out || '23c changes accepted and trimmed=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '23a ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev2, tid, 'claude', 'resume', sid);
+    out := out || '23d FAIL resume sent to a computer the session didn''t run on' || E'\n';
+    reset role;
+  exception when others then out := out || '23d resume on another computer refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev2, tid, 'claude', 'changes', sid, 'Blue');
+    out := out || '23e FAIL changes sent to a computer the session didn''t run on' || E'\n';
+    reset role;
+  exception when others then out := out || '23e changes on another computer refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev, tid2, 'claude', 'resume', sid);
+    out := out || '23f FAIL a session resumed under another task' || E'\n';
+    reset role;
+  exception when others then out := out || '23f another task refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev, tid, 'codex', 'resume', sid);
+    out := out || '23g FAIL a Claude session resumed as Codex' || E'\n';
+    reset role;
+  exception when others then out := out || '23g another agent refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev, tid, 'claude', 'start', sid);
+    out := out || '23h FAIL a start naming a session accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23h start with a session refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, changes) values (dev, tid, 'claude', 'start', 'Blue');
+    out := out || '23i FAIL a start with changes accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23i start with changes refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'resume', sid, 'Blue');
+    out := out || '23j FAIL a resume with changes accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23j resume with changes refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind) values (dev, tid, 'claude', 'resume');
+    out := out || '23k FAIL a resume without a session accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23k resume without a session refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, E' \n ');
+    out := out || '23l FAIL blank changes accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23l blank changes refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, repeat('x', 20001));
+    out := out || '23m FAIL 20001 characters of changes accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23m long changes refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind) values (dev, tid, 'claude', 'shell');
+    out := out || '23n FAIL an unknown kind accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23n unknown kind refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, surface) values (dev, tid, 'claude', 'shell');
+    out := out || '23o FAIL an unknown surface accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23o unknown surface refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev, tid, 'claude', 'resume', sid);
+    out := out || '23p FAIL resume without a fresh code accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23p resume with a stale code refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_new_factor, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, 'Blue');
+    out := out || '23q FAIL changes with an authenticator added in this session accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23q changes with a new authenticator refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, status) values (dev, tid, 'claude', 'resume', sid, 'launched');
+    out := out || '23r FAIL client-set status on a resume accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '23r client-set status refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    update public.launch_requests set status = 'launched', decided_at = now() where kind = 'resume';
+    update public.launch_requests set status = 'pending' where kind = 'resume';
+    out := out || '23s FAIL a decided resume set back to pending' || E'\n';
+    reset role;
+  exception when others then out := out || '23s re-pending a resume refused: ' || left(sqlerrm, 60) || E'\n'; end;
+
+  -- 24. another account can't aim a request at this account's sessions or computers (test 16's computer of b went
+  --     with its block, so b signs one in here)
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    dev_b := public.register_device('B PC', 'windows');
+    reset role;
+  exception when others then out := out || '24 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id) values (dev_b, tid, 'claude', 'resume', sid);
+    out := out || '24 FAIL another account''s session resumed on its own computer' || E'\n';
+    reset role;
+  exception when others then out := out || '24 other account''s session refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, 'Blue');
+    out := out || '24a FAIL changes sent to another account''s computer' || E'\n';
+    reset role;
+  exception when others then out := out || '24a other account''s computer refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.launch_requests; out := out || '24b other account sees requests=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '24b ERROR ' || sqlerrm || E'\n'; end;
+
+  -- 25. a computer that signs out stops being the default, can't become it again, and takes no requests
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set is_default = true where id = dev2;
+    perform public.revoke_device(dev2);
+    select count(*) into n from public.devices where is_default; out := out || '25 defaults after signing the default out=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '25 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set is_default = true where id = dev2;
+    out := out || '25a FAIL a signed-out computer became the default' || E'\n';
+    reset role;
+  exception when others then out := out || '25a signed-out default refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev2, tid, 'claude');
+    out := out || '25b FAIL a request for a signed-out computer accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '25b signed-out computer refused: ' || left(sqlerrm, 60) || E'\n'; end;
 
   -- 12. revoking the device ends its session at once
   begin

@@ -2,8 +2,8 @@ import "server-only";
 import { addDays } from "date-fns";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status,
-  Surface, AgentId,
+  AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequestKind, LaunchRequestStatus, Priority, ReportCriterion,
+  ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
 } from "@/lib/types";
 
 /*
@@ -45,6 +45,29 @@ export interface SessionFilter {
   surface?: Surface;
   agent?: AgentId;
   deviceId?: string;
+}
+
+export interface LaunchRequestFilter {
+  deviceId?: string;
+  status?: LaunchRequestStatus[];
+  taskId?: number;
+  /** Only requests made since then (an ISO timestamp). */
+  since?: string;
+  /** At most this many, newest first (default 200). */
+  limit?: number;
+}
+
+/** A request to a computer, as the web app or another computer makes it (the database fills in the rest). */
+export interface LaunchRequestInput {
+  deviceId: string;
+  taskId: number;
+  agent: AgentId;
+  /** Where it was asked from: "web" or "desktop". */
+  via: string;
+  kind?: LaunchRequestKind;
+  surface?: Surface | null;
+  targetSessionId?: string | null;
+  changes?: string | null;
 }
 
 export interface ReportInput {
@@ -155,6 +178,37 @@ export const edgeSignature = (e: { fromTaskId: number; toTaskId: number; mode: E
 export function snapshotOf(taskIds: number[], edges: FlowEdge[], after: string | null): { edges: string[]; after: string | null } {
   const ids = new Set(taskIds);
   return { edges: edges.filter((e) => ids.has(e.fromTaskId) || ids.has(e.toTaskId)).map(edgeSignature), after };
+}
+
+/* ---------- computers ---------- */
+
+/**
+ * A computer's name as the account keeps it: plain text on one line, at most 80 characters (the database refuses
+ * control characters). Any session of the account can rename a computer, and the computer takes the name over.
+ */
+export const cleanDeviceName = (name: string) => name.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
+
+/** PacedMind's version as a computer reports it, in the shape the database keeps (supabase/migrations). */
+export const APP_VERSION = /^[0-9]{1,6}(\.[0-9]{1,6}){0,3}([-+][0-9A-Za-z.+-]{1,32})?$/;
+export const appVersionOk = (v: string) => v.length <= 40 && APP_VERSION.test(v);
+
+/**
+ * A word from an agent's sign-in status (its method or plan), or undefined: lower case, short, and without @, slashes or
+ * anything else an email, a path or a key would need, so none of those can travel with it.
+ */
+export function loginWord(v: unknown): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const w = v.trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9 ._-]{0,23}$/.test(w) ? w : undefined;
+}
+
+/** An agent's sign-in status from wherever it was stored (the cloud's copy can be written by any session of the account). */
+export function loginOf(v: unknown): AgentLogin {
+  const l = v && typeof v === "object" ? (v as Record<string, unknown>) : {};
+  const state = l.state === "in" || l.state === "out" ? l.state : "unknown";
+  const method = loginWord(l.method);
+  const plan = loginWord(l.plan);
+  return { state, ...(method ? { method } : {}), ...(plan ? { plan } : {}) };
 }
 
 /* ---------- settings ---------- */

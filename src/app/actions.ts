@@ -5,24 +5,27 @@ import * as repo from "@/server/repo";
 import { importLegacy, resetAccount } from "@/server/account";
 import { usesCloud } from "@/server/scope";
 import { resetLocal } from "@/server/store/local-db";
-import { checkThisDevice, deviceIdFor, runsHere } from "@/server/devices";
+import { checkThisDevice, deviceIdFor, offeredDevice, runsHere } from "@/server/devices";
 import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
 import {
-  afterTaskDone, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
+  afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
 } from "@/server/ops";
 import { approve, deny } from "@/server/requests";
 import { commandProblem, deviceConfig, rotateOwnerToken, updateDevice } from "@/server/device";
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
-import { STEP_UP_REFUSED, refusedStepUp, verifyCode } from "@/server/step-up";
-import { MODE, supabase } from "@/server/supabase";
+import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
+import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
-import type { AgentId, EdgeMode, Project, RemoteStart, Settings, Surface, TerminalId } from "@/lib/types";
+import {
+  LIVE_STATUSES, deviceOnline, isLiveSession,
+  type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
+} from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
-function done(r: Result = { ok: true }): Result {
+function done<T extends Result = Result>(r: T = { ok: true } as T): T {
   refresh();
   return r;
 }
@@ -115,52 +118,158 @@ export async function deleteEventAction(id: number) {
 const SURFACES = new Set<Surface>(["terminal", "desktop", "cloud"]);
 
 /**
- * Starts a session: in the desktop app, where the task says (a terminal or the agent's app here, or its cloud).
- * The web app can't start anything, and a task that runs on another computer starts there: both answer `remote`
- * (with that computer), and the page asks for a fresh two-factor code to send the request (requestSessionAction).
+ * What start, resume and changes answer when they can't run on this computer (the web app has none, and a task or
+ * session can belong to another computer): `remote`, with the computer to offer (`deviceId`, null when there's none to
+ * suggest) and whether it's the only one that can take it (`pinned`: the task or its project names it, or the session
+ * ran there). The page then asks that computer with a fresh two-factor code: requestSessionAction,
+ * requestResumeAction or requestChangesRemoteAction.
  */
-export async function startSessionAction(
-  taskId: number, agent?: AgentId | null, surface?: Surface,
-): Promise<Result & { remote?: boolean; deviceId?: string }> {
+type Remote = { remote?: boolean; deviceId?: string | null; pinned?: boolean };
+
+/**
+ * What a request to a computer answers: the request's id once sent (it shows in /api/state's `requests`), and
+ * `needCode` when it needs a current two-factor code first (none was given, and none was entered in the last four
+ * minutes), or the one given didn't do.
+ */
+type Requested = Result & { requestId?: string; needCode?: boolean };
+
+/**
+ * Starts a session: in the desktop app, where the task says (a terminal or the agent's app here, or its cloud).
+ * The web app can't start anything, and a task that runs on another computer starts there: both answer `remote`,
+ * offering the computer the task names, else its project's, else the account's default.
+ */
+export async function startSessionAction(taskId: number, agent?: AgentId | null, surface?: Surface): Promise<Result & Remote> {
   await guard();
   if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to run the session" };
-  if (MODE === "web") return { ok: false, remote: true, error: "Choose a computer to start it on." };
   const task = await repo.getTask(taskId);
-  const project = task?.projectId ? await repo.getProject(task.projectId) : null;
-  const runsOn = task ? deviceIdFor(task.deviceId, project?.deviceId) : null;
-  if (task && runsOn && !runsHere(runsOn)) return { ok: false, remote: true, deviceId: runsOn, error: `${task.key} runs on another computer.` };
+  if (!task) return { ok: false, error: "Task not found" };
+  const project = task.projectId ? await repo.getProject(task.projectId) : null;
+  if (MODE === "web") {
+    return { ok: false, remote: true, ...offeredDevice(task, project, await repo.listDevices()), error: "Choose a computer to start it on." };
+  }
+  const runsOn = deviceIdFor(task.deviceId, project?.deviceId);
+  if (runsOn && !runsHere(runsOn)) return { ok: false, remote: true, deviceId: runsOn, pinned: true, error: `${task.key} runs on another computer.` };
   const r = await startSession(taskId, { agent: agent ?? undefined, surface, reason: "you" });
   return done(r.ok ? { ok: true, message: r.message ?? "Session started" } : { ok: false, error: r.error });
 }
 
-/** Asks a computer to start a session. Needs a fresh code: the database refuses the request without one. */
-export async function requestSessionAction(taskId: number, agent: AgentId, deviceId: string, code: string): Promise<Result> {
-  await guard();
-  if (agent !== "claude" && agent !== "codex") return { ok: false, error: "Choose Claude Code or Codex." };
-  const device = await repo.getDevice(deviceId);
-  if (!device || device.revokedAt) return { ok: false, error: "That computer isn't signed in anymore." };
-  if (device.remoteStart === "off") return { ok: false, error: `${device.name} doesn't take sessions started from elsewhere. Change that in its Settings.` };
-  const db = await supabase();
-  const wrong = await verifyCode(db, code);
-  if (wrong) return { ok: false, error: wrong };
-  try {
-    await repo.createLaunchRequest({ deviceId, taskId, agent, via: MODE === "web" ? "web" : "desktop" });
-  } catch (e) {
-    const message = errorOf(e);
-    return { ok: false, error: refusedStepUp(message) ? STEP_UP_REFUSED : message };
-  }
-  return done({
-    ok: true,
-    message: device.remoteStart === "auto" ? `Sent to ${device.name}: it starts within seconds.` : `Sent to ${device.name}: allow it there to start.`,
-  });
+/**
+ * The computer a request goes to, when it's signed in and takes requests (its setting as it last said: the computer
+ * decides for itself when the request arrives).
+ */
+async function requestTarget(deviceId: string | null | undefined): Promise<Device | string> {
+  if (!(await usesCloud())) return "Sign in to PacedMind Cloud to use your other computers.";
+  const device = deviceId ? await repo.getDevice(deviceId) : null;
+  if (!device || device.revokedAt) return "That computer isn't signed in to PacedMind anymore.";
+  if (device.remoteStart === "off") return `${device.name} doesn't take sessions from elsewhere. Change that in its Settings.`;
+  return device;
 }
 
-/** Picks a session up again where it ran, or in the desktop app (`surface` "desktop"). */
-export async function resumeSessionAction(sessionId: string, surface?: Surface): Promise<Result> {
+/**
+ * The fresh two-factor code a request to a computer needs: `code` when given, else one this session entered in the
+ * last four minutes. The database checks the code's time and authenticator either way. Null when the request can go.
+ */
+async function stepUp(code: string | null | undefined): Promise<Requested | null> {
+  if (code?.trim()) {
+    const wrong = await verifyCode(await supabase(), code);
+    return wrong ? { ok: false, error: wrong, needCode: true } : null;
+  }
+  const until = codeFreshUntil(await readAuthState());
+  return until && until > Date.now() ? null : { ok: false, error: "Enter a current two-factor code.", needCode: true };
+}
+
+/** What the computer does with a request, as its setting last said, for the message after sending it. */
+function sentMessage(device: Device, kind: LaunchRequestKind, asks: boolean): string {
+  const now = asks
+    ? { start: "allow it there to start", resume: "allow it there to resume the session", changes: "allow it there to send the changes" }[kind]
+    : { start: "it starts within seconds", resume: "it opens within seconds", changes: "the agent gets your changes within seconds" }[kind];
+  const away = deviceOnline(device) ? "" : ` It hasn't been online in the last few minutes; the request waits there for 10 minutes.`;
+  return `Sent to ${device.name}: ${now}.${away}`;
+}
+
+/** Sends a request, after its fresh code. */
+async function sendRequest(input: repo.LaunchRequestInput, device: Device, code: string, asks: boolean): Promise<Requested> {
+  const stale = await stepUp(code);
+  if (stale) return stale;
+  try {
+    const r = await repo.createLaunchRequest(input);
+    return done({ ok: true, requestId: r.id, message: sentMessage(device, input.kind ?? "start", asks) });
+  } catch (e) {
+    const message = errorOf(e);
+    if (!refusedStepUp(message)) return { ok: false, error: message };
+    // A code from an authenticator added in this session doesn't count (SECURITY.md), and neither does an old one.
+    return { ok: false, needCode: true, error: (code ?? "").trim() ? STEP_UP_REFUSED : "Enter a current two-factor code." };
+  }
+}
+
+/**
+ * Asks a computer to start a session for a task, where the task says or on `surface`. Needs a fresh two-factor code:
+ * `code`, or "" to use one entered in the last four minutes. A task or project that names its computer starts only
+ * there, so another computer is refused here already.
+ */
+export async function requestSessionAction(
+  taskId: number, agent: AgentId, deviceId: string, code: string, surface?: Surface | null,
+): Promise<Requested> {
+  await guard();
+  if (agent !== "claude" && agent !== "codex") return { ok: false, error: "Choose Claude Code or Codex." };
+  if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to run the session" };
+  const task = await repo.getTask(taskId);
+  if (!task) return { ok: false, error: "Task not found" };
+  if (task.agent === "human") return { ok: false, error: `${task.key} is marked as yours. Hand it to Claude Code or Codex first.` };
+  if ((await repo.listSessions({ taskId, status: LIVE_STATUSES })).length) return { ok: false, error: `${task.key} already has a running session` };
+  const device = await requestTarget(deviceId);
+  if (typeof device === "string") return { ok: false, error: device };
+  const project = task.projectId ? await repo.getProject(task.projectId) : null;
+  const named = deviceIdFor(task.deviceId, project?.deviceId);
+  if (named && named !== device.id) {
+    const other = await repo.getDevice(named);
+    return { ok: false, error: `${task.key} runs on ${other?.name ?? "another computer"}. Send it there, or pick another computer in its details.` };
+  }
+  // A session in the agent's cloud always waits for you on the computer, whatever its setting.
+  const asks = device.remoteStart !== "auto" || (surface ?? task.runIn) === "cloud";
+  return sendRequest({ deviceId: device.id, taskId, agent, via: MODE === "web" ? "web" : "desktop", kind: "start", surface: surface ?? null }, device, code, asks);
+}
+
+/**
+ * Picks a session up again where it ran, or in the desktop app (`surface` "desktop"). From the web app, and for a
+ * session that ran on another computer, it answers `remote` with that computer (a cloud session can be pulled in on any
+ * computer from its desktop app, and from the web app on the one that sent it).
+ */
+export async function resumeSessionAction(sessionId: string, surface?: Surface): Promise<Result & Remote> {
   await guard();
   if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to open the session" };
+  const s = await repo.getSession(sessionId);
+  if (!s) return { ok: false, error: "Session not found" };
+  if (MODE === "web" || (s.surface !== "cloud" && !runsHere(s.deviceId))) {
+    if (!s.deviceId) return { ok: false, error: "This session didn't run on a computer of your account, so it can't be resumed from here." };
+    return { ok: false, remote: true, deviceId: s.deviceId, pinned: true, error: "Resume it on the computer it ran on." };
+  }
   const r = await resumeSession(sessionId, surface);
   return done(r.ok ? { ok: true, message: r.message } : { ok: false, error: r.error });
+}
+
+/**
+ * Asks the computer a session ran on to pick it up again: where it ran, or with `surface` "desktop" a Claude Code
+ * conversation moves from its terminal into the Claude app. Needs a fresh code, like requestSessionAction.
+ */
+export async function requestResumeAction(sessionId: string, code: string, surface?: Surface | null): Promise<Requested> {
+  await guard();
+  if (surface === "cloud" || (surface && !SURFACES.has(surface))) return { ok: false, error: "A session resumes where it ran, or in the Claude app." };
+  const s = await repo.getSession(sessionId);
+  if (!s) return { ok: false, error: "Session not found" };
+  if (!(await repo.getTask(s.taskId))) return { ok: false, error: "The task is gone" };
+  if (!s.deviceId) return { ok: false, error: "This session didn't run on a computer of your account, so it can't be resumed from here." };
+  const to = surface === "desktop" ? "desktop" : null;
+  if (!to && s.surface === "terminal" && isLiveSession(s)) {
+    return { ok: false, error: "That session is still running in its terminal. Close it in PacedMind first if its terminal is gone." };
+  }
+  const device = await requestTarget(s.deviceId);
+  if (typeof device === "string") return { ok: false, error: device };
+  // Pulling a cloud session in runs its work on the computer, so that always waits for you there.
+  const asks = device.remoteStart !== "auto" || s.surface === "cloud";
+  return sendRequest({
+    deviceId: device.id, taskId: s.taskId, agent: s.agent, via: MODE === "web" ? "web" : "desktop", kind: "resume", targetSessionId: s.id, surface: to,
+  }, device, code, asks);
 }
 
 /** For sessions that can't report back (the cloud, an app without PacedMind's MCP server): you say the work is finished. */
@@ -180,12 +289,42 @@ export async function closeSessionAction(sessionId: string): Promise<Result> {
   return done();
 }
 
-/** Sends a hand-back back to its agent with what should change. It reopens in a new terminal here. */
-export async function requestChangesAction(sessionId: string, changes: string): Promise<Result> {
+/**
+ * Sends a hand-back back to its agent with what should change. It reopens in a new terminal here. From the web app, and
+ * for a session that ran on another computer, it answers `remote` with that computer (requestChangesRemoteAction).
+ */
+export async function requestChangesAction(sessionId: string, changes: string): Promise<Result & Remote> {
   await guard();
-  if (MODE !== "desktop") return { ok: false, error: "Ask for changes in the PacedMind desktop app, on the computer the session ran on." };
+  const s = await repo.getSession(sessionId);
+  if (!s) return { ok: false, error: "Session not found" };
+  if (MODE === "web" || !runsHere(s.deviceId)) {
+    const problem = await changesProblem(s, "remote");
+    if (problem) return { ok: false, error: problem };
+    return { ok: false, remote: true, deviceId: s.deviceId, pinned: true, error: "Send the changes to the computer the session ran on." };
+  }
   const r = await requestChanges(sessionId, changes);
   return done(r.ok ? { ok: true, message: r.message } : { ok: false, error: r.error });
+}
+
+/**
+ * Asks the computer a session ran on to send it back to its agent with `text` (trimmed, 1 to 20,000 characters): its
+ * terminal reopens there and the agent reads the changes through start_task. Needs a fresh code, like
+ * requestSessionAction. Only terminal sessions take changes; the apps and the cloud take them where they run.
+ */
+export async function requestChangesRemoteAction(sessionId: string, text: string, code: string): Promise<Requested> {
+  await guard();
+  const changes = (text ?? "").trim();
+  if (!changes) return { ok: false, error: "Write what should change" };
+  if (changes.length > 20000) return { ok: false, error: "Keep the changes under 20,000 characters." };
+  const s = await repo.getSession(sessionId);
+  if (!s) return { ok: false, error: "Session not found" };
+  const problem = await changesProblem(s, "remote");
+  if (problem) return { ok: false, error: problem };
+  const device = await requestTarget(s.deviceId);
+  if (typeof device === "string") return { ok: false, error: device };
+  return sendRequest({
+    deviceId: device.id, taskId: s.taskId, agent: s.agent, via: MODE === "web" ? "web" : "desktop", kind: "changes", targetSessionId: s.id, changes,
+  }, device, code, device.remoteStart !== "auto");
 }
 
 export async function markSessionDoneAction(sessionId: string): Promise<Result> {
@@ -375,7 +514,7 @@ export async function updateDeviceSettingsAction(patch: {
   }
   if (patch.terminal && !TERMINAL_IDS.has(patch.terminal)) return { ok: false, error: "Unknown terminal" };
   if (patch.remoteStart && !["off", "ask", "auto"].includes(patch.remoteStart)) return { ok: false, error: "Unknown setting" };
-  const name = patch.name?.trim().slice(0, 80);
+  const name = patch.name === undefined ? undefined : repo.cleanDeviceName(patch.name);
   updateDevice({
     ...(name ? { name } : {}),
     ...(patch.terminal ? { terminal: patch.terminal } : {}),
@@ -384,10 +523,48 @@ export async function updateDeviceSettingsAction(patch: {
     ...(patch.remoteStart ? { remoteStart: patch.remoteStart } : {}),
   });
   const id = deviceConfig().deviceId;
-  if (id && (name || patch.remoteStart)) await repo.updateDeviceRow(id, { name, remoteStart: patch.remoteStart });
+  // The account's copy, for Settings elsewhere. What counts is saved above already: if the copy doesn't go through now
+  // (offline, or just signed in again), the account sync sends it within a minute (requests.ts).
+  if (id && (name || patch.remoteStart)) await repo.updateDeviceRow(id, { name, remoteStart: patch.remoteStart }).catch(() => {});
   // A new command can find a different tool: look again.
   if (patch.claudeCommand || patch.codexCommand) void checkThisDevice(mcpUrl()).catch(() => {});
   return done({ ok: true, message: "Saved" });
+}
+
+/* ---------- the account's computers ---------- */
+
+/**
+ * Renames one of the account's computers, from any signed-in window (the web app, any computer). This computer takes a
+ * new name at once, another one within a minute. Without an account, it renames this computer (id "" or its own id).
+ */
+export async function renameDeviceAction(deviceId: string, name: string): Promise<Result> {
+  await guard();
+  const clean = repo.cleanDeviceName(name ?? "");
+  if (!clean) return { ok: false, error: "Give the computer a name" };
+  const here = MODE === "desktop" && (deviceId === deviceConfig().deviceId || (deviceId === "" && !(await usesCloud())));
+  if (await usesCloud()) {
+    try {
+      await repo.renameDevice(deviceId, clean);
+    } catch (e) {
+      return { ok: false, error: errorOf(e) };
+    }
+  } else if (!here) {
+    return { ok: false, error: "Without an account, PacedMind knows only this computer." };
+  }
+  if (here) updateDevice({ name: clean });
+  return done({ ok: true, message: `Renamed to ${clean}` });
+}
+
+/** Makes a signed-in computer the account's default: sessions go there when neither the task nor its project names one. */
+export async function setDefaultDeviceAction(deviceId: string): Promise<Result> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: "Without an account, this computer is the only one." };
+  try {
+    await repo.setDefaultDevice(deviceId);
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  return done({ ok: true, message: `${(await repo.getDevice(deviceId))?.name ?? "That computer"} is the default now` });
 }
 
 /** A new owner token: agents set up with the old one lose access until you connect them again. */

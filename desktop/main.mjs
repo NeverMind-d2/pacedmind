@@ -467,11 +467,22 @@ function watchSessions() {
   setInterval(check, 5000);
 }
 
+/**
+ * What an approval asks, for its notification: to start a session, to resume one, or to send one back to its agent
+ * with changes (`kind`, from /api/state). `agent` reads "Claude Code · Terminal".
+ */
+function approvalTitle(a) {
+  const key = a.key ?? "a session";
+  if (a.kind === "resume") return /· Cloud$/.test(a.agent ?? "") ? `Pull ${key} in from the cloud?` : `Resume ${key} with ${a.agent}?`;
+  if (a.kind === "changes") return `Send ${key} back to ${String(a.agent ?? "its agent").split(" · ")[0]} with changes?`;
+  return `Start ${key} with ${a.agent}?`;
+}
+
 /** A session asked for over MCP or from elsewhere: nothing starts until you allow it in the window. */
 function notifyApproval(a) {
   if (!Notification.isSupported()) return;
   const n = new Notification({
-    title: `Start ${a.key ?? "a session"} with ${a.agent}?`,
+    title: approvalTitle(a),
     body: [a.title, `Asked by ${a.from}. Open PacedMind to allow or refuse it.`].filter(Boolean).join("\n"),
     icon: ICON_PNG,
   });

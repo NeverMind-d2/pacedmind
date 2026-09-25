@@ -19,6 +19,7 @@ import {
   updateTaskAction,
 } from "@/app/actions";
 import { startSessionOrAsk } from "@/components/remote-start";
+import { RequestStatus } from "@/components/request-status";
 import { addToFlowAction, setAgentsAction, setRunAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
 import { AgentIcon, Icon, StatusIcon, SurfaceIcon } from "@/components/icons";
 import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast, type MenuItem } from "@/components/ui";
@@ -65,11 +66,20 @@ export interface FlowDevice {
   /** False until PacedMind looked for the agents on it. */
   checked: boolean;
   agents: Record<AgentId, AgentTools>;
+  /** The account's default computer, where sessions go when neither the task nor its project names one. */
+  isDefault?: boolean;
 }
 
 export interface FlowViewProps {
   project: { id: string; name: string; flowOn: boolean; folder: string | null; color: string; codexEnv: string | null };
   projects: { id: string; name: string; color: string; inFlow: number }[];
+  /**
+   * In the desktop app, which switches flows on for this computer and keeps its folders. The web app has neither: it
+   * shows where the flow is on, and starts sessions through the "Run on a computer" sheet.
+   */
+  desktop: boolean;
+  /** The other computers where this project's flow is on, by name (each switches it on for itself). */
+  flowsOnAt: string[];
   /** Computers PacedMind runs on, this one first. */
   devices: FlowDevice[];
   tasks: FlowTask[];
@@ -904,14 +914,14 @@ function FlowEditor(props: FlowViewProps) {
   const ghostTask = ghost ? graph.byId.get(ghost.taskId) : undefined;
   const ghostAfter = ghost && ghost.after !== null ? graph.byId.get(ghost.after) : undefined;
 
-  let inspector: ReactNode = <EmptyInspector />;
+  let inspector: ReactNode;
   if (selectedTask) {
     const at = (graph.incoming.get(selectedTask.id) ?? []).find((e) => e.mode === "time")?.atTime ?? "";
     const run = runs.get(selectedTask.id)!;
     const session = sessions[selectedTask.id];
     inspector = (
       <Inspector key={`${selectedTask.id}:${at}`} project={project} task={selectedTask} info={info.get(selectedTask.id)!} run={run}
-        devices={devices} session={session} graph={graph} flowOn={flowOn} now={now} defaultAt={defaultAt}
+        devices={devices} session={session} graph={graph} flowOn={flowOn || props.flowsOnAt.length > 0} desktop={props.desktop} now={now} defaultAt={defaultAt}
         onAgent={(agent) => setAgent(selectedTask, agent)}
         onRun={(patch) => setRun(selectedTask, patch)}
         onFolder={(folder) => setFolder(selectedTask, folder)}
@@ -925,11 +935,14 @@ function FlowEditor(props: FlowViewProps) {
     inspector = (
       <EdgeInspector edge={selectedEdge} graph={graph} onPick={pickNode} onRemove={() => removeEdge(selectedEdge)} onClose={() => setSel(null)} />
     );
+  } else {
+    inspector = <EmptyInspector desktop={props.desktop} />;
   }
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <FlowHeader project={project} projects={props.projects} summary={summary} agents={agentStatus} flowOn={flowOn}
+        desktop={props.desktop} flowsOnAt={props.flowsOnAt}
         canTidy={placed.length > 0} onFlow={toggleFlow} onTidy={tidyUp} onFit={() => fitTo(placed.map(positionOf), 250)}
         onAdd={() => setAdding(true)} />
       <div className="flex min-h-0 flex-1">
@@ -1013,12 +1026,14 @@ function FlowEditor(props: FlowViewProps) {
 
 type More = "add" | "fit" | "tidy" | "roadmap";
 
-function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlow, onTidy, onFit, onAdd }: {
+function FlowHeader({ project, projects, summary, agents, flowOn, desktop, flowsOnAt, canTidy, onFlow, onTidy, onFit, onAdd }: {
   project: FlowViewProps["project"];
   projects: FlowViewProps["projects"];
   summary: string;
   agents: { agent: AgentId; status: string; busy: boolean }[];
   flowOn: boolean;
+  desktop: boolean;
+  flowsOnAt: string[];
   canTidy: boolean;
   onFlow: (on: boolean) => void;
   onTidy: () => void;
@@ -1067,11 +1082,22 @@ function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlo
       ))}
       <ZoomControls onFit={onFit} />
       <Button onClick={onTidy} disabled={!canTidy} title="Line the sessions up in the order they run" className="max-md:hidden">Tidy up</Button>
-      <label className="flex h-7 shrink-0 cursor-pointer items-center gap-2 pl-1 text-[12.5px] text-fg3"
-        title="When the flow is on, PacedMind starts the next session on its own">
-        {flowOn ? "Flow on" : "Paused"}
-        <Switch on={flowOn} onChange={onFlow} label="Flow on" />
-      </label>
+      {desktop ? (
+        <label className="flex h-7 shrink-0 cursor-pointer items-center gap-2 pl-1 text-[12.5px] text-fg3"
+          title={`When the flow is on, PacedMind starts the next session on its own${flowsOnAt.length ? `. It's on at ${names(flowsOnAt)} too` : ""}`}>
+          {flowOn ? "Flow on" : "Paused"}
+          {flowsOnAt.length > 0 && <span className="max-w-[180px] truncate text-mut2 max-md:hidden">· on at {names(flowsOnAt)}</span>}
+          <Switch on={flowOn} onChange={onFlow} label="Flow on" />
+        </label>
+      ) : (
+        // The web app runs no flow: each computer switches a project's flow on for itself, in its desktop app.
+        <span className="flex h-7 min-w-0 shrink-0 items-center gap-2 pl-1 text-[12.5px] text-fg3"
+          title={flowsOnAt.length ? `The flow starts sessions on its own on ${names(flowsOnAt)}. Switch it in the desktop app there.`
+            : "Switch the flow on in the desktop app, on the computer it should run on."}>
+          <span aria-hidden="true" className={cx("h-[7px] w-[7px] shrink-0 rounded-full", flowsOnAt.length ? "bg-fg2" : "border border-dim")} />
+          <span className="max-w-[240px] truncate max-md:max-w-[38vw]">{flowsOnAt.length ? `On at ${names(flowsOnAt)}` : "Off"}</span>
+        </span>
+      )}
       <Menu<More> width={200} align="right" className="md:hidden"
         trigger={
           <button type="button" aria-label="More" aria-haspopup="menu"
@@ -1450,8 +1476,8 @@ function BackToFlow({ onClick, className }: { onClick: () => void; className?: s
 }
 
 function Inspector({
-  project, task, info, run, devices, session, graph, flowOn, now, defaultAt, onAgent, onRun, onFolder, onCodexEnv, onStart, onStartNow, onFinished,
-  onRemove, onClose,
+  project, task, info, run, devices, session, graph, flowOn, desktop, now, defaultAt, onAgent, onRun, onFolder, onCodexEnv, onStart, onStartNow,
+  onFinished, onRemove, onClose,
 }: {
   project: FlowViewProps["project"];
   task: FlowTask;
@@ -1460,7 +1486,9 @@ function Inspector({
   devices: FlowDevice[];
   session: FlowSession | undefined;
   graph: Graph;
+  /** Whether the flow is on anywhere. */
   flowOn: boolean;
+  desktop: boolean;
   now: number;
   defaultAt: string;
   onAgent: (agent: AgentId) => void;
@@ -1488,7 +1516,10 @@ function Inspector({
   // Sessions that can't tell PacedMind they're done: cloud ones, and the desktop app until it has PacedMind's MCP server.
   const silent = (s: Surface) => s === "cloud" || (s === "desktop" && mcp !== null && mcp !== "connected");
   const canFinish = !!session && active && silent(session.surface);
-  const startLabel = surface === "desktop" ? `Open in ${APP_LABEL[task.agent]}` : surface === "cloud" ? "Send to the cloud" : "Start in terminal";
+  // Another computer's task (any, in the web app) starts there, through the "Run on a computer" sheet.
+  const away = !desktop || (!!device && !device.here && devices.some((d) => d.here));
+  const startLabel = away ? `Start on ${device?.name ?? "a computer"}…`
+    : surface === "desktop" ? `Open in ${APP_LABEL[task.agent]}` : surface === "cloud" ? "Send to the cloud" : "Start in terminal";
   const options: { mode: EdgeMode; title: string; desc: string }[] = [
     { mode: "auto", title: "Automatically", desc: `A new ${AGENT_LABEL[task.agent]} session starts as soon as ${src} finishes.` },
     { mode: "manual", title: "Manually", desc: `Starts after you mark ${src} done.` },
@@ -1548,13 +1579,18 @@ function Inspector({
                     </button>
                   }
                   items={devices.map((d) => ({
-                    value: d.id, label: d.name, icon: <Icon name="laptop" size={13} />, hint: d.here ? "This computer" : undefined,
+                    value: d.id, label: d.name, icon: <Icon name="laptop" size={13} />, hint: d.here ? "This computer" : d.isDefault ? "Default" : undefined,
                   }))}
                   onSelect={(id) => { if (id !== task.deviceId) onRun({ deviceId: id }); }} />
               </>
             )}
-            <span className="text-mut2">Folder</span>
-            <FolderField key={`${task.folder}:${task.ownFolder}`} task={task} projectFolder={project.folder} onSave={onFolder} />
+            {/* Folders are each computer's own, set in its desktop app. */}
+            {desktop && (
+              <>
+                <span className="text-mut2">Folder</span>
+                <FolderField key={`${task.folder}:${task.ownFolder}`} task={task} projectFolder={project.folder} onSave={onFolder} />
+              </>
+            )}
             <span className="text-mut2">Branch</span>
             {mode === "session"
               ? <span className="truncate text-fg3">Same branch as {src}</span>
@@ -1582,7 +1618,7 @@ function Inspector({
           {surface === "desktop" && mcp !== null && mcp !== "connected" && (
             <p className="text-[12px] leading-relaxed text-mut2">
               The {APP_LABEL[task.agent]} can&apos;t tell PacedMind when it&apos;s done until {AGENT_LABEL[task.agent]} is{" "}
-              <Link href="/settings#devices" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
+              <Link href="/computers" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
               Until then, mark the session finished here.
             </p>
           )}
@@ -1644,25 +1680,30 @@ function Inspector({
               </div>
             ))}
             {!flowOn && outgoing.some((e) => e.mode !== "session") && (
-              <p className="text-[12px] leading-relaxed text-mut2">The flow is paused, so these don&apos;t start on their own.</p>
+              <p className="text-[12px] leading-relaxed text-mut2">The flow is {desktop ? "paused" : "off"}, so these don&apos;t start on their own.</p>
             )}
           </div>
         </Section>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 pb-4 pt-3">
-        {canFinish ? (
-          <Button onClick={onFinished} title="The session can't tell PacedMind itself. The task waits for your check, and what comes next may start.">
-            <Icon name="check" size={12} strokeWidth={2.2} />Mark finished
-          </Button>
-        ) : (
-          <Button onClick={onStartNow} disabled={active || task.status === "done" || task.status === "canceled"}
-            title={active ? "A session for this task is already running" : run.blocked ?? `${startLabel}${device && surface !== "cloud" ? ` on ${device.name}` : ""}`}>
-            <SurfaceIcon surface={surface} size={12} strokeWidth={2} />{startLabel}
-          </Button>
-        )}
-        <span className="flex-1" />
-        <Button variant="ghost" onClick={onRemove}>Remove from flow</Button>
+      <div className="flex shrink-0 flex-col gap-2.5 border-t border-line px-5 pb-4 pt-3">
+        {/* What became of a request to a computer for this task. */}
+        <RequestStatus match={(r) => r.taskId === task.id} />
+        {/* A long computer name puts Remove on a line of its own rather than cutting the name short. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {canFinish ? (
+            <Button onClick={onFinished} title="The session can't tell PacedMind itself. The task waits for your check, and what comes next may start.">
+              <Icon name="check" size={12} strokeWidth={2.2} />Mark finished
+            </Button>
+          ) : (
+            <Button onClick={onStartNow} disabled={active || task.status === "done" || task.status === "canceled"} className="max-w-full"
+              title={active ? "A session for this task is already running"
+                : run.blocked ?? (away ? "Asks that computer to start it" : `${startLabel}${device && surface !== "cloud" ? ` on ${device.name}` : ""}`)}>
+              <SurfaceIcon surface={surface} size={12} strokeWidth={2} className="shrink-0" /><span className="truncate">{startLabel}</span>
+            </Button>
+          )}
+          <Button variant="ghost" onClick={onRemove} className="ml-auto">Remove from flow</Button>
+        </div>
       </div>
     </aside>
   );
@@ -1704,14 +1745,18 @@ function EdgeInspector({ edge, graph, onPick, onRemove, onClose }: {
 }
 
 /** Help for the canvas beside it. A phone shows the canvas alone until a session is tapped. */
-function EmptyInspector() {
+function EmptyInspector({ desktop }: { desktop: boolean }) {
   return (
     <aside aria-label="Selected session" className="flex w-[320px] shrink-0 flex-col border-l border-line max-md:hidden">
       <div className="flex h-11 shrink-0 items-center border-b border-line px-5 text-[12.5px] text-mut">Nothing selected</div>
       <div className="flex flex-col gap-3 px-5 py-[18px] text-[12.5px] leading-relaxed text-mut2">
         <p>Select a session on the canvas to choose its agent, where it runs and how it starts.</p>
         <p>Put sessions anywhere on the grid; they stay where you leave them. To run one after another, drag from the dot under the first to the dot above the second.</p>
-        <p>A session runs in a terminal or the agent&apos;s desktop app on your computer, or in the agent&apos;s cloud. Each task can have its own folder.</p>
+        {desktop ? (
+          <p>A session runs in a terminal or the agent&apos;s desktop app on your computer, or in the agent&apos;s cloud. Each task can have its own folder.</p>
+        ) : (
+          <p>A session runs in a terminal or the agent&apos;s desktop app on one of your computers, or in the agent&apos;s cloud. Each computer keeps its own folders and switches the flow on for itself, in its desktop app.</p>
+        )}
         <p>Click the agent on a session to hand it to Claude Code or Codex. Tidy up lines everything up in the order it runs. <Kbd>Delete</Kbd> removes what&apos;s selected.</p>
       </div>
     </aside>

@@ -429,6 +429,23 @@ async function launch(session: Session, task: Task, folder: string, env: string,
 }
 
 /**
+ * Why this computer can't pick a session up again (resumeSession), or null. `to` "desktop" moves a Claude Code
+ * conversation from a terminal into the Claude app (for other sessions it shows the agent's app).
+ */
+export function resumeProblem(session: Session, to?: Surface): string | null {
+  if (MODE !== "desktop") return "Resume it from the PacedMind desktop app, which opens terminals on your computer.";
+  if (!SESSION_ID.test(session.id)) return "Session not found";
+  if (to === "cloud") return "A session can't move into the cloud. Start a new one there instead.";
+  // Cloud sessions can be picked up from any computer; the others only where they ran.
+  if (session.surface !== "cloud" && session.deviceId && session.deviceId !== thisDeviceId()) return "That session ran on another computer. Resume it there.";
+  // Its terminal is still open: a second one on the same conversation would get in its way.
+  if (!to && session.surface === "terminal" && LIVE_STATUSES.includes(session.status)) {
+    return "That session is still running in its terminal. Close it in PacedMind first if its terminal is gone.";
+  }
+  return null;
+}
+
+/**
  * Picks a session up again: a terminal session reopens its terminal (Claude resumes the same conversation), a
  * desktop session shows its app, and a cloud session opens in a terminal with `claude --teleport` (Claude) or on
  * the web (Codex). The folder comes from this computer, never from the session's record in the cloud.
@@ -440,10 +457,8 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     const device = await activeDevice();
     const session = await repo.getSession(sessionId);
     if (!session) return { ok: false, error: "Session not found" };
-    // Cloud sessions can be picked up from any computer; the others only where they ran.
-    if (session.surface !== "cloud" && session.deviceId && session.deviceId !== device.deviceId) {
-      return { ok: false, error: "That session ran on another computer. Resume it there." };
-    }
+    const problem = resumeProblem(session, to);
+    if (problem) return { ok: false, error: problem };
     const task = await repo.getTask(session.taskId);
     if (!task) return { ok: false, error: "The task is gone" };
     const bad = checkTask(task);
@@ -488,14 +503,21 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
   });
 }
 
+/**
+ * Why a session's agent can't take changes through PacedMind wherever it's asked from, or null: changes reach the agent
+ * through start_task, which cloud sessions can't call, and the apps start new conversations.
+ */
+export function changesSurfaceProblem(session: Session): string | null {
+  if (session.surface === "terminal") return null;
+  const where = session.surface === "cloud" ? CLOUD_LABEL[session.agent] : `the ${APP_LABEL[session.agent]}`;
+  return `This session runs in ${where}. Open it there and write your changes to the agent.`;
+}
+
 /** Why this computer can't reopen a session for changes, because it runs elsewhere, or null. */
 export function reopenProblem(session: Session): string | null {
   if (MODE !== "desktop") return "Ask for changes in the PacedMind desktop app, which opens terminals on your computer.";
-  // Changes reach the agent through start_task, which cloud sessions can't call, and the apps start new conversations.
-  if (session.surface !== "terminal") {
-    const where = session.surface === "cloud" ? CLOUD_LABEL[session.agent] : `the ${APP_LABEL[session.agent]}`;
-    return `This session runs in ${where}. Open it there and write your changes to the agent.`;
-  }
+  const surface = changesSurfaceProblem(session);
+  if (surface) return surface;
   if (session.deviceId && session.deviceId !== thisDeviceId()) return "This session ran on another computer. Ask for the changes in PacedMind there.";
   return null;
 }

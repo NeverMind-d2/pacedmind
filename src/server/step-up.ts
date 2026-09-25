@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { readAuthState } from "./supabase";
+import { readAuthState, type AuthState } from "./supabase";
 
 /*
  * A fresh two-factor code for actions that weaken the account or reach a computer from afar. Verifying it
@@ -25,6 +25,25 @@ export const STEP_UP_REFUSED =
   "That needs a code from an authenticator you had before this sign-in. If you added one just now, sign out and in again, then try again.";
 
 export const refusedStepUp = (message: string) => /row-level security|two-factor code first/i.test(message);
+
+/**
+ * How long a code entered in this session lets the app skip asking for another before a request to a computer: four
+ * minutes, a minute short of the five the database allows (private.recent_mfa), so a request sent near the end still
+ * gets there in time.
+ */
+export const CODE_REUSE_MS = 4 * 60_000;
+
+/**
+ * Until when (ms since the epoch) the app may send a request to a computer without asking for a code again: the last
+ * time this session verified an authenticator, plus CODE_REUSE_MS. Null without one. A hint only: the database checks
+ * the code's time itself, and that it came from an authenticator the account had before this sign-in.
+ */
+export function codeFreshUntil(state: AuthState | null): number | null {
+  const at = (state?.amr ?? [])
+    .filter((a) => ["totp", "mfa/totp", "webauthn", "mfa/webauthn"].includes(a.method) && Number.isFinite(a.timestamp))
+    .reduce((max, a) => Math.max(max, a.timestamp), 0);
+  return at ? at * 1000 + CODE_REUSE_MS : null;
+}
 
 /**
  * Verifies `code` against the given authenticator, or against each of the account's (oldest first: the one

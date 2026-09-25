@@ -1,5 +1,5 @@
 import "server-only";
-import { changesProblemIn } from "./ops";
+import { changesProblemIn, changesViaIn } from "./ops";
 import * as repo from "./repo";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
@@ -86,6 +86,9 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       pending: pending.get(s.id) ?? [],
       canRequestChanges: (s.status === "finished" || s.status === "done")
         && !changesProblemIn(s, { task, live: busy.has(s.taskId), newest: newestOfTask.get(s.taskId) }),
+      changesVia: s.status === "finished" || s.status === "done"
+        ? changesViaIn(s, { task, live: busy.has(s.taskId), newest: newestOfTask.get(s.taskId) }) : null,
+      deviceId: s.deviceId,
       next: next
         ? {
           id: next.id, key: next.key, title: next.title, href: taskHref(next),

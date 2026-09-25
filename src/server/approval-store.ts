@@ -1,5 +1,5 @@
 import "server-only";
-import type { AgentId, Surface } from "@/lib/types";
+import type { AgentId, LaunchRequestKind, Surface } from "@/lib/types";
 
 /*
  * Sessions waiting for you to allow them in this computer's PacedMind window (requests.ts decides what goes
@@ -13,14 +13,18 @@ export interface Approval {
   /** The launch request it answers, or null when it's this computer's own (an agent over MCP, a flow). */
   requestId: string | null;
   from: "elsewhere" | "agent" | "flow";
+  /** Start a new session, resume one, or send one back to its agent with changes. */
+  kind: LaunchRequestKind;
   taskId: number;
   key: string;
   agent: AgentId;
   folder: string;
   /** Where it would run: a terminal or the agent's app here, or the agent's cloud. */
   surface: Surface;
-  /** For an agent asking to send a session back to work: the session and what should change. */
+  /** For sending a session back to work: the session and what should change (untrusted text the agent reads). */
   changes?: { sessionId: string; text: string };
+  /** For resuming a session: which one, and "desktop" when a terminal conversation moves into the Claude app. */
+  resume?: { sessionId: string; to?: Surface };
   requestedAt: number;
   expiresAt: number;
 }
