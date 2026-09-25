@@ -96,20 +96,24 @@ execSync("npm run build", { cwd: root, stdio: "inherit" });
 step("Collecting the app files");
 const server = path.join(stage, "server");
 const standalone = path.join(root, ".next", "standalone");
-// Build tracing follows the database path and copies data/ (your local database and session
-// scripts) into the standalone folder. The app keeps its own data in %APPDATA%, so leave it out.
+// Only what server.js runs from. File tracing also copies in project files that the server's dynamic
+// paths seem to reach, and the server never reads them: data/ (your local database and session
+// scripts), dist/, docs/ and src/ files, the checkout's .git and .claude. Some are private, and in the
+// main checkout .git and .claude/worktrees are huge.
 // sharp is there for Next's image optimizer, which the app never uses. Its native binaries would tie
 // the server to one platform and processor, and a universal Mac app runs the same files on both.
-const skip = ["data", "dist", "node_modules/sharp", "node_modules/@img"].map((dir) => path.join(standalone, dir));
-fs.cpSync(standalone, server, {
-  recursive: true,
-  filter: (src) => !skip.some((dir) => src === dir || src.startsWith(dir + path.sep)),
-});
+const keep = [".next", "node_modules", "package.json", "server.js"];
+const skip = ["node_modules/sharp", "node_modules/@img"].map((dir) => path.join(standalone, dir));
+for (const entry of keep) {
+  fs.cpSync(path.join(standalone, entry), path.join(server, entry), {
+    recursive: true,
+    filter: (src) => !skip.some((dir) => src === dir || src.startsWith(dir + path.sep)),
+  });
+}
+const traced = fs.readdirSync(standalone).filter((entry) => !keep.includes(entry));
+if (traced.length) console.log(`  Left out what file tracing added: ${traced.join(", ")}`);
 fs.cpSync(path.join(root, ".next", "static"), path.join(server, ".next", "static"), { recursive: true });
 if (fs.existsSync(path.join(root, "public"))) fs.cpSync(path.join(root, "public"), path.join(server, "public"), { recursive: true });
-for (const leftover of ["data", "dist"]) {
-  if (fs.existsSync(path.join(server, leftover))) throw new Error(`The build unexpectedly contains ${leftover}/. Check outputFileTracingExcludes.`);
-}
 for (const file of ["main.mjs", "preload.cjs", "icon.ico", "icon.png", "trayTemplate.png", "trayTemplate@2x.png"]) {
   fs.copyFileSync(path.join(root, "desktop", file), path.join(stage, file));
 }

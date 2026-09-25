@@ -52,7 +52,8 @@ export function execLine(line: string, opts: { cwd?: string; input?: string; tim
     let stderr = "";
     let child;
     try {
-      child = spawn(sh.file, sh.args, { cwd: opts.cwd, env: agentEnv(), windowsHide: true, windowsVerbatimArguments: sh.verbatim });
+      // turbopackIgnore: a program chosen at run time would make the build trace (and ship) the whole project.
+      child = spawn(/* turbopackIgnore: true */ sh.file, sh.args, { cwd: opts.cwd, env: agentEnv(), windowsHide: true, windowsVerbatimArguments: sh.verbatim });
     } catch (e) {
       resolve({ code: -1, stdout, stderr: e instanceof Error ? e.message : String(e) });
       return;
@@ -82,7 +83,7 @@ export function openUrl(url: string): string | null {
     const [file, args] = process.platform === "win32"
       ? ["rundll32.exe", ["url.dll,FileProtocolHandler", url]]
       : [process.platform === "darwin" ? "open" : "xdg-open", [url]];
-    const child = spawn(file, args, { detached: true, stdio: "ignore", env: agentEnv() });
+    const child = spawn(/* turbopackIgnore: true */ file, args, { detached: true, stdio: "ignore", env: agentEnv() });
     child.on("error", () => {});
     child.unref();
     return null;
