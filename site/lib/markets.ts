@@ -1,18 +1,9 @@
 export type Market = { code: string; name: string; currency: string; locale: string; amount: number };
 
-/** A plan's monthly amount: Cloud's price (share 1) or a part of it, rounded to the currency's cents. */
-export function planAmount(amount: number, share: number) {
-  return Math.round(Math.round(amount * 100) * share) / 100;
-}
-
-/**
- * "$12.99", "26,99 zł", "￥1,080": a plan's monthly price as people in that country write it. It has
- * cents whenever Cloud's price has them, so half of $15.99 reads "$8.00", not "$8".
- */
-export function formatPlanPrice(market: Market, share: number) {
-  const amount = planAmount(market.amount, share);
-  const digits = Number.isInteger(amount) && Number.isInteger(market.amount) ? 0 : 2;
-  return new Intl.NumberFormat(market.locale, { style: "currency", currency: market.currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(amount);
+/** "$12.99", "26,99 zł", "￥1,080": Cloud's monthly price as people in that country write it. */
+export function formatPlanPrice(market: Market) {
+  const digits = Number.isInteger(market.amount) ? 0 : 2;
+  return new Intl.NumberFormat(market.locale, { style: "currency", currency: market.currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(market.amount);
 }
 
 // Time zones of the countries in prices.json. The time zone says where someone is more reliably

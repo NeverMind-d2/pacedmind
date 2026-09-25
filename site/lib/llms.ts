@@ -1,7 +1,7 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
 import { formatPlanPrice } from "@/lib/markets";
-import { CLOUD, DESCRIPTION, FAQ, NAME, ONE_DEVICE, ONE_DEVICE_SHARE, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
+import { CLOUD, COST, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
 
 /**
  * /llms.txt and /llms-full.txt (https://llmstxt.org): PacedMind in plain Markdown for answer engines
@@ -9,7 +9,6 @@ import { CLOUD, DESCRIPTION, FAQ, NAME, ONE_DEVICE, ONE_DEVICE_SHARE, PRICING, S
  */
 
 const DOCS = absoluteUrl(SITE.docs);
-const PLANS = `${NAME} on one device costs half as much as Cloud. Cloud, with unlimited tasks in the cloud and all your devices in sync, is coming soon, for about the price of a music subscription in your country. ${PRICING.trial}`;
 const list = (items: readonly string[]) => items.map((item) => `- ${item}`).join("\n");
 
 export function llmsTxt() {
@@ -19,8 +18,8 @@ export function llmsTxt() {
 
 ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadlines and calendar events share one calendar and one timeline. ${NAME} also coordinates AI coding agents: it starts Claude Code and Codex sessions from your tasks, each in its own terminal, runs them one after another in a flow if you like, and tells you when a session is waiting for you. The agents report back to ${NAME} over MCP (the Model Context Protocol), on your computer. ${NAME} doesn't run an AI model of its own and needs no API key.
 
-- Plans: ${PLANS}
-- Your data: on one device, your plan stays on your computer.
+- Plans: ${COST}
+- Your data: on one device, your plan stays on your computer, with no account.
 - Name: "${NAME}", one word. Its line is "${TAGLINE}"
 
 ## Docs
@@ -32,7 +31,7 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 ## Website
 
 - [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today, Timeline and Flow views.
-- [Pricing](${absoluteUrl("/#pricing")}): The two plans, with their prices in your country.
+- [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
 - [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys and where your plan is stored.
 
 ## Download
@@ -42,7 +41,7 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 
 ## Optional
 
-- [Full text](${absoluteUrl("/llms-full.txt")}): The home page as text, with both plans' prices in every country and the answers to the frequently asked questions.
+- [Full text](${absoluteUrl("/llms-full.txt")}): The home page as text, with Cloud's price in every country and the answers to the frequently asked questions.
 `;
 }
 
@@ -63,15 +62,17 @@ ${SUMMARY}
 - [Download ${NAME} for Windows](${SITE.downloads.windows})
 - [Download ${NAME} for macOS](${SITE.downloads.mac})
 
+${DOWNLOAD_NOTE}
+
 ## Views
 
 ${VIEWS.map(({ tab, title, body }) => `### ${tab}: ${title}\n\n${body}`).join("\n\n")}
 
 ## Pricing
 
-${PRICING.title} ${PRICING.subtitle} ${PRICING.trial}
+${PRICING.title} ${PRICING.subtitle} ${PRICING.plans}
 
-### One device
+### One device: free
 
 ${list(ONE_DEVICE)}
 
@@ -79,9 +80,9 @@ ${list(ONE_DEVICE)}
 
 ${list(CLOUD)}
 
-Monthly prices in each country, as of ${prices.checkedOn}:
+Cloud's monthly price in each country, as of ${prices.checkedOn}:
 
-${list(markets.map((market) => `${market.name}: One device ${formatPlanPrice(market, ONE_DEVICE_SHARE)}, Cloud ${formatPlanPrice(market, 1)} (${market.currency})`))}
+${list(markets.map((market) => `${market.name}: ${formatPlanPrice(market)} (${market.currency})`))}
 
 ## Frequently asked questions
 

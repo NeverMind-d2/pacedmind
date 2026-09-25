@@ -24,12 +24,12 @@ function useMarket(markets: Market[], fallback: string) {
   return find(country) ?? find(fallback)!;
 }
 
-/** A plan's monthly price in the chosen country: Cloud's (share 1) or a part of it. */
-export function PlanPrice({ markets, fallback, share = 1 }: { markets: Market[]; fallback: string; share?: number }) {
+/** Cloud's monthly price in the chosen country. */
+export function PlanPrice({ markets, fallback }: { markets: Market[]; fallback: string }) {
   const market = useMarket(markets, fallback);
   return (
     <p className="flex items-baseline gap-2 text-ink">
-      <span className="text-[46px] leading-none font-light tabular-nums">{formatPlanPrice(market, share)}</span>
+      <span className="text-[46px] leading-none font-light tabular-nums">{formatPlanPrice(market)}</span>
       <span className="text-[16px] text-mut">/ month</span>
     </p>
   );

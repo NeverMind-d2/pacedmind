@@ -2,7 +2,7 @@ import Link from "next/link";
 import prices from "@/prices.json";
 import { SITE } from "@/lib/site";
 import type { Market } from "@/lib/markets";
-import { CLOUD, FAQ, ONE_DEVICE, ONE_DEVICE_SHARE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
+import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { Emblem } from "@/components/emblem";
@@ -57,6 +57,7 @@ export default function Home() {
               <a className="download" data-os="windows" href={SITE.downloads.windows}>Download for Windows</a>
               <a className="download" data-os="mac" href={SITE.downloads.mac}>Download for macOS</a>
             </div>
+            <p className="mt-4 text-[15px] text-mut">{DOWNLOAD_NOTE}</p>
           </div>
           <ScreenDeck items={VIEWS} className={{ stage: `min-w-0 ${DECK_WIDTH}`, controls: `lg:col-start-2 ${DECK_WIDTH}` }} />
         </section>
@@ -67,13 +68,13 @@ export default function Home() {
             <span className="block text-mut">{PRICING.subtitle}</span>
           </h2>
           <div className="mt-6 flex flex-wrap items-baseline gap-x-8 gap-y-3 sm:mt-8">
-            <p className="text-[16px] text-text sm:text-[18px]">{PRICING.trial}</p>
+            <p className="text-[16px] text-text sm:text-[18px]">{PRICING.plans}</p>
             <CountryPicker markets={markets} fallback={prices.fallback} />
           </div>
           <div className="mt-10 grid border-t border-line sm:mt-12 md:grid-cols-2">
             <div className="pb-12 pt-10 md:pr-14">
               <h3 className="text-[22px] font-medium text-ink">One device</h3>
-              <div className="mt-6"><PlanPrice markets={markets} fallback={prices.fallback} share={ONE_DEVICE_SHARE} /></div>
+              <p className="mt-6 text-[46px] leading-none font-light text-ink">Free</p>
               <ul className="mt-8 space-y-3 text-[16px] text-text">
                 {ONE_DEVICE.map((item) => <li key={item}>{item}</li>)}
               </ul>

@@ -66,9 +66,9 @@ export function website(): Node {
 }
 
 /**
- * The app. It has no Offer until its plans can be bought and are on the page: the prices differ by
- * country, which one Offer can't say honestly. Google shows a software rich result only with genuine
- * ratings or reviews, so this is for understanding the entity, not for stars.
+ * The app. It has no Offer yet: the free plan gets one (price 0) once the downloads work. Cloud's price
+ * differs by country, which one Offer can't say honestly. Google shows a software rich result only with
+ * genuine ratings or reviews, so this is for understanding the entity, not for stars.
  */
 export function softwareApplication(): Node {
   return {

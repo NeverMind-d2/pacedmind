@@ -9,12 +9,14 @@ export const TITLE = `${NAME}: ${TAGLINE}`;
 
 export const SUMMARY =
   "A calm planner for your tasks, time blocks and deadlines. It starts your Claude Code and Codex sessions and tells you when one is waiting for you.";
-export const DESCRIPTION = `${SUMMARY} For Windows and macOS.`;
+export const DESCRIPTION = `${SUMMARY} Free on one device, for Windows and macOS.`;
+/** Under the download buttons. */
+export const DOWNLOAD_NOTE = "Free on one device. No account needed.";
 
 /** The home page in search results: what PacedMind is, and a description that fits the snippet (~155 characters). */
 export const SEARCH_TITLE = `${NAME}: a calm planner for tasks and coding agents`;
 export const SEARCH_DESCRIPTION =
-  "A calm planner for tasks, time blocks and deadlines. It starts your Claude Code and Codex sessions and tells you when one is waiting. For Windows and macOS.";
+  "A calm planner for tasks, time blocks and deadlines. It starts Claude Code and Codex sessions and tells you when one is waiting. Free for Windows and macOS.";
 
 /** The three views in the screen deck. */
 export const VIEWS = [
@@ -36,18 +38,20 @@ export const VIEWS = [
 ] as const;
 
 /**
- * Two plans. Cloud costs what a music subscription costs in each country (prices.json); One device
- * costs half of that (ONE_DEVICE_SHARE, applied by planAmount() in lib/markets.ts). Both start with
- * a free trial. No Offer in the structured data until a plan can be bought.
+ * Two plans. One device is free and needs no account. Cloud costs what a music subscription costs in
+ * each country (prices.json) and starts with a free trial. No Offer in the structured data until the
+ * downloads work (see lib/seo.ts).
  */
 export const PRICING = {
   title: "A little more peace of mind.",
   subtitle: "For about the price of a music subscription.",
-  trial: "Every plan starts with 7 days free.",
+  plans: "Free on one device. Cloud starts with 7 days free.",
 };
-export const ONE_DEVICE_SHARE = 0.5;
-export const ONE_DEVICE = ["Tasks, time blocks, calendar and deadlines", "Claude Code and Codex sessions, and flows", "Windows and macOS", "Your plan stays on your computer"];
-export const CLOUD = ["Everything in One device", "Unlimited tasks in the cloud", "All your devices, in sync"];
+export const ONE_DEVICE = ["Tasks, time blocks, calendar and deadlines", "Claude Code and Codex sessions, and flows", "Windows and macOS", "Your plan stays on your computer", "No account needed"];
+export const CLOUD = ["Everything in One device", "Unlimited tasks in the cloud", "All your devices, in sync", "Start sessions on your other computers"];
+/** The price question's answer, also the plans line in /llms.txt. */
+export const COST =
+  "PacedMind is free on one device, without an account. Cloud, with unlimited tasks in the cloud and all your devices in sync, is coming soon for about the price of a music subscription in your country. It starts with 7 days free.";
 
 /** Shown on the page and in its FAQPage data word for word: search engines check that the two match. */
 export const FAQ = [
@@ -57,7 +61,7 @@ export const FAQ = [
   },
   {
     question: "How much does PacedMind cost?",
-    answer: "PacedMind on one device costs half as much as Cloud. Cloud, with unlimited tasks in the cloud and all your devices in sync, is coming soon for about the price of a music subscription in your country. Every plan starts with 7 days free.",
+    answer: COST,
   },
   {
     question: "Which computers does PacedMind run on?",
@@ -77,6 +81,6 @@ export const FAQ = [
   },
   {
     question: "Where is my plan stored?",
-    answer: "On your computer. With Cloud, when it arrives, your plan stays in sync across all your devices.",
+    answer: "On your computer, and you don't need an account. With Cloud, when it arrives, you sign in and your plan stays in sync across all your devices.",
   },
 ];
