@@ -25,10 +25,13 @@ import { parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
 import { GRID, NODE_H, NODE_W, freeSpot, layoutFlow, snap, type Point } from "@/lib/flow-layout";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, EDGE_LABEL, canRun, surfaceOf,
-  type AgentId, type AgentTools, type EdgeMode, type FlowEdge, type McpLink, type Session, type Status, type Surface,
+  type AgentId, type AgentTools, type EdgeMode, type FlowEdge, type McpLink, type ReportOutcome, type Session, type Status, type Surface,
 } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
+
+/** A task's latest session. `changesSince`: when you asked for changes, while its agent works on them. */
+export type FlowSession = Session & { changesSince: string | null };
 
 export interface FlowTask {
   id: number;
@@ -48,8 +51,8 @@ export interface FlowTask {
   flowY: number | null;
   sortOrder: number;
   completedAt: string | null;
-  /** Handed back partial or blocked: what comes after it waits until the user marks it done. */
-  held: boolean;
+  /** Handed back partial or blocked (the outcome): what comes after it waits until the user marks it done. */
+  held: Exclude<ReportOutcome, "done"> | null;
 }
 
 /** A computer PacedMind runs on, and what it has of each agent. */
@@ -74,7 +77,7 @@ export interface FlowViewProps {
   /** Connections between the project's tasks. */
   edges: FlowEdge[];
   /** Latest session per task id. */
-  sessions: Record<number, Session>;
+  sessions: Record<number, FlowSession>;
   /** Task id → key of the task whose terminal session its latest session carries on. */
   continuedFrom: Record<number, string>;
   /** Tasks whose running session the flow started on its own. */
@@ -323,7 +326,7 @@ function edgeLabel(e: FlowEdge): string {
 const keyOf = (g: Graph, id: number) => g.byId.get(id)?.key ?? "?";
 
 function nodeInfo(
-  t: FlowTask, g: Graph, sessions: Record<number, Session>, continuedFrom: Record<number, string>, autoStarted: Set<number>, now: number,
+  t: FlowTask, g: Graph, sessions: Record<number, FlowSession>, continuedFrom: Record<number, string>, autoStarted: Set<number>, now: number,
 ): NodeInfo {
   const s = sessions[t.id];
   const incoming = g.incoming.get(t.id) ?? [];
@@ -337,13 +340,21 @@ function nodeInfo(
   }
   if (s && (s.status === "running" || s.status === "starting")) {
     const where = s.surface === "cloud" ? ` in ${CLOUD_LABEL[s.agent]}` : s.surface === "desktop" ? ` in the ${APP_LABEL[s.agent]}` : "";
+    // Sent back with Request changes: the agent has been at it since then, not since the session first started.
     const note = continuedFrom[t.id]
       ? `Same session as ${continuedFrom[t.id]}`
-      : `Started${where} ${autoStarted.has(t.id) ? "on its own " : ""}${since(s.startedAt, now)}`;
-    return { tone: "running", state: `Running ${duration(now - parseLocal(s.startedAt).getTime())}`, note };
+      : s.changesSince
+        ? `Working on your changes since ${clock(s.changesSince, now)}`
+        : `Started${where} ${autoStarted.has(t.id) ? "on its own " : ""}${since(s.startedAt, now)}`;
+    return { tone: "running", state: `Running ${duration(now - parseLocal(s.changesSince ?? s.startedAt).getTime())}`, note };
   }
   if (s?.status === "finished" || t.status === "review") {
-    const note = s?.status === "finished" && s.finishedAt ? `Finished ${clock(s.finishedAt, now)}, check it and mark done` : "Check it and mark done";
+    const at = s?.status === "finished" && s.finishedAt ? s.finishedAt : null;
+    if (t.held === "blocked") return { tone: "waiting", state: "Blocked", note: at ? `Got stuck ${since(at, now)}, it needs you` : "It needs you" };
+    if (t.held === "partial") {
+      return { tone: "waiting", state: "Partly done", note: at ? `Handed back part of it ${since(at, now)}, check it and mark done` : "Check it and mark done" };
+    }
+    const note = at ? `Finished ${clock(at, now)}, check it and mark done` : "Check it and mark done";
     return { tone: "waiting", state: "Waiting for you", note };
   }
   if (s?.status === "closed") {
@@ -356,8 +367,14 @@ function nodeInfo(
   const state = t.status === "progress" ? "In progress" : "Not started";
   const src = names(incoming.map((e) => keyOf(g, e.fromTaskId)));
   const mode = startMode(incoming);
+  // A task before it that was handed back partly done or blocked holds it, whatever the connection, until marked done.
+  const heldBy = incoming.filter((e) => {
+    const x = g.byId.get(e.fromTaskId);
+    return !!x && x.status === "review" && !!x.held;
+  });
   let note: string;
   if (!mode) note = "Start it yourself";
+  else if (!ready && heldBy.length) note = `Starts when you mark ${names(heldBy.map((e) => keyOf(g, e.fromTaskId)))} done`;
   else if (mode === "session") note = `Same session as ${src}`;
   else if (ready) note = `Ready, ${src} ${incoming.length > 1 ? "are" : "is"} ${mode === "manual" ? "done" : "finished"}`;
   else if (mode === "manual") note = `Starts when you mark ${src} done`;
@@ -462,13 +479,15 @@ function shortPath(p: string): string {
   return `…${sep}${p.split(/[\\/]/).filter(Boolean).slice(-2).join(sep)}`;
 }
 
-function lastRun(s: Session, now: number): string {
+function lastRun(s: FlowSession, held: FlowTask["held"], now: number): string {
   switch (s.status) {
     case "starting":
     case "running":
-      return `Running since ${clock(s.startedAt, now)}`;
-    case "finished":
-      return `Finished ${clock(s.finishedAt ?? s.startedAt, now)}, waiting for you`;
+      return s.changesSince ? `Working on your changes since ${clock(s.changesSince, now)}` : `Running since ${clock(s.startedAt, now)}`;
+    case "finished": {
+      const at = clock(s.finishedAt ?? s.startedAt, now);
+      return held === "blocked" ? `Blocked ${at}, needs you` : held === "partial" ? `Partly done ${at}, waiting for you` : `Finished ${at}, waiting for you`;
+    }
     case "done":
       return `Done, finished ${clock(s.finishedAt ?? s.endedAt ?? s.startedAt, now)}`;
     case "closed":
@@ -1336,7 +1355,7 @@ function Inspector({
   info: NodeInfo;
   run: Run;
   devices: FlowDevice[];
-  session: Session | undefined;
+  session: FlowSession | undefined;
   graph: Graph;
   flowOn: boolean;
   now: number;
@@ -1435,7 +1454,7 @@ function Inspector({
             {session && (
               <>
                 <span className="text-mut2">Last run</span>
-                <Link href={`/sessions?s=${session.id}`} className="truncate text-fg3 hover:text-strong">{lastRun(session, now)}</Link>
+                <Link href={`/sessions?s=${session.id}`} className="truncate text-fg3 hover:text-strong">{lastRun(session, task.held, now)}</Link>
               </>
             )}
           </div>

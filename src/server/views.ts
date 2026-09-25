@@ -1,4 +1,5 @@
 import "server-only";
+import { changesProblem } from "./ops";
 import * as repo from "./repo";
 import type { Area, Project, Session, SessionEvent, Task, TaskContext, Usage } from "@/lib/types";
 
@@ -12,7 +13,10 @@ export function taskContext(tasks: Task[]): TaskContext {
   for (const s of Object.values(sessions)) sessionEvents[s.id] = repo.sessionEvents(s.id);
   const reports = Object.fromEntries(repo.reportsForTasks([...ids]));
   const pending = Object.fromEntries(repo.pendingImages(Object.values(sessions).map((s) => s.id)));
-  return { areas: repo.listAreas(), projects: repo.listProjects(), sessions, sessionEvents, reports, pending };
+  const changesOk = Object.fromEntries(
+    Object.values(sessions).filter((s) => s.status === "finished" || s.status === "done").map((s) => [s.id, !changesProblem(s)]),
+  );
+  return { areas: repo.listAreas(), projects: repo.listProjects(), sessions, sessionEvents, reports, pending, changesOk };
 }
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";

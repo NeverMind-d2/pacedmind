@@ -412,7 +412,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "get_task", {
     title: "Get task",
-    description: "A task's full details: description, numbered sub-tasks, dates, estimate, labels, flow connections and latest session.",
+    description: "A task's full details: description, numbered Done when items and sub-tasks, dates, estimate, labels, flow connections, latest session and the latest report an agent handed back.",
     input: z.object({ task: taskRef }),
     kind: "read",
   }, ({ task }) => describeTask(findTask(task)));

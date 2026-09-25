@@ -71,7 +71,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 
 - `get_next_task` (read): the next ready task in a project.
 - `start_task`: "I'm working on this task." Returns the changes the user asked for (if they sent the last hand-back back), the task with its Done when list, the last report if there is one, and hand-back instructions.
-- `attach_image`: adds a screenshot or other image (a PNG, JPEG, GIF or WebP file path, up to 20 MB) to the task while the agent works. It becomes part of the next report.
+- `attach_image`: adds a screenshot or other image (a PNG, JPEG, GIF or WebP file path, up to 20 MB) to the task while the agent works. It becomes part of the next report; after a hand-back, it joins the last one.
 - `finish_task`: "Ready for review," with a report:
   - `summary` (required): what changed and what to look at first;
   - `criteria`: a verdict (`met`, `partly`, `not_met`) and note for each Done when item. Required when the task has Done when items, unless the outcome is blocked;

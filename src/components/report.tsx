@@ -111,8 +111,8 @@ export function RequestChangesForm({ agent, resumes, pending, onSend, onCancel }
         className="field-sizing-content min-h-[76px] w-full resize-none bg-transparent text-[12.5px] leading-[1.55] text-fg2 outline-none placeholder:text-mut2" />
       <div className="text-[11.5px] leading-[1.45] text-mut2">
         {resumes
-          ? `${AGENT_LABEL[agent]} continues its conversation in a new terminal tab.`
-          : `${AGENT_LABEL[agent]} starts again in a new terminal tab, with its last report and your changes.`}
+          ? `${AGENT_LABEL[agent]} continues its conversation in a new terminal.`
+          : `${AGENT_LABEL[agent]} starts again in a new terminal, with its last report and your changes.`}
       </div>
       <div className="flex items-center justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>

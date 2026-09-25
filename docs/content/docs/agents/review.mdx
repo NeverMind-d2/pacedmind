@@ -18,7 +18,7 @@ In a flow, tasks connected **Manually** wait for that. Tasks connected **Automat
 | Task rows | *Session finished*, with a navy dot. |
 | Task details | *Claude Code finished at 12:22 · waiting for you*, *Claude Code handed back part of it at 12:22 · waiting for you* or *Claude Code got stuck at 12:22 · needs you*, with the report and **Mark done**. |
 | **Roadmap** | *2 finished sessions waiting for you* in the header, and **Open session** on the task's row. |
-| **Flows** | The session's card reads *Waiting for you*; its panel adds *Finished 12:22, check it and mark done*. |
+| **Flows** | The session's card reads *Waiting for you*, *Partly done* or *Blocked*; its panel adds *Finished 12:22, check it and mark done*, *Handed back part of it at 12:22, check it and mark done* or *Got stuck at 12:22, it needs you*. |
 | **Timeline** | A navy outline around the task's bar and a navy dot after it. |
 | **Calendar**, week | A 45-minute block to check the result, *Check DEV-21*, planned in your focus time. |
 
@@ -56,7 +56,7 @@ A session without a report shows the agent's note instead, if it left one. That'
 
 ## Request changes
 
-**Request changes**, under the report in the task's details or in **Sessions**, sends the work back to the agent with what you want changed. It works once the agent has handed the task back, for a session that ran in a terminal on this computer, and still after the task was marked done.
+**Request changes**, under the report in the task's details or in **Sessions**, sends the work back to the agent with what you want changed. It's offered on the task's latest report, for a session that ran in a terminal on this computer, and still after the task was marked done.
 
 1. Select **Request changes**.
 2. Write what should change in the field (*What should change? Be as specific as you'd be with a colleague.*). The agent reads it as written, so answer its questions there too.
@@ -64,7 +64,7 @@ A session without a report shows the agent's note instead, if it left one. That'
 
 PacedMind adds your changes to the report, under **You asked for changes**, and opens a new terminal in the session's folder: a new tab in Windows Terminal, a new window otherwise. *Sent to Claude Code in a new terminal* confirms it. Then:
 
-* **Claude Code** continues its conversation, as a new branch of it (*Claude Code continues its conversation in a new terminal tab.*). The old terminal can stay open or be closed. **Codex**, and Claude Code without a conversation to go back to, start again, with the last report and your changes (*Codex starts again in a new terminal tab, with its last report and your changes.*).
+* **Claude Code** continues its conversation, as a new branch of it (*Claude Code continues its conversation in a new terminal.*). The old terminal can stay open or be closed. **Codex**, and Claude Code without a conversation to go back to, start again, with the last report and your changes (*Codex starts again in a new terminal, with its last report and your changes.*).
 * The task goes back to **In progress**, from **Done** too, and the session to **Running**: *Claude Code is working on your changes since 14:05*. The earlier report folds away under **The report from 25 Sep 12:22**.
 * The agent reads your changes first, makes them without starting the task over, and hands the task back with a new report whose summary starts with what it changed. You're notified again. The earlier report keeps your changes.
 
@@ -82,7 +82,7 @@ An agent that can't finish everything still hands the task back, and says so in 
 
 The notification reads *DEV-21 is partly done* or *DEV-21 is blocked*, and the row in **Sessions** *partly done 12:22* or *stuck 12:22*. The session stays in **Finished, waiting for you**.
 
-A partly done or blocked hand-back holds up the flow: no task that waits for this one starts, whatever its connection, until you mark the task done, or the agent hands it back again as done, for example after **Request changes**. Tasks connected **In the same session** don't continue after such a hand-back; start them yourself.
+A partly done or blocked hand-back holds up the flow: no task that waits for this one starts, whatever its connection, until you mark the task done, the agent hands it back again as done (for example after **Request changes**), or a newer session of the task is marked finished. Tasks connected **In the same session** don't continue in the agent's session: marking the task done starts them as a new session.
 
 ## What Mark done does
 
@@ -90,7 +90,7 @@ A partly done or blocked hand-back holds up the flow: no task that waits for thi
 
 * the task's finished sessions become **Done** (*You marked it done*) and leave the waiting count;
 * the check block leaves the week plan;
-* in a flow, tasks connected **Manually** after this one can start, and so can any task whose other connections were already satisfied. After a partly done or blocked hand-back, this is also when tasks connected **Automatically** or **At a set time** start;
+* in a flow, tasks connected **Manually** after this one can start, and so can any task whose other connections were already satisfied. After a partly done or blocked hand-back, this is also when tasks connected **Automatically** or **At a set time** start, and a task connected **In the same session** starts as a new session;
 * if this was the last task of the project's flow, projects that start after it begin their flows.
 
 The message names the sessions that started, such as *Started DEV-23, DEV-24*. See [Automate with flows](/agents/flows). **Request changes** stays available afterwards, and moves the task back to **In progress**.

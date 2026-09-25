@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import * as repo from "./repo";
 import { planTimeBlocks } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, fmtShort, fmtTime, minutesOf, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
-import { AGENT_LABEL, type FlowEdge, type Project, type Session, type Settings, type Task } from "@/lib/types";
+import { AGENT_LABEL, type FlowEdge, type Project, type ReportOutcome, type Session, type Settings, type Task } from "@/lib/types";
 
 /* Read-only helpers for the Timeline and Roadmap views. */
 
@@ -82,11 +82,14 @@ export function dayLoads(tasks: Task[], sessions: Session[], from: string, days:
 
 /* ---------- task state, for the task order and the timeline bars ---------- */
 
+/** Tasks handed back partial or blocked, with that outcome (repo.heldOutcomes). */
+type Held = Map<number, Exclude<ReportOutcome, "done">>;
+
 /** Same rule as the flow engine: done, or handed back for review unless the hand-back was partial or blocked (`held`). */
-const ready = (source: Task, held: Set<number>) => source.status === "done" || (source.status === "review" && !held.has(source.id));
+const ready = (source: Task, held: Held) => source.status === "done" || (source.status === "review" && !held.has(source.id));
 
 /** Same rule as the flow engine: whether a connection lets its target start. */
-function satisfied(edge: FlowEdge, source: Task | undefined, now: string, held: Set<number>): boolean {
+function satisfied(edge: FlowEdge, source: Task | undefined, now: string, held: Held): boolean {
   if (!source) return true;
   if (edge.mode === "manual") return source.status === "done";
   if (edge.mode === "time") return ready(source, held) && !!edge.atTime && edge.atTime <= now;
@@ -115,7 +118,7 @@ function doneLabel(t: Task, today: string): string {
 }
 
 function stateOf(
-  t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Map<number, Task>, today: string, now: string, held: Set<number>,
+  t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Map<number, Task>, today: string, now: string, held: Held,
 ): TaskState {
   if (t.status === "done") return { text: doneLabel(t, today), short: "Done", tone: "done" };
   if (t.status === "canceled") return { text: "Canceled", short: "Canceled", tone: "done" };
@@ -124,6 +127,9 @@ function stateOf(
   }
   if (s?.status === "finished") {
     const at = when(s.finishedAt ?? s.startedAt, today);
+    const outcome = held.get(t.id);
+    if (outcome === "blocked") return { text: `Blocked ${at}, needs you`, short: `Blocked ${at}`, tone: "waiting" };
+    if (outcome === "partial") return { text: `Partly done ${at}, waiting for you`, short: `Partly done ${at}`, tone: "waiting" };
     return { text: `Finished ${at}, waiting for you`, short: `Finished ${at}`, tone: "waiting" };
   }
   const dueToday = t.dueDate && dateOnly(t.dueDate) === today && timeOf(t.dueDate) ? `Due ${fmtTime(t.dueDate)}` : null;
@@ -134,6 +140,11 @@ function stateOf(
   const same = incoming.find((e) => e.mode === "session");
   if (same) return { text: `Same session as ${key(same.fromTaskId)}`, short: "Same session", tone: "queued" };
   const blocking = incoming.filter((e) => !satisfied(e, byId.get(e.fromTaskId), now, held));
+  // Held back by a partly done or blocked hand-back: it goes on when the user marks that task done.
+  const heldBy = blocking.filter((e) => byId.get(e.fromTaskId)?.status === "review" && held.has(e.fromTaskId));
+  if (blocking.length && heldBy.length === blocking.length) {
+    return { text: `When you mark ${joinAnd(heldBy.map((e) => key(e.fromTaskId)))} done`, short: "Waits for you", tone: "next" };
+  }
   if (blocking.length === 1 && blocking[0].mode === "manual") {
     return { text: `When you mark ${key(blocking[0].fromTaskId)} done`, short: "Manual start", tone: "next" };
   }
@@ -163,7 +174,7 @@ export function taskStates(tasks: Task[], sessions: Record<number, Session>, edg
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const today = toDateStr(now);
   const stamp = toDateTimeStr(now);
-  const held = repo.heldTaskIds();
+  const held = repo.heldOutcomes();
   return Object.fromEntries(
     tasks.map((t) => [t.id, stateOf(t, sessions[t.id], edges.filter((e) => e.toTaskId === t.id), byId, today, stamp, held)]),
   );

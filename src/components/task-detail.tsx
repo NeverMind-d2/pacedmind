@@ -102,10 +102,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const soFar = session ? ctx.pending[session.id] ?? [] : [];
   const offList = report ? report.criteria.filter((c) => !task.doneWhen.some((d) => sameText(d, c.text))) : [];
   const head = session ? sessionHead(session, events, latestOfSession) : null;
-  // Changes go back to an agent in a terminal once it handed the task back, also after the task was marked done.
-  // Sessions in the apps or the cloud take them where they run.
+  // Changes go back to an agent in a terminal on this computer once it handed the task back, also after the task was
+  // marked done. Sessions in the apps or the cloud take them where they run (changesProblem on the server decides).
   const [asking, setAsking] = useState(false);
-  const canAsk = !!agent && session?.surface === "terminal" && (session.status === "finished" || session.status === "done");
+  const canAsk = !!session && !!ctx.changesOk[session.id];
   const pager = reports.length > 1 && (
     <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
       <button type="button" aria-label="Older report" disabled={viewing >= reports.length - 1} onClick={() => setViewing((v) => v + 1)}

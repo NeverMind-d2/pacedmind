@@ -1,10 +1,10 @@
-import { FlowView, type FlowDevice, type FlowTask } from "@/components/views/flow";
+import { FlowView, type FlowDevice, type FlowSession, type FlowTask } from "@/components/views/flow";
 import { Icon } from "@/components/icons";
 import { thisDevice } from "@/server/devices";
 import * as repo from "@/server/repo";
 import { projectColor } from "@/lib/colors";
 import { nowStamp, parseLocal } from "@/lib/dates";
-import { agentOf, type Session } from "@/lib/types";
+import { agentOf } from "@/lib/types";
 
 const ms = (stamp: string) => parseLocal(stamp).getTime();
 
@@ -38,8 +38,12 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   const ids = new Set(tasks.map((t) => t.id));
   const edges = repo.listEdges().filter((e) => ids.has(e.fromTaskId) && ids.has(e.toTaskId));
   const sessions = repo.listSessions().filter((s) => ids.has(s.taskId));
-  const latest: Record<number, Session> = {};
-  for (const s of sessions) latest[s.taskId] ??= s;
+  const latest: Record<number, FlowSession> = {};
+  for (const s of sessions) {
+    // A session sent back with Request changes works on them since the user asked (the time is on its report).
+    const active = s.status === "running" || s.status === "starting";
+    latest[s.taskId] ??= { ...s, changesSince: active ? repo.latestSessionReport(s.id)?.changesAt ?? null : null };
+  }
 
   // Sessions that carry on another task's terminal session ("same session" connections).
   const continuedFrom: Record<number, string> = {};
@@ -74,13 +78,13 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   }));
 
   // Tasks that are yours ("human") never run as agent sessions, so they aren't offered to the flow.
-  const held = repo.heldTaskIds();
+  const held = repo.heldOutcomes();
   const flowTasks: FlowTask[] = tasks.flatMap((t) => {
     const agent = agentOf(t, project.agent);
     return agent ? [{
       id: t.id, key: t.key, title: t.title, status: t.status, agent,
       runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? me.id, folder: t.folder ?? project.folder, ownFolder: !!t.folder,
-      flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt, held: held.has(t.id),
+      flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt, held: held.get(t.id) ?? null,
     }] : [];
   });
   const yours = tasks.filter((t) => t.agent === "human" && t.status !== "done" && t.status !== "canceled").length;

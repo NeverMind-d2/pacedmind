@@ -41,6 +41,19 @@ function maybeStart(target: Task, { edges, tasks, held }: Snapshot): LaunchResul
   return startSession(target.id);
 }
 
+/**
+ * Starts a "same session" task in a new session, once the task before it is released from a partial or blocked
+ * hand-back, unless its other connections still hold it. Like same-session chains, it doesn't wait for Flow on.
+ */
+function startAfterHold(target: Task, edge: FlowEdge, { edges, tasks, held }: Snapshot): LaunchResult | null {
+  if (target.status !== "todo" && target.status !== "backlog") return null;
+  if (target.agent === "human") return null;
+  const others = incoming(target.id, edges).filter((x) => x.id !== edge.id);
+  if (!others.every((x) => satisfied(x, tasks.get(x.fromTaskId), held))) return null;
+  if (repo.listSessions("task_id = ? AND status IN ('starting', 'running')", target.id).length) return null;
+  return startSession(target.id);
+}
+
 function snapshot() {
   const edges = repo.listEdges();
   const tasks = new Map(repo.listTasks().map((t) => [t.id, t]));
@@ -72,15 +85,19 @@ export function afterFinished(taskId: number): { continueWith: Task | null; star
   return { continueWith, started };
 }
 
-/** Called when you mark a task done: manual connections can now start their sessions. */
+/**
+ * Called when you mark a task done: manual connections can now start their sessions. After a partial or blocked
+ * hand-back the agent stopped, so a "same session" task after it can't continue in its session: it starts in a new
+ * one, as it does when a session is marked finished.
+ */
 export function afterDone(taskId: number): LaunchResult[] {
   const snap = snapshot();
-  const { edges, tasks } = snap;
+  const { edges, tasks, held } = snap;
   const started: LaunchResult[] = [];
   for (const e of edges.filter((x) => x.fromTaskId === taskId)) {
     const target = tasks.get(e.toTaskId);
     if (!target) continue;
-    const r = maybeStart(target, snap);
+    const r = e.mode === "session" && held.has(taskId) ? startAfterHold(target, e, snap) : maybeStart(target, snap);
     if (r) started.push(r);
   }
   const done = tasks.get(taskId);

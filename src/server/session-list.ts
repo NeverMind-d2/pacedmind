@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { changesProblem } from "./ops";
 import * as repo from "./repo";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
@@ -84,6 +85,7 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
       events,
       reports: reports.get(s.id) ?? [],
       pending: pending.get(s.id) ?? [],
+      canRequestChanges: (s.status === "finished" || s.status === "done") && !changesProblem(s),
       next: next
         ? {
           id: next.id, key: next.key, title: next.title, href: taskHref(next),

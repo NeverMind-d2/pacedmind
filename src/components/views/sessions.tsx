@@ -45,6 +45,8 @@ export interface SessionItem {
   reports: Report[];
   /** Images attached while it works, before it hands the task back. */
   pending: Attachment[];
+  /** Whether its agent can take changes from here now (changesProblem on the server). */
+  canRequestChanges: boolean;
   /** The next task in the flow after this one. */
   next: { id: number; key: string; title: string; href: string; canStart: boolean } | null;
 }
@@ -310,8 +312,8 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
   const [viewing, setViewing] = useState(0);
   const report = s.reports[Math.min(viewing, s.reports.length - 1)] ?? null;
   const [asking, setAsking] = useState(false);
-  // Sessions in the apps or the cloud take changes where they run.
-  const canAsk = s.surface === "terminal" && (s.status === "finished" || s.status === "done");
+  // Only where the server would take them: a terminal on this computer, the task's latest report, not your own task.
+  const canAsk = s.canRequestChanges;
   const worked = workedFor(s, now);
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${

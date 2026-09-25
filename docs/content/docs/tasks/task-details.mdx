@@ -133,7 +133,7 @@ The card ends with the session's folder and branch name, and these buttons:
 | **Resume in terminal** | A terminal session that isn't running and didn't fail. | Opens a terminal in the session's folder again. Claude Code continues the same conversation. |
 | **Open the Claude app** or **Open the Codex app** | A session in a desktop app. | Brings the app forward. |
 | **Open in the cloud** | A cloud session with a link. | Opens it in the browser. |
-| **Request changes** | A terminal session whose agent handed the task back: finished, or done after you marked the task done. Not for a task that is yours. | Opens a box to write what should change, and sends it to the agent. See [Request changes](#request-changes). |
+| **Request changes** | A terminal session on this computer whose agent handed the task back, finished or done after you marked the task done, with the task's latest report. Not for a task that is yours, or while another session of it runs. | Opens a box to write what should change, and sends it to the agent. See [Request changes](#request-changes). |
 | **Mark finished** | A running session outside a terminal. | Marks the session finished and the task **In review**, for sessions that can't report back. |
 | **New session** | The session is closed, done or failed, and the task isn't done. | Starts a fresh session. |
 | **Mark done** | The agent finished. | Marks the task done after your review. This can start the next sessions of a flow. |
@@ -153,8 +153,8 @@ A line under the box says how the agent goes back to work:
 
 | Text | When |
 | --- | --- |
-| *Claude Code continues its conversation in a new terminal tab.* | A Claude Code session that PacedMind started in a terminal. Claude Code picks up its conversation as a new branch of it, so a terminal still open on the old conversation can stay open: closing it doesn't close the session. |
-| *Codex starts again in a new terminal tab, with its last report and your changes.* | A Codex session: Codex starts a new conversation, and reads your changes and its last report when it picks the task up. A Claude Code session without a conversation to go back to, such as one reported from outside PacedMind, shows the same text with Claude Code. |
+| *Claude Code continues its conversation in a new terminal.* | A Claude Code session that PacedMind started in a terminal. Claude Code picks up its conversation as a new branch of it, so a terminal still open on the old conversation can stay open: closing it doesn't close the session. |
+| *Codex starts again in a new terminal, with its last report and your changes.* | A Codex session: Codex starts a new conversation, and reads your changes and its last report when it picks the task up. A Claude Code session without a conversation to go back to, such as one reported from outside PacedMind, shows the same text with Claude Code. |
 
 PacedMind opens a new tab in Windows Terminal, and a new window otherwise, and confirms *Sent to Claude Code in a new terminal*. Then:
 
@@ -163,7 +163,7 @@ PacedMind opens a new tab in Windows Terminal, and a new window otherwise, and c
 * the card reads *Claude Code is working on your changes since 14:05*, with your changes on top and the report folded under **The report from 25 Sep 12:22**, which opens it;
 * when the agent hands the task back again, its new report shows first, as *Report 2 of 2*, and the earlier report keeps your changes.
 
-If the terminal can't open, PacedMind shows why, and the session stays as it was. For a terminal session that ran on another computer, it answers *This session ran on DESKTOP-2. Ask for the changes in PacedMind there.*
+If the terminal can't open, PacedMind shows why, and the session stays as it was. A terminal session that ran on another computer doesn't offer **Request changes** here: ask for the changes in PacedMind on that computer.
 
 Sessions in the Claude or Codex app, or in the cloud, don't offer **Request changes**: they take changes where they run. Select **Open the Claude app**, **Open the Codex app** or **Open in the cloud**, and write the changes to the agent there. See [Request changes](/agents/review#request-changes).
 

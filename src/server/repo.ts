@@ -488,6 +488,12 @@ export function setReportChanges(reportId: number, changes: string | null, at: s
   db().prepare("UPDATE reports SET changes = ?, changes_at = ? WHERE id = ?").run(changes, at, reportId);
 }
 
+/** Takes back a report that turned out not to be needed. The images it took wait for the next one again. */
+export function deleteReport(reportId: number) {
+  db().prepare("UPDATE attachments SET report_id = NULL WHERE report_id = ?").run(reportId);
+  db().prepare("DELETE FROM reports WHERE id = ?").run(reportId);
+}
+
 const REPORTS = "SELECT reports.*, sessions.agent AS agent FROM reports JOIN sessions ON sessions.id = reports.session_id";
 
 /** Each task's latest reports (at most `perTask`), newest first. */
@@ -519,12 +525,22 @@ export function latestSessionReport(sessionId: string): Report | null {
   return reportsForSessions([sessionId]).get(sessionId)?.[0] ?? null;
 }
 
-/** Tasks whose latest hand-back was partial or blocked. Flows don't go on after them until the user marks them done. */
-export function heldTaskIds(): Set<number> {
+/**
+ * Tasks whose latest hand-back was partial or blocked, with that outcome. Flows don't go on after them until the user
+ * marks them done. The report has to come from the task's latest session: a later session that was marked finished,
+ * or finished in the cloud, brings no report of its own, and moves the task on.
+ */
+export function heldOutcomes(): Map<number, Exclude<ReportOutcome, "done">> {
   const rows = db().prepare(
-    "SELECT task_id FROM reports WHERE id IN (SELECT MAX(id) FROM reports GROUP BY task_id) AND outcome != 'done'",
+    `SELECT r.task_id, r.outcome FROM reports r
+     WHERE r.id IN (SELECT MAX(id) FROM reports GROUP BY task_id) AND r.outcome != 'done'
+       AND r.session_id = (SELECT s.id FROM sessions s WHERE s.task_id = r.task_id ORDER BY s.started_at DESC LIMIT 1)`,
   ).all() as Row[];
-  return new Set(rows.map((r) => Number(r.task_id)));
+  return new Map(rows.map((r) => [Number(r.task_id), String(r.outcome) as Exclude<ReportOutcome, "done">]));
+}
+
+export function heldTaskIds(): Set<number> {
+  return new Set(heldOutcomes().keys());
 }
 
 /* ---------- flow edges ---------- */

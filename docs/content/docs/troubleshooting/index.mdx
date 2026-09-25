@@ -114,15 +114,16 @@ The cloud can't reach PacedMind on your computer. Follow a Claude Code on the we
 
 Requests without the right token get `401 Unauthorized`.
 
-### Request changes doesn't reopen the session
+### Request changes is missing, or doesn't reopen the session
 
-**Request changes** sends work back only to a session that ran in a terminal on this computer. Otherwise its message says why:
+**Request changes** shows only where it can send the work back: on the task's latest report, for a session that ran in a terminal on this computer, while no other session of the task runs, and not for your own tasks. When an agent sends changes with `request_changes`, or a request can't go through, the message says why:
 
 | Message | Solution |
 | --- | --- |
 | *This session runs in the Claude app. Open it there and write your changes to the agent.* | Sessions in a desktop app or in the cloud take changes where they run. |
 | *This session ran on DESKTOP-2. Ask for the changes in PacedMind there.* | Use PacedMind on the computer where the session ran. |
 | *This task already has a running session* | Wait until that session hands the task back, or close it with **Close session**. |
+| *DEV-22 has a newer report. Ask for the changes on that one.* | Ask for the changes on the task's latest report. |
 | *DEV-22 has no folder to work in* | Give the task or its project a folder. |
 
 When the terminal doesn't open, the message gives the reason, as when a session starts. See [A session couldn't start](#a-session-couldnt-start).
@@ -145,7 +146,7 @@ Check, in order:
 6. **Does it already have a running session?**
 7. **Does it wait for other tasks too?** A task starts only when every connection leading to it is ready.
 8. **Is it the first task of the flow?** Tasks without connections leading to them are started by hand.
-9. **Is it connected In the same session?** Such a task doesn't start a new session: the agent continues with it after handing back the task before it as done. Only when that session is marked finished by hand does it start as a new session.
+9. **Is it connected In the same session?** Such a task doesn't start a new session: the agent continues with it after handing back the task before it as done. It starts as a new session only when that session is marked finished by hand, or when you mark the task before it done after a partly done or blocked hand-back.
 
 If the session started but failed, the reason is in its details.
 

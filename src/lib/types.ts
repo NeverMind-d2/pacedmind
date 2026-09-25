@@ -240,6 +240,8 @@ export interface TaskContext {
   reports: Record<number, Report[]>;
   /** Images a running session attached so far, before it hands the task back, per session id. */
   pending: Record<string, Attachment[]>;
+  /** Session ids whose agent can take changes from here now (Request changes). */
+  changesOk: Record<string, boolean>;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */

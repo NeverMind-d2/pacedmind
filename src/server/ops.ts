@@ -3,7 +3,7 @@ import { tx } from "./db";
 import * as repo from "./repo";
 import type { StoredImage } from "./attachments";
 import { afterDone, afterFinished, afterFlowOn } from "./flow";
-import { reopenForChanges, startSession, type LaunchResult } from "./launcher";
+import { reopenForChanges, reopenProblem, startSession, type LaunchResult } from "./launcher";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
 import { AGENT_LABEL, type AgentId, type Project, type ReportCriterion, type ReportOutcome, type Session, type Task } from "@/lib/types";
@@ -112,6 +112,24 @@ export function closeSession(sessionId: string): boolean {
 }
 
 /**
+ * Why the user can't send changes to this session's agent right now, or null. The app offers Request changes only
+ * where this is null, so the button and requestChanges agree.
+ */
+export function changesProblem(s: Session): string | null {
+  if (s.status !== "finished" && s.status !== "done") return "The agent hasn't handed this task back yet";
+  const task = repo.getTask(s.taskId);
+  if (!task) return "The task is gone";
+  if (task.agent === "human") return `${task.key} is marked as yours. Hand it to Claude Code or Codex first.`;
+  if (repo.listSessions("task_id = ? AND status IN ('starting', 'running')", s.taskId).length) return "This task already has a running session";
+  const elsewhere = reopenProblem(s);
+  if (elsewhere) return elsewhere;
+  // The agent reads the changes with the task's latest report (start_task), so they can only go on that one.
+  const newest = repo.latestReport(s.taskId);
+  if (newest && newest.sessionId !== s.id) return `${task.key} has a newer report. Ask for the changes on that one.`;
+  return null;
+}
+
+/**
  * The user read an agent's hand-back and wants changes. They go on the session's last report, where start_task
  * finds them, and the session reopens in a new terminal: Claude Code continues its conversation, Codex starts
  * a new one. The task goes back to in progress, also when it was already marked done.
@@ -121,12 +139,8 @@ export function requestChanges(sessionId: string, changes: string): LaunchResult
   const s = repo.getSession(sessionId);
   if (!s) return { ok: false, error: "Session not found" };
   if (!text) return { ok: false, error: "Write what should change" };
-  if (s.status !== "finished" && s.status !== "done") return { ok: false, error: "The agent hasn't handed this task back yet" };
-  const task = repo.getTask(s.taskId);
-  if (task?.agent === "human") return { ok: false, error: `${task.key} is marked as yours. Hand it to Claude Code or Codex first.` };
-  if (repo.listSessions("task_id = ? AND status IN ('starting', 'running')", s.taskId).length) {
-    return { ok: false, error: "This task already has a running session" };
-  }
+  const problem = changesProblem(s);
+  if (problem) return { ok: false, error: problem };
   // Hand-backs from before reports existed only left a note; it becomes their report.
   const report = repo.latestSessionReport(s.id);
   const reportId = report?.id ?? repo.createReport({
@@ -136,11 +150,14 @@ export function requestChanges(sessionId: string, changes: string): LaunchResult
   repo.setReportChanges(reportId, text, nowStamp());
   const r = reopenForChanges(s.id);
   if (!r.ok) {
-    repo.setReportChanges(reportId, report?.changes ?? null, report?.changesAt ?? null);
+    // Nothing changes when the terminal doesn't open: the request goes, and so does a report made for it.
+    if (report) repo.setReportChanges(reportId, report.changes ?? null, report.changesAt ?? null);
+    else repo.deleteReport(reportId);
     return r;
   }
   tx(() => {
-    repo.updateSession(s.id, { status: "running", endedAt: null });
+    // Running again: the hand-back's time stays on its report.
+    repo.updateSession(s.id, { status: "running", finishedAt: null, endedAt: null });
     repo.addSessionEvent(s.id, "changes_requested", `You asked for changes: ${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}`);
     repo.updateTask(s.taskId, { status: "progress" });
   });

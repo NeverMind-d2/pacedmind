@@ -396,6 +396,20 @@ export function resumeSession(sessionId: string, surface?: Surface): LaunchResul
   return { ok: true, session: repo.getSession(session.id)!, message: text };
 }
 
+/** Why this computer can't reopen a session for changes because it runs elsewhere, or null. */
+export function reopenProblem(session: Session): string | null {
+  // Changes reach the agent through start_task, which cloud sessions can't call, and the apps start new conversations.
+  if (session.surface !== "terminal") {
+    const where = session.surface === "cloud" ? CLOUD_LABEL[session.agent] : `the ${APP_LABEL[session.agent]}`;
+    return `This session runs in ${where}. Open it there and write your changes to the agent.`;
+  }
+  if (session.deviceId && session.deviceId !== thisDeviceId()) {
+    const device = repo.getDevice(session.deviceId);
+    return `This session ran on ${device?.name ?? "another device"}. Ask for the changes in PacedMind there.`;
+  }
+  return null;
+}
+
 /**
  * Sends a terminal session back to work on changes the user asked for (see requestChanges in ops.ts). It reopens
  * with a first message that says so. Claude Code continues its conversation as a new branch of it, with its own
@@ -406,15 +420,8 @@ export function reopenForChanges(sessionId: string): LaunchResult {
   if (!session) return { ok: false, error: "Session not found" };
   const task = repo.getTask(session.taskId);
   if (!task) return { ok: false, error: "The task is gone" };
-  // Changes reach the agent through start_task, which cloud sessions can't call, and the apps start new conversations.
-  if (session.surface !== "terminal") {
-    const where = session.surface === "cloud" ? CLOUD_LABEL[session.agent] : `the ${APP_LABEL[session.agent]}`;
-    return { ok: false, error: `This session runs in ${where}. Open it there and write your changes to the agent.` };
-  }
-  if (session.deviceId && session.deviceId !== thisDeviceId()) {
-    const device = repo.getDevice(session.deviceId);
-    return { ok: false, error: `This session ran on ${device?.name ?? "another device"}. Ask for the changes in PacedMind there.` };
-  }
+  const elsewhere = reopenProblem(session);
+  if (elsewhere) return { ok: false, error: elsewhere };
   const folder = session.folder ?? taskFolder(task).folder;
   if (!folder) return { ok: false, error: `${task.key} has no folder to work in` };
   const dir = sessionDir(session.id);

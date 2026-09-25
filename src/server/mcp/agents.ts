@@ -42,8 +42,10 @@ function placeText(agent: AgentId, surface: Surface, deviceId: string | null): s
 
 function sessionLine(s: Session): string {
   const t = repo.getTask(s.taskId);
-  const at = (s.finishedAt ?? s.endedAt ?? s.startedAt).replace("T", " ");
   const report = repo.latestSessionReport(s.id);
+  // A session reopened for changes has been at work since the user asked for them.
+  const working = (s.status === "starting" || s.status === "running") && report?.changesAt ? report.changesAt : null;
+  const at = (working ?? s.finishedAt ?? s.endedAt ?? s.startedAt).replace("T", " ");
   const counts = report ? reportCounts(report) : "";
   return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId)} · ` +
     `${SESSION_TEXT[s.status]} · ${at}${report && report.outcome !== "done" ? ` · handed back ${report.outcome}` : ""}` +
@@ -371,7 +373,7 @@ export function registerAgentTools(server: McpServer) {
       `Work on this task here. When it is ready for the user to check, call finish_task with task ${t.key}, session ${s.id} and a report:`,
       "- summary: one or two sentences on what changed and what the user should look at first;",
       after.doneWhen.length ? "- criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);" : null,
-      "- images: screenshots of anything you changed that can be seen. Save each as a PNG file and pass its path; attach_image adds them while you work;",
+      "- images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;",
       "- verify: steps the user can follow to check the result, and questions: anything the user has to decide;",
       "- details: anything longer, in Markdown.",
       "If you can't finish, still call finish_task, with outcome partial or blocked, and say why. Do not mark the task done yourself.",
@@ -385,7 +387,7 @@ export function registerAgentTools(server: McpServer) {
     input: z.object({
       task: taskRef,
       session: z.string().optional().describe("Your session id"),
-      path: z.string().describe("Path of the image file on this computer. Relative paths are read from the project folder"),
+      path: z.string().describe("Path of the image file on this computer. Relative paths are read from your session's folder, else the project's"),
       caption: z.string().optional().describe("What the image shows, in a few words"),
     }),
     kind: "write",

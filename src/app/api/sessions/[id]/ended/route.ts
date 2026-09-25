@@ -1,5 +1,8 @@
+import fs from "node:fs";
+import path from "node:path";
 import * as repo from "@/server/repo";
 import { authorized } from "@/server/auth";
+import { dbPath } from "@/server/db";
 import { nowStamp } from "@/lib/dates";
 
 /** Called by the SessionEnd hook when the agent's terminal session closes. */
@@ -12,6 +15,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   // a new branch of the conversation, and a terminal still open on the old one says nothing about it when it closes.
   const cli = new URL(req.url).searchParams.get("cli");
   if (cli && first.cliSessionId && cli !== first.cliSessionId) return Response.json({ ok: true, current: false });
+  // A hook without a conversation comes from a terminal opened before conversations had their own settings files.
+  // When the current conversation has one, the session was reopened since, and that old terminal isn't it.
+  if (!cli && first.cliSessionId) {
+    const own = path.join(/* turbopackIgnore: true */ path.dirname(dbPath()), "sessions", id, `settings-${first.cliSessionId}.json`);
+    if (fs.existsSync(own)) return Response.json({ ok: true, current: false });
+  }
 
   // A terminal can carry a chain of "same session" tasks; close every one still open.
   const chain = [first];
