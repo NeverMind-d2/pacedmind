@@ -3,15 +3,20 @@
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
-  connectClaudeAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
+  checkDeviceAction, connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
   updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, revokeDeviceAction, signOutAction, signOutEverywhereAction,
 } from "@/app/auth/actions";
 import { projectColor } from "@/lib/colors";
-import { AGENT_LABEL, type AgentId, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings } from "@/lib/types";
-import { Icon } from "../icons";
+import { TERMINALS, terminalFor } from "@/lib/terminals";
+import {
+  AGENT_LABEL, APP_LABEL, platformName,
+  type AgentId, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings,
+} from "@/lib/types";
+import { AgentIcon, Icon } from "../icons";
+import { ImportProjects } from "../import-projects";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
 
@@ -23,7 +28,7 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "delete_task"]],
   ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
   ["Flows", ["get_flow", "connect_tasks", "disconnect_tasks", "add_to_flow", "remove_from_flow"]],
-  ["Sessions", ["list_sessions", "start_session", "close_session", "get_next_task", "start_task", "finish_task"]],
+  ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "finish_task"]],
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -34,13 +39,47 @@ const REMOTE_TEXT: Record<RemoteStart, string> = {
   auto: "Sessions asked for from the web app or another computer start right away. Asking always takes a fresh two-factor code.",
 };
 
-function Section({ title, children, note }: { title: string; children: ReactNode; note?: ReactNode }) {
+function Section({ id, title, action, children, note }: { id?: string; title: string; action?: ReactNode; children: ReactNode; note?: ReactNode }) {
   return (
-    <section className="flex flex-col gap-2.5">
-      <h2 className="text-[13px] font-semibold text-fg2">{title}</h2>
+    <section id={id} className="flex scroll-mt-6 flex-col gap-2.5">
+      <div className="flex min-h-6 items-center gap-2">
+        <h2 className="flex-1 text-[13px] font-semibold text-fg2">{title}</h2>
+        {action}
+      </div>
       <div className="overflow-hidden rounded-lg border border-line2">{children}</div>
       {note && <p className="text-[12px] leading-relaxed text-mut2">{note}</p>}
     </section>
+  );
+}
+
+const MCP_TEXT = { connected: "Reports to PacedMind", elsewhere: "Reports to another PacedMind", missing: "Not connected" } as const;
+
+/** One agent on a computer: its CLI, its desktop app, and whether sessions PacedMind didn't start can report back. */
+function AgentTools({ agent, device, here, pending, onConnect }: {
+  agent: AgentId; device: Device; here: boolean; pending: boolean; onConnect: (agent: AgentId) => void;
+}) {
+  const t = device.agents[agent];
+  const part = (on: boolean, text: string) => <span className={on ? "text-fg3" : "text-dim"}>{text}</span>;
+  return (
+    <div className="flex min-h-9 items-center gap-2.5 text-[12.5px]">
+      <AgentIcon agent={agent} size={14} className="text-fg3" />
+      <span className="w-[92px] shrink-0 text-fg2">{AGENT_LABEL[agent]}</span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+        {part(!!t.cli, t.cli ? `CLI ${t.cli.version}` : "No CLI")}
+        <span className="text-faint">·</span>
+        {part(!!t.app, t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent]}`)}
+        <span className="text-faint">·</span>
+        {part(t.mcp === "connected", MCP_TEXT[t.mcp])}
+      </span>
+      {here && t.mcp !== "connected" && (t.cli || t.app || agent === "codex") && (
+        <Button size="sm" disabled={pending} onClick={() => onConnect(agent)}
+          title={agent === "claude"
+            ? "Adds PacedMind's MCP server to Claude Code for all projects, with your token, so the Claude app's sessions can report back"
+            : "Adds PacedMind's MCP server to ~/.codex/config.toml (kept as config.toml.pacedmind-backup), so the Codex app's sessions can report back"}>
+          Connect
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -76,8 +115,12 @@ export interface AccountView {
   backupCodes: boolean;
 }
 
-export function SettingsView({ settings, projects, areas, account, devices, device, mcp, legacy, sessionsCount }: {
-  settings: Settings; projects: Project[]; areas: Area[]; account: AccountView; devices: Device[];
+export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform }: {
+  settings: Settings; projects: Project[]; areas: Area[]; account: AccountView;
+  /** The computers signed in to the account, this one first. */
+  devices: Device[];
+  /** This computer's id in the account's list; null in the web app, or until it registered. */
+  thisDeviceId: string | null;
   /** This computer's own settings; null in the web app. */
   device: DeviceSettings | null;
   /** Null in the web app: agents connect to the desktop app, where their terminals run. */
@@ -85,10 +128,13 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
   /** What this computer's local database from before accounts holds, if there is one. */
   legacy: { file: string; areas: number; projects: number; tasks: number } | null;
   sessionsCount: number;
+  /** The server's system, which decides the terminals sessions can open in. */
+  platform: NodeJS.Platform;
 }) {
   const { run, pending } = useAction();
   const router = useRouter();
   const [showToken, setShowToken] = useState(false);
+  const [importing, setImporting] = useState(false);
   const defaultArea = areas.find((a) => a.key === "DEV")?.id ?? areas[0]?.id ?? "";
   const [newProject, setNewProject] = useState({ name: "", areaId: defaultArea, folder: "", agent: "claude" as AgentId | null });
   const [password, setPassword] = useState({ current: "", next: "", again: "", code: "" });
@@ -98,7 +144,14 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
   const saveDevice = (patch: Parameters<typeof updateDeviceSettingsAction>[0]) => run(() => updateDeviceSettingsAction(patch));
   const token = mcp?.token ?? "";
   const claudeCmd = mcp ? `claude mcp add --transport http --scope user organizer ${mcp.url} --header "Authorization: Bearer ${token}"` : "";
-  const codexToml = mcp ? `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcp.url}"\nbearer_token_env_var = "ORGANIZER_TOKEN"` : "";
+  // A header rather than bearer_token_env_var: the Codex app has no ORGANIZER_TOKEN to read.
+  const codexToml = mcp ? `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcp.url}"\nhttp_headers = { Authorization = "Bearer ${token}" }` : "";
+  const connect = (agent: AgentId) => {
+    const what = agent === "claude" ? "Claude Code, for all projects" : "Codex's config.toml";
+    if (confirm(`Add PacedMind (${mcp?.url ?? "this computer"}) to ${what}, with your token? Sessions you start yourself, and those in the ${APP_LABEL[agent]}, will report to this PacedMind.`)) {
+      run(() => connectAgentAction(agent));
+    }
+  };
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
@@ -173,17 +226,28 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
               </Row>
             </Section>
 
-            <Section title="Computers" note="Computers with the PacedMind desktop app signed in to your account. Signing one out ends its session at once, and its agents lose access to PacedMind.">
+            <Section id="devices" title="Computers"
+              action={device && <Button size="sm" variant="ghost" disabled={pending} onClick={() => run(() => checkDeviceAction())}><Icon name="refresh" size={12} />Check again</Button>}
+              note="Computers with the PacedMind desktop app signed in to your account, and what each found of Claude Code and Codex (it looks when it starts and every half hour). Connected, the agents' desktop apps report back like terminal sessions. Signing a computer out ends its session at once, and its agents lose access to PacedMind.">
               {devices.length === 0 && <Row label="None yet"><span className="text-[12.5px] text-fg3">Sign in to the desktop app to add a computer.</span></Row>}
-              {devices.map((x) => (
-                <Row key={x.id} label={x.platform === "windows" ? "Windows" : x.platform === "macos" ? "Mac" : "Linux"}>
-                  <span className="flex-1 truncate text-[12.5px] text-fg2">
-                    {x.name}{device?.deviceId === x.id && <span className="ml-2 text-mut2">This computer</span>}
-                  </span>
-                  <span className="text-[12px] text-mut2">Seen {seen(x.lastSeenAt)}</span>
-                  <Button size="sm" onClick={() => confirm(`Sign ${x.name} out of PacedMind? Its agents lose access right away.`) && run(() => revokeDeviceAction(x.id))}>Sign out</Button>
-                </Row>
-              ))}
+              {devices.map((d) => {
+                const here = !!thisDeviceId && d.id === thisDeviceId;
+                return (
+                  <div key={d.id} className="flex flex-col gap-1 border-b border-line px-3.5 py-2.5 last:border-b-0">
+                    <div className="flex h-7 items-center gap-2.5">
+                      <Icon name="laptop" size={14} className="text-mut" />
+                      <span className="truncate text-[13px] font-medium text-fg">{d.name}</span>
+                      <span className="flex-1 truncate text-[12px] text-mut2">
+                        {platformName(d.platform)}{here ? " · this computer" : ` · seen ${seen(d.lastSeenAt)}`}
+                      </span>
+                      <Button size="sm" onClick={() => confirm(`Sign ${d.name} out of PacedMind? Its agents lose access right away.`) && run(() => revokeDeviceAction(d.id))}>Sign out</Button>
+                    </div>
+                    {d.checkedAt
+                      ? (["claude", "codex"] as AgentId[]).map((a) => <AgentTools key={a} agent={a} device={d} here={here} pending={pending} onConnect={connect} />)
+                      : <p className="pb-1 text-[12px] text-mut2">{here ? "Looking for Claude Code and Codex…" : "Hasn't looked for Claude Code and Codex yet."}</p>}
+                  </div>
+                );
+              })}
             </Section>
 
             <Section title="Appearance">
@@ -216,8 +280,8 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
             {device && <>
               <Section title="This computer"
                 note={device.encrypted
-                  ? "What runs here is decided here. Agent commands, project folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain."
-                  : "What runs here is decided here. Agent commands, project folders, flow switches and access tokens stay on this computer. This development server keeps them unencrypted in data/."}>
+                  ? "What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain."
+                  : "What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer. This development server keeps them unencrypted in data/."}>
                 <Row label="Name">
                   <input className={input} defaultValue={device.name} maxLength={80} aria-label="This computer's name"
                     onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.name && saveDevice({ name: e.target.value })} />
@@ -230,10 +294,12 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
               </Section>
 
               <Section title="Starting sessions">
-                <Row label="Terminal">
-                  <Segmented value={device.terminal} onChange={(v) => saveDevice({ terminal: v })}
-                    options={[{ value: "wt", label: "Windows Terminal" }, { value: "cmd", label: "Command Prompt" }]} />
-                </Row>
+                {TERMINALS[platform] && (
+                  <Row label="Terminal">
+                    <Segmented value={terminalFor(device.terminal, platform).value} onChange={(v) => saveDevice({ terminal: v })}
+                      options={TERMINALS[platform]!} />
+                  </Row>
+                )}
                 <Row label="Claude command">
                   <input className={input} defaultValue={device.claudeCommand} aria-label="Claude command"
                     onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.claudeCommand && saveDevice({ claudeCommand: e.target.value })} />
@@ -246,7 +312,7 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
             </>}
 
             {mcp && <>
-              <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished. Sessions PacedMind starts get their own token, which works only for their task and only while they run.">
+              <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished. Sessions PacedMind starts in a terminal get their own token, which works only for their task and only while they run.">
                 <Row label="Address">
                   <span className="flex-1 truncate font-mono text-[12px] text-fg2">{mcp.url}</span>
                   <Button size="sm" onClick={() => copy(mcp.url, "Address")}>Copy</Button>
@@ -259,29 +325,30 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
                 </Row>
               </Section>
 
-              <Section title="Connect your agents" note="For Claude Code and Codex you start yourself. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.">
+              <Section title="Connect your agents" note="For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.">
                 <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
                   <div className="flex items-center gap-2.5">
-                    <Icon name="terminal" size={14} className="text-mut" />
+                    <AgentIcon agent="claude" size={14} className="text-fg3" />
                     <span className="flex-1 text-[13px] font-medium text-fg">Claude Code</span>
-                    <Button size="sm" disabled={pending} onClick={() => run(() => connectClaudeAction())}>Connect</Button>
+                    <Button size="sm" disabled={pending} onClick={() => connect("claude")}>Connect</Button>
                     <Button size="sm" onClick={() => copy(claudeCmd, "Command")}>Copy command</Button>
                   </div>
-                  <p className="text-[12px] text-mut2">Connect adds PacedMind to Claude Code for all your projects, with your token, without showing it.</p>
+                  <p className="text-[12px] text-mut2">Connect adds PacedMind to Claude Code for all your projects, with your token, without showing it. The Claude app&apos;s Code sessions use it too.</p>
                 </div>
                 <div className="flex flex-col gap-2.5 p-3.5">
                   <div className="flex items-center gap-2.5">
-                    <Icon name="terminal" size={14} className="text-mut" />
+                    <AgentIcon agent="codex" size={14} className="text-fg3" />
                     <span className="flex-1 text-[13px] font-medium text-fg">Codex</span>
+                    <Button size="sm" disabled={pending} onClick={() => connect("codex")}>Connect</Button>
                     <Button size="sm" onClick={() => copy(codexToml, "Config")}>Copy config</Button>
                   </div>
-                  <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{codexToml}</pre>
-                  <p className="text-[12px] text-mut2">Codex reads the token from the <span className="font-mono">ORGANIZER_TOKEN</span> environment variable. Sessions started from PacedMind set it for you, with their own token.</p>
+                  <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{showToken ? codexToml : codexToml.replace(token, "•".repeat(16))}</pre>
+                  <p className="text-[12px] text-mut2">The Codex CLI and the Codex app share this file. Sessions started from PacedMind don&apos;t need it: they get their own token.</p>
                 </div>
               </Section>
 
               <Section title="Tools agents can use"
-                note={<>Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they&apos;re asked. Starting a session over MCP waits for you to allow it here. Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
+                note={<>Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they&apos;re asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
                 {TOOL_GROUPS.map(([group, names]) => (
                   <div key={group} className="flex items-start gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
                     <span className="w-[72px] shrink-0 text-[12.5px] text-mut2">{group}</span>
@@ -292,8 +359,9 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
             </>}
 
             <Section title={device ? "Projects on this computer" : "Projects"}
+              action={device && <Button size="sm" variant="ghost" onClick={() => setImporting(true)}><Icon name="download" size={12} />Import from Claude and Codex</Button>}
               note={device
-                ? "A session works in its project's folder on this computer; without one it gets a scratch folder. A flow only starts sessions by itself when it's on here. Changing the folder turns the flow off."
+                ? "A session works in its task's own folder on this computer, else its project's; without either it gets a scratch folder. A flow only starts sessions by itself when it's on here. Changing a folder turns the flow off."
                 : "Folders and flows are set in the desktop app, on the computer where the sessions run."}>
               {projects.map((p) => (
                 <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
@@ -310,7 +378,7 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
                     </>}
                   </div>
                   {device && (
-                    <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder="C:\path\to\repo" aria-label={`Folder for ${p.name}`}
+                    <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder={platform === "win32" ? "C:\\path\\to\\repo" : "/path/to/repo"} aria-label={`Folder for ${p.name}`}
                       onBlur={(e) => (e.target.value.trim() || null) !== p.folder && run(() => updateProjectAction(p.id, { folder: e.target.value.trim() || null }), "Folder saved")} />
                   )}
                 </div>
@@ -358,7 +426,7 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
               </Row>
             </Section>
 
-            <Section title="Data" note={`Stored in your account, not on this computer. ${sessionsCount} sessions recorded so far.`}>
+            <Section title="Data" note={`Stored in your account, not on this computer. Images agents attach stay on the computer they were saved on. ${sessionsCount} sessions recorded so far.`}>
               {legacy && legacy.tasks + legacy.projects > 0 && (
                 <Row label="This computer">
                   <span className="flex-1 truncate text-[12.5px] text-fg3" title={legacy.file}>
@@ -376,6 +444,7 @@ export function SettingsView({ settings, projects, areas, account, devices, devi
           </div>
         </div>
       </div>
+      {importing && <ImportProjects areas={areas} onClose={() => setImporting(false)} />}
     </div>
   );
 }

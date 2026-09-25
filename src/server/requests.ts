@@ -1,11 +1,12 @@
 import "server-only";
 import crypto from "node:crypto";
 import * as repo from "./repo";
-import { forgetSessionFiles, plannedFolder, startSession, type LaunchResult } from "./launcher";
-import { deviceConfig, deviceFor, platformName, revokeAllSessionTokens, updateDevice } from "./device";
+import { forgetSessionFiles, plannedFolder, plannedSurface, startSession, type LaunchResult } from "./launcher";
+import { deviceConfig, deviceFor, revokeAllSessionTokens, thisPlatform, updateDevice } from "./device";
 import { approvals, clearApprovals, handledRequests, type Approval } from "./approval-store";
+import { requestChanges } from "./ops";
 import { MODE, authState, supabase } from "./supabase";
-import { AGENT_LABEL, agentOf, type AgentId, type Task } from "@/lib/types";
+import { AGENT_LABEL, SURFACE_LABEL, agentOf, type AgentId, type Session, type Surface, type Task } from "@/lib/types";
 
 /*
  * Sessions asked for from outside this computer's PacedMind window: from the web app or another computer
@@ -51,41 +52,70 @@ const FROM_TEXT: Record<Approval["from"], string> = {
 export function approvalItems(tasks: Task[]): ApprovalItem[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return pendingApprovals().map((a) => ({
-    id: a.id, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: AGENT_LABEL[a.agent], folder: a.folder,
-    from: FROM_TEXT[a.from], requestedAt: a.requestedAt, expiresAt: a.expiresAt,
+    id: a.id, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`, folder: a.folder,
+    from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”` : FROM_TEXT[a.from],
+    requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
 }
 
+const excerpt = (text: string) => (text.length > 200 ? `${text.slice(0, 200).trimEnd()}…` : text);
+
 /** Puts a request in front of you, with what it would run right now. Null when the task can't run here at all. */
 async function ask(
-  task: Task, agent: AgentId | null, from: Approval["from"], requestId: string | null, times?: { at: number; until: number },
+  task: Task, agent: AgentId | null, from: Approval["from"], requestId: string | null, times?: { at: number; until: number }, surface?: Surface,
 ): Promise<Approval | null> {
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
   const who = agent ?? agentOf(task, project?.agent);
   const folder = plannedFolder(task);
   if (!who || !folder) return null;
-  const same = pendingApprovals().find((a) => a.taskId === task.id && a.from === from && a.requestId === requestId);
+  const same = pendingApprovals().find((a) => a.taskId === task.id && a.from === from && a.requestId === requestId && !a.changes);
   if (same) return same;
   const now = Date.now();
   const a: Approval = {
-    id: requestId ?? crypto.randomUUID(), requestId, from, taskId: task.id, key: task.key, agent: who, folder,
+    id: requestId ?? crypto.randomUUID(), requestId, from, taskId: task.id, key: task.key, agent: who, folder, surface: surface ?? plannedSurface(task, who),
     requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
   };
   approvals().set(a.id, a);
   return a;
 }
 
-/** An agent asked over MCP to start a session: it waits for you in the app. */
-export const askFromAgent = (task: Task, agent: AgentId | null) => ask(task, agent, "agent", null);
+/** An agent asked over MCP to start a session (where it runs, if it said): it waits for you in the app. */
+export const askFromAgent = (task: Task, agent: AgentId | null, surface?: Surface) => ask(task, agent, "agent", null, undefined, surface);
 
 /** A flow wants to start a task along a connection you haven't confirmed on this computer. */
 export const askFromFlow = (task: Task) => ask(task, null, "flow", null);
+
+/**
+ * An agent asked over MCP to send a session back to work with changes (request_changes): reopening it runs an agent
+ * here, so it waits for you like a session it asks for. The changes are written when you allow it.
+ */
+export async function askForChanges(session: Session, task: Task, text: string): Promise<Approval | null> {
+  const folder = plannedFolder(task);
+  if (!folder) return null;
+  for (const [id, x] of approvals()) if (x.changes?.sessionId === session.id) approvals().delete(id);
+  const now = Date.now();
+  const a: Approval = {
+    id: crypto.randomUUID(), requestId: null, from: "agent", taskId: task.id, key: task.key, agent: session.agent, folder, surface: "terminal",
+    changes: { sessionId: session.id, text }, requestedAt: now, expiresAt: now + TTL_MS,
+  };
+  approvals().set(a.id, a);
+  return a;
+}
 
 export async function approve(id: string): Promise<LaunchResult> {
   const a = approvals().get(id);
   approvals().delete(id);
   if (!a || a.expiresAt <= Date.now()) return { ok: false, error: "That request expired. Ask for the session again." };
-  const r = await startSession(a.taskId, { agent: a.agent, reason: "approved", expect: { key: a.key, agent: a.agent, folder: a.folder } });
+  if (a.changes) {
+    const task = await repo.getTask(a.taskId);
+    if (!task || task.key !== a.key || plannedFolder(task) !== a.folder) {
+      return { ok: false, error: `${a.key} changed after you saw the request (its task or folder). Ask for the changes again.` };
+    }
+    return requestChanges(a.changes.sessionId, a.changes.text);
+  }
+  const r = await startSession(a.taskId, {
+    agent: a.agent, surface: a.surface, reason: "approved", expect: { key: a.key, agent: a.agent, folder: a.folder, surface: a.surface },
+  });
   if (a.requestId) await repo.settleLaunchRequest(a.requestId, r.ok ? "launched" : "failed", { sessionId: r.session?.id, note: r.error });
   return r;
 }
@@ -109,7 +139,7 @@ export async function syncDevice(): Promise<void> {
   let d = deviceFor(state.user.id);
 
   if (!d.deviceId) {
-    updateDevice({ deviceId: await repo.registerDevice(d.name, platformName()), claimedSession: state.sessionId });
+    updateDevice({ deviceId: await repo.registerDevice(d.name, thisPlatform()), claimedSession: state.sessionId });
     d = deviceConfig();
   } else if (state.sessionId && d.claimedSession !== state.sessionId) {
     try {
@@ -117,7 +147,7 @@ export async function syncDevice(): Promise<void> {
       updateDevice({ claimedSession: state.sessionId });
     } catch {
       // Signed out from another device while this one was away: register again as a new computer.
-      updateDevice({ deviceId: await repo.registerDevice(d.name, platformName()), claimedSession: state.sessionId });
+      updateDevice({ deviceId: await repo.registerDevice(d.name, thisPlatform()), claimedSession: state.sessionId });
     }
     d = deviceConfig();
   }

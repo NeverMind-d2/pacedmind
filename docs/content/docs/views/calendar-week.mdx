@@ -1,0 +1,51 @@
+---
+title: "Calendar: week"
+description: The week view lays out activities, auto-planned focus blocks and agent sessions hour by hour, with the Auto-plan panel that explains the plan.
+---
+
+The week view shows one week, Monday to Sunday, from 07:00 to 21:00. It combines the fixed calendar, the focus blocks the auto-planner suggests for your tasks, and the agent sessions that ran.
+
+Open it with **Week** in the calendar's header, by selecting a day number in the month view, or with **Go to Week** in the command menu.
+
+<img src="/docs/screenshots/calendar-week.png" alt="The week view with activities, auto-planned focus blocks, a check block and the Auto-plan panel" width="1920" height="1200" loading="lazy" />
+
+## The header
+
+* **Calendar**, the dates and the ISO week number, such as *21 to 27 Sep · week 39*.
+* The arrows (**Previous week**, **Next week**) and **Today**, which returns to the current week.
+* **Month** and **Week**, to switch views.
+
+The bar under the header is the legend, and states the week's load: *22.5 h planned of 26 h focus time left* (for the current week) or *… of … h focus time* (for a later week).
+
+| Legend | Meaning |
+| --- | --- |
+| **Fixed** | Calendar activities. |
+| **Planned for you** | Focus blocks the auto-planner suggests for your tasks, such as *WRK-31 Prepare slides for Q4 planning*. |
+| **Check a finished session** | A 45-minute block to review work an agent finished, such as *Check DEV-21*. It has a terminal icon and a navy outline. |
+| **Agent sessions** | Thin lanes at the right edge of each day: when sessions ran, one lane for Claude Code and, at the far right, one for Codex. A running session's lane grows until it ends. |
+
+## The grid
+
+* Each day's header shows its name and date, with today's date in navy. A flag shows the day's open deadlines: the time of a single deadline that has one, otherwise their count, or *2 missed* on a past day, in red when late.
+* Days outside the work days are shaded.
+* A navy line marks the current time.
+* Overlapping blocks sit side by side. Blocks in the past are faded.
+* Hover a block for its title and time. Select a planned block, a check block or a session lane to open the task's details.
+
+## The Auto-plan panel
+
+The panel on the right explains the plan. It hides while a task's details are open.
+
+* The switch next to the **Auto-plan** heading hides and shows the focus blocks. When off, the panel says *Auto-plan is off. Only fixed events are shown.*
+* The status line: *Planned at 14:05 · 6 tasks in 9 blocks*, or *Planned at 14:05 · nothing to place this week*. For a past week: *This week is over, so there is nothing left to plan.*
+* Up to four notes on what the planner did, such as *DEV-21 finished, so 45 min to check it was added today at 15:00*, *WRK-27 is overdue, planned today at 09:00*, or *Split WRK-31 into 2 blocks*.
+* **Rest of this week** (or **This week**): planned hours of the available focus hours, with a bar split by area color and the hours per area.
+* **Didn't fit this week**: tasks that need more time than is free, such as *WRK-36 Send the Q4 plan to the team needs 2 h and there's no free slot left this week.* Select one to open it.
+* **Rules**: the work hours and break from **Settings**, and the planner's fixed rules, with **Change** to open **Settings**.
+* **Replan the week** reloads the week and plans it again from the current time.
+
+The plan is recomputed every time the view loads. Focus blocks aren't stored and can't be dragged; they change when the tasks change. See [The auto-planner](/planning/auto-planner).
+
+## Weeks ahead
+
+The planner fills the days from now on in order, so a later week only gets what the weeks before it leave over. A later week states its full focus time. Its **Didn't fit this week** list names only tasks meant for that week: those planned before its end, or, without a planned day, with no deadline or a deadline before its end.

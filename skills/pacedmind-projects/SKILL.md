@@ -22,7 +22,8 @@ Aim for tasks of roughly 30 minutes to one day of work. Bigger ones hide uncerta
 - Order the tasks the way they'll be done, and let each one leave the project in a working state.
 - Give each task:
   - a verb-first title;
-  - a description with the context and a clear definition of done;
+  - a description with the context: why, constraints, links;
+  - `done_when`: the outcomes that must be true when it's finished, each one checkable. Agents answer every item when they hand the task back, and the user reviews against them. For work with a visible result, include a screenshot item, such as "A screenshot of /reports with the new button";
   - sub-tasks for its steps;
   - an estimate.
 - Create them all in one `create_tasks` call. Only set `planned` or `due` where the user has dates in mind; otherwise leave scheduling to planning.
@@ -30,12 +31,15 @@ Aim for tasks of roughly 30 minutes to one day of work. Bigger ones hide uncerta
 - Set the roadmap order with `reorder_tasks`.
 - Show the user the breakdown (keys and titles) and adjust it before building more on top.
 
-A task description an agent can act on:
+A task an agent can act on:
 
-    Add CSV export to the reports page.
-    Why: finance wants monthly exports for their spreadsheet.
-    Done when: a "Download CSV" button on /reports downloads the rows for the current filters, with the
-    same columns as the table and dates as YYYY-MM-DD, and an empty report gives a header-only file.
+    title: "Add CSV export to the reports page"
+    description: "Finance wants monthly exports for their spreadsheet. Use the same query as the table."
+    done_when:
+      - "A Download CSV button on /reports downloads the rows for the current filters"
+      - "The CSV has the table's columns, with dates as YYYY-MM-DD"
+      - "An empty report gives a file with only the header"
+      - "A screenshot of /reports with the button"
 
 ## Automate it with agent flows
 
@@ -48,7 +52,7 @@ A flow runs a project's tasks as agent sessions, one after another. Use it for w
    - **same_session**: the same agent continues in the same terminal and keeps its context. Good for closely related steps.
    - **at_time**: waits until a set time, for example to run overnight.
 3. Check the result with `get_flow`.
-4. Nothing starts on its own until the project's flow is on. Only the user can switch it on, in PacedMind's Flows page on the computer where the sessions run, because it starts agents there unattended. Tell them the flow is ready when it is.
+4. Nothing starts on its own until the project's flow is on. Only the user can switch it on, in PacedMind's Flows page on the computer where the sessions run, because it starts agents there unattended; switching it on also starts the tasks that are already ready. Tell them the flow is ready when it is.
 
 The user starts the first task of a flow with the Start button in PacedMind. If the user asks you to, `start_session` sends the request; they allow it in PacedMind.
 

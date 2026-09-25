@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import * as repo from "@/server/repo";
 import { guardAction } from "@/server/guard";
-import type { AgentId, EdgeMode } from "@/lib/types";
+import type { AgentId, EdgeMode, Surface } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -43,6 +43,28 @@ export async function setAgentsAction(taskIds: number[], agent: AgentId): Promis
   if (!AGENTS.has(agent)) return { ok: false, error: "Unknown agent" };
   // Rows of other accounts (or none) aren't touched: the database only updates this account's tasks.
   await Promise.all(taskIds.filter(Number.isFinite).map((id) => repo.updateTask(id, { agent })));
+  refresh();
+  return { ok: true };
+}
+
+const SURFACES = new Set<Surface>(["terminal", "desktop", "cloud"]);
+
+/**
+ * Sets where tasks' sessions run: in a terminal or the desktop app on a computer, or in the agent's cloud. The canvas
+ * sends a task together with the tasks that share its session, since one session runs in one place.
+ */
+export async function setRunAction(taskIds: number[], patch: { runIn?: Surface | null; deviceId?: string | null }): Promise<Result> {
+  await guardAction();
+  if (patch.runIn && !SURFACES.has(patch.runIn)) return { ok: false, error: "Unknown place to run" };
+  if (patch.deviceId) {
+    const device = await repo.getDevice(patch.deviceId);
+    if (!device || device.revokedAt) return { ok: false, error: "That computer isn't signed in to PacedMind" };
+  }
+  // Rows of other accounts (or none) aren't touched: the database only updates this account's tasks.
+  await Promise.all(taskIds.filter(Number.isFinite).map((id) => repo.updateTask(id, {
+    ...(patch.runIn !== undefined ? { runIn: patch.runIn } : {}),
+    ...(patch.deviceId !== undefined ? { deviceId: patch.deviceId } : {}),
+  })));
   refresh();
   return { ok: true };
 }

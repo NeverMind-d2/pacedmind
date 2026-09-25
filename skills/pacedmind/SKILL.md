@@ -5,16 +5,16 @@ description: Manage the user's PacedMind planner (also called Organizer) through
 
 # PacedMind
 
-PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `organizer`; in Claude Code its tools appear as `mcp__organizer__<tool>`. If those tools aren't available in this session, tell the user and point them to PacedMind → Settings → MCP server, which has the command to connect. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
+PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `organizer`; in Claude Code its tools appear as `mcp__organizer__<tool>`. If those tools aren't available in this session, tell the user and point them to PacedMind → Settings → Connect your agents, which shows how to connect Claude Code and Codex. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
 
 ## How the planner is organized
 
 - **Areas** are the top level (Work, Personal, Health …). Each has a short key that task keys come from (WRK-12).
 - **Projects** belong to one area and can have a target date, a color, a working folder and a default agent.
-- **Tasks** live in a project, directly in an area, or in the Inbox (no area). They have a status (backlog, todo, in_progress, in_review, done, canceled), a priority (urgent, high, medium, low, none), a **due** date (the deadline, optionally with a time), a **planned** day (when the user means to do it), an estimate in minutes, labels, a description and sub-tasks.
+- **Tasks** live in a project, directly in an area, or in the Inbox (no area). They have a status (backlog, todo, in_progress, in_review, done, canceled), a priority (urgent, high, medium, low, none), a **due** date (the deadline, optionally with a time), a **planned** day (when the user means to do it), an estimate in minutes, labels, a description, a **Done when** list (what must be true when it's finished) and sub-tasks.
 - **Calendar events** are fixed activities such as meetings, workouts and appointments, either one-off or weekly.
 - **Focus blocks** aren't stored anywhere. The auto-planner computes them from work hours, events and open tasks, so you change them through the tasks' planned days, due dates, priorities and estimates.
-- **Agent sessions** are Claude Code or Codex runs on a task. When an agent finishes, the task moves to in_review and waits for the user. **Flows** chain a project's tasks so their sessions start one after another.
+- **Agent sessions** are Claude Code or Codex runs on a task. When an agent finishes, it hands the task back with a **report** (a summary, an answer to each Done when item, screenshots, how to check it, questions), and the task moves to in_review and waits for the user. **Flows** chain a project's tasks so their sessions start one after another.
 
 ## Working with the tools
 
@@ -34,8 +34,9 @@ Start with `get_overview` whenever you need today's date, the ids of areas and p
 A good task is one the user (or an agent) can pick up weeks later without asking questions.
 
 - **Title**: a short, concrete action, verb first: "Send Q4 budget to finance", not "Budget".
-- **Description**: the context that won't be obvious later: why it matters, links, constraints, and what "done" looks like. For work an agent will do, add acceptance criteria.
-- **Sub-tasks**: steps that are worth ticking off. Keep them to a handful.
+- **Description**: the context that won't be obvious later: why it matters, links and constraints.
+- **Done when** (`done_when`): what must be true when the task is finished, one checkable outcome per item: "The PDF is in Documents/Car", not "Look into insurance". For work an agent will do, this is its acceptance criteria: the agent answers each item in its report. When the user wants to see the result, say so in an item, such as "A screenshot of the new settings page".
+- **Sub-tasks**: steps that are worth ticking off. Keep them to a handful. Sub-tasks are how to get there; Done when is where to end up.
 - **Estimate**: realistic minutes. The auto-planner uses it to fill the calendar.
 - **Dates**: set `due` only for real deadlines and use `planned` for when the user will do it. Don't invent deadlines the user didn't give.
 - **Priority**:
@@ -49,7 +50,8 @@ Example:
     create_task
       title: "Renew car insurance"
       area: "personal"
-      description: "Current policy ends Oct 14. Compare the renewal offer with two quotes; the Allianz one from last year was cheapest. Done when the new policy is paid and the PDF is in Documents/Car."
+      description: "Current policy ends Oct 14. Compare the renewal offer with two quotes; the Allianz one from last year was cheapest."
+      done_when: ["The new policy is paid", "The policy PDF is in Documents/Car"]
       due: "2026-10-10"
       planned: "next saturday"
       estimate_minutes: 45

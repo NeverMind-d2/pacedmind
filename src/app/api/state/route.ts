@@ -22,9 +22,14 @@ export async function GET() {
   if (step) return Response.json({ version: `${boot}-${step}`, waiting: [], approvals: [], signedIn: false }, noStore);
   const [version, finished, tasks] = await Promise.all([repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listTasks()]);
   const byId = new Map(tasks.map((t) => [t.id, t]));
+  const briefs = await repo.reportBriefs(finished.map((s) => s.id));
   const waiting = finished.map((s) => {
     const task = byId.get(s.taskId);
-    return { id: s.id, key: task?.key ?? null, title: task?.title ?? null, note: s.note, finishedAt: s.finishedAt };
+    const report = briefs.get(s.id);
+    return {
+      id: s.id, key: task?.key ?? null, title: task?.title ?? null, note: s.note, finishedAt: s.finishedAt,
+      outcome: report?.outcome ?? null, questions: report?.questions ?? 0,
+    };
   });
   const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
   const approvalKey = approvals.map((a) => a.id).join(",");

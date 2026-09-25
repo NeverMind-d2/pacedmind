@@ -1,0 +1,106 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+ * PacedMind design tokens
+ * Source: ../src/app/globals.css (the app) and ../site/app/globals.css (the
+ * home page). Near-black neutral grays in the dark theme, neutral grays in the
+ * light one, and the navy accent used sparingly: links, the active page and the
+ * one primary button. Keep in step with the app when its palette changes.
+ * ------------------------------------------------------------------------- */
+
+@theme {
+  --color-fd-background: #ffffff;
+  --color-fd-foreground: #202026;
+  --color-fd-muted: #f5f5f6;
+  --color-fd-muted-foreground: #61616e;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #202026;
+  --color-fd-card: #fafafb;
+  --color-fd-card-foreground: #202026;
+  --color-fd-border: #e3e3e8;
+  --color-fd-primary: #172f6f;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #f5f5f6;
+  --color-fd-secondary-foreground: #202026;
+  --color-fd-accent: #eeeef1;
+  --color-fd-accent-foreground: #202026;
+  --color-fd-ring: #172f6f;
+}
+
+.dark,
+.dark #nd-sidebar {
+  --color-fd-background: #010101;
+  --color-fd-foreground: #e4e4e7;
+  --color-fd-muted: #08080a;
+  --color-fd-muted-foreground: #a1a1a8;
+  --color-fd-popover: #08080a;
+  --color-fd-popover-foreground: #e4e4e7;
+  --color-fd-card: #08080a;
+  --color-fd-card-foreground: #e4e4e7;
+  --color-fd-border: #1b1b1e;
+  --color-fd-primary: #95abd9;
+  --color-fd-primary-foreground: #010101;
+  --color-fd-secondary: #0b0b0d;
+  --color-fd-secondary-foreground: #e4e4e7;
+  --color-fd-accent: #101012;
+  --color-fd-accent-foreground: #ededef;
+  --color-fd-ring: #95abd9;
+}
+
+:root {
+  /* The primary button's navy fill (--color-accent-strong in the app). */
+  --brand: #172f6f;
+  /* The icons on the home page tiles: the app's muted gray (--color-mut). */
+  --tile-icon: #61616e;
+}
+
+.dark {
+  --brand: #2e4b91;
+  --tile-icon: #a1a1a8;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  /* Jost, geometric like the wordmark, as on pacedmind.com: page and home titles only. */
+  --font-display: var(--font-jost), var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-brand: var(--brand);
+  --color-tile-icon: var(--tile-icon);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Page titles in the display face, like the headings on pacedmind.com. */
+#nd-page h1 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* App screenshots: the app's near-black would otherwise merge with the dark page. */
+#nd-page img[src*='/screenshots/'] {
+  border: 1px solid var(--color-fd-border);
+  border-radius: 10px;
+}
+
+/* Keys and UI labels written as <kbd> in the pages. */
+.prose kbd {
+  border: 1px solid var(--color-fd-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.05em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  white-space: nowrap;
+}

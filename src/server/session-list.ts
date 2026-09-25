@@ -1,27 +1,22 @@
 import "server-only";
+import { changesProblemIn } from "./ops";
 import * as repo from "./repo";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
-import { agentOf, type Session, type SessionEvent, type Status, type Task } from "@/lib/types";
+import { agentOf, taskHref, type Report, type Session, type Status, type Task } from "@/lib/types";
 
 const EARLIER_LIMIT = 30;
 const active = (s: Session) => s.status === "starting" || s.status === "running";
 
-/** Where a task opens in the app: its project, else its area, else the inbox. */
-export function taskHref(t: Task): string {
-  if (t.projectId) return `/project/${t.projectId}?task=${t.key}`;
-  if (t.areaId) return `/area/${t.areaId}?task=${t.key}`;
-  return `/inbox?task=${t.key}`;
-}
-
 /** Everything the Sessions screen shows, grouped the way it lists them. */
 export async function sessionList(selected: string | null): Promise<{ groups: SessionGroup[]; initialId: string | null; startable: StartableTask[] }> {
-  const [all, taskList, projectList, edges, done] = await Promise.all([
-    repo.listSessions(), repo.listTasks(), repo.listProjects(), repo.listEdges(), repo.doneTimes(),
+  const [all, taskList, projectList, edges, done, deviceList] = await Promise.all([
+    repo.listSessions(), repo.listTasks(), repo.listProjects(), repo.listEdges(), repo.doneTimes(), repo.listDevices(),
   ]);
   const tasks = new Map(taskList.map((t) => [t.id, t]));
   const projects = new Map(projectList.map((p) => [p.id, p]));
   const byId = new Map(all.map((s) => [s.id, s]));
+  const devices = new Map(deviceList.map((d) => [d.id, d.name]));
   const busy = new Set(all.filter(active).map((s) => s.taskId));
   const today = todayStr();
 
@@ -31,7 +26,27 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       ? done.get(s.id) ?? s.endedAt ?? s.finishedAt ?? tasks.get(s.taskId)?.completedAt ?? s.startedAt
       : s.endedAt ?? s.finishedAt ?? s.startedAt;
 
-  let eventsOf: Record<string, SessionEvent[]> = {};
+  const finished = all.filter((s) => s.status === "finished")
+    .sort((a, b) => (b.finishedAt ?? b.startedAt).localeCompare(a.finishedAt ?? a.startedAt));
+  const running = all.filter(active).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const ended = all.filter((s) => !active(s) && s.status !== "finished").sort((a, b) => endAt(b).localeCompare(endAt(a)));
+  const endedToday = ended.filter((s) => dateOnly(endAt(s)) >= today);
+  const earlier = ended.filter((s) => dateOnly(endAt(s)) < today);
+  const shownEarlier = earlier.slice(0, EARLIER_LIMIT);
+  // A link to an older session still opens it.
+  const linked = selected ? earlier.slice(EARLIER_LIMIT).find((s) => s.id === selected) : undefined;
+  if (linked) shownEarlier.push(linked);
+
+  const shownIds = [...finished, ...running, ...endedToday, ...shownEarlier].map((s) => s.id);
+  const [eventsOf, reports, pending] = await Promise.all([
+    repo.sessionEventsFor(shownIds), repo.reportsForSessions(shownIds), repo.pendingImages(shownIds),
+  ]);
+  // Request changes goes on a task's newest report only.
+  const newestOfTask = new Map<number, Report>();
+  for (const list of reports.values()) {
+    for (const r of list) if ((newestOfTask.get(r.taskId)?.id ?? 0) < r.id) newestOfTask.set(r.taskId, r);
+  }
+
   const item = (s: Session): SessionItem => {
     const task = tasks.get(s.taskId);
     const project = task?.projectId ? projects.get(task.projectId) : undefined;
@@ -48,6 +63,9 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       id: s.id,
       status: s.status,
       agent: s.agent,
+      surface: s.surface,
+      device: s.deviceId ? devices.get(s.deviceId) ?? null : null,
+      url: s.url,
       folder: s.folder,
       branch: s.branch,
       startedAt: s.startedAt,
@@ -58,12 +76,16 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       cliSessionId: s.cliSessionId,
       origin: s.continuesSessionId
         ? "continued"
-        : events.some((e) => e.kind === "started" && e.text === "Started outside Organizer") ? "outside" : "organizer",
+        : events.some((e) => e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text)) ? "outside" : "organizer",
       continues: prev ? { id: prev.id, key: tasks.get(prev.taskId)?.key ?? "an earlier task" } : null,
       task: task ? { id: task.id, key: task.key, title: task.title } : null,
       project: project ? { id: project.id, name: project.name } : null,
       href: task ? taskHref(task) : null,
       events,
+      reports: reports.get(s.id) ?? [],
+      pending: pending.get(s.id) ?? [],
+      canRequestChanges: (s.status === "finished" || s.status === "done")
+        && !changesProblemIn(s, { task, live: busy.has(s.taskId), newest: newestOfTask.get(s.taskId) }),
       next: next
         ? {
           id: next.id, key: next.key, title: next.title, href: taskHref(next),
@@ -72,18 +94,6 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
         : null,
     };
   };
-
-  const finished = all.filter((s) => s.status === "finished")
-    .sort((a, b) => (b.finishedAt ?? b.startedAt).localeCompare(a.finishedAt ?? a.startedAt));
-  const running = all.filter(active).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  const ended = all.filter((s) => !active(s) && s.status !== "finished").sort((a, b) => endAt(b).localeCompare(endAt(a)));
-  const endedToday = ended.filter((s) => dateOnly(endAt(s)) >= today);
-  const earlier = ended.filter((s) => dateOnly(endAt(s)) < today);
-  const shownEarlier = earlier.slice(0, EARLIER_LIMIT);
-  // A link to an older session still opens it.
-  const linked = selected ? earlier.slice(EARLIER_LIMIT).find((s) => s.id === selected) : undefined;
-  if (linked) shownEarlier.push(linked);
-  eventsOf = await repo.sessionEventsFor([...finished, ...running, ...endedToday, ...shownEarlier].map((s) => s.id));
 
   const groups: SessionGroup[] = (
     [

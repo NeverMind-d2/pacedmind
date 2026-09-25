@@ -10,7 +10,7 @@ import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
   AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL,
-  type Area, type CalEvent, type Priority, type Project, type Session, type Status, type Task,
+  type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task,
 } from "@/lib/types";
 
 /* ---------- registering tools ---------- */
@@ -230,7 +230,9 @@ export function taskLine(t: Task, n: Names): string {
 }
 
 export async function describeTask(t: Task, given?: Names): Promise<string> {
-  const [n, edges, tasks, session] = await Promise.all([given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id)]);
+  const [n, edges, tasks, session, report] = await Promise.all([
+    given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id), repo.latestReport(t.id),
+  ]);
   const keys = new Map(tasks.map((x) => [x.id, x.key]));
   const keyOf = (id: number) => keys.get(id) ?? `#${id}`;
   const after = edges.filter((e) => e.toTaskId === t.id).map((e) => `${keyOf(e.fromTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
@@ -243,13 +245,55 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? fmtWhen(t.plannedDate) : "none"}` : null,
     `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent === "human" ? " · Done by: the user (human), not in flows" : t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
-    project?.folder ? `Folder: ${project.folder}` : null,
+    t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,
+    t.runIn ? `Sessions run in: ${t.runIn === "desktop" ? "the agent's desktop app" : t.runIn === "cloud" ? "the agent's cloud" : "a terminal"}` : null,
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",
+    t.doneWhen.length ? `\nDone when:\n${t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n")}` : null,
     t.subtasks.length ? `\nSub-tasks:\n${t.subtasks.map((s, i) => `${i + 1}. [${s.done ? "x" : " "}] ${s.title}`).join("\n")}` : null,
     after.length ? `\nStarts after: ${after.join(", ")}` : null,
     next.length ? `${after.length ? "" : "\n"}Leads to: ${next.join(", ")}` : null,
-    session ? `\nLatest session: ${session.id} · ${session.status}${session.note ? ` · ${session.note}` : ""}` : null,
+    session && session.id !== report?.sessionId ? `\nLatest session: ${session.id} · ${session.status}${session.note ? ` · ${session.note}` : ""}` : null,
+    report ? `\n${reportText(report, session?.id === report.sessionId ? "Latest report" : "Last report, from an earlier session")}` : null,
     `\nCreated ${t.createdAt.replace("T", " ")} · updated ${t.updatedAt.replace("T", " ")}${t.completedAt ? ` · done ${t.completedAt.replace("T", " ")}` : ""}`,
+  ].filter((x) => x !== null).join("\n");
+}
+
+const VERDICT_TEXT = { met: "met", partly: "partly met", not_met: "not met" } as const;
+
+/** "Settings in dark mode, 1280×800 PNG, 240 KB". */
+export function imageLine(a: Attachment): string {
+  const kb = a.bytes >= 1048576 ? `${(a.bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(a.bytes / 1024))} KB`;
+  const size = a.width && a.height ? `${a.width}×${a.height} ` : "";
+  return `${a.caption ? `"${a.caption}", ` : "an image, "}${size}${a.mime.replace("image/", "").toUpperCase()}, ${kb}`;
+}
+
+/** "2 of 3 Done when items met · 2 images · 1 question". */
+export function reportCounts(r: Report): string {
+  const answered = r.criteria.filter((c) => c.verdict);
+  return [
+    r.criteria.length ? `${r.criteria.filter((c) => c.verdict === "met").length} of ${plural(r.criteria.length, "Done when item")} met` : null,
+    answered.length < r.criteria.length ? `${r.criteria.length - answered.length} not answered` : null,
+    r.images.length ? plural(r.images.length, "image") : null,
+    r.questions.length ? plural(r.questions.length, "question") : null,
+  ].filter(Boolean).join(" · ");
+}
+
+/** A report the way agents and assistants read it. */
+export function reportText(r: Report, heading = "Report"): string {
+  const outcome = r.outcome === "done" ? "done" : r.outcome === "partial" ? "partly done" : "blocked, needs the user";
+  return [
+    `${heading} · session ${r.sessionId} · ${AGENT_LABEL[r.agent]} · ${r.createdAt.replace("T", " ")} · ${outcome}`,
+    `Summary: ${r.summary}`,
+    r.criteria.length
+      ? `Done when:\n${r.criteria.map((c, i) => `${i + 1}. [${c.verdict ? VERDICT_TEXT[c.verdict] : "not answered"}] ${c.text}${c.note ? ` · ${c.note}` : ""}`).join("\n")}`
+      : null,
+    r.images.length ? `Images:\n${r.images.map((a) => `- ${imageLine(a)}`).join("\n")}` : null,
+    r.verify.length ? `How to check:\n${r.verify.map((v, i) => `${i + 1}. ${v}`).join("\n")}` : null,
+    r.questions.length ? `Questions for the user:\n${r.questions.map((q) => `- ${q}`).join("\n")}` : null,
+    r.links.length ? `Links: ${r.links.map((l) => (l.label === l.url ? l.url : `${l.label} (${l.url})`)).join(", ")}` : null,
+    r.followUps.length ? `Follow-ups: ${r.followUps.map((f) => (f.title ? `${f.key} ${f.title}` : f.key)).join(", ")}` : null,
+    r.details ? `Details:\n${r.details}` : null,
+    r.changes ? `The user asked for changes (${(r.changesAt ?? "").replace("T", " ")}):\n${r.changes}` : null,
   ].filter((x) => x !== null).join("\n");
 }
 

@@ -7,8 +7,10 @@ import { CommandPalette } from "@/components/command-palette";
 import { LiveRefresh } from "@/components/live-refresh";
 import { Approvals } from "@/components/approvals";
 import { RemoteStart } from "@/components/remote-start";
+import { ImportOffer } from "@/components/import-projects";
 import { Toaster } from "@/components/ui";
 import * as repo from "@/server/repo";
+import { deviceConfig } from "@/server/device";
 import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
@@ -24,10 +26,12 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const step = nextStep(state);
   if (step) redirect(step);
   const user = state!.user;
-  const [areas, projects, tasks, waiting, devices] = await Promise.all([
-    repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }),
-    MODE === "web" ? repo.listDevices() : [],
+  const [areas, projects, tasks, waiting, all] = await Promise.all([
+    repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }), repo.listDevices(),
   ]);
+  // Where "Start on a computer" can send a session: in the desktop app, the other computers.
+  const me = MODE === "desktop" ? deviceConfig().deviceId : null;
+  const devices = all.filter((d) => d.id !== me);
   const today = todayStr();
   const open = (t: (typeof tasks)[number]) => t.status !== "done" && t.status !== "canceled";
   const counts = {
@@ -48,11 +52,13 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel">{children}</main>
       </div>
       {approvals.length > 0 && <Approvals items={approvals} />}
-      {MODE === "web" && <RemoteStart devices={devices} tasks={tasks.map((t) => ({ id: t.id, key: t.key, title: t.title }))} />}
+      <RemoteStart devices={devices} tasks={tasks.map((t) => ({ id: t.id, key: t.key, title: t.title }))} />
       <QuickAdd areas={areas} projects={projects} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />
       <LiveRefresh />
+      {/* The first time PacedMind opens on a computer, it offers to bring the Claude Code and Codex projects there over. */}
+      {MODE === "desktop" && !deviceConfig().importOffered && <ImportOffer areas={areas} />}
     </div>
   );
 }

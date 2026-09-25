@@ -1,5 +1,5 @@
 import "server-only";
-import type { AgentId } from "@/lib/types";
+import type { AgentId, Surface } from "@/lib/types";
 
 /*
  * Sessions waiting for you to allow them in this computer's PacedMind window (requests.ts decides what goes
@@ -17,6 +17,10 @@ export interface Approval {
   key: string;
   agent: AgentId;
   folder: string;
+  /** Where it would run: a terminal or the agent's app here, or the agent's cloud. */
+  surface: Surface;
+  /** For an agent asking to send a session back to work: the session and what should change. */
+  changes?: { sessionId: string; text: string };
   requestedAt: number;
   expiresAt: number;
 }

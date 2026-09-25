@@ -1,6 +1,7 @@
 import { SettingsView } from "@/components/views/settings";
 import * as repo from "@/server/repo";
 import { legacySummary } from "@/server/account";
+import { thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
 import { deviceConfig } from "@/server/device";
 import { encryptedAtRest } from "@/server/secure-file";
@@ -8,15 +9,18 @@ import { MODE, authState } from "@/server/supabase";
 import type { DeviceSettings } from "@/lib/types";
 
 export default async function SettingsPage() {
-  const [settings, projects, areas, sessions, state, devices, legacy] = await Promise.all([
+  const [settings, projects, areas, sessions, state, devices, legacy, me] = await Promise.all([
     repo.getSettings(), repo.listProjects(), repo.listAreas(), repo.listSessions(), authState(), repo.listDevices(),
-    MODE === "desktop" ? legacySummary() : null,
+    MODE === "desktop" ? legacySummary() : null, MODE === "desktop" ? thisDevice() : null,
   ]);
   const d = MODE === "desktop" ? deviceConfig() : null;
   const device: DeviceSettings | null = d && {
     name: d.name, terminal: d.terminal, claudeCommand: d.claudeCommand, codexCommand: d.codexCommand, remoteStart: d.remoteStart,
-    deviceId: d.deviceId, encrypted: encryptedAtRest(),
+    deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
   };
+  // This computer first, with what it found of the agents itself; then the other computers signed in.
+  const signedIn = devices.filter((x) => !x.revokedAt);
+  const here = me?.id ? [me] : [];
   return (
     <SettingsView
       settings={settings}
@@ -29,11 +33,13 @@ export default async function SettingsPage() {
         })),
         backupCodes: state?.hasRecoveryCodes ?? false,
       }}
-      devices={devices.filter((x) => !x.revokedAt)}
+      devices={[...here, ...signedIn.filter((x) => x.id !== me?.id)]}
+      thisDeviceId={me?.id || null}
       device={device}
       mcp={d ? { url: mcpUrl(), token: d.ownerToken } : null}
       legacy={legacy}
       sessionsCount={sessions.length}
+      platform={process.platform}
     />
   );
 }

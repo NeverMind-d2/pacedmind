@@ -1,0 +1,237 @@
+---
+title: Sessions
+description: "Reference for the session tools: list_sessions, start_session, close_session and request_changes, and the protocol agents follow on a task: get_next_task, start_task, attach_image and finish_task."
+---
+
+## `list_sessions`
+
+**Read-only. Allowed without asking.**
+
+Agent sessions, newest first. Each line shows the session id, the task, the agent and where it runs, the state, the time and the session's note. For an agent's hand-back, the note is the report's summary; the line also says *handed back partial* or *handed back blocked* when the report does, and ends with counts from the report: the **Done when** items met and not answered, the images and the questions.
+
+```text
+Session 3f2a9c1b · DEV-21 MCP server skeleton · Claude Code in a terminal on DESKTOP-1 · finished, waiting for the user's review · 2026-09-24 13:53:07 · MCP endpoint added at /api/mcp. Tests pass. (2 of 3 Done when items met · 1 question)
+Session 9c0d1e2f · DEV-22 Start sessions from the app · Claude Code in a terminal on DESKTOP-1 · finished, waiting for the user's review · 2026-09-25 10:12:40 · handed back partial · The terminal opens in the project folder; the task doesn't show the running session yet. (1 of 3 Done when items met · 1 not answered)
+```
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `status` | `waiting`, `running` or `all` | `waiting`: finished and needing review, including hand-backs that are partly done or blocked. Default `all`. |
+| `project` | string | Only sessions for tasks in this project. |
+| `task` | string | Only sessions for this task. |
+| `limit` | number | 1 to 200. Default 20. |
+
+The states read: *starting*, *running*, *finished, waiting for the user's review*, *reviewed and done*, *closed* and *failed*.
+
+## `start_session`
+
+**Starts an agent on the user's computer or in its cloud. Agents ask the user first.**
+
+Starts Claude Code or Codex working on a task, in the task's folder, the same way as **Start with Claude Code** in the app: where the task runs, unless `where` says otherwise. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-runs).
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `agent` | `claude` or `codex` | no | Defaults to the task's agent, else the project's, else Claude Code. |
+| `where` | `terminal`, `desktop` or `cloud` | no | A terminal, the agent's desktop app (the first message is written there, and the user sends it), or the agent's cloud (Claude Code on the web, Codex cloud). |
+
+Returns *Started DEV-22 with Claude Code in a terminal on DESKTOP-1 (session 3f2a9c1b).* For the desktop app, it adds *The first message is written there; the user sends it.*; for the cloud, *Cloud sessions can't report back to PacedMind; the user marks the task finished or done.* Fails when the task already has a running session, when it's the user's own task, when the computer lacks the agent's tool or app, when the folder can't be used, or, for the cloud, without a git repository or, for Codex, without the project's Codex environment.
+
+## `close_session`
+
+**Deletes. Agents ask the user first.**
+
+Marks a running session as closed, for example when its terminal was closed or it got stuck. The task goes back to **Todo** if it was in progress.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `session` | string | yes | The session id from `list_sessions`. |
+
+## `request_changes`
+
+**Reopens an agent's session in a new terminal on the user's computer. Agents ask the user first.**
+
+Sends work an agent handed back to it again, with what the user wants changed, the same way as **Request changes** under a report in the app. See [Request changes](/agents/review#request-changes).
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `changes` | string | yes | What should change, in the user's words. The agent reads it as written. |
+
+The task's latest session must have handed the task back: it's **Finished**, or **Done** when the user already marked the task done. PacedMind then:
+
+1. adds the changes to the agent's last report;
+2. reopens the session in a new terminal, in the session's folder, or the task's when the session has none, with a first message that sends the agent to `start_task`, which shows the changes first;
+3. sets the session back to **Running** (*You asked for changes: …*) and the task to **In progress**, also when the task was done.
+
+Claude Code continues its conversation as a new branch of it, with its own id, so closing a terminal still open on the old conversation doesn't close the reopened session. A Claude Code session without a conversation to go back to, such as one started outside PacedMind, starts a new conversation. Codex starts a new conversation. The first message reads:
+
+```text
+PacedMind task DEV-22, session 3f2a9c1b: the user reviewed your work on Start sessions from the app and asked for changes. Call the organizer MCP tool start_task with task DEV-22 and session 3f2a9c1b to read them, then follow the instructions it returns.
+```
+
+Returns *Sent the changes to Claude Code. DEV-22 is in progress again: session 3f2a9c1b reopened in a new terminal on the user's computer.*
+
+Only a session in a terminal on this computer can be reopened. Refused when:
+
+* the task's latest session hasn't handed it back, or the task has no session (*DEV-22 has no hand-back to send changes to: its latest session is running. start_session starts a new session.*);
+* `changes` is empty (*Write what should change*);
+* the task is the user's own (*DEV-22 is marked as yours. Hand it to Claude Code or Codex first.*);
+* the task already has a running session (*This task already has a running session*);
+* the task's latest report comes from another of its sessions (*DEV-22 has a newer report. Ask for the changes on that one.*);
+* the session runs in a desktop app or in the cloud (*This session runs in the Claude app. Open it there and write your changes to the agent.*);
+* the session ran on another computer (*This session ran on DESKTOP-2. Ask for the changes in PacedMind there.*);
+* the session has no folder and the task's folder can't be used (*DEV-22 has no folder to work in*), or the terminal doesn't open.
+
+## The protocol for agents working on a task
+
+A session that PacedMind starts begins with a message naming the task and the session. The agent picks the task up with `start_task`, can attach screenshots with `attach_image` while it works, and hands the task back with a report through `finish_task`. The **pacedmind-agent-session** skill teaches the protocol in detail. See [How a session runs](/agents/lifecycle).
+
+### `get_next_task`
+
+**Read-only. Allowed without asking.**
+
+The next task in a project that is ready to be worked on: the first task in roadmap order that is to do or in the backlog and whose connections leading to it are all satisfied. A connection from a task that an agent handed back partly done or blocked is satisfied only once that task is marked done or handed back again as done, or a newer session of it is marked finished. Returns the same details as [`get_task`](/mcp/tools/tasks#get_task), or *Nothing in … is ready right now.*
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | yes | The project's id or name. |
+
+### `start_task`
+
+**Changes data. Allowed without asking.**
+
+Tells PacedMind that the agent is starting work on a task. The session becomes **Running** (*Claude Code read the task over MCP*) and the task **In progress**.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `session` | string | no | The session id from the agent's first message. |
+| `agent` | `claude` or `codex` | no | Used when PacedMind didn't start the session. |
+
+Returns, in this order:
+
+1. the changes the user asked for, when they reviewed the last hand-back and sent it back with **Request changes** or `request_changes`, with the instruction to make these changes first;
+2. the task's details, the same as [`get_task`](/mcp/tools/tasks#get_task) returns, including the numbered **Done when** items and the last report, if the task was handed back before;
+3. the session id and the instructions for handing the task back with a report.
+
+For example:
+
+```text
+PacedMind session: 3f2a9c1b
+Work on this task here. When it is ready for the user to check, call finish_task with task DEV-22, session 3f2a9c1b and a report:
+- summary: one or two sentences on what changed and what the user should look at first;
+- criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);
+- images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;
+- verify: steps the user can follow to check the result, and questions: anything the user has to decide;
+- details: anything longer, in Markdown.
+If you can't finish, still call finish_task, with outcome partial or blocked, and say why. Do not mark the task done yourself.
+```
+
+The `criteria` line appears only when the task has Done when items.
+
+When the user asked for changes, the result starts with them:
+
+```text
+The user reviewed your last hand-back and asked for changes (2026-09-25 11:02:13):
+Show the running session in the task list too, not only in the task panel.
+
+Make these changes first; your last report is at the end of the task below. Then hand the task back again with finish_task and a new report whose summary starts with what you changed.
+```
+
+The changes stay on the last report until the agent hands the task back with a new one, so every `start_task` until then shows them.
+
+With a session id of that task, `start_task` sets that session back to **Running**, whatever its state. Without one, it uses the task's running session; when there's none, as when the agent was started outside PacedMind, it creates one (*Started outside PacedMind*). It refuses to create one for tasks that are the user's own.
+
+### `attach_image`
+
+**Changes data. Allowed without asking.**
+
+Adds a screenshot or another image to the task the agent works on, so the user sees it with the agent's report. The agent saves the image as a file first and passes its path; PacedMind keeps its own copy, in the `attachments` folder next to its database. `finish_task` takes images too.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `session` | string | no | The agent's session id. |
+| `path` | string | yes | The image file on this computer: a PNG, JPEG, GIF or WebP image of up to 20 MB. |
+| `caption` | string | no | What the image shows, in a few words. |
+
+PacedMind tells the type from the file's contents, not from its name. The path can be absolute, start with `~` for the home folder, or be a `file://` URL. On Windows, Git Bash paths such as `/c/Users/…`, WSL paths such as `/mnt/c/Users/…`, and `/tmp/…`, which stands for the system's temp folder, work too. A relative path is read from the session's folder, or the project's when the session has none.
+
+The image goes to the session named in `session`, else the task's running session, else its latest session. While the session runs, the image waits and becomes part of the report at `finish_task`; after the task was handed back, it joins that session's last report.
+
+Returns the caption in quotes, or *an image*, then the size in pixels when PacedMind can read it, the type and the file size:
+
+```text
+Attached "Task panel with the running session", 1440×900 PNG, 212 KB to DEV-22. It will be part of your report when you call finish_task.
+Attached an image, 1280×800 JPEG, 1.4 MB to DEV-22, in your last report.
+```
+
+Refused when:
+
+* the task has no session yet (*DEV-22 has no session yet. Call start_task with task DEV-22 first.*);
+* the session already has 40 images (*This session already has 40 images. Attach the ones that show the result best.*);
+* the path is empty (*The image path is empty.*);
+* there's no file at the path (*PacedMind can't find …. Save the image to a file and pass its absolute path.*). A path that PacedMind completed or translated, such as a relative or a Git Bash path, is shown with the one it read: *… (read as …)*;
+* the path is a folder (*… is a folder, not an image file.*);
+* the file is larger than 20 MB (*panel.png is 23.4 MB; an image can be up to 20 MB. Save a smaller one, for example only the window instead of the whole screen.*);
+* the file isn't one of the four image types (*panel.png isn't a PNG, JPEG, GIF or WebP image.*).
+
+### `finish_task`
+
+**Changes data. Allowed without asking.**
+
+Hands a task back for the user's review, with a report of what the agent did. PacedMind shows the report on the task and in **Sessions**: the summary, the answer to each **Done when** item, the screenshots, how to check the result, and the questions. See [The report](/agents/review#the-report).
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `session` | string | no | The session id. |
+| `summary` | string | yes, or `note` | One or two sentences on what changed and what the user should look at first. Line breaks become spaces. |
+| `outcome` | `done`, `partial` or `blocked` | no | `done`, the default: everything asked for is ready. `partial`: only some of it is. `blocked`: the agent can't go on without the user. |
+| `criteria` | list | when the task has Done when items, unless `outcome` is `blocked` | The answer to each Done when item: `item`, its number as `start_task` listed it, or its text; `verdict`, `met`, `partly` or `not_met`; and, optionally, a `note` on how the agent checked it or what's missing. |
+| `images` | list | no | Up to 20 screenshots or other images of the result, each with a `path` and, optionally, a `caption`. The files follow the same rules as in [`attach_image`](#attach_image). |
+| `verify` | string list | no | Steps the user can follow to check the result: a command to run, a page to open, what to look for. |
+| `questions` | string list | no | Decisions or answers the agent needs from the user. |
+| `details` | string | no | Anything longer, in Markdown: what the agent did and why, trade-offs, test results, findings. |
+| `links` | list | no | Pull requests, commits, previews or documents, each with a `label` and a `url`. |
+| `follow_ups` | string list | no | Keys of tasks the agent created for work outside this one. |
+| `note` | string | no | The older name for `summary`, used when `summary` is left out. |
+
+Answers in `criteria` match the Done when items by number, by their text, or by a part of the text that fits only one item. The report keeps each item's text as it was at the hand-back, so later edits to the list don't change it. An answer that matches no item is kept as an extra item, so an agent can also report what it checked on a task without Done when items. Items without an answer show as not answered. The images the agent attached with `attach_image` while it worked become part of the report too. Links without a URL, and follow-ups that aren't task keys, are left out.
+
+The report goes to the session named in `session`, else the task's running session, else its latest session when that one has already handed the task back. When there's no session to report on, as for an agent that PacedMind didn't start, `finish_task` records one (*Started outside PacedMind*), except for a task that is the user's own.
+
+The session becomes **Finished**, with the summary as its note, which notifications and `list_sessions` show, and the task goes to **In review**. What happens next depends on `outcome`:
+
+* `done`: the flow goes on. Sessions that waited for this task start, and a **Same session** connection continues in this session.
+* `partial` or `blocked`: nothing starts. Tasks connected after this one wait until the user marks it done, until the agent hands it back again as `done` (for example after `request_changes`), or until a newer session of the task is marked finished. A task connected with **Same session** doesn't continue in this session; it starts as a new session when the user marks this task done. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
+
+The result starts with *Recorded your report for DEV-22 (…). It waits for the user's check.* The parentheses count the Done when items met and not answered, the images and the questions, or say *summary only*. When they apply, *Not answered:* follows with the items left without an answer, unless the outcome is `blocked`, and *Left out follow-ups that aren't PacedMind tasks:* with the keys. The result ends:
+
+* for `done`, with one line for each session the flow started, such as *PacedMind started DEV-24 in a new Codex session.*, and then either *Next in this same session: DEV-23 · Session tracking over MCP.* and *Call start_task with task DEV-23 and session 9c0d1e2f, then keep working.*, when a **Same session** connection continues, or *You can stop here.*;
+* for `partial` or `blocked`, with *You handed it back as partial, so the flow waits until the user marks DEV-22 done. You can stop here.*
+
+For example:
+
+```text
+Recorded your report for DEV-21 (2 of 3 Done when items met · 1 question). It waits for the user's check.
+PacedMind started DEV-24 in a new Codex session.
+You can stop here.
+```
+
+```text
+Recorded your report for DEV-22 (1 of 3 Done when items met · 1 not answered). It waits for the user's check.
+Not answered: "A screenshot of the task panel with the running session".
+You handed it back as partial, so the flow waits until the user marks DEV-22 done. You can stop here.
+```
+
+Refused, with nothing recorded, when:
+
+* the summary is missing (*finish_task needs a summary: one or two sentences on what changed and what the user should look at first.*);
+* the task has Done when items, `criteria` is empty and the outcome isn't `blocked`: *DEV-22 lists what "done" means. Answer each item in criteria (verdict met, partly or not_met, with a note), then call finish_task again:*, followed by the numbered items;
+* an `item` number doesn't exist (*DEV-22's Done when has 3 items; there's no item 4.*, or, for a task without Done when items, *DEV-22 has no Done when items. Pass the text of what you checked as item.*);
+* an image can't be used, with the same messages as `attach_image`; with several images, they end with *Nothing was recorded; fix it and call again.*;
+* there's no session to report on and the task is the user's own (*DEV-22 is marked as the user's own task (human), so it stays out of flows and agent sessions. Ask the user before changing that with update_task.*).
+
+A session that can't call `finish_task`, in the cloud or in a desktop app without PacedMind's MCP server, is marked finished in the app instead, with **Mark finished**. That has the same effect on the session, the task and the flow, but records no report; a **Same session** task after it then starts as a new session.

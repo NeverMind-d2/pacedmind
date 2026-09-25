@@ -7,6 +7,17 @@ export type Doer = AgentId | "human";
 /** How the target task's session starts once the source task is ready. */
 export type EdgeMode = "auto" | "manual" | "session" | "time";
 export type SessionStatus = "starting" | "running" | "finished" | "done" | "closed" | "failed";
+/**
+ * Where an agent session runs: in a terminal or the agent's desktop app on a device where PacedMind is
+ * installed, or in the provider's cloud (Claude Code on the web, Codex cloud).
+ */
+export type Surface = "terminal" | "desktop" | "cloud";
+/** Whether PacedMind's MCP server is set up for sessions it doesn't configure itself (desktop apps). */
+export type McpLink = "connected" | "elsewhere" | "missing";
+/** How an agent handed a task back: all of it ready, part of it, or stuck until the user decides something. */
+export type ReportOutcome = "done" | "partial" | "blocked";
+/** An agent's answer to one "Done when" item. */
+export type Verdict = "met" | "partly" | "not_met";
 
 /** A session that is (about to be) at work in a terminal. */
 export const isLiveSession = (s: { status: SessionStatus }) => s.status === "starting" || s.status === "running";
@@ -36,6 +47,10 @@ export interface Project {
   targetDate: string | null;
   /** Where its sessions run on this computer; set in the desktop app, never stored in the cloud. */
   folder: string | null;
+  /** The computer its sessions run on; null means whichever computer starts them. */
+  deviceId: string | null;
+  /** The Codex cloud environment (its label or id) that tasks sent to Codex cloud run in. */
+  codexEnv: string | null;
   agent: AgentId | null;
   afterProjectId: string | null;
   /** Whether its flow may start sessions on this computer by itself (a switch in the desktop app). */
@@ -66,8 +81,16 @@ export interface Task {
   plannedDate: string | null;
   estimateMin: number;
   labels: string[];
+  /** What must be true when the task is finished, one checkable outcome per item. Agents answer each when they hand it back. */
+  doneWhen: string[];
   reminder: string | null;
   agent: Doer | null;
+  /** Where its agent sessions run; null picks the terminal when the agent's CLI is installed, else its desktop app. */
+  runIn: Surface | null;
+  /** The computer its sessions run on; null means the project's computer. */
+  deviceId: string | null;
+  /** Its own working folder on this computer (a workspace); set in the desktop app, never stored in the cloud. Null means the project's folder. */
+  folder: string | null;
   sortOrder: number;
   flowX: number | null;
   flowY: number | null;
@@ -100,10 +123,13 @@ export interface Session {
   id: string;
   taskId: number;
   agent: AgentId;
-  /** The computer it runs on. */
+  surface: Surface;
+  /** The computer it runs on, or the one that sent it to the cloud. */
   deviceId: string | null;
   folder: string | null;
   branch: string | null;
+  /** Where to follow it, e.g. claude.ai/code for cloud sessions. */
+  url: string | null;
   status: SessionStatus;
   startedAt: string;
   finishedAt: string | null;
@@ -119,6 +145,53 @@ export interface SessionEvent {
   at: string;
   kind: string;
   text: string;
+}
+
+/** An image an agent attached to a task, such as a screenshot of the result. Served at /api/attachments/<id>. */
+export interface Attachment {
+  id: string;
+  taskId: number;
+  sessionId: string | null;
+  /** The report it belongs to; null while the session is still working. */
+  reportId: number | null;
+  mime: string;
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  caption: string;
+  createdAt: string;
+}
+
+/** A "Done when" item as the agent answered it. The text is kept as it was, so later edits don't change old reports. */
+export interface ReportCriterion {
+  text: string;
+  /** Null when the agent didn't answer this item. */
+  verdict: Verdict | null;
+  note: string;
+}
+
+/** What an agent handed back with finish_task: one per hand-back, so a session that is resumed can have several. */
+export interface Report {
+  id: number;
+  sessionId: string;
+  taskId: number;
+  agent: AgentId;
+  outcome: ReportOutcome;
+  summary: string;
+  /** Markdown. */
+  details: string;
+  criteria: ReportCriterion[];
+  /** Steps the user can follow to check the result. */
+  verify: string[];
+  questions: string[];
+  links: { label: string; url: string }[];
+  /** Tasks the agent created for work outside this one. Title and href are null when the task is gone. */
+  followUps: { key: string; title: string | null; href: string | null }[];
+  createdAt: string;
+  images: Attachment[];
+  /** What the user asked to change after reading this report; the agent gets it through start_task. */
+  changes: string | null;
+  changesAt: string | null;
 }
 
 export interface FlowEdge {
@@ -139,10 +212,13 @@ export interface Settings {
   workDays: number[];
 }
 
+/** Windows Terminal or Command Prompt on Windows, Terminal or iTerm on macOS (src/lib/terminals.ts). */
+export type TerminalId = "wt" | "cmd" | "terminal" | "iterm";
+
 /** What the desktop app on this computer decides for itself (src/server/device.ts), as Settings shows it. */
 export interface DeviceSettings {
   name: string;
-  terminal: "wt" | "cmd";
+  terminal: TerminalId;
   claudeCommand: string;
   codexCommand: string;
   remoteStart: RemoteStart;
@@ -150,16 +226,34 @@ export interface DeviceSettings {
   deviceId: string | null;
   /** Whether the app's secrets on disk are encrypted with a key from the OS keychain. */
   encrypted: boolean;
+  /** True once the import of Claude Code and Codex projects was offered here (it opens by itself only once). */
+  importOffered: boolean;
 }
 
-/** A computer with the desktop app, signed in to the account. */
+/** What PacedMind found on a computer for one agent. */
+export interface AgentTools {
+  /** The command-line tool, when it answered `--version`; `path` when it isn't on the PATH but was found where installers put it. */
+  cli: { version: string; path?: string } | null;
+  /** The desktop app, when it's installed. */
+  app: { version: string | null } | null;
+  /** Whether sessions PacedMind doesn't set up itself (the desktop app) can reach PacedMind's MCP server. */
+  mcp: McpLink;
+}
+
+export const NO_AGENT_TOOLS: AgentTools = { cli: null, app: null, mcp: "missing" };
+
+/** A computer with the desktop app, signed in to the account. Sessions run on it in a terminal or an agent's desktop app. */
 export interface Device {
   id: string;
   name: string;
   platform: "windows" | "macos" | "linux";
   remoteStart: RemoteStart;
+  /** What it found for each agent when it last looked; nothing found until the first check finished. */
+  agents: Record<AgentId, AgentTools>;
   createdAt: string;
   lastSeenAt: string | null;
+  /** When it last looked for the agents; null until the first check finished. */
+  checkedAt: string | null;
   revokedAt: string | null;
 }
 
@@ -187,6 +281,14 @@ export interface TaskContext {
   /** Latest session per task id. */
   sessions: Record<number, Session>;
   sessionEvents: Record<string, SessionEvent[]>;
+  /** What agents handed back, per task id, newest first. */
+  reports: Record<number, Report[]>;
+  /** Images a running session attached so far, before it hands the task back, per session id. */
+  pending: Record<string, Attachment[]>;
+  /** Session ids whose agent can take changes from here now (Request changes). */
+  changesOk: Record<string, boolean>;
+  /** In the desktop app, which keeps this computer's folders and starts sessions here; false in the web app. */
+  desktop?: boolean;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
@@ -220,11 +322,57 @@ export const AGENT_LABEL: Record<AgentId, string> = {
 
 export const DOER_LABEL: Record<Doer, string> = { ...AGENT_LABEL, human: "You" };
 
+export const SURFACE_LABEL: Record<Surface, string> = { terminal: "Terminal", desktop: "Desktop app", cloud: "Cloud" };
+/** The agent's desktop app and its cloud, by name. */
+export const APP_LABEL: Record<AgentId, string> = { claude: "Claude app", codex: "Codex app" };
+export const CLOUD_LABEL: Record<AgentId, string> = { claude: "Claude Code on the web", codex: "Codex cloud" };
+
+/**
+ * Where a task's sessions run when the task doesn't say: in a terminal when the agent's CLI is on the device,
+ * else in its desktop app when that is. Until the device was checked, in a terminal.
+ */
+export function surfaceOf(runIn: Surface | null, tools: AgentTools | undefined): Surface {
+  if (runIn) return runIn;
+  return tools && !tools.cli && tools.app ? "desktop" : "terminal";
+}
+
+/** "Windows", "macOS" or "Linux" for a device's platform (or a Node platform name). */
+export function platformName(platform: string): string {
+  if (platform === "windows" || platform === "win32") return "Windows";
+  if (platform === "macos" || platform === "darwin") return "macOS";
+  return platform === "linux" ? "Linux" : platform;
+}
+
+/** Whether a device can run an agent's sessions that way; cloud sessions need the CLI to start them. */
+export function canRun(tools: AgentTools | undefined, surface: Surface): boolean {
+  if (!tools) return surface === "terminal";
+  return surface === "desktop" ? !!tools.app : !!tools.cli;
+}
+
 /** The agent that runs a task: its own, else the project's, else Claude Code. Null for a task that is yours. */
 export function agentOf(task: { agent: Doer | null }, projectAgent?: AgentId | null): AgentId | null {
   if (task.agent === "human") return null;
   return task.agent ?? projectAgent ?? "claude";
 }
+
+/** Where a task opens in the app: its project, else its area, else the inbox. */
+export function taskHref(t: { key: string; projectId: string | null; areaId: string | null }): string {
+  if (t.projectId) return `/project/${t.projectId}?task=${t.key}`;
+  if (t.areaId) return `/area/${t.areaId}?task=${t.key}`;
+  return `/inbox?task=${t.key}`;
+}
+
+export const OUTCOME_LABEL: Record<ReportOutcome, string> = {
+  done: "Done",
+  partial: "Partly done",
+  blocked: "Blocked",
+};
+
+export const VERDICT_LABEL: Record<Verdict, string> = {
+  met: "Met",
+  partly: "Partly met",
+  not_met: "Not met",
+};
 
 export const EDGE_LABEL: Record<EdgeMode, string> = {
   auto: "Auto",

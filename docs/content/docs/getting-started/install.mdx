@@ -1,0 +1,91 @@
+---
+title: Install PacedMind
+description: Download and install PacedMind on Windows or macOS for the current user, update it, uninstall it, or build it from its source code.
+---
+
+PacedMind installs for the current user. It needs no administrator rights on Windows, and on macOS it goes into the Applications folder like any other app.
+
+## Before installing
+
+* **Windows:** Windows 10 or Windows 11.
+* **macOS:** macOS 13 Ventura or later, on Apple silicon or Intel.
+
+Claude Code, Codex and a terminal app aren't needed for the installation. They matter once PacedMind starts agent sessions; see [Agent sessions](/agents).
+
+## Install on Windows
+
+1. Download the installer, `PacedMind-Windows.exe`, from [pacedmind.com/download/windows](https://pacedmind.com/download/windows).
+2. Run it. The installer isn't signed yet, so Windows SmartScreen may show *Windows protected your PC*: select **More info**, then **Run anyway**.
+
+The installer installs PacedMind to `%LOCALAPPDATA%\Programs\Organizer`, adds **PacedMind** to the Start Menu and to the desktop, and starts it. Its data folder is `%APPDATA%\Organizer` (for example `C:\Users\Anna\AppData\Roaming\Organizer`). The first start creates an empty database with five default areas. See [First launch](/getting-started/first-launch).
+
+## Install on macOS
+
+1. Download the disk image, `PacedMind-macOS.dmg`, from [pacedmind.com/download/mac](https://pacedmind.com/download/mac).
+2. Open it, and drag **PacedMind** onto the **Applications** folder beside it.
+3. Open PacedMind from Applications, Launchpad or Spotlight. The first time, macOS asks whether to open an app downloaded from the internet: select **Open**.
+
+The app is signed, and notarized by Apple. Its data folder is `~/Library/Application Support/Organizer`. The first start creates an empty database with five default areas. See [First launch](/getting-started/first-launch).
+
+### Why some names say Organizer
+
+Organizer is PacedMind's earlier name. The data folder and the MCP server's identifier (`organizer`) keep that name, and on Windows so do the installation folder and the executable (`Organizer.exe`), so updates keep the existing data and agent connections. Windows shows the app, its shortcuts and its notifications as **PacedMind**; the **Details** tab of Task Manager lists its processes as `Organizer.exe`. On macOS the app itself is called PacedMind.
+
+## Update
+
+Download the installer or the disk image again, and install it the same way. The data stays as it is, including the MCP access token, so connected agents keep working.
+
+* **Windows:** run the new `PacedMind-Windows.exe`. If PacedMind is running, the installer asks to close it first.
+* **macOS:** quit PacedMind (its menu bar icon → **Quit PacedMind**, or <kbd>⌘</kbd>+<kbd>Q</kbd>), drag the new **PacedMind** onto **Applications**, and select **Replace**.
+
+## Uninstall
+
+### Windows
+
+1. In Windows **Settings → Apps → Installed apps** (**Apps & features** on Windows 10), select **Uninstall** for **PacedMind**. This removes the app, its shortcuts and the **Start with Windows** entry.
+2. To delete the data as well, delete the folder `%APPDATA%\Organizer`. This removes every area, project, task, activity and session record, and can't be undone.
+
+### macOS
+
+1. If **Open at Login** is checked in the menu bar icon's menu, uncheck it. Then quit PacedMind.
+2. Drag **PacedMind** from Applications to the Bin.
+3. To delete the data as well, delete the folder `~/Library/Application Support/Organizer` (in Finder, **Go → Go to Folder…**). This removes every area, project, task, activity and session record, and can't be undone.
+
+### Agent connections
+
+If Claude Code or Codex were connected to PacedMind, remove those connections too:
+
+* Claude Code: `claude mcp remove organizer` (add `--scope user` if it was added for all projects).
+* Codex: delete the `[mcp_servers.organizer]` section from `~/.codex/config.toml`.
+* Agent skills installed from the source code: `npm run skills -- --remove` in the source folder. See [Agent skills](/skills).
+
+## Build from the source code
+
+With the source code and [Node.js](https://nodejs.org/) 22.13 or later, one command builds the desktop app and installs it for the current user:
+
+```bash
+npm install
+npm run desktop
+```
+
+`npm run desktop` takes a few minutes. It builds the app and packages it with Electron, closes PacedMind if it's running from an earlier installation, installs it and starts it:
+
+* on Windows, to `%LOCALAPPDATA%\Programs\Organizer`, the installer's folder, with the same shortcuts;
+* on macOS, as `~/Applications/PacedMind.app`, the Applications folder in the home folder.
+
+Run it again after updating the code: it replaces the running app and keeps the data.
+
+| Command | Result |
+| --- | --- |
+| `npm run desktop` | Builds, installs and starts the app. |
+| `npm run desktop -- --no-launch` | Builds and installs the app without starting it. |
+| `npm run desktop -- --no-install` | Builds and packages the app into `dist/package` without installing it. |
+
+If the running app can't be closed, the command stops with *Organizer is still running. Quit it from the tray icon and run this again.* on Windows, or *PacedMind is still running. Quit it from its menu bar icon and run this again.* on macOS. Quit PacedMind and run `npm run desktop` again.
+
+## Troubleshooting
+
+* **The build fails on an older Node.js:** check the version with `node --version`. PacedMind needs 22.13 or later, which runs its database module without extra flags. `npm install` only warns about an older version; `npm run desktop` then fails.
+* **Windows: PacedMind was installed or started from a terminal inside the Claude or Codex desktop app, and its data or icon looks wrong:** those apps keep a separate copy of `AppData` for the programs they start. Open PacedMind from the Start Menu instead. See [Troubleshooting](/troubleshooting#the-data-looks-empty-or-the-icon-is-blank).
+
+More problems and their solutions are on the [Troubleshooting](/troubleshooting) page.

@@ -1,0 +1,87 @@
+---
+title: First launch
+description: Open PacedMind for the first time, find your way around the window and the sidebar, and set up areas, projects and work hours.
+---
+
+Open PacedMind: on Windows from the Start Menu or its desktop shortcut, on macOS from Applications, Launchpad or Spotlight. The window shows *Starting PacedMind…* while the app's server starts, then opens **Today**.
+
+## The window
+
+The window has three parts:
+
+* **The header**, across the top: **Go back** and **Go forward** buttons (<kbd>Alt</kbd>+<kbd>Left</kbd> and <kbd>Alt</kbd>+<kbd>Right</kbd> on Windows, <kbd>⌘</kbd>+<kbd>[</kbd> and <kbd>⌘</kbd>+<kbd>]</kbd> on macOS), and the PacedMind wordmark, which returns to **Today**. The window's own buttons sit in the header too: minimize, maximize and close at its right end on Windows, the close, minimize and zoom buttons at its left end on macOS.
+* **The sidebar**, on the left.
+* **The main panel**, which shows the selected view. Opening a task adds its details panel on the right.
+
+Pages refresh on their own when data changes elsewhere, for example when an agent reports progress over MCP.
+
+## The sidebar
+
+From top to bottom:
+
+| Element | What it does |
+| --- | --- |
+| **Search** (<kbd>Ctrl</kbd>+<kbd>K</kbd>, on macOS <kbd>⌘</kbd>+<kbd>K</kbd>) | Opens the command menu to find tasks, projects and pages. See [Search and the command menu](/tasks/search). |
+| Pen button (<kbd>C</kbd>) | Opens quick add for a new task. See [Quick add](/tasks/quick-add). |
+| **Inbox** | Tasks without an area or project. The number counts the open ones. |
+| **Today** | What's overdue, due today or planned for today. The number counts those open tasks. |
+| **Upcoming** | The next 14 days, and project target dates. |
+| **Calendar** | Month and week views, with auto-planned focus time in the week. |
+| **Timeline** | Areas, projects and tasks as bars over time. |
+| **Projects** | All areas and projects with their progress. |
+| **Roadmap** | Project dates and the order of a project's tasks. |
+| **Flows** | The editor for a project's chain of agent sessions. |
+| **Sessions** | Claude Code and Codex sessions. The number counts finished sessions that wait for review. |
+| **Areas** | One row per area, with its key (such as **WRK**). |
+| **Projects** | One row per project, with a progress ring and its target date. |
+| **Settings** | Appearance, devices, the MCP server, sessions, folders, work hours and data. |
+| Sun or moon button | Switches between the dark and the light theme. |
+
+Right-click an area or a project, or use its **…** button, for its menu: rename, change the color, open its tasks, and more. See [Areas and projects](/concepts/areas-and-projects).
+
+## Bring your projects over
+
+The first time PacedMind opens, it looks for the folders you already work in with Claude Code and Codex on this computer, and offers them in a window, *Bring your projects over*. A folder both agents used is listed once, with both marks. Tick the ones to keep, choose their area under **Add to**, and select **Add … projects**: each becomes a project with that folder, and the agent that worked there last as its default agent.
+
+**Not now** closes the window; it doesn't open by itself again. **Settings → Projects and folders → Import from Claude and Codex** opens it any time. When PacedMind finds nothing new to bring over, the window doesn't appear. See [Import projects](/settings#import-projects).
+
+## What the first start contains
+
+A new installation starts with five areas and nothing else:
+
+| Area | Key |
+| --- | --- |
+| Work | WRK |
+| Personal | PER |
+| Health | HLT |
+| Learning | LRN |
+| Dev | DEV |
+
+Rename, recolor or delete them, and add others. Task keys come from the area key: the first task in Work is WRK-1.
+
+## Closing the window
+
+Closing the window doesn't quit PacedMind. It keeps running, so agents can still report back and PacedMind can notify when a session finishes: on Windows in the notification area (the tray), on macOS in the menu bar, with its icon in the Dock. The first time, a notification says so: *PacedMind is still running*.
+
+| | Windows | macOS |
+| --- | --- | --- |
+| Open the window again | Click the tray icon, or open PacedMind from the Start Menu. | Click the Dock icon, or select **Open PacedMind** in the menu bar icon's menu. |
+| Quit | Right-click the tray icon and select **Quit PacedMind**. | Select **Quit PacedMind** in the menu bar icon's menu, or press <kbd>⌘</kbd>+<kbd>Q</kbd>. |
+| Start PacedMind when you sign in | Right-click the tray icon and select **Start with Windows**. | Select **Open at Login** in the menu bar icon's menu. |
+
+Started that way, PacedMind opens in the tray or the menu bar, without a window. See [Desktop app](/desktop-app) for the tray, the menu bar, notifications and the window.
+
+## First steps
+
+1. **Adjust the areas.** Keep the ones that fit, rename the others, and add areas from the **+** next to **Areas** in the sidebar. See [Areas and projects](/concepts/areas-and-projects).
+2. **Create a project.** Use the **+** next to **Projects** in the sidebar and pick its area. Give it a target date on the **Projects** page.
+3. **Add tasks.** Press <kbd>C</kbd> anywhere and type, for example, *Send invoice to Acme friday 10:00 !high #finance*. See [Quick add](/tasks/quick-add).
+4. **Set the work hours.** In **Settings → Auto-plan**, set the focus hours, the break and the work days. The auto-planner fills that time with tasks. See [Work hours and days](/planning/work-hours).
+5. **Prepare agent work (optional).** In **Settings → Projects and folders**, give a code project its folder and default agent, or import them, then open a task and select **Start with Claude Code**. See [Agent sessions](/agents).
+6. **Connect the agents' own sessions (optional).** In **Settings → Devices**, select **Connect** for Claude Code and Codex, so sessions in their desktop apps, and sessions you start yourself, report back to PacedMind. See [MCP server](/mcp).
+
+## Explore with sample data
+
+**Settings → Data → Load sample data** replaces everything with an example workspace: projects in each area, tasks with dates and sub-tasks, weekly activities, and a project with an agent flow and a finished session. **Start empty** goes back to the five default areas.
+
+Both ask for confirmation and replace all areas, projects, tasks, activities and sessions. They can't be undone. Settings, including work hours and the MCP access token, stay as they are.

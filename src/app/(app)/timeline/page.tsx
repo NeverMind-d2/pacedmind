@@ -29,7 +29,7 @@ export default async function TimelinePage(props: PageProps<"/timeline">) {
       tasks={tasks}
       sessions={sessions}
       edges={edges}
-      states={taskStates(tasks, latest, edges, now)}
+      states={await taskStates(tasks, latest, edges, now)}
       loads={await dayLoads(tasks, Object.values(latest), from, WIDEST, now)}
       dayMinutes={workdayMinutes(settings)}
       ctx={await taskContext(tasks)}

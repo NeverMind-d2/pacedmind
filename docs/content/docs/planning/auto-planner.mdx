@@ -1,0 +1,68 @@
+---
+title: The auto-planner
+description: The rules the auto-planner follows to fill free focus time with your tasks, add check blocks for finished agent sessions, and report what didn't fit.
+---
+
+The auto-planner fills your free focus time with your open tasks, most urgent first. It runs whenever a view needs a plan, starting from the current time, and never stores its result: the plan changes as soon as the tasks change.
+
+## Free focus time
+
+For each work day, the planner starts from the focus hours in **Settings → Auto-plan** and removes:
+
+* the break (**Keep free**);
+* every calendar activity, plus 10 minutes before and after it;
+* on today, the time that has already passed, rounded up to the next quarter hour.
+
+Only gaps of at least 30 minutes count as free focus time. The sum of these gaps is the week's capacity, as in *22.5 h planned of 26 h focus time left*.
+
+## What gets planned
+
+First, **check blocks**: for every agent session that finished and waits for review, a 45-minute block to check the result, such as *Check DEV-21*. Checks go into the earliest free time.
+
+Then **your tasks**. A task is planned when all of these hold:
+
+* its status is **Todo** or **In progress**;
+* it isn't handed to Claude Code or Codex: it's yours, or nobody is set;
+* it has a due date, a planned date, or **Urgent** or **High** priority.
+
+Backlog tasks, tasks in review, and tasks without any date or high priority are left out.
+
+## In which order
+
+The tasks go in this order, each one placed before the next is looked at:
+
+1. overdue tasks before the rest;
+2. then by due date, earliest first (tasks without one come after those with one);
+3. then by planned date;
+4. then by priority, **Urgent** first;
+5. then by age, older tasks first.
+
+## How much time, and where
+
+* **Length**: the task's estimate, rounded to quarter hours, at least 15 minutes. For a task **In progress** with sub-tasks, only the share of open sub-tasks counts, but at least a quarter of the estimate.
+* **Blocks**: at most 2 hours each, and at least 30 minutes unless less than that remains, with 10 minutes between blocks. A longer task is split over several blocks (*Split WRK-31 into 2 blocks*).
+* **Where**: the earliest free gap that fits. A task planned for a later day starts on that day at the earliest.
+* **What doesn't fit**: time the range can't hold is reported, such as *WRK-36 Send the Q4 plan to the team needs 2 h and there's no free slot left this week.*
+
+## Reading the result
+
+The week view's **Auto-plan** panel explains the plan in a few notes:
+
+* *DEV-21 finished, so 45 min to check it was added today at 15:00*;
+* *WRK-27 is overdue, planned today at 09:00*;
+* *Split WRK-31 into 2 blocks*.
+
+It also shows the planned hours against the capacity, split by area, and lists **Rules**:
+
+* *Focus time Mon to Fri, 09:00 to 17:00*;
+* *Keep 12:30 to 13:30 free*;
+* *Deadlines first, then priority*;
+* *Finished agent sessions get a check block*;
+* *Tasks for Claude Code and Codex are left to them*.
+
+## Things to know
+
+* The plan is a suggestion. Focus blocks aren't events: they don't block anything, can't be dragged, and don't appear on the month view.
+* A later week gets what the earlier days leave over, because the planner always fills from now on.
+* Deadlines set the order, not a limit. When there's no room before a task's deadline, its blocks land after it without a warning; the **Auto-plan** notes only flag deadlines that have already passed.
+* Agents see the same plan with `get_agenda`, which also reports the free focus time left per day and the overdue tasks.

@@ -3,20 +3,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { requestSessionAction, startSessionAction } from "@/app/actions";
-import { AGENT_LABEL, type AgentId, type Device, type Doer } from "@/lib/types";
+import { AGENT_LABEL, type AgentId, type Device, type Doer, type Surface } from "@/lib/types";
 import { Button, Segmented, cx, toast } from "./ui";
 
 const EVENT = "pacedmind:remote-start";
 
 /**
- * Starts a session: in the desktop app the terminal opens here. The web app can't open terminals, so it
- * opens the dialog below, which asks a computer to start it.
+ * Starts a session: in the desktop app it opens here, where the task says (or `surface`). The web app can't
+ * start anything, and a task that runs on another computer starts there, so both open the dialog below, which
+ * asks that computer to start it.
  */
-export async function startSessionOrAsk(taskId: number, agent?: Doer | null) {
+export async function startSessionOrAsk(taskId: number, agent?: Doer | null, surface?: Surface) {
   const wanted = agent === "claude" || agent === "codex" ? agent : null;
-  const r = await startSessionAction(taskId, wanted);
+  const r = await startSessionAction(taskId, wanted, surface);
   if (!r.remote) return r;
-  window.dispatchEvent(new CustomEvent(EVENT, { detail: { taskId, agent: wanted ?? "claude" } }));
+  window.dispatchEvent(new CustomEvent(EVENT, { detail: { taskId, agent: wanted ?? "claude", deviceId: r.deviceId ?? null } }));
   return { ok: true };
 }
 
@@ -42,11 +43,13 @@ export function RemoteStart({ devices, tasks }: { devices: Device[]; tasks: { id
 
   useEffect(() => {
     const on = (e: Event) => {
-      const d = (e as CustomEvent<{ taskId: number; agent: AgentId }>).detail;
-      setAsk(d);
+      const d = (e as CustomEvent<{ taskId: number; agent: AgentId; deviceId: string | null }>).detail;
+      setAsk({ taskId: d.taskId, agent: d.agent });
       setCode("");
       const open = devices.filter(canStart);
-      setDeviceId((cur) => cur || (open.find(seenRecently) ?? open[0])?.id || "");
+      // The computer the task runs on, when it says; else the one you picked last, or one that's around.
+      const named = d.deviceId && open.some((x) => x.id === d.deviceId) ? d.deviceId : null;
+      setDeviceId((cur) => named ?? (cur || (open.find(seenRecently) ?? open[0])?.id || ""));
     };
     window.addEventListener(EVENT, on);
     return () => window.removeEventListener(EVENT, on);

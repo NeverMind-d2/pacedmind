@@ -1,0 +1,184 @@
+---
+title: Tasks
+description: "Reference for the task tools: list_tasks, get_task, create_task, create_tasks, update_task, bulk_update_tasks and delete_task."
+---
+
+## `list_tasks`
+
+**Read-only. Allowed without asking.**
+
+Finds tasks. Without filters, it lists every open task. Filters combine: a task must match all of them.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `project` | string | Only tasks in this project. |
+| `area` | string | Only tasks in this area, or `inbox` for tasks without an area or project. |
+| `status` | status list | Only these statuses. Overrides `include_done`. |
+| `priority` | priority list | Only these priorities. |
+| `label` | string | Only tasks with this label. |
+| `search` | string | Words that must all appear in the title, the description or the key. |
+| `due_from`, `due_to` | date | Due dates in this range, inclusive. |
+| `planned_from`, `planned_to` | date | Planned dates in this range, inclusive. |
+| `overdue` | boolean | Only open tasks past their due date. |
+| `unscheduled` | boolean | Only tasks with neither a due date nor a planned date. |
+| `include_done` | boolean | Also include done and canceled tasks. |
+| `limit` | number | 1 to 500. Default 100. |
+
+Returns the number of matches and one line per task. When there are more than the limit: *…and 12 more. Narrow the filters or raise the limit.*
+
+## `get_task`
+
+**Read-only. Allowed without asking.**
+
+Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+
+The report starts with its session, the agent, when it was handed back and its outcome: *done*, *partly done* or *blocked, needs the user*. Then come the summary, each Done when item with the agent's verdict (*met*, *partly met*, *not met* or *not answered*) and note, the images, each by its caption, size in pixels, type and file size, how to check the result, the questions for the user, links, follow-ups, the details, and the changes the user asked for, if any. It's headed *Latest report* when it comes from the task's latest session, else *Last report, from an earlier session*. The *Latest session* line appears only when that session has no report of its own, such as a session still at work on its first hand-back.
+
+For example, with the sample data:
+
+```text
+DEV-21 · MCP server skeleton
+Status: In review · Priority: High
+Where: project Organizer app (organizer) in Dev
+Due: 2026-09-25 (Fri) · Planned for: none
+Estimate: 1h · Agent: Claude Code
+Labels: mcp
+
+Description:
+Expose tasks, projects and time blocks over MCP so Claude Code and Codex can read and update them.
+
+Done when:
+1. /api/mcp answers tools/list with the task tools
+2. Requests without the token get 401
+3. Claude Code can create a task through it
+
+Starts after: DEV-19 (auto)
+Leads to: DEV-22 (manual), DEV-24 (auto)
+
+Latest report · session 3f2a9c1b · Claude Code · 2026-09-24 13:53:07 · done
+Summary: MCP endpoint added at /api/mcp. Tests pass.
+Done when:
+1. [met] /api/mcp answers tools/list with the task tools · 12 tools listed.
+2. [met] Requests without the token get 401
+3. [partly met] Claude Code can create a task through it · Tried with the MCP inspector, not with Claude Code yet.
+How to check:
+1. Run npm run dev
+2. Open Settings → MCP server and copy the connect command
+3. Ask Claude Code to list your tasks
+Questions for the user:
+- Should agents be allowed to delete tasks without asking?
+Details:
+- `src/app/api/mcp/route.ts` serves the MCP server with **mcp-handler**.
+- Tools for tasks, projects and time blocks live in `src/server/mcp/`.
+- Every request needs the bearer token from Settings.
+
+Created 2026-09-21 13:53:07 · updated 2026-09-24 13:53:07
+```
+
+The sub-task numbers are the ones `update_task` accepts, and the Done when numbers are the ones `finish_task` accepts in `criteria`.
+
+## `create_task`
+
+**Changes data. Allowed without asking.**
+
+Adds a task. Without `project` and `area`, it goes to the Inbox.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `title` | string | yes | A short, concrete action. |
+| `project` | string | no | The project. Its area comes with it. |
+| `area` | string | no | The area, when there's no project. |
+| `description` | string | no | Why it matters, context, constraints, links. Plain text or Markdown. |
+| `done_when` | string list | no | What must be true when the task is finished, one checkable outcome per item, such as "/reports has a Download CSV button" or "A screenshot of the new page". Up to 20 items; blank and repeated items are left out. Agents answer each item when they hand the task back. See [Done when](/concepts/tasks#done-when). |
+| `status` | status | no | Defaults to `todo`. |
+| `priority` | priority | no | Defaults to `none`. |
+| `due` | date, optional time | no | The deadline. |
+| `planned` | date | no | The day to work on it. |
+| `estimate_minutes` | number | no | 5 to 1440. Default 60. |
+| `labels` | string list | no | Labels, stored in lowercase, without `#`. |
+| `subtasks` | string list | no | Checklist items. |
+| `agent` | `claude`, `codex` or `human` | no | Who does it. Left out, the task gets the project's default agent. `human` keeps it out of flows. |
+
+Returns the new task's line, with its key and the number of Done when items and sub-tasks: *Created DEV-43 · Todo · High · Add CSV export to the reports page · Organizer app · 4 Done when items · 3 sub-tasks.*
+
+A project together with an area that isn't the project's area is refused: *Project … is in …, not …. Leave out the area.* A task created as `done` can start the next sessions of a flow, like any task marked done.
+
+## `create_tasks`
+
+**Changes data.**
+
+Adds up to 50 tasks at once, for example when breaking a project down. All go to the same place; each has its own details.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | no | The project for all tasks. |
+| `area` | string | no | The area for all tasks, when there's no project. |
+| `tasks` | list | yes | 1 to 50 tasks, each with `title` and any of the optional `create_task` fields, such as `description` and `done_when`. |
+
+All dates are checked before anything is created, so one wrong date doesn't leave half the tasks behind.
+
+## `update_task`
+
+**Changes data. Allowed without asking.**
+
+Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`, and an empty list, `[]`, clears `done_when`.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `task` | string, required | The task key. |
+| `title` | string | The new title. |
+| `description` | string | Replaces the description. |
+| `append_to_description` | string | Adds a paragraph at the end of the description. |
+| `done_when` | string list | Replaces the Done when list, up to 20 items. `[]` clears it. |
+| `status` | status | The new status. `done` can start the next sessions of a flow. |
+| `priority` | priority | The new priority. |
+| `due` | date with optional time, or `null` | The deadline. |
+| `planned` | date or `null` | The planned day. |
+| `estimate_minutes` | number | 5 to 1440. |
+| `labels` | string list | Replaces all labels. |
+| `add_labels`, `remove_labels` | string list | Adds or removes labels. |
+| `project` | string or `null` | Moves the task to this project and its area, or takes it out of its project. |
+| `area` | string or `null` | Moves the task to this area; `null` or `inbox` moves it to the Inbox. The task leaves its project when that project is in another area. With `project`, leave it out: a different area is refused. |
+| `agent` | `claude`, `codex`, `human` or `null` | Who does it. `human` takes the task out of its flow for good. |
+| `runs_in` | `terminal`, `desktop`, `cloud` or `null` | Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. `null`: a terminal when the agent's command-line tool is installed, else its desktop app. |
+| `folder` | string or `null` | An absolute folder its sessions work in instead of the project's, checked right away. `null` goes back to the project's folder. |
+| `add_subtasks` | string list | New sub-tasks. |
+| `complete_subtasks` | string list | Sub-tasks to tick off, by number (as `get_task` shows them) or title. |
+| `reopen_subtasks` | string list | Sub-tasks to reopen. |
+| `remove_subtasks` | string list | Sub-tasks to delete. |
+
+Returns the updated task line; with `done_when`, the number of Done when items, such as *· 3 Done when items*; and, with sub-tasks, how many are done, such as *· 3/4 sub-tasks done*. It also reports *WRK-12 is the user's now, so it left the flow.* and the sessions a status of `done` started.
+
+## `bulk_update_tasks`
+
+**Changes data.**
+
+Applies the same change to up to 100 tasks, for rescheduling and triage.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `tasks` | string list, required | 1 to 100 task keys. |
+| `status` | status | The new status. |
+| `priority` | priority | The new priority. |
+| `due` | date with optional time, or `null` | A new deadline for all. |
+| `planned` | date or `null` | A new planned day for all. |
+| `shift_days` | number | Moves each task's due and planned dates by this many days, -365 to 365, keeping times. |
+| `project` | string or `null` | Moves the tasks to this project, or out of their projects. |
+| `area` | string or `null` | Moves the tasks to this area, or to the Inbox. |
+| `add_labels`, `remove_labels` | string list | Adds or removes labels. |
+
+`shift_days` can't be combined with `due` or `planned`. Setting `status` to `done` works as in `update_task`: finished sessions of those tasks count as reviewed, and sessions waiting for them in a flow can start.
+
+## `delete_task`
+
+**Deletes. Agents ask the user first.**
+
+Deletes a task with its sub-tasks, sessions and flow connections, and the reports and images its agents handed back. Setting the status to `canceled` keeps a record and is often the better choice.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |

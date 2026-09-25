@@ -5,8 +5,9 @@ import crypto from "node:crypto";
 import { addDays, addMinutes } from "date-fns";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { requireAal2, supabase } from "./supabase";
-import { commandProblem, deviceConfig, setFlowArmed, setProjectFolder, updateDevice } from "./device";
-import { flowSnapshot } from "./repo";
+import { removeImageFiles } from "./attachments";
+import { commandProblem, deviceConfig, setFlowArmed, setProjectFolder, setTaskFolder, updateDevice } from "./device";
+import { CODEX_ENV, cleanDoneWhen, flowSnapshot } from "./repo";
 import { toDateStr, toStamp } from "@/lib/dates";
 
 /* An account's data as a whole: starting over, sample data, and bringing over the data PacedMind kept on this computer before the cloud. */
@@ -27,13 +28,19 @@ export const DEFAULT_AREAS = [
   { name: "Dev", key: "DEV", color: "#7AA3AD" },
 ];
 
-/** Deletes the account's areas, projects, tasks (with their sessions and connections) and events. Settings stay. */
+/** Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay. */
 async function clearAccount(db: SupabaseClient) {
   const { id } = (await requireAal2()).user;
-  // Deleting tasks takes their sub-tasks, sessions and connections along; areas take their projects.
+  // The images this computer keeps for the account's tasks go with them.
+  const device = deviceConfig().deviceId;
+  const files = device ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
+  // Deleting tasks takes their sub-tasks, sessions, reports, images and connections along; areas take their projects.
   for (const table of ["tasks", "events", "projects", "areas", "key_counters"]) {
     check(await db.from(table).delete().eq("user_id", id));
   }
+  removeImageFiles(files);
+  // So do this computer's folders and flow switches for them.
+  updateDevice({ folders: {}, taskFolders: {}, armed: [], confirmed: {} });
 }
 
 /** Starts the account over with the default areas, and optionally the sample data. */
@@ -187,9 +194,10 @@ export async function legacySummary(): Promise<{ file: string; areas: number; pr
 
 /**
  * Copies the local database into the signed-in account. Only into an account without projects or tasks:
- * its default areas are replaced by the local ones. Task keys, dates and sessions come along; project
- * folders, flow switches and agent commands stay on this computer (device.ts). The old MCP token doesn't:
- * agents connect again with this computer's new one.
+ * its default areas are replaced by the local ones. Task keys, dates, sessions and their reports come along,
+ * and the images agents attached stay in this computer's data folder; project and task folders, flow
+ * switches and agent commands stay on this computer (device.ts). The old MCP token doesn't: agents connect
+ * again with this computer's new one.
  */
 export async function importLegacy(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
@@ -203,6 +211,8 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
   const { DatabaseSync } = await import("node:sqlite");
   const conn = new DatabaseSync(file, { readOnly: true });
   const all = (sql: string) => conn.prepare(sql).all() as Row[];
+  // Tables later versions of the local app added (reports and their images) may not be there.
+  const has = (table: string) => all(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '${table}'`).length > 0;
   try {
     const areas = all("SELECT * FROM areas ORDER BY sort");
     const projects = all("SELECT * FROM projects ORDER BY sort");
@@ -212,10 +222,23 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const sessions = all("SELECT * FROM sessions ORDER BY started_at");
     const sessionEvents = all("SELECT * FROM session_events ORDER BY id");
     const edges = all("SELECT * FROM edges ORDER BY id");
+    const reports = has("reports") ? all("SELECT * FROM reports ORDER BY id") : [];
+    const attachments = has("attachments") ? all("SELECT * FROM attachments ORDER BY created_at") : [];
     const settings = all("SELECT key, value FROM settings");
 
     await clearAccount(db);
     const s = (v: unknown) => (v == null ? null : String(v));
+    const jsonList = (v: unknown): unknown[] => {
+      try {
+        const x = JSON.parse(String(v ?? "[]"));
+        return Array.isArray(x) ? x : [];
+      } catch {
+        return [];
+      }
+    };
+    const SURFACES = new Set(["terminal", "desktop", "cloud"]);
+    // The local database only knew this computer: a project or task that ran on a chosen computer runs here.
+    const here = deviceConfig().deviceId;
 
     const newAreas = check(await db.from("areas").insert(areas.map((a) => ({
       name: String(a.name), key: String(a.key), color: String(a.color), sort: Number(a.sort),
@@ -227,9 +250,10 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const projectId = new Map<string, string>();
     const flowsOn: string[] = [];
     for (const p of projects) {
+      const env = typeof p.codex_env === "string" ? p.codex_env.trim() : "";
       const r = check(await db.from("projects").insert({
         area_id: areaId(p.area_id), name: String(p.name), color: s(p.color), start_date: s(p.start_date), target_date: s(p.target_date),
-        agent: s(p.agent), sort: Number(p.sort),
+        agent: s(p.agent), sort: Number(p.sort), codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null,
       }).select("id").single()) as Row;
       projectId.set(String(p.id), String(r.id));
       // The folder and the flow switch belonged to this computer all along; they stay here, not in the cloud.
@@ -249,11 +273,18 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         due_date: s(t.due_date), planned_date: s(t.planned_date), estimate_min: Number(t.estimate_min), labels: JSON.parse(String(t.labels || "[]")),
         reminder: s(t.reminder), agent: s(t.agent), sort_order: Number(t.sort_order), flow_x: t.flow_x == null ? null : Number(t.flow_x),
         flow_y: t.flow_y == null ? null : Number(t.flow_y), created_at: String(t.created_at), updated_at: String(t.updated_at), completed_at: s(t.completed_at),
+        done_when: cleanDoneWhen(jsonList(t.done_when).filter((x): x is string => typeof x === "string")),
+        run_in: SURFACES.has(String(t.run_in)) ? String(t.run_in) : null, device_id: t.device_id ? here : null,
       }))).select("id, key")) as Row[];
       const byKey = new Map(rows.map((r) => [String(r.key), Number(r.id)]));
       for (const t of chunk) taskId.set(Number(t.id), byKey.get(String(t.key).toUpperCase())!);
     }
     const task = (old: unknown) => taskId.get(Number(old));
+    // A task's own folder was this computer's too.
+    for (const t of tasks) {
+      const id = task(t.id);
+      if (id && typeof t.folder === "string" && t.folder.trim()) setTaskFolder(id, t.folder.trim());
+    }
 
     const subs = subtasks.filter((x) => task(x.task_id)).map((x) => ({ task_id: task(x.task_id), title: String(x.title), done: Number(x.done) === 1, sort: Number(x.sort) }));
     for (let i = 0; i < subs.length; i += 500) check(await db.from("subtasks").insert(subs.slice(i, i + 500)));
@@ -269,7 +300,9 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const known = new Set(["starting", "running", "finished", "done", "closed", "failed"]);
     for (const x of kept) {
       check(await db.from("sessions").insert({
-        id: sessionId.get(String(x.id)), task_id: task(x.task_id), agent: String(x.agent), device_id: deviceConfig().deviceId,
+        id: sessionId.get(String(x.id)), task_id: task(x.task_id), agent: String(x.agent), device_id: here,
+        surface: SURFACES.has(String(x.surface)) ? String(x.surface) : "terminal",
+        url: typeof x.url === "string" && /^https:\/\/[^\s<>"']{1,1000}$/.test(x.url) ? x.url : null,
         folder: s(x.folder), branch: s(x.branch), status: known.has(String(x.status)) ? String(x.status) : "closed",
         started_at: String(x.started_at), finished_at: s(x.finished_at), ended_at: s(x.ended_at), note: s(x.note)?.slice(0, 2000) ?? null,
         cli_session_id: uuid(x.cli_session_id),
@@ -280,6 +313,31 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       session_id: sessionId.get(String(e.session_id)), at: String(e.at), kind: String(e.kind), text: String(e.text ?? ""),
     }));
     for (let i = 0; i < sevs.length; i += 500) check(await db.from("session_events").insert(sevs.slice(i, i + 500)));
+
+    // Reports, and the images agents attached: the files are in this computer's data folder already.
+    const reportId = new Map<number, number>();
+    const text = (v: unknown, max: number) => String(v ?? "").slice(0, max);
+    for (const r of reports) {
+      const sid = sessionId.get(String(r.session_id));
+      const tid = task(r.task_id);
+      if (!sid || !tid) continue;
+      const row = check(await db.from("reports").insert({
+        session_id: sid, task_id: tid, outcome: ["done", "partial", "blocked"].includes(String(r.outcome)) ? String(r.outcome) : "done",
+        summary: text(r.summary, 2000).trim() || "Handed back", details: text(r.details, 100000),
+        criteria: jsonList(r.criteria).slice(0, 50), verify: jsonList(r.verify).slice(0, 50), questions: jsonList(r.questions).slice(0, 50),
+        links: jsonList(r.links).slice(0, 50), follow_ups: jsonList(r.follow_ups).slice(0, 50), created_at: String(r.created_at),
+        changes: r.changes ? text(r.changes, 20000) : null, changes_at: r.changes ? s(r.changes_at) : null,
+      }).select("id").single()) as Row;
+      reportId.set(Number(r.id), Number(row.id));
+    }
+    const images = attachments.filter((a) => /^[0-9a-f]{16}$/.test(String(a.id)) && task(a.task_id) && /^[0-9a-f]{16}\.(png|jpg|gif|webp)$/.test(String(a.file)))
+      .map((a) => ({
+        id: String(a.id), task_id: task(a.task_id), session_id: a.session_id == null ? null : sessionId.get(String(a.session_id)) ?? null,
+        report_id: a.report_id == null ? null : reportId.get(Number(a.report_id)) ?? null, device_id: here,
+        file: String(a.file), mime: String(a.mime), bytes: Number(a.bytes), width: a.width == null ? null : Number(a.width),
+        height: a.height == null ? null : Number(a.height), caption: text(a.caption, 500), created_at: String(a.created_at),
+      }));
+    for (let i = 0; i < images.length; i += 200) check(await db.from("attachments").insert(images.slice(i, i + 200)));
 
     const links = edges.filter((e) => task(e.from_task_id) && task(e.to_task_id)).map((e) => ({
       from_task_id: task(e.from_task_id), to_task_id: task(e.to_task_id), mode: String(e.mode), at_time: s(e.at_time),
@@ -296,9 +354,10 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const values = Object.entries(old).filter(([k]) => PLANNING.has(k)).map(([key, value]) => ({ user_id: userId, key, value }));
     if (values.length) check(await db.from("settings").upsert(values, { onConflict: "user_id,key" }));
     updateDevice({
-      ...(old.terminal === "wt" || old.terminal === "cmd" ? { terminal: old.terminal } : {}),
+      ...(old.terminal === "wt" || old.terminal === "cmd" || old.terminal === "terminal" || old.terminal === "iterm" ? { terminal: old.terminal } : {}),
       ...(typeof old.claudeCommand === "string" && !commandProblem(old.claudeCommand) ? { claudeCommand: old.claudeCommand } : {}),
       ...(typeof old.codexCommand === "string" && !commandProblem(old.codexCommand) ? { codexCommand: old.codexCommand } : {}),
+      ...(old.importOffered === true ? { importOffered: true } : {}),
     });
 
     return { areas: areas.length, projects: projects.length, tasks: tasks.length };

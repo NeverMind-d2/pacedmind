@@ -1,0 +1,41 @@
+---
+title: Views
+description: The views in PacedMind's sidebar, what each one is for, and what they have in common.
+---
+
+PacedMind shows the same tasks, activities and sessions in several views. Each view answers one question; the sidebar lists them in this order, with both calendar views under **Calendar**.
+
+| View | Answers |
+| --- | --- |
+| **[Inbox](/views/inbox)** | What still needs a place? Tasks without an area or project. |
+| **[Today](/views/today)** | What's overdue, due or planned today, and what's on the calendar? |
+| **[Upcoming](/views/upcoming)** | What's coming in the next 14 days, and how are the projects doing against their target dates? |
+| **[Calendar: month](/views/calendar)** | What falls on which day? Move tasks between days by dragging. |
+| **[Calendar: week](/views/calendar-week)** | How does the week fit into my hours? Activities, auto-planned focus blocks and agent sessions. |
+| **[Timeline](/views/timeline)** | How does the work spread over weeks? Bars for tasks and projects, and dependencies. |
+| **[Projects](/views/projects)** | Which areas and projects exist, and how far along are they? |
+| **[Roadmap](/views/roadmap)** | When does each project run, and in which order do a project's tasks come? |
+| **[Flows](/views/flows)** | Which agent session starts after which, and how? |
+| **[Sessions](/views/sessions)** | Which agent sessions are running, and which wait for review? |
+
+**Settings** has its own page: see [Settings](/settings).
+
+The screenshots on these pages show the dark theme and the example workspace from **Settings → Data → Load sample data**.
+
+## What the views share
+
+* **The details panel.** In most views, clicking a task opens its details on the right; <kbd>Esc</kbd> closes them. See [The task details panel](/tasks/task-details). Three views work differently: in the month calendar, a click opens the task's menu, which has **Open task**; in **Flows** and **Sessions**, a click selects the session, and **Open task** opens the task in its project's list.
+* **Live updates.** An open view checks for changes every few seconds and refreshes when something changed, for example when an agent updated a task over MCP or a session finished. Hidden windows don't check; they catch up when shown again.
+* **Links with the task selected.** A task link, such as one from the command menu, opens the view with the task's details already open.
+* **Back and forward.** The arrows in the header (<kbd>Alt</kbd>+<kbd>Left</kbd> and <kbd>Alt</kbd>+<kbd>Right</kbd>) move through the views visited.
+* **Themes.** Every view follows the dark or light theme chosen in the sidebar or in **Settings → Appearance**.
+
+## Counts in the sidebar
+
+| Item | Counts |
+| --- | --- |
+| **Inbox** | Open tasks without an area or project. |
+| **Today** | Open tasks due today or earlier, or planned for today. |
+| **Sessions** | Finished sessions waiting for review. |
+
+A count disappears at zero.

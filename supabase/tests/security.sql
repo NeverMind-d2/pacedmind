@@ -10,7 +10,7 @@ declare
   -- verified an authenticator added after it started (what a stolen session could do).
   sa uuid := gen_random_uuid(); sb uuid := gen_random_uuid(); sa_new uuid := gen_random_uuid(); sb2 uuid := gen_random_uuid();
   fa uuid := gen_random_uuid(); fa_new uuid := gen_random_uuid(); fb uuid := gen_random_uuid();
-  area_a uuid; area_b uuid; dev uuid; dev_b uuid; tid bigint; tkey text; req uuid;
+  area_a uuid; area_b uuid; dev uuid; dev_b uuid; tid bigint; tkey text; req uuid; rid bigint;
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
   claims_aal1 text; claims_aal2_old text; claims_aal2_fresh text; claims_bad_session text; claims_new_factor text;
@@ -187,6 +187,86 @@ begin
     out := out || '16 FAIL a live computer was claimed by another session' || E'\n';
     reset role;
   exception when others then out := out || '16 takeover refused: ' || left(sqlerrm, 70) || E'\n'; end;
+
+  -- 17. reports and images: kept for your own sessions, checked shapes, invisible to other accounts
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.sessions (id, task_id, agent, device_id, status, started_at) values ('0123456789abcdef', tid, 'claude', dev, 'finished', '2026-09-25T10:00:00');
+    insert into public.reports (session_id, task_id, outcome, summary, created_at) values ('0123456789abcdef', tid, 'partial', 'Half done', '2026-09-25T11:00:00') returning id into rid;
+    insert into public.attachments (id, task_id, session_id, report_id, device_id, file, mime, bytes, created_at)
+      values ('00112233445566ff', tid, '0123456789abcdef', rid, dev, '00112233445566ff.png', 'image/png', 100, '2026-09-25T11:00:00');
+    select count(*) into n from public.reports; out := out || '17 own report stored, reports=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.attachments; out := out || '17a own image stored, images=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '17 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    select count(*) into n from public.reports; out := out || '17b aal1 sees reports=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.attachments; out := out || '17c aal1 sees images=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '17b ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb,
+      'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);
+    set local role authenticated;
+    select count(*) into n from public.reports; out := out || '17d other account sees reports=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.attachments; out := out || '17e other account sees images=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '17d ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb,
+      'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);
+    set local role authenticated;
+    insert into public.reports (session_id, task_id, summary, created_at) values ('0123456789abcdef', tid, 'Not mine', '2026-09-25T11:00:00');
+    out := out || '17f FAIL report on another account''s session accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17f report on another account''s session blocked: ' || left(sqlerrm, 70) || E'\n'; end;
+
+  -- 18. what reaches a computer is held to safe shapes
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.attachments (id, task_id, file, mime, bytes, created_at) values ('00112233445566fe', tid, '../../evil.png', 'image/png', 100, '2026-09-25T11:00:00');
+    out := out || '18 FAIL image file outside its folder accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18 image path rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set url = 'javascript:alert(1)' where id = '0123456789abcdef';
+    out := out || '18a FAIL non-https session link accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18a session link rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, codex_env) values (area_a, 'Cloud', 'env" & calc & "');
+    out := out || '18b FAIL shell characters in a Codex environment accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18b Codex environment rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set run_in = 'shell' where id = tid;
+    out := out || '18c FAIL unknown run-in accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18c run-in rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set agents = '{"claude": {"cli": true}}', checked_at = now() where id = dev;
+    get diagnostics n = row_count; out := out || '18d computer''s agents updated=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18d ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set user_id = b where id = dev;
+    out := out || '18e FAIL a computer moved to another account' || E'\n';
+    reset role;
+  exception when others then out := out || '18e computer''s owner refused: ' || left(sqlerrm, 60) || E'\n'; end;
+
+  -- 19. anon reads no reports or images
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    select count(*) into n from public.reports;
+    out := out || '19 FAIL anon read reports=' || n || E'\n';
+    reset role;
+  exception when others then out := out || '19 anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
 
   -- 12. revoking the device ends its session at once
   begin

@@ -1,0 +1,132 @@
+---
+title: Flows
+description: The flow editor lays out a project's tasks as agent sessions on a free grid, decides which agent runs each one and where, and connects them so sessions start one after another.
+---
+
+A flow lays out a project's tasks as agent sessions and decides which one starts after which. **Flows** is the editor: a canvas with the project's sessions, a list of tasks to add, and a panel for the selected session or connection. What the connections do is explained in [Automate with flows](/agents/flows).
+
+<img src="/docs/screenshots/flows.png" alt="The flow editor with the task list on the left, connected sessions on the canvas and the help panel on the right" width="1920" height="1200" loading="lazy" />
+
+## The header
+
+| Element | What it does |
+| --- | --- |
+| Project name | A menu of all projects, with *3 in flow* next to those that have a flow. |
+| **Roadmap** / **Flow** | Switches to the same project's [roadmap](/views/roadmap). |
+| Summary | Counts the sessions, such as *2 done · 1 running · 1 waiting for you · 3 not started*, or *Nothing in the flow yet*. |
+| Agents | On wide windows: what Claude Code and Codex are doing in this flow, each with its mark, such as *1 running, 1 waiting for you* or *idle*. |
+| Zoom | **Zoom out**, the zoom level, **Zoom in**, and **Fit**, which shows the whole flow. |
+| **Tidy up** | Lines the sessions up in the order they run (*Line the sessions up in the order they run*). |
+| **Flow on** / **Paused** | The switch that lets the flow start sessions on its own. |
+
+Switching the flow on starts the sessions of the tasks that are already ready and names them, such as *Started DEV-24*; with nothing to start, it confirms *Flow is on. Sessions start on their own when the one before is ready.* Switching it off: *Flow paused. Nothing starts on its own.*
+
+## Add tasks to the flow
+
+The panel on the left, **Add to the flow**, lists the project's open tasks that aren't on the canvas yet, each with the mark of the agent that runs it. **Search tasks** filters them by key or title.
+
+* **Drag a task onto the canvas** to place it there. Dropped just below another session, it runs after that one: the preview says *Drop to run after DEV-21* and draws the connection. Elsewhere it says *Drop to add it here, run by Claude Code*.
+* **Click a task** to add it at the end of the flow (*Added DEV-26 to the flow*).
+
+Tasks that are yours never appear in the list; the panel notes, for example, *2 tasks are yours, so they stay out of the flow*. Setting a task on the canvas to **You** (under **Done by** in its details) takes it off the flow and deletes its connections: *DEV-26 is yours now, so it left the flow*. The panel's bottom part is the legend for the connection lines: **Automatically**, **After you mark it done**, **Same session, no stop** and **At a set time**.
+
+## The canvas
+
+The canvas is a free grid. Sessions sit anywhere on it and snap to the grid when dropped; their position has no meaning for who runs them or when.
+
+* Drag a session to move it. Its position is saved with the task.
+* Scroll to pan. Zoom between 30% and 150% with the zoom controls, <kbd>Ctrl</kbd> + mouse wheel, or a pinch on a touchpad.
+* Click empty canvas to clear the selection.
+
+Each project's canvas opens where it was left, with the same pan and zoom. The first time, it fits the whole flow. The view is kept per computer.
+
+An empty canvas says *Drag tasks here to build the flow*.
+
+### Sessions
+
+Each session is a card with:
+
+* the state icon and the key, and the state on the right: *Not started*, *In progress*, *Opened*, *Running 12 min*, *Waiting for you*, *Partly done*, *Blocked*, *Done*, *Canceled*, *Stopped* or *Didn't start*;
+* the task's title;
+* the agent chip, **Claude Code** or **Codex** with the agent's mark, and where the session runs: **Terminal**, **Claude app** or **Codex app**, or **Cloud**. With more than one computer, the computer's name follows, such as *Terminal · DESKTOP-1*.
+
+A place the computer can't run is struck through, and its tooltip says why, such as *The Codex CLI isn't installed on DESKTOP-1*. How a session starts and what happened to it are in its panel.
+
+Click the agent chip to hand the session to the other agent (*Claude Code runs this. Click to hand it to Codex.*). Tasks that share one session change agent together, and the message says so.
+
+Sessions chained by **Same session** connections, with the same agent, sit in a box labeled *One Claude Code session* (or Codex).
+
+### Connections
+
+To make one session start after another, drag from the dot under the first card to the dot above the second. A dashed navy line follows the pointer. A connection can't link a session to itself, repeat an existing connection, or close a loop.
+
+A new connection starts **Automatically**. Its label on the line shows how the next session starts: **Auto**, **Manual**, **Same session**, or the day and time for a timed start. Click the label (*Change how it starts*) to select the session it leads to and change it in the panel.
+
+Select a session or a connection and press <kbd>Delete</kbd> or <kbd>Backspace</kbd> to remove it. Removing a session takes it off the canvas and deletes its connections, which also removes them as dependencies from the **Timeline**; the task itself stays (*Removed DEV-26 from the flow*). <kbd>Esc</kbd> clears the selection.
+
+### Tidy up
+
+**Tidy up** arranges the sessions from top to bottom in the order they run: each session one row below the last one it waits for, under the sessions it follows, with branches side by side. It then fits the flow into view.
+
+## The session panel
+
+Selecting a session opens its panel on the right. The top line shows the key, the project and **Open task**, followed by the title and the current state with a note on how it starts or what happened, such as *Not started · Starts when DEV-21 finishes*, *Waiting for you · Finished 12:22, check it and mark done* or *Partly done · Handed back part of it at 12:22, check it and mark done*.
+
+**Session**:
+
+| Field | Shows |
+| --- | --- |
+| **Agent** | **Claude Code** or **Codex**, with their marks, to switch. |
+| **Device** | Only when PacedMind runs on more than one computer: the computer the session runs on, where its folder is. The menu marks *This computer*. |
+| **Folder** | The task's own folder, else the project's (*Project's* next to it), or *PacedMind workspace* when there's neither. |
+| **Branch** | The branch name recorded for the session, such as *agent/dev-22*, or *Same branch as DEV-22* for a session that continues another one. |
+| **Last run** | The latest session, such as *Finished 12:22, waiting for you*. Select it to open it in **Sessions**. |
+
+Click the folder to give the task a folder of its own, such as a separate checkout, and press <kbd>Enter</kbd> (*DEV-25 works in its own folder now*). **Own · reset** goes back to the project's folder. PacedMind checks the folder right away: *Can't use C:\code\app: That folder doesn't exist.*
+
+**Runs in** chooses where the session runs:
+
+| Option | Description in the panel |
+| --- | --- |
+| **Terminal** | *Claude Code 2.1.282 in a new terminal on DESKTOP-1, connected to PacedMind.* |
+| **Claude app** or **Codex app** | *Opens a new Code session in the Claude app on DESKTOP-1 with the first message written. You send it.* For Codex, a new thread in the Codex app. |
+| **Claude Code on the web** or **Codex cloud** | *Runs on Anthropic's servers from the folder's GitHub repository, even while your computer sleeps.* For Codex, OpenAI's servers. |
+
+An option the computer can't run is dimmed and says why, such as *The Codex CLI isn't installed on DESKTOP-1* or *Codex cloud sessions start from the Codex CLI, which isn't installed on DESKTOP-1*. PacedMind finds out what each computer has on its own; see [Devices](/settings#devices). Until a task's place is chosen, it runs in a terminal when the agent's CLI is installed, else in the agent's desktop app.
+
+Tasks that share one session run in the same place: choosing it for one moves the others along (*DEV-22 and DEV-23 run in the Claude app now, because they share one session*). A task that continues another one's session says *It runs where DEV-22 runs, since it carries on that session.*
+
+The panel adds a note where a session can't report back on its own:
+
+* **Claude app** or **Codex app**, while that agent isn't connected to PacedMind: *The Claude app can't tell PacedMind when it's done until Claude Code is connected to PacedMind. Until then, mark the session finished here.* The link opens **Settings → Devices**.
+* **Claude Code on the web**: *The cloud can't reach PacedMind on your computer, so mark the session finished here when its pull request is ready.*
+* **Codex cloud**: *PacedMind checks Codex cloud every minute and marks the session finished when its task is ready.* A field asks for the project's Codex environment, its label or id from chatgpt.com/codex/settings/environments (*e.g. my-app*).
+
+**Starts**, for sessions that have a connection leading to them:
+
+| Option | Description in the panel |
+| --- | --- |
+| **Automatically** | *A new Claude Code session starts as soon as DEV-21 finishes.* |
+| **Manually** | *Starts after you mark DEV-21 done.* |
+| **In the same session** | *Claude carries on from DEV-21 in the same session, without stopping.* Choosing it hands the session to the agent, the computer and the place of the one before, if they differ. |
+| **At a set time** | The day and time, *once DEV-21 is done*. A date and time field appears; it defaults to the next work day at the start of the work hours. |
+
+Choosing a mode sets it for every connection leading to the session. When those differ, the panel says *Its connections start in different ways. Pick one to use for all of them.* A session without connections says *Nothing leads here, so you start it yourself.*
+
+**When it finishes** lists what happens next, such as *DEV-23 starts on its own* or *DEV-24 starts after you mark DEV-21 done*. When the flow is paused, it adds *The flow is paused, so these don't start on their own.*
+
+At the bottom:
+
+* The start button starts the session right away, where **Runs in** says: **Start in terminal**, **Open in Claude app** (or **Open in Codex app**), or **Send to the cloud**. It's unavailable while a session runs or when the task is done or canceled. See [Start, resume and close sessions](/agents/start-and-manage).
+* **Mark finished** takes its place while a session that can't report back runs: in the cloud, or in a desktop app that isn't connected to PacedMind. The task goes to **In review**, and the flow starts what waited for it.
+* **Remove from flow** takes the session off the canvas and deletes its connections.
+
+## The connection panel
+
+Selecting a connection shows its two keys, what it does (*DEV-23 starts after you mark DEV-22 done.*), how it starts, **Change how DEV-23 starts**, and **Remove connection** (<kbd>Delete</kbd>).
+
+With nothing selected, the panel shows four hints on using the editor.
+
+## Which project opens
+
+**Flows** opens the project from its link (**Open flow** in a project's menu, **Flow** on a project page), else the first project with sessions in a flow, else the first project with a default agent, else the first project. Without projects, it explains that a flow lays out a project's tasks as agent sessions, and asks to create a project first.

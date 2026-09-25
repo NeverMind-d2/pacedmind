@@ -1,0 +1,42 @@
+---
+title: Search and the command menu
+description: Find tasks by key or title, jump to projects and pages, and create a task, all from the command menu.
+---
+
+The command menu finds tasks and projects and goes to the main pages, from the keyboard.
+
+## Open it
+
+* Press <kbd>Ctrl</kbd>+<kbd>K</kbd> anywhere (<kbd>Cmd</kbd>+<kbd>K</kbd> on a Mac keyboard). The same keys close it again.
+* Select **Search** at the top of the sidebar.
+
+## What it finds
+
+Type in *Search tasks, projects and pages…*. The list updates as you type:
+
+| Entry | Shown | Opens |
+| --- | --- | --- |
+| **New task** | When the text matches *new task* or *create*, and with an empty search | Quick add |
+| **Go to** a page | Pages whose name matches: **Today**, **Inbox**, **Upcoming**, **Calendar**, **Week**, **Timeline**, **Roadmap**, **Flows**, **Sessions**, **Settings** | That page |
+| Projects | Projects whose name contains the text | The project's task list |
+| Tasks | Up to 12 tasks whose key or title contains the text, with their status icon and key | The task's list, with the task open |
+
+Matching ignores letter case and finds the text anywhere in a key or title. A task key, such as *wrk-12*, lists that task together with keys that start the same way, such as WRK-120, and titles that contain the text.
+
+When nothing matches, the menu says *No matches. Try a task key like DEV-21.*
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| <kbd>↑</kbd> <kbd>↓</kbd> | Move through the entries. |
+| <kbd>Enter</kbd> | Open the highlighted entry. |
+| <kbd>Esc</kbd> | Close the menu. |
+
+A task opened from the menu shows in its project's list, its area's list, or the Inbox, with the details panel open. A finished task outside any area opens the Inbox without its details, because the Inbox lists only open tasks.
+
+## Other ways to find tasks
+
+* **Area and project pages** list all their tasks by status. See [Projects](/views/projects#area-and-project-task-lists).
+* The **Calendar**'s **No date** panel lists open tasks without any date. See [Calendar: month](/views/calendar#the-no-date-panel).
+* Agents search with `list_tasks`, which filters by project, area, status, priority, label, words, dates, overdue and unscheduled tasks. See [Task tools](/mcp/tools/tasks#list_tasks).

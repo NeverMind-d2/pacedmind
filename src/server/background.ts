@@ -1,11 +1,16 @@
 import "server-only";
+import { checkCodexCloud } from "./cloud";
+import { checkThisDevice, saveToolsOnce } from "./devices";
 import { tick, watchStatuses } from "./flow";
+import { mcpUrl } from "./launcher";
 import { syncDevice } from "./requests";
 import { MODE, NotSignedIn, authState } from "./supabase";
 
+const CHECK_EVERY = 30 * 60_000;
+
 /** Background work of the desktop app's server (and `npm run dev`), started once from src/instrumentation.ts. */
 export function startBackground() {
-  const g = globalThis as unknown as { __organizerTick?: NodeJS.Timeout; __organizerSync?: NodeJS.Timeout };
+  const g = globalThis as unknown as { __organizerTick?: NodeJS.Timeout; __organizerSync?: NodeJS.Timeout; __organizerCloud?: NodeJS.Timeout };
   if (MODE !== "desktop" || g.__organizerTick) return;
 
   // Started by the desktop app: stop when the app goes away, even if it crashed and could not stop us.
@@ -14,6 +19,11 @@ export function startBackground() {
     process.stdin.on("error", () => process.exit(0));
     process.stdin.resume();
   }
+
+  // Which agents this computer has; again now and then, since tools get installed and updated. Needs no sign-in.
+  const check = () => checkThisDevice(mcpUrl()).catch((e) => console.error("[organizer] device check failed", e));
+  setTimeout(check, 3_000);
+  setInterval(check, CHECK_EVERY);
 
   /** Runs `work` for the signed-in account; does nothing until someone finished signing in with 2FA. */
   const every = (ms: number, name: string, work: () => Promise<unknown>) => {
@@ -31,12 +41,15 @@ export function startBackground() {
       }
     }, ms);
   };
-  // This computer in the account (registration, sign-out from elsewhere, requests to start sessions), and
-  // flows reacting to tasks finished elsewhere.
+  // This computer in the account (registration, sign-out from elsewhere, requests to start sessions, what it
+  // found of the agents), and flows reacting to tasks finished elsewhere.
   g.__organizerSync = every(5_000, "account sync", async () => {
     await syncDevice();
+    await saveToolsOnce();
     await watchStatuses();
   });
   // Connections "at a set time" start their sessions.
   g.__organizerTick = every(60_000, "flow tick", tick);
+  // Codex cloud tasks don't report back; asking Codex tells which are ready.
+  g.__organizerCloud = every(60_000, "Codex cloud check", checkCodexCloud);
 }

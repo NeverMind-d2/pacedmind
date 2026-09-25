@@ -7,10 +7,14 @@ export type DeckItem = { tab: string; title: string; body: string; screen: React
 
 const HOLD = 6000;
 const EASE = "cubic-bezier(0.65, 0, 0.35, 1)";
-// Where the front, middle and back screens sit on a 1056 px wide stage; everything scales with the stage.
+// Where the front, middle and back screens sit on a 1056 × 780 stage; everything scales with the stage.
 const STAGE = { w: 1056, h: 780 };
 const SLOTS = [[0, 236, 0], [138, 118, -130], [275, 0, -260]];
 const CARD_SCALE = 0.74;
+// The part of the stage the tilted screens cover, measured in the browser. The deck's box is cut to it, so the
+// tabs sit right under the screens and the screens' edges are the deck's edges.
+const CROP = { l: -30, t: 54, r: 960, b: 720 };
+const VIEW = { w: CROP.r - CROP.l, h: CROP.b - CROP.t };
 
 const motionQuery = "(prefers-reduced-motion: reduce)";
 const subscribeMotion = (cb: () => void) => {
@@ -22,8 +26,9 @@ const subscribeMotion = (cb: () => void) => {
 /**
  * The app's screens in 3D. Each holds the front for a few seconds, then steps back as the next comes forward;
  * the line under its tab shows the time left. Picking a tab stops the cycle; hovering pauses it.
+ * It renders two boxes, the screens and their controls, so a page grid can place them separately.
  */
-export function ScreenDeck({ items }: { items: DeckItem[] }) {
+export function ScreenDeck({ items, className = {} }: { items: DeckItem[]; className?: { stage?: string; controls?: string } }) {
   const reduced = useSyncExternalStore(subscribeMotion, () => window.matchMedia(motionQuery).matches, () => false);
   const [front, setFront] = useState(0);
   const [auto, setAuto] = useState(true);
@@ -43,7 +48,7 @@ export function ScreenDeck({ items }: { items: DeckItem[] }) {
     const el = stageRef.current;
     if (!el) return;
     const fit = () => {
-      setK(Math.min(1, el.clientWidth / STAGE.w));
+      setK(Math.min(1, el.clientWidth / VIEW.w));
       setSized(true);
     };
     fit();
@@ -96,32 +101,23 @@ export function ScreenDeck({ items }: { items: DeckItem[] }) {
     tabs.current[next]?.focus();
   };
 
-  return (
-    <section aria-label="PacedMind's views" className="mt-[88px] sm:mt-32"
-      onPointerEnter={() => setPaused(true)} onPointerLeave={() => setPaused(document.hidden)}
-      onFocus={() => setPaused(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaused(false); }}>
-      <div role="tablist" aria-label="Views" onKeyDown={onKey} className="flex gap-[22px] sm:gap-9">
-        {items.map((it, i) => {
-          const on = i === front;
-          return (
-            <button key={it.tab} ref={(el) => { tabs.current[i] = el; }} type="button" role="tab" id={`view-tab-${i}`} aria-selected={on}
-              aria-controls={`view-panel-${i}`} tabIndex={on ? 0 : -1} onClick={() => pick(i)}
-              className={`flex flex-col gap-2.5 text-[17px] transition-colors sm:text-[19px] ${on ? "text-ink" : "text-mut hover:text-text"}`}>
-              {it.tab}
-              <span className="block h-0.5 w-full overflow-hidden bg-line">
-                {on && (
-                  <span key={cycling ? front : "still"} className={`block h-full w-full bg-ink ${cycling ? "pace" : ""}`}
-                    style={cycling ? { animationDuration: `${HOLD}ms`, animationPlayState: paused ? "paused" : "running" } : undefined} />
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+  const hover = { onPointerEnter: () => setPaused(true), onPointerLeave: () => setPaused(document.hidden) };
 
-      <div ref={stageRef} className={`deck-stage relative mt-7 w-full sm:mt-12 ${sized ? "is-sized" : ""}`}
-        style={{ aspectRatio: `${STAGE.w} / ${STAGE.h}`, perspective: `${Math.max(900, 2400 * k)}px`, perspectiveOrigin: "60% 40%" }}>
-        <div className="deck-layer absolute inset-0" style={{ transformStyle: "preserve-3d", transform: "rotateX(7deg) rotateY(10deg)" }}>
+  return (
+    <>
+      {/*
+        The screens first; the tabs and the caption under them act as their controls. The box shows only the cropped
+        part of the stage, and the full stage sits inside it at an offset; the perspective point moves with it.
+      */}
+      <div ref={stageRef} {...hover} className={`deck-stage relative w-full ${sized ? "is-sized" : ""} ${className.stage ?? ""}`}
+        style={{
+          maxWidth: VIEW.w, aspectRatio: `${VIEW.w} / ${VIEW.h}`, perspective: `${2400 * k}px`,
+          perspectiveOrigin: `${(0.6 * STAGE.w - CROP.l) * k}px ${(0.4 * STAGE.h - CROP.t) * k}px`,
+        }}>
+        <div className="deck-layer absolute" style={{
+          left: -CROP.l * k, top: -CROP.t * k, width: STAGE.w * k, height: STAGE.h * k,
+          transformStyle: "preserve-3d", transform: "rotateX(7deg) rotateY(10deg)",
+        }}>
           {items.map((it, i) => {
             const role = (i - front + items.length) % items.length;
             const [x, y, z] = SLOTS[role];
@@ -143,15 +139,37 @@ export function ScreenDeck({ items }: { items: DeckItem[] }) {
         </div>
       </div>
 
-      <div className="grid max-w-[600px]">
-        {items.map((it, i) => (
-          <div key={it.tab} role="tabpanel" id={`view-panel-${i}`} aria-labelledby={`view-tab-${i}`} aria-hidden={i !== front}
-            className="[grid-area:1/1] transition-opacity duration-500" style={{ opacity: i === front ? 1 : 0 }}>
-            <h2 className="text-[26px] leading-[1.2] font-light text-ink sm:text-[32px]">{it.title}</h2>
-            <p className="mt-2.5 text-[16px] leading-[1.6] text-mut sm:text-[18px]">{it.body}</p>
-          </div>
-        ))}
-      </div>
-    </section>
+      <section aria-label="PacedMind's views" {...hover} className={`mt-6 sm:mt-8 ${className.controls ?? ""}`}
+        onFocus={() => setPaused(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPaused(false); }}>
+        <div role="tablist" aria-label="Views" onKeyDown={onKey} className="flex gap-[22px] sm:gap-9">
+          {items.map((it, i) => {
+            const on = i === front;
+            return (
+              <button key={it.tab} ref={(el) => { tabs.current[i] = el; }} type="button" role="tab" id={`view-tab-${i}`} aria-selected={on}
+                aria-controls={`view-panel-${i}`} tabIndex={on ? 0 : -1} onClick={() => pick(i)}
+                className={`flex flex-col gap-2.5 text-[17px] transition-colors sm:text-[19px] ${on ? "text-ink" : "text-mut hover:text-text"}`}>
+                {it.tab}
+                <span className="block h-0.5 w-full overflow-hidden bg-line">
+                  {on && (
+                    <span key={cycling ? front : "still"} className={`block h-full w-full bg-ink ${cycling ? "pace" : ""}`}
+                      style={cycling ? { animationDuration: `${HOLD}ms`, animationPlayState: paused ? "paused" : "running" } : undefined} />
+                  )}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 grid max-w-[560px]">
+          {items.map((it, i) => (
+            <div key={it.tab} role="tabpanel" id={`view-panel-${i}`} aria-labelledby={`view-tab-${i}`} aria-hidden={i !== front}
+              className="[grid-area:1/1] transition-opacity duration-500" style={{ opacity: i === front ? 1 : 0 }}>
+              <h2 className="text-[19px] leading-[1.3] text-ink">{it.title}</h2>
+              <p className="mt-1.5 text-[16px] leading-[1.6] text-mut">{it.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </>
   );
 }

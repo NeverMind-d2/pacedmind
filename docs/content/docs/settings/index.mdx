@@ -1,0 +1,119 @@
+---
+title: Settings
+description: Every section of PacedMind's Settings page, from appearance, devices, the MCP server and connecting agents to how sessions start, project folders and importing them, work hours and data.
+---
+
+**Settings**, at the bottom of the sidebar, holds *Appearance, sessions, MCP and planning*. Most fields save as soon as they're changed or lose focus, confirmed by *Saved*.
+
+## Appearance
+
+**Theme**: **Dark** or **Light**. The sun or moon button next to **Settings** in the sidebar switches it too. The choice is remembered on this computer and also colors the desktop app's title bar.
+
+## Devices
+
+*Sessions run in a terminal or an agent's desktop app on a computer with PacedMind, or in the agent's cloud. PacedMind looks for Claude Code and Codex when it starts and every half hour. Connected, the desktop apps report back like terminal sessions.*
+
+One block per computer: its name and system, such as *Windows · this computer*, and one row per agent:
+
+| Part | Shows |
+| --- | --- |
+| The command-line tool | Its version, such as *CLI 2.1.282*, or *No CLI*. |
+| The desktop app | *Claude app* or *Codex app* with its version, or *No Claude app*. |
+| The connection | *Reports to PacedMind* when sessions PacedMind doesn't start itself, such as those in the desktop app, reach this PacedMind; *Reports to another PacedMind* when they're set up for another copy, such as a development one; *Not connected* otherwise. |
+
+**Check again** looks for the agents right away (*Checked DESKTOP-1*). Before the first check finishes, a computer shows *Looking for Claude Code and Codex…*.
+
+**Connect** appears for an agent that isn't connected to this PacedMind. It asks first, then:
+
+* for **Claude Code**, adds PacedMind's MCP server to Claude Code for all projects, where the Claude app's Code sessions find it too: the same as running the command under **Connect your agents**;
+* for **Codex**, adds the `[mcp_servers.organizer]` section to `~/.codex/config.toml`, which the Codex app and the Codex command-line tool share, and keeps the previous file as `config.toml.pacedmind-backup`.
+
+The message *Claude Code reports to PacedMind now* confirms it. Use **Connect** from the copy of PacedMind the agents should report to, normally the installed app.
+
+## MCP server
+
+*Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished.*
+
+| Row | Shows |
+| --- | --- |
+| **Status** | *Running with this app*. |
+| **Address** | `http://127.0.0.1:4319/api/mcp`, with **Copy**. |
+| **Access token** | The token, masked, with **Show** / **Hide**, **Copy** and **Regenerate**. |
+
+**Regenerate** asks *Make a new token? Agents set up with the old one lose access until you update them.* See [MCP server](/mcp#the-access-token).
+
+## Connect your agents
+
+*Sessions you start from PacedMind are connected automatically. Set this up once to use PacedMind from sessions you start yourself.* It's the manual way to do what **Connect** under **Devices** does, for example on another computer.
+
+* **Claude Code**: the `claude mcp add` command with the address and token, for all projects (`--scope user`), and **Copy command**. See [Connect Claude Code](/mcp/connect-claude-code).
+* **Codex**: the `config.toml` section with the address and the token, and **Copy config**. *The Codex CLI and the Codex app share this file. Sessions started from PacedMind don't need it.* See [Connect Codex](/mcp/connect-codex).
+
+## Starting sessions
+
+| Row | Meaning |
+| --- | --- |
+| **Terminal** | Where terminal sessions open: **Windows Terminal** or **Command Prompt** on Windows, **Terminal** or **iTerm** on macOS. |
+| **Claude command** | The command that starts Claude Code, `claude` by default. |
+| **Codex command** | The command that starts Codex, `codex` by default. |
+
+Change a command to use a full path or to add options. PacedMind adds its own options after it and uses the command as typed, so put a path with spaces in double quotes. See [Start, resume and close sessions](/agents/start-and-manage#the-agent-command).
+
+## Tools agents can use
+
+The MCP tools by group: **Overview**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Flows** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks without asking; anything else asks in their terminal first. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).
+
+## Projects and folders
+
+*A session works in its task's own folder, else its project's. Tasks without either get a scratch folder next to the database.*
+
+**Import from Claude and Codex**, next to the heading, brings the folders you work in with Claude Code and Codex over as projects. See [Import projects](#import-projects).
+
+One row per project, with:
+
+* the project's color and name;
+* its default agent: **No agent**, **Claude Code** or **Codex**;
+* **Flow**: whether its flow starts sessions on its own (*Flow on* or *Flow paused*). Switching it on also starts the tasks that are already ready (*Started DEV-24*);
+* its folder, such as `C:\path\to\repo`, saved when the field loses focus (*Folder saved*).
+
+**New project** at the bottom adds a project with a name, an area and an optional folder (*Folder (optional)*), with **Add project**. Projects added here get Claude Code as their default agent.
+
+The folder isn't checked when it's saved. When a session starts, it must be an absolute path to an existing folder, or the start is refused with *Can't use the folder …* and the reason. See [Areas and projects](/concepts/areas-and-projects#project-folders).
+
+### Import projects
+
+The first time PacedMind opens, it offers to bring your projects over; **Import from Claude and Codex** opens the same window later. PacedMind reads, without changing them, the records Claude Code and Codex keep on this computer: the Claude app's Code sessions and Claude Code's projects, the Codex app's projects, and Codex's trusted folders and sessions.
+
+*Bring your projects over* lists the folders found, most recently used first, such as *PacedMind found 10 folders you work in with Claude Code and Codex on this computer, 7 of them with both.* Each row shows:
+
+* a tick box, and the name the project gets: the name given in the Codex app, else the folder's name. Click the name of a ticked folder to change it;
+* the folder;
+* the marks of the agents that worked there, with the exact sources in the tooltip, such as *Claude app, Codex app*;
+* when either agent last worked there, such as *today* or *3 days ago*; or *Already a project*, or *Can't be used* for a folder whose path can't be passed to a terminal.
+
+A folder used by both Claude Code and Codex is listed once. Sessions in a git worktree, or in a subfolder of a repository, count for the repository. Temporary and scratch folders, folders that no longer exist, and your user folder with its Documents, Desktop and Downloads are left out. Folders used in the last four months are ticked, except one that holds two or more of the others, such as a folder of projects.
+
+Choose the area under **Add to**, then select **Add 9 projects** (*Added 9 projects*). Each project gets its folder, on this computer, and as its default agent the one that worked there last. **Not now** closes the window for good; **Import from Claude and Codex** is always here.
+
+## Auto-plan
+
+*The week view fills free focus time between these hours, around your fixed activities.*
+
+| Row | Meaning |
+| --- | --- |
+| **Focus hours** | When work starts and ends, such as 09:00 to 17:00. |
+| **Keep free** | A daily break, such as 12:30 to 13:30. |
+| **Work days** | **Mon** to **Sun**, each switched on or off with a click. |
+
+See [Work hours and days](/planning/work-hours).
+
+## Data
+
+*Everything is stored in one SQLite file on this computer.* The note also counts the sessions recorded so far.
+
+| Row | Meaning |
+| --- | --- |
+| **Database** | The database file's full path. |
+| **Reset** | **Load sample data** (*Replace everything with the sample data?*) or **Start empty** (*Delete all tasks, projects, activities and sessions?*). |
+
+Both resets replace all areas, projects, tasks, activities and sessions, and can't be undone. Settings, including the work hours and the MCP token, stay. See [Where your data lives](/getting-started/data).

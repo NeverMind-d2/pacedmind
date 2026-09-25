@@ -1,0 +1,62 @@
+---
+title: Due and planned dates
+description: The difference between a task's due date and its planned date, how to set each, and how Today, Upcoming, the calendar, the timeline and the auto-planner use them.
+---
+
+A task has two dates, and they answer different questions:
+
+| Date | Question | Time of day |
+| --- | --- | --- |
+| **Due date** | By when must it be finished? This is the deadline. | Optional, such as 17:00 |
+| **Planned date** | On which day will you work on it? | No, a day only |
+
+Both are optional and independent. A task can have a deadline next Friday and be planned for Wednesday. Set a due date only for real deadlines, and use the planned date to spread the work over the week.
+
+## Set the dates
+
+| Where | How |
+| --- | --- |
+| Quick add | A date typed in the title, such as *friday 10:00* or *next monday*, becomes the **due date**. The **Plan for a day** chip sets the planned date. |
+| Details panel | **Due date** (*Add a deadline*) and **Planned** (*Pick a day to work on it*). |
+| Calendar, month view | Drag a task to another day. Drop it on the **Due** flag to make that day its deadline. |
+| Timeline | Drag a bar's start edge for the planned date, its end edge for the due date, or the whole bar to move both. A bar without a deadline also gets one, at its end, when its start edge is dragged. |
+| Agents | `due` and `planned` in `create_task` and `update_task`, or a whole day with `reschedule_day`. |
+
+The date picker offers **Today**, **Tomorrow** and **In a week**, a date field, a time field for due dates, and **Clear** once a date is set. A time can only be set once a date is chosen.
+
+## How the views use them
+
+| View | Due date | Planned date |
+| --- | --- | --- |
+| **Today** | **Overdue** lists open tasks due before today. **Due today** lists tasks due today. | **Planned for today** lists tasks planned for today that aren't overdue or due today. |
+| **Upcoming** | Each of the next 14 days lists its deadlines first, sorted by time. **Deadlines only** hides planned tasks and activities; project targets stay. | Tasks planned for the day follow the deadlines. |
+| **Calendar**, month | A chip with a flag on the deadline's day, red when overdue. | A chip with a calendar check mark on the planned day. When both dates fall on the same day, the task shows once, as its deadline. |
+| **Calendar**, week | The day's header counts its open deadlines, shows the time of a single one, or says how many were missed on a past day. | Planned days guide the auto-planner's focus blocks. |
+| **Timeline** | The bar ends at the deadline, marked with a flag. | The bar starts on the planned day. |
+| **Auto-planner** | Overdue tasks come first, then the earliest deadlines. | A task planned for a later day isn't placed before that day. |
+
+## Planned days don't carry over
+
+A planned date is a single day. When it passes and the task isn't done, the task doesn't move to the next day: without a deadline, it leaves **Today**, the **Today** count in the sidebar and **Upcoming**. It stays on its planned day in the calendar, in its area's or project's list, and on the timeline; when the task is yours, the auto-planner still places it in your next free focus time. Give it a new planned day to bring it back to **Today**.
+
+## Overdue
+
+An open task is overdue once its due date is before today. With a time, its deadline turns red as soon as that time has passed, even on the same day. **Today** lists tasks due on earlier days in the **Overdue** group; a task due earlier today stays in **Due today**, with its time in red.
+
+A task row shows its deadline as a short chip:
+
+| Chip | Meaning |
+| --- | --- |
+| **3d overdue** | The deadline was three days ago. |
+| **Yesterday** | The deadline was yesterday. |
+| **Today** | Due by the end of today. |
+| **17:00** | Due today at 17:00; red once that time has passed. |
+| **Tomorrow**, **Tomorrow, 10:00** | Due tomorrow. |
+| **Sat 26** | Due within the week. |
+| **12 Oct** | Due later. |
+
+The details panel adds the distance, such as *in 3 days* or *2 days late*.
+
+## Dates and flows
+
+Dates don't start agent sessions. Sessions in a flow start when the tasks before them are finished, or at a set time. See [Automate with flows](/agents/flows).

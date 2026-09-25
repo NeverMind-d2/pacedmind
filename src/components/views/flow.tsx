@@ -11,21 +11,28 @@ import {
   Background, BackgroundVariant, BaseEdge, EdgeLabelRenderer, Handle, Position, ReactFlow, ReactFlowProvider, ViewportPortal,
   getBezierPath, useReactFlow, useViewport,
   type Connection, type Edge, type EdgeChange, type EdgeProps, type EdgeTypes, type Node as FlowNode, type NodeChange,
-  type NodeHandle, type NodeProps, type NodeTypes, type OnDelete, type OnNodeDrag,
+  type NodeHandle, type NodeProps, type NodeTypes, type OnDelete, type OnMove, type OnNodeDrag, type Viewport,
 } from "@xyflow/react";
 import { format } from "date-fns";
 import {
-  connectAction, deleteEdgeAction, placeInFlowAction, removeFromFlowAction, setFlowOnAction,
+  connectAction, deleteEdgeAction, finishSessionAction, placeInFlowAction, removeFromFlowAction, setCodexEnvAction, setFlowOnAction,
+  updateTaskAction,
 } from "@/app/actions";
 import { startSessionOrAsk } from "@/components/remote-start";
-import { addToFlowAction, setAgentsAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
-import { Icon, StatusIcon } from "@/components/icons";
+import { addToFlowAction, setAgentsAction, setRunAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
+import { AgentIcon, Icon, StatusIcon, SurfaceIcon } from "@/components/icons";
 import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast } from "@/components/ui";
 import { parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
 import { GRID, NODE_H, NODE_W, freeSpot, layoutFlow, snap, type Point } from "@/lib/flow-layout";
-import { AGENT_LABEL, EDGE_LABEL, type AgentId, type EdgeMode, type FlowEdge, type Session, type Status } from "@/lib/types";
+import {
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, EDGE_LABEL, canRun, surfaceOf,
+  type AgentId, type AgentTools, type EdgeMode, type FlowEdge, type McpLink, type ReportOutcome, type Session, type Status, type Surface,
+} from "@/lib/types";
 
 /* ---------- data from the server ---------- */
+
+/** A task's latest session. `changesSince`: when you asked for changes, while its agent works on them. */
+export type FlowSession = Session & { changesSince: string | null };
 
 export interface FlowTask {
   id: number;
@@ -34,22 +41,44 @@ export interface FlowTask {
   status: Status;
   /** Who runs it: the task's agent, else the project's, else Claude Code. */
   agent: AgentId;
+  /** Where its sessions run, as the task says; null leaves it to what its device has (surfaceOf). */
+  runIn: Surface | null;
+  /** The device its sessions run on: the task's, else the project's, else this computer. */
+  deviceId: string;
+  /** Its working folder: its own, else the project's; null means a scratch folder PacedMind makes. */
+  folder: string | null;
+  ownFolder: boolean;
   flowX: number | null;
   flowY: number | null;
   sortOrder: number;
   completedAt: string | null;
+  /** Handed back partial or blocked (the outcome): what comes after it waits until the user marks it done. */
+  held: Exclude<ReportOutcome, "done"> | null;
+}
+
+/** A computer PacedMind runs on, and what it has of each agent. */
+export interface FlowDevice {
+  id: string;
+  name: string;
+  /** The computer this page is served from. */
+  here: boolean;
+  /** False until PacedMind looked for the agents on it. */
+  checked: boolean;
+  agents: Record<AgentId, AgentTools>;
 }
 
 export interface FlowViewProps {
-  project: { id: string; name: string; flowOn: boolean; folder: string | null; color: string };
+  project: { id: string; name: string; flowOn: boolean; folder: string | null; color: string; codexEnv: string | null };
   projects: { id: string; name: string; color: string; inFlow: number }[];
+  /** Computers PacedMind runs on, this one first. */
+  devices: FlowDevice[];
   tasks: FlowTask[];
   /** Open tasks in the project that are yours: they stay out of the flow. */
   yours: number;
   /** Connections between the project's tasks. */
   edges: FlowEdge[];
   /** Latest session per task id. */
-  sessions: Record<number, Session>;
+  sessions: Record<number, FlowSession>;
   /** Task id → key of the task whose terminal session its latest session carries on. */
   continuedFrom: Record<number, string>;
   /** Tasks whose running session the flow started on its own. */
@@ -64,6 +93,7 @@ export interface FlowViewProps {
 // Node size and the grid come from src/lib/flow-layout.ts, which the server's placement and tidy use too.
 const HANDLE = 16;
 const AGENTS: AgentId[] = ["claude", "codex"];
+const SURFACES: Surface[] = ["terminal", "desktop", "cloud"];
 const ACCENT = "var(--color-accent)";
 const ACCENT_LINE = "color-mix(in srgb, var(--color-accent) 70%, transparent)";
 const DND_TYPE = "application/x-organizer-task";
@@ -81,6 +111,26 @@ const CONNECTION_LINE = { stroke: ACCENT_LINE, strokeWidth: 1.5, strokeDasharray
 const DEFAULT_VIEWPORT = { x: 40, y: 40, zoom: 1 };
 /** React Flow asks to keep its attribution unless you subscribe to Pro; this lets it blend into the canvas. */
 const CANVAS_STYLE = { "--xy-attribution-background-color": "transparent" } as CSSProperties;
+
+/* Where you last left each project's canvas (pan and zoom), kept in this browser. Positions of sessions are saved with the tasks. */
+const viewKey = (projectId: string) => `pacedmind:flow-view:${projectId}`;
+
+function savedView(projectId: string): Viewport | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(viewKey(projectId)) ?? "null") as Viewport | null;
+    return v && [v.x, v.y, v.zoom].every(Number.isFinite) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveView(projectId: string, v: Viewport) {
+  try {
+    localStorage.setItem(viewKey(projectId), JSON.stringify({ x: Math.round(v.x), y: Math.round(v.y), zoom: Math.round(v.zoom * 1000) / 1000 }));
+  } catch {
+    // Private windows may not keep it; the canvas then fits the flow when it opens.
+  }
+}
 
 const MODE_LINE: Record<EdgeMode, { stroke: string; width: number; dash?: string }> = {
   auto: { stroke: "var(--color-line-strong)", width: 1.5 },
@@ -110,8 +160,12 @@ type TaskNodeData = {
   title: string;
   tone: Tone;
   state: string;
-  note: string;
   agent: AgentId;
+  /** Where its session runs, and that in words ("Terminal", "Claude app", "Cloud", with the device when there are several). */
+  surface: Surface;
+  place: string;
+  /** Why it can't run there, e.g. the CLI isn't installed; null when it can. */
+  blocked: string | null;
   /** Lights the outgoing dot: a task dropped from the palette will run after this one. */
   linkOut: boolean;
 };
@@ -122,7 +176,7 @@ type ModeEdge = Edge<ModeEdgeData, "mode">;
 
 type Selection = { kind: "node" | "edge"; id: number } | null;
 type Ghost = { taskId: number; x: number; y: number; after: number | null };
-type TaskPatch = Partial<Pick<FlowTask, "flowX" | "flowY" | "agent">>;
+type TaskPatch = Partial<Pick<FlowTask, "flowX" | "flowY" | "agent" | "runIn" | "deviceId" | "folder" | "ownFolder">>;
 type EdgeOp =
   | { kind: "add"; edge: FlowEdge }
   | { kind: "remove"; ids: number[] }
@@ -216,15 +270,47 @@ function formatAt(at: string, pattern: string): string {
 const atLabel = (at: string) => formatAt(at, "EEE d MMM, HH:mm");
 const names = (keys: string[]) => (keys.length < 2 ? keys.join("") : `${keys.slice(0, -1).join(", ")} and ${keys[keys.length - 1]}`);
 const agentShort = (a: AgentId) => (a === "claude" ? "Claude" : "Codex");
+const CLI_NAME: Record<AgentId, string> = { claude: "Claude Code CLI", codex: "Codex CLI" };
 
-const READY = new Set<Status>(["review", "done"]);
+/** Where a task's session runs, worked out against its device. */
+interface Run {
+  surface: Surface;
+  device: FlowDevice | undefined;
+  tools: AgentTools | undefined;
+  /** Why the device can't run it there, or null. */
+  blocked: string | null;
+}
+
+/** Why a device can't run an agent's sessions that way, or null. Mirrors src/server/launcher.ts. */
+function runProblem(agent: AgentId, surface: Surface, device: FlowDevice | undefined): string | null {
+  if (!device?.checked || canRun(device.agents[agent], surface)) return null;
+  if (surface === "desktop") return `The ${APP_LABEL[agent]} isn't installed on ${device.name}`;
+  if (surface === "cloud") return `${CLOUD_LABEL[agent]} sessions start from the ${CLI_NAME[agent]}, which isn't installed on ${device.name}`;
+  return `The ${CLI_NAME[agent]} isn't installed on ${device.name}`;
+}
+
+function runOf(t: FlowTask, devices: FlowDevice[]): Run {
+  const device = devices.find((d) => d.id === t.deviceId) ?? devices[0];
+  const tools = device?.checked ? device.agents[t.agent] : undefined;
+  const surface = surfaceOf(t.runIn, tools);
+  return { surface, device, tools, blocked: runProblem(t.agent, surface, device) };
+}
+
+/** "Terminal", "Claude app" or "Cloud", with the device's name when there are several. */
+function placeLabel(agent: AgentId, surface: Surface, device: FlowDevice | undefined, several: boolean): string {
+  const base = surface === "desktop" ? APP_LABEL[agent] : surface === "cloud" ? "Cloud" : "Terminal";
+  return several && surface !== "cloud" && device ? `${base} · ${device.name}` : base;
+}
+
+/** Mirrors src/server/flow.ts: done, or handed back for review unless the hand-back was partial or blocked. */
+const ready = (t: FlowTask) => t.status === "done" || (t.status === "review" && !t.held);
 
 /** Mirrors src/server/flow.ts: whether one connection lets its target start. */
 function satisfied(e: FlowEdge, source: FlowTask | undefined, nowStr: string): boolean {
   if (!source) return true;
   if (e.mode === "manual") return source.status === "done";
-  if (e.mode === "time") return READY.has(source.status) && !!e.atTime && e.atTime <= nowStr;
-  return READY.has(source.status);
+  if (e.mode === "time") return ready(source) && !!e.atTime && e.atTime <= nowStr;
+  return ready(source);
 }
 
 function startMode(incoming: FlowEdge[]): EdgeMode | "mixed" | null {
@@ -241,7 +327,7 @@ function edgeLabel(e: FlowEdge): string {
 const keyOf = (g: Graph, id: number) => g.byId.get(id)?.key ?? "?";
 
 function nodeInfo(
-  t: FlowTask, g: Graph, sessions: Record<number, Session>, continuedFrom: Record<number, string>, autoStarted: Set<number>, now: number,
+  t: FlowTask, g: Graph, sessions: Record<number, FlowSession>, continuedFrom: Record<number, string>, autoStarted: Set<number>, now: number,
 ): NodeInfo {
   const s = sessions[t.id];
   const incoming = g.incoming.get(t.id) ?? [];
@@ -250,26 +336,46 @@ function nodeInfo(
     return { tone: "done", state: "Done", note };
   }
   if (t.status === "canceled") return { tone: "canceled", state: "Canceled", note: "Won't run" };
+  if (s?.status === "starting" && s.surface === "desktop") {
+    return { tone: "running", state: "Opened", note: `In the ${APP_LABEL[s.agent]} ${since(s.startedAt, now)}. Send the first message there to start` };
+  }
   if (s && (s.status === "running" || s.status === "starting")) {
+    const where = s.surface === "cloud" ? ` in ${CLOUD_LABEL[s.agent]}` : s.surface === "desktop" ? ` in the ${APP_LABEL[s.agent]}` : "";
+    // Sent back with Request changes: the agent has been at it since then, not since the session first started.
     const note = continuedFrom[t.id]
       ? `Same session as ${continuedFrom[t.id]}`
-      : `Started ${autoStarted.has(t.id) ? "on its own " : ""}${since(s.startedAt, now)}`;
-    return { tone: "running", state: `Running ${duration(now - parseLocal(s.startedAt).getTime())}`, note };
+      : s.changesSince
+        ? `Working on your changes since ${clock(s.changesSince, now)}`
+        : `Started${where} ${autoStarted.has(t.id) ? "on its own " : ""}${since(s.startedAt, now)}`;
+    return { tone: "running", state: `Running ${duration(now - parseLocal(s.changesSince ?? s.startedAt).getTime())}`, note };
   }
   if (s?.status === "finished" || t.status === "review") {
-    const note = s?.status === "finished" && s.finishedAt ? `Finished ${clock(s.finishedAt, now)}, check it and mark done` : "Check it and mark done";
+    const at = s?.status === "finished" && s.finishedAt ? s.finishedAt : null;
+    if (t.held === "blocked") return { tone: "waiting", state: "Blocked", note: at ? `Got stuck ${since(at, now)}, it needs you` : "It needs you" };
+    if (t.held === "partial") {
+      return { tone: "waiting", state: "Partly done", note: at ? `Handed back part of it ${since(at, now)}, check it and mark done` : "Check it and mark done" };
+    }
+    const note = at ? `Finished ${clock(at, now)}, check it and mark done` : "Check it and mark done";
     return { tone: "waiting", state: "Waiting for you", note };
   }
-  if (s?.status === "closed") return { tone: "stopped", state: "Stopped", note: "Terminal closed before it finished" };
-  if (s?.status === "failed") return { tone: "stopped", state: "Didn't start", note: s.note ?? "The terminal didn't open" };
+  if (s?.status === "closed") {
+    return { tone: "stopped", state: "Stopped", note: `${s.surface === "terminal" ? "Terminal" : "Session"} closed before it finished` };
+  }
+  if (s?.status === "failed") return { tone: "stopped", state: "Didn't start", note: s.note ?? "The session didn't open" };
 
   const nowStr = toDateTimeStr(new Date(now));
   const ready = incoming.every((e) => satisfied(e, g.byId.get(e.fromTaskId), nowStr));
   const state = t.status === "progress" ? "In progress" : "Not started";
   const src = names(incoming.map((e) => keyOf(g, e.fromTaskId)));
   const mode = startMode(incoming);
+  // A task before it that was handed back partly done or blocked holds it, whatever the connection, until marked done.
+  const heldBy = incoming.filter((e) => {
+    const x = g.byId.get(e.fromTaskId);
+    return !!x && x.status === "review" && !!x.held;
+  });
   let note: string;
   if (!mode) note = "Start it yourself";
+  else if (!ready && heldBy.length) note = `Starts when you mark ${names(heldBy.map((e) => keyOf(g, e.fromTaskId)))} done`;
   else if (mode === "session") note = `Same session as ${src}`;
   else if (ready) note = `Ready, ${src} ${incoming.length > 1 ? "are" : "is"} ${mode === "manual" ? "done" : "finished"}`;
   else if (mode === "manual") note = `Starts when you mark ${src} done`;
@@ -363,7 +469,7 @@ function nextWorkMorning(now: number, workStart: string, workDays: number[]): st
   const d = new Date(now);
   for (let i = 1; i <= 7; i++) {
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i);
-    if (!workDays.length || workDays.includes(day.getDay())) return `${toDateStr(day)}T${workStart}`;
+    if (!workDays.length || workDays.includes(day.getDay() || 7)) return `${toDateStr(day)}T${workStart}`;
   }
   return `${toDateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1))}T${workStart}`;
 }
@@ -374,13 +480,15 @@ function shortPath(p: string): string {
   return `…${sep}${p.split(/[\\/]/).filter(Boolean).slice(-2).join(sep)}`;
 }
 
-function lastRun(s: Session, now: number): string {
+function lastRun(s: FlowSession, held: FlowTask["held"], now: number): string {
   switch (s.status) {
     case "starting":
     case "running":
-      return `Running since ${clock(s.startedAt, now)}`;
-    case "finished":
-      return `Finished ${clock(s.finishedAt ?? s.startedAt, now)}, waiting for you`;
+      return s.changesSince ? `Working on your changes since ${clock(s.changesSince, now)}` : `Running since ${clock(s.startedAt, now)}`;
+    case "finished": {
+      const at = clock(s.finishedAt ?? s.startedAt, now);
+      return held === "blocked" ? `Blocked ${at}, needs you` : held === "partial" ? `Partly done ${at}, waiting for you` : `Finished ${at}, waiting for you`;
+    }
     case "done":
       return `Done, finished ${clock(s.finishedAt ?? s.endedAt ?? s.startedAt, now)}`;
     case "closed":
@@ -440,6 +548,8 @@ function FlowEditor(props: FlowViewProps) {
     () => new Map(placed.map((t) => [t.id, nodeInfo(t, graph, sessions, continuedFrom, autoStarted, now)])),
     [placed, graph, sessions, continuedFrom, autoStarted, now],
   );
+  const { devices } = props;
+  const runs = useMemo(() => new Map(placed.map((t) => [t.id, runOf(t, devices)])), [placed, devices]);
   const positions = useMemo(
     () => new Map(placed.map((t) => [t.id, drag?.id === t.id ? { x: drag.x, y: drag.y } : positionOf(t)])),
     [placed, drag],
@@ -451,12 +561,16 @@ function FlowEditor(props: FlowViewProps) {
 
   const nodes = useMemo<TaskNode[]>(() => placed.map((t) => {
     const i = info.get(t.id)!;
+    const r = runs.get(t.id)!;
     return {
       id: String(t.id), type: "task", position: positions.get(t.id)!, width: NODE_W, height: NODE_H, handles: HANDLES,
       selected: t.id === selNode, dragging: drag?.id === t.id,
-      data: { key: t.key, title: t.title, tone: i.tone, state: i.state, note: i.note, agent: t.agent, linkOut: t.id === linkOut },
+      data: {
+        key: t.key, title: t.title, tone: i.tone, state: i.state, agent: t.agent, surface: r.surface,
+        place: placeLabel(t.agent, r.surface, r.device, devices.length > 1), blocked: r.blocked, linkOut: t.id === linkOut,
+      },
     };
-  }), [placed, info, positions, drag, selNode, linkOut]);
+  }), [placed, info, runs, devices, positions, drag, selNode, linkOut]);
 
   const links = useMemo<ModeEdge[]>(() => graph.edges.map((e) => ({
     id: String(e.id), source: String(e.fromTaskId), target: String(e.toTaskId), type: "mode", selected: e.id === selEdge,
@@ -537,6 +651,22 @@ function FlowEditor(props: FlowViewProps) {
     if (t) setAgentRef.current(t, otherAgent(t.agent));
   }, [graph]);
 
+  /** Where a task's session runs. One session runs in one place, so the tasks it shares a session with move along. */
+  const setRun = (t: FlowTask, patch: { runIn?: Surface; deviceId?: string }) => {
+    const ids = sessionChain(t.id, graph);
+    const where = patch.runIn === "desktop" ? `in the ${APP_LABEL[t.agent]}` : patch.runIn === "cloud" ? `in ${CLOUD_LABEL[t.agent]}`
+      : patch.runIn ? "in a terminal" : `on ${devices.find((d) => d.id === patch.deviceId)?.name ?? "that computer"}`;
+    act(() => patchTask(Object.fromEntries(ids.map((id) => [id, patch]))), () => setRunAction(ids, patch),
+      ids.length > 1 ? `${names(ids.map((id) => keyOf(graph, id)))} run ${where} now, because they share one session` : undefined);
+  };
+
+  /** Gives a task a folder of its own, or back to the project's (null). */
+  const setFolder = (t: FlowTask, folder: string | null) => {
+    const own = folder && folder !== project.folder ? folder : null;
+    act(() => patchTask({ [t.id]: { folder: own ?? project.folder, ownFolder: own !== null } }),
+      () => updateTaskAction(t.id, { folder: own }), own ? `${t.key} works in its own folder now` : `${t.key} works in the project's folder`);
+  };
+
   const addTask = (t: FlowTask, at: Point, after: number | null, message?: string) => {
     setSel({ kind: "node", id: t.id });
     act(() => {
@@ -567,17 +697,20 @@ function FlowEditor(props: FlowViewProps) {
   const setStart = (t: FlowTask, mode: EdgeMode, atTime: string | null) => {
     const first = (graph.incoming.get(t.id) ?? [])[0];
     const source = first ? graph.byId.get(first.fromTaskId) : undefined;
-    // One terminal session can't switch agents: "same session" hands the task (and whatever continues
-    // its session) to the agent of the task it continues. It stays where it is on the canvas.
-    const agent = mode === "session" && source && source.agent !== t.agent ? source.agent : null;
-    const ids = agent ? sessionChain(t.id, graph).filter((id) => graph.byId.get(id)?.agent !== agent) : [];
+    // One session can't switch agents or places: "same session" hands the task (and whatever continues its
+    // session) to the agent, device and surface of the task it continues. It stays where it is on the canvas.
+    const follow = mode === "session" && source ? source : null;
+    const agent = follow && follow.agent !== t.agent ? follow.agent : null;
+    const place = follow && (follow.runIn !== t.runIn || follow.deviceId !== t.deviceId) ? { runIn: follow.runIn, deviceId: follow.deviceId } : null;
+    const ids = agent || place ? sessionChain(t.id, graph) : [];
     act(() => {
       editEdge({ kind: "mode", toTaskId: t.id, mode, atTime });
-      if (agent) patchTask(Object.fromEntries(ids.map((id) => [id, { agent }])));
+      if (agent || place) patchTask(Object.fromEntries(ids.map((id) => [id, { ...(agent ? { agent } : {}), ...place }])));
     }, async () => {
       const r = await setStartAction(t.id, mode, mode === "time" ? atTime : null);
-      if (agent && r.ok) return setAgentsAction(ids, agent);
-      return r;
+      if (!r.ok) return r;
+      const a = agent ? await setAgentsAction(ids, agent) : r;
+      return a.ok && place ? setRunAction(ids, place) : a;
     });
   };
 
@@ -620,6 +753,14 @@ function FlowEditor(props: FlowViewProps) {
   }, []);
 
   const pickNode = useCallback((id: number) => setSel({ kind: "node", id }), []);
+
+  // The canvas opens where you left it in this project; the first time, it fits the flow.
+  const onInit = () => {
+    const view = savedView(project.id);
+    if (view) void rf.setViewport(view);
+    else fitTo(placed.map(positionOf));
+  };
+  const onMoveEnd: OnMove = (_e, view) => saveView(project.id, view);
 
   const onNodeDragStop: OnNodeDrag<TaskNode> = (_e, node) => {
     setDrag(null);
@@ -726,12 +867,18 @@ function FlowEditor(props: FlowViewProps) {
   let inspector: ReactNode = <EmptyInspector />;
   if (selectedTask) {
     const at = (graph.incoming.get(selectedTask.id) ?? []).find((e) => e.mode === "time")?.atTime ?? "";
+    const run = runs.get(selectedTask.id)!;
+    const session = sessions[selectedTask.id];
     inspector = (
-      <Inspector key={`${selectedTask.id}:${at}`} project={project} task={selectedTask} info={info.get(selectedTask.id)!}
-        session={sessions[selectedTask.id]} graph={graph} flowOn={flowOn} now={now} defaultAt={defaultAt}
+      <Inspector key={`${selectedTask.id}:${at}`} project={project} task={selectedTask} info={info.get(selectedTask.id)!} run={run}
+        devices={devices} session={session} graph={graph} flowOn={flowOn} now={now} defaultAt={defaultAt}
         onAgent={(agent) => setAgent(selectedTask, agent)}
+        onRun={(patch) => setRun(selectedTask, patch)}
+        onFolder={(folder) => setFolder(selectedTask, folder)}
+        onCodexEnv={(env) => act(() => {}, () => setCodexEnvAction(project.id, env), env.trim() ? `${project.name} runs in Codex's ${env.trim()} environment` : undefined)}
         onStart={(mode, at) => setStart(selectedTask, mode, at)}
-        onStartNow={() => act(() => {}, () => startSessionOrAsk(selectedTask.id, selectedTask.agent))}
+        onStartNow={() => act(() => {}, () => startSessionOrAsk(selectedTask.id, selectedTask.agent, run.surface))}
+        onFinished={() => session && act(() => {}, () => finishSessionAction(session.id))}
         onRemove={() => remove(selectedTask)} />
     );
   } else if (selectedEdge) {
@@ -763,7 +910,8 @@ function FlowEditor(props: FlowViewProps) {
                 isValidConnection={(c) => canConnect(Number(c.source), Number(c.target), graph)}
                 onDelete={onDelete}
                 onPaneClick={() => setSel(null)}
-                onInit={() => fitTo(placed.map(positionOf))}
+                onInit={onInit}
+                onMoveEnd={onMoveEnd}
                 deleteKeyCode={DELETE_KEYS}
                 selectionKeyCode={null}
                 multiSelectionKeyCode={null}
@@ -854,7 +1002,7 @@ function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlo
       <span className="flex-1" />
       {agents.map((a) => (
         <span key={a.agent} className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap text-[12px] text-mut2 xl:flex">
-          <Icon name="terminal" size={13} strokeWidth={1.9} className="text-mut" />
+          <AgentIcon agent={a.agent} size={13} className="text-fg3" />
           <span className="text-fg3">{AGENT_LABEL[a.agent]}</span>
           <span className={a.busy ? "text-fg2" : undefined}>{a.status}</span>
         </span>
@@ -933,6 +1081,7 @@ function Palette({ project, tasks, total, yours, dragging, onDragStart, onDragEn
             <Grip />
             <span className="w-11 shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
             <span className="min-w-0 flex-1 truncate text-[12.5px]">{t.title}</span>
+            <span title={`Run by ${AGENT_LABEL[t.agent]}`} className="flex shrink-0 text-mut2"><AgentIcon agent={t.agent} size={11} /></span>
           </button>
         ))}
         {!list.length && <p className="px-1.5 py-1 text-[12px] leading-relaxed text-mut2">{empty}</p>}
@@ -1053,9 +1202,13 @@ function TaskNodeView({ id, data, selected }: NodeProps<TaskNode>) {
         <span className={cx("whitespace-nowrap text-[11px]", data.tone === "waiting" ? "text-fg2" : "text-mut2")}>{data.state}</span>
       </div>
       <div className={cx("h-[18px] truncate text-[13px] leading-[18px]", done ? "text-mut2" : "text-strong")}>{data.title}</div>
-      <div className="flex h-4 min-w-0 items-center gap-1.5 text-[11.5px] leading-4">
+      <div className="flex h-4 min-w-0 items-center gap-2 text-[11px] leading-4">
         <AgentChip taskId={Number(id)} agent={data.agent} done={done} />
-        <span className="truncate text-mut2">{data.note}</span>
+        <span title={data.blocked ?? `Runs in ${data.place}`}
+          className={cx("flex min-w-0 items-center gap-1", data.blocked ? "text-dim line-through decoration-dim" : "text-mut2")}>
+          <SurfaceIcon surface={data.surface} size={11} strokeWidth={2} className="shrink-0" />
+          <span className="truncate">{data.place}</span>
+        </span>
       </div>
       <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE}><HandleDot on={data.linkOut} /></Handle>
     </div>
@@ -1065,7 +1218,7 @@ function TaskNodeView({ id, data, selected }: NodeProps<TaskNode>) {
 /** Who runs the session. Clicking hands it to the other agent (with anything that shares its session). */
 function AgentChip({ taskId, agent, done }: { taskId: number; agent: AgentId; done: boolean }) {
   const switchAgent = useContext(SwitchAgent);
-  const label = <><Icon name="terminal" size={10} strokeWidth={2} className="shrink-0" />{AGENT_LABEL[agent]}</>;
+  const label = <><AgentIcon agent={agent} size={10} />{AGENT_LABEL[agent]}</>;
   const look = "flex h-4 shrink-0 items-center gap-1 whitespace-nowrap rounded-[4px] border border-ctl px-1.5 text-[10.5px] leading-none text-mut";
   if (done) return <span className={look}>{label}</span>;
   return (
@@ -1121,18 +1274,100 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt, onAgent, onStart, onStartNow, onRemove }: {
+/** A choice in the inspector: a radio row with a title and a line under it. */
+function Choice({ on, title, desc, dim, icon, onPick }: {
+  on: boolean; title: ReactNode; desc: ReactNode; dim?: boolean; icon?: ReactNode; onPick: () => void;
+}) {
+  return (
+    <button type="button" role="radio" aria-checked={on} onClick={() => { if (!on) onPick(); }}
+      className={cx("flex gap-2.5 rounded-[7px] border px-2.5 py-2 text-left", on ? "border-accent/55 bg-accent/5" : "border-line2 hover:bg-hover")}>
+      <span className={cx("mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px]",
+        on ? "border-accent" : "border-line-strong")}>
+        {on && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className={cx("flex items-center gap-1.5 text-[13px]", dim ? "text-mut" : "text-fg")}>{icon}{title}</span>
+        <span className={cx("text-[12px] leading-[1.45]", dim ? "text-dim" : "text-mut2")}>{desc}</span>
+      </span>
+    </button>
+  );
+}
+
+/** Where the choices for running a session take you, and what they need. */
+function runChoice(agent: AgentId, surface: Surface, device: FlowDevice | undefined): { title: string; desc: string; problem: string | null } {
+  const tools = device?.checked ? device.agents[agent] : undefined;
+  const problem = runProblem(agent, surface, device);
+  const on = device ? ` on ${device.name}` : "";
+  if (surface === "terminal") {
+    return { title: "Terminal", problem, desc: problem ?? `${AGENT_LABEL[agent]}${tools?.cli ? ` ${tools.cli.version}` : ""} in a new terminal${on}, connected to PacedMind.` };
+  }
+  if (surface === "desktop") {
+    return {
+      title: APP_LABEL[agent], problem,
+      desc: problem ?? `Opens a new ${agent === "claude" ? "Code session" : "thread"} in the ${APP_LABEL[agent]}${on} with the first message written. You send it.`,
+    };
+  }
+  return {
+    title: CLOUD_LABEL[agent], problem,
+    desc: problem ?? `Runs on ${agent === "claude" ? "Anthropic" : "OpenAI"}'s servers from the folder's GitHub repository, even while your computer sleeps.`,
+  };
+}
+
+/** A task's folder: its own or the project's. Click to type another; empty goes back to the project's. */
+function FolderField({ task, projectFolder, onSave }: { task: FlowTask; projectFolder: string | null; onSave: (folder: string | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task.folder ?? "");
+  const save = () => {
+    setEditing(false);
+    const next = draft.trim() || null;
+    if (next !== (task.ownFolder ? task.folder : null) && !(next === projectFolder && !task.ownFolder)) onSave(next);
+  };
+  if (editing) {
+    return (
+      <input autoFocus value={draft} aria-label="Folder for this task" placeholder={projectFolder ?? "C:\\path\\to\\folder"}
+        onChange={(e) => setDraft(e.target.value)} onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") { e.stopPropagation(); setDraft(task.folder ?? ""); setEditing(false); }
+        }}
+        className="h-[26px] min-w-0 rounded-md border border-ctl bg-input px-2 font-mono text-[11.5px] text-fg2 outline-none" />
+    );
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      <button type="button" onClick={() => { setDraft(task.folder ?? ""); setEditing(true); }}
+        title={`${task.folder ?? `No folder: sessions run in PacedMind's workspaces/${task.key.toLowerCase()}`}\nClick to give this task its own folder`}
+        className="min-w-0 truncate rounded px-0.5 text-left font-mono text-[11.5px] text-fg3 hover:bg-hover hover:text-strong">
+        {task.folder ? shortPath(task.folder) : "PacedMind workspace"}
+      </button>
+      {task.ownFolder
+        ? <button type="button" onClick={() => onSave(null)} title="Use the project's folder again" className="shrink-0 text-[11.5px] text-mut2 hover:text-fg2">Own · reset</button>
+        : task.folder && <span className="shrink-0 text-[11.5px] text-dim">Project&apos;s</span>}
+    </div>
+  );
+}
+
+function Inspector({
+  project, task, info, run, devices, session, graph, flowOn, now, defaultAt, onAgent, onRun, onFolder, onCodexEnv, onStart, onStartNow, onFinished,
+  onRemove,
+}: {
   project: FlowViewProps["project"];
   task: FlowTask;
   info: NodeInfo;
-  session: Session | undefined;
+  run: Run;
+  devices: FlowDevice[];
+  session: FlowSession | undefined;
   graph: Graph;
   flowOn: boolean;
   now: number;
   defaultAt: string;
   onAgent: (agent: AgentId) => void;
+  onRun: (patch: { runIn?: Surface; deviceId?: string }) => void;
+  onFolder: (folder: string | null) => void;
+  onCodexEnv: (env: string) => void;
   onStart: (mode: EdgeMode, atTime: string | null) => void;
   onStartNow: () => void;
+  onFinished: () => void;
   onRemove: () => void;
 }) {
   const incoming = graph.incoming.get(task.id) ?? [];
@@ -1145,12 +1380,18 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
   const [draft, setDraft] = useState(at ?? defaultAt);
   const validDraft = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(draft);
   const active = session?.status === "running" || session?.status === "starting";
+  const { surface, device } = run;
+  const mcp: McpLink | null = device?.checked ? device.agents[task.agent].mcp : null;
+  // Sessions that can't tell PacedMind they're done: cloud ones, and the desktop app until it has PacedMind's MCP server.
+  const silent = (s: Surface) => s === "cloud" || (s === "desktop" && mcp !== null && mcp !== "connected");
+  const canFinish = !!session && active && silent(session.surface);
+  const startLabel = surface === "desktop" ? `Open in ${APP_LABEL[task.agent]}` : surface === "cloud" ? "Send to the cloud" : "Start in terminal";
   const options: { mode: EdgeMode; title: string; desc: string }[] = [
     { mode: "auto", title: "Automatically", desc: `A new ${AGENT_LABEL[task.agent]} session starts as soon as ${src} finishes.` },
     { mode: "manual", title: "Manually", desc: `Starts after you mark ${src} done.` },
     {
       mode: "session", title: "In the same session",
-      desc: `${agentShort(srcAgent)} carries on from ${src} in the same terminal, without stopping.` +
+      desc: `${agentShort(srcAgent)} carries on from ${src} in the same session, without stopping.` +
         (srcAgent !== task.agent ? ` Hands it to ${AGENT_LABEL[srcAgent]}.` : ""),
     },
     { mode: "time", title: "At a set time", desc: `${atLabel(at ?? (validDraft ? draft : defaultAt))}, once ${src} is done.` },
@@ -1185,13 +1426,28 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
           <div className="grid grid-cols-[64px_minmax(0,1fr)] items-center gap-x-2.5 gap-y-2 text-[12.5px]">
             <span className="text-mut2">Agent</span>
             <div className="flex">
-              <Segmented value={task.agent} onChange={onAgent} options={AGENTS.map((a) => ({ value: a, label: AGENT_LABEL[a] }))} />
+              <Segmented value={task.agent} onChange={onAgent}
+                options={AGENTS.map((a) => ({ value: a, label: <><AgentIcon agent={a} size={12} />{AGENT_LABEL[a]}</> }))} />
             </div>
+            {devices.length > 1 && (
+              <>
+                <span className="text-mut2">Device</span>
+                <Menu width={230}
+                  trigger={
+                    <button type="button" className="flex h-[26px] max-w-full items-center gap-1.5 rounded-md px-1 text-fg3 hover:bg-hover">
+                      <Icon name="laptop" size={13} className="shrink-0 text-mut" />
+                      <span className="truncate">{device?.name ?? "This computer"}</span>
+                      <Icon name="chevronDown" size={11} className="shrink-0 text-mut2" />
+                    </button>
+                  }
+                  items={devices.map((d) => ({
+                    value: d.id, label: d.name, icon: <Icon name="laptop" size={13} />, hint: d.here ? "This computer" : undefined,
+                  }))}
+                  onSelect={(id) => { if (id !== task.deviceId) onRun({ deviceId: id }); }} />
+              </>
+            )}
             <span className="text-mut2">Folder</span>
-            <span title={project.folder ?? `No project folder: it runs in PacedMind's workspaces/${task.key.toLowerCase()}`}
-              className="truncate font-mono text-[11.5px] text-fg3">
-              {project.folder ? shortPath(project.folder) : "PacedMind workspace"}
-            </span>
+            <FolderField key={`${task.folder}:${task.ownFolder}`} task={task} projectFolder={project.folder} onSave={onFolder} />
             <span className="text-mut2">Branch</span>
             {mode === "session"
               ? <span className="truncate text-fg3">Same branch as {src}</span>
@@ -1199,10 +1455,46 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
             {session && (
               <>
                 <span className="text-mut2">Last run</span>
-                <Link href={`/sessions?s=${session.id}`} className="truncate text-fg3 hover:text-strong">{lastRun(session, now)}</Link>
+                <Link href={`/sessions?s=${session.id}`} className="truncate text-fg3 hover:text-strong">{lastRun(session, task.held, now)}</Link>
               </>
             )}
           </div>
+        </Section>
+
+        <Section title="Runs in">
+          <div role="radiogroup" aria-label="Where it runs" className="flex flex-col gap-1.5">
+            {SURFACES.map((s) => {
+              const c = runChoice(task.agent, s, device);
+              return (
+                <Choice key={s} on={surface === s} dim={!!c.problem} title={c.title} desc={c.desc}
+                  icon={<SurfaceIcon surface={s} size={13} className="text-mut" />} onPick={() => onRun({ runIn: s })} />
+              );
+            })}
+          </div>
+          {mode === "session" && <p className="text-[12px] leading-relaxed text-mut2">It runs where {src} runs, since it carries on that session.</p>}
+          {surface === "desktop" && mcp !== null && mcp !== "connected" && (
+            <p className="text-[12px] leading-relaxed text-mut2">
+              The {APP_LABEL[task.agent]} can&apos;t tell PacedMind when it&apos;s done until {AGENT_LABEL[task.agent]} is{" "}
+              <Link href="/settings#devices" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
+              Until then, mark the session finished here.
+            </p>
+          )}
+          {surface === "cloud" && task.agent === "codex" && (
+            <label className="flex flex-col gap-1.5 text-[12px] text-mut2">
+              <span>Codex environment for {project.name}: its label or id at chatgpt.com/codex/settings/environments</span>
+              <input defaultValue={project.codexEnv ?? ""} placeholder="e.g. my-app" aria-label="Codex cloud environment"
+                onBlur={(e) => { if ((e.target.value.trim() || null) !== project.codexEnv) onCodexEnv(e.target.value); }}
+                onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                className="h-[30px] rounded-md border border-line2 bg-input px-2.5 font-mono text-[12px] text-fg2 outline-none focus:border-ctl" />
+            </label>
+          )}
+          {surface === "cloud" && (
+            <p className="text-[12px] leading-relaxed text-mut2">
+              {task.agent === "codex"
+                ? "PacedMind checks Codex cloud every minute and marks the session finished when its task is ready."
+                : "The cloud can't reach PacedMind on your computer, so mark the session finished here when its pull request is ready."}
+            </p>
+          )}
         </Section>
 
         <Section title="Starts">
@@ -1212,19 +1504,8 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
                 const on = mode === o.mode;
                 return (
                   <Fragment key={o.mode}>
-                    <button type="button" role="radio" aria-checked={on}
-                      onClick={() => { if (!on) onStart(o.mode, o.mode === "time" ? (validDraft ? draft : defaultAt) : null); }}
-                      className={cx("flex gap-2.5 rounded-[7px] border px-2.5 py-2 text-left",
-                        on ? "border-accent/55 bg-accent/5" : "border-line2 hover:bg-hover")}>
-                      <span className={cx("mt-px flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border-[1.5px]",
-                        on ? "border-accent" : "border-line-strong")}>
-                        {on && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
-                      </span>
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="text-[13px] text-fg">{o.title}</span>
-                        <span className="text-[12px] leading-[1.45] text-mut2">{o.desc}</span>
-                      </span>
-                    </button>
+                    <Choice on={on} title={o.title} desc={o.desc}
+                      onPick={() => onStart(o.mode, o.mode === "time" ? (validDraft ? draft : defaultAt) : null)} />
                     {o.mode === "time" && on && (
                       <input type="datetime-local" aria-label="Start at" value={draft}
                         onChange={(e) => setDraft(e.target.value)} onBlur={commitTime}
@@ -1261,10 +1542,16 @@ function Inspector({ project, task, info, session, graph, flowOn, now, defaultAt
       </div>
 
       <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 pb-4 pt-3">
-        <Button onClick={onStartNow} disabled={active || task.status === "done" || task.status === "canceled"}
-          title={active ? "A session for this task is already running" : `Open ${AGENT_LABEL[task.agent]} in a new terminal`}>
-          <Icon name="terminal" size={12} strokeWidth={2} />Start session now
-        </Button>
+        {canFinish ? (
+          <Button onClick={onFinished} title="The session can't tell PacedMind itself. The task waits for your check, and what comes next may start.">
+            <Icon name="check" size={12} strokeWidth={2.2} />Mark finished
+          </Button>
+        ) : (
+          <Button onClick={onStartNow} disabled={active || task.status === "done" || task.status === "canceled"}
+            title={active ? "A session for this task is already running" : run.blocked ?? `${startLabel}${device && surface !== "cloud" ? ` on ${device.name}` : ""}`}>
+            <SurfaceIcon surface={surface} size={12} strokeWidth={2} />{startLabel}
+          </Button>
+        )}
         <span className="flex-1" />
         <Button variant="ghost" onClick={onRemove}>Remove from flow</Button>
       </div>
@@ -1308,8 +1595,9 @@ function EmptyInspector() {
     <aside aria-label="Selected session" className="flex w-[320px] shrink-0 flex-col border-l border-line">
       <div className="flex h-11 shrink-0 items-center border-b border-line px-5 text-[12.5px] text-mut">Nothing selected</div>
       <div className="flex flex-col gap-3 px-5 py-[18px] text-[12.5px] leading-relaxed text-mut2">
-        <p>Select a session on the canvas to choose its agent and how it starts.</p>
-        <p>Put sessions anywhere on the grid. To run one after another, drag from the dot under the first to the dot above the second.</p>
+        <p>Select a session on the canvas to choose its agent, where it runs and how it starts.</p>
+        <p>Put sessions anywhere on the grid; they stay where you leave them. To run one after another, drag from the dot under the first to the dot above the second.</p>
+        <p>A session runs in a terminal or the agent&apos;s desktop app on your computer, or in the agent&apos;s cloud. Each task can have its own folder.</p>
         <p>Click the agent on a session to hand it to Claude Code or Codex. Tidy up lines everything up in the order it runs. <Kbd>Delete</Kbd> removes what&apos;s selected.</p>
       </div>
     </aside>

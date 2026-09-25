@@ -5,14 +5,14 @@ import path from "node:path";
 import { readSecureJson, writeSecureJson } from "./secure-file";
 import { folderProblem } from "./folders";
 import { nowStamp } from "@/lib/dates";
-import type { AgentId, RemoteStart } from "@/lib/types";
+import type { AgentId, RemoteStart, TerminalId } from "@/lib/types";
 
 /*
  * What this computer decides for itself, never the cloud: how agents start (commands, terminal), where each
- * project's sessions run, which projects' flows may start sessions on their own, what happens to sessions
- * requested from elsewhere, and the MCP tokens agents use. It lives in an encrypted file next to the app's
- * data (secure-file.ts), so nothing a browser, another computer or a compromised database writes can change
- * what runs here. Only the desktop app's own window (see proxy.ts) changes it.
+ * project's and task's sessions run, which projects' flows may start sessions on their own, what happens to
+ * sessions requested from elsewhere, and the MCP tokens agents use. It lives in an encrypted file next to the
+ * app's data (secure-file.ts), so nothing a browser, another computer or a compromised database writes can
+ * change what runs here. Only the desktop app's own window (see proxy.ts) changes it.
  */
 
 export interface DeviceConfig {
@@ -23,11 +23,13 @@ export interface DeviceConfig {
   /** The auth session the devices row was last pointed at (claim_device). */
   claimedSession: string | null;
   name: string;
-  terminal: "wt" | "cmd";
+  terminal: TerminalId;
   claudeCommand: string;
   codexCommand: string;
   /** Project id → the folder its sessions run in. */
   folders: Record<string, string>;
+  /** Task id → its own folder (a workspace), for tasks that don't run in their project's folder. */
+  taskFolders: Record<string, string>;
   /** Projects whose flows may start sessions on this computer by themselves. */
   armed: string[];
   /**
@@ -45,6 +47,8 @@ export interface DeviceConfig {
    * session ends, is finished or done, or a day has passed.
    */
   sessionTokens: Record<string, { sessionId: string; taskId: number; issuedAt: string; expires?: number }>;
+  /** Once the import of the folders you work in with Claude Code and Codex was offered here (it opens by itself once). */
+  importOffered: boolean;
 }
 
 export const dataDir = () =>
@@ -61,15 +65,17 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     deviceId: null,
     claimedSession: null,
     name: keep?.name ?? os.hostname().slice(0, 80) ?? "This computer",
-    terminal: keep?.terminal ?? "wt",
+    terminal: keep?.terminal ?? (process.platform === "darwin" ? "terminal" : "wt"),
     claudeCommand: keep?.claudeCommand ?? "claude",
     codexCommand: keep?.codexCommand ?? "codex",
     folders: {},
+    taskFolders: {},
     armed: [],
     confirmed: {},
     remoteStart: "ask",
     ownerToken: newOwnerToken(),
     sessionTokens: {},
+    importOffered: false,
   };
 }
 
@@ -144,6 +150,33 @@ export function setProjectFolder(projectId: string, folder: string | null): stri
   if (moved) delete confirmed[projectId];
   save({ ...d, folders, armed, confirmed });
   return null;
+}
+
+/** A task's own folder on this computer, when it doesn't run in its project's. */
+export const taskFolder = (taskId: number): string | null => deviceConfig().taskFolders?.[String(taskId)] ?? null;
+
+/** Sets or clears a task's own folder on this computer. Returns why it can't, or null. */
+export function setTaskFolder(taskId: number, folder: string | null): string | null {
+  const d = deviceConfig();
+  const taskFolders = { ...(d.taskFolders ?? {}) };
+  if (folder) {
+    const problem = folderProblem(folder);
+    if (problem) return problem;
+    taskFolders[String(taskId)] = folder;
+  } else {
+    delete taskFolders[String(taskId)];
+  }
+  save({ ...d, taskFolders });
+  return null;
+}
+
+/** Forgets a deleted task's folder. */
+export function forgetTask(taskId: number) {
+  const d = deviceConfig();
+  if (!d.taskFolders?.[String(taskId)]) return;
+  const taskFolders = { ...d.taskFolders };
+  delete taskFolders[String(taskId)];
+  save({ ...d, taskFolders });
 }
 
 export const flowArmed = (projectId: string | null | undefined) => !!projectId && deviceConfig().armed.includes(projectId);
@@ -253,6 +286,6 @@ export function moveSessionToken(fromSessionId: string, toSessionId: string, tas
   save({ ...d, sessionTokens });
 }
 
-export function platformName(): "windows" | "macos" | "linux" {
+export function thisPlatform(): "windows" | "macos" | "linux" {
   return process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux";
 }

@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import * as repo from "./repo";
 import { planTimeBlocks } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, fmtShort, fmtTime, minutesOf, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
-import { AGENT_LABEL, type FlowEdge, type Project, type Session, type Settings, type Task } from "@/lib/types";
+import { AGENT_LABEL, type FlowEdge, type Project, type ReportOutcome, type Session, type Settings, type Task } from "@/lib/types";
 
 /* Read-only helpers for the Timeline and Roadmap views. */
 
@@ -73,7 +73,7 @@ export async function dayLoads(tasks: Task[], sessions: Session[], from: string,
     for (const b of plan.blocks) add(dateOnly(b.start), "planned", minutesOf(timeOf(b.end)!) - minutesOf(timeOf(b.start)!));
   }
   for (const t of tasks) {
-    if (t.status !== "done" || !t.completedAt || t.agent) continue;
+    if (t.status !== "done" || !t.completedAt || (t.agent && t.agent !== "human")) continue;
     const day = dateOnly(t.completedAt);
     if (day >= from && day < today) add(day, "done", t.estimateMin);
   }
@@ -82,14 +82,18 @@ export async function dayLoads(tasks: Task[], sessions: Session[], from: string,
 
 /* ---------- task state, for the task order and the timeline bars ---------- */
 
-const READY = new Set(["review", "done"]);
+/** Tasks handed back partial or blocked, with that outcome (repo.heldOutcomes). */
+type Held = Map<number, Exclude<ReportOutcome, "done">>;
+
+/** Same rule as the flow engine: done, or handed back for review unless the hand-back was partial or blocked (`held`). */
+const ready = (source: Task, held: Held) => source.status === "done" || (source.status === "review" && !held.has(source.id));
 
 /** Same rule as the flow engine: whether a connection lets its target start. */
-function satisfied(edge: FlowEdge, source: Task | undefined, now: string): boolean {
+function satisfied(edge: FlowEdge, source: Task | undefined, now: string, held: Held): boolean {
   if (!source) return true;
   if (edge.mode === "manual") return source.status === "done";
-  if (edge.mode === "time") return READY.has(source.status) && !!edge.atTime && edge.atTime <= now;
-  return READY.has(source.status);
+  if (edge.mode === "time") return ready(source, held) && !!edge.atTime && edge.atTime <= now;
+  return ready(source, held);
 }
 
 const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
@@ -113,7 +117,9 @@ function doneLabel(t: Task, today: string): string {
   return diff < 7 ? `Done ${format(parseLocal(t.completedAt), "EEE")}` : `Done ${fmtShort(t.completedAt)}`;
 }
 
-function stateOf(t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Map<number, Task>, today: string, now: string): TaskState {
+function stateOf(
+  t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Map<number, Task>, today: string, now: string, held: Held,
+): TaskState {
   if (t.status === "done") return { text: doneLabel(t, today), short: "Done", tone: "done" };
   if (t.status === "canceled") return { text: "Canceled", short: "Canceled", tone: "done" };
   if (s && (s.status === "running" || s.status === "starting")) {
@@ -121,6 +127,9 @@ function stateOf(t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Ma
   }
   if (s?.status === "finished") {
     const at = when(s.finishedAt ?? s.startedAt, today);
+    const outcome = held.get(t.id);
+    if (outcome === "blocked") return { text: `Blocked ${at}, needs you`, short: `Blocked ${at}`, tone: "waiting" };
+    if (outcome === "partial") return { text: `Partly done ${at}, waiting for you`, short: `Partly done ${at}`, tone: "waiting" };
     return { text: `Finished ${at}, waiting for you`, short: `Finished ${at}`, tone: "waiting" };
   }
   const dueToday = t.dueDate && dateOnly(t.dueDate) === today && timeOf(t.dueDate) ? `Due ${fmtTime(t.dueDate)}` : null;
@@ -130,11 +139,16 @@ function stateOf(t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Ma
   const key = (id: number) => byId.get(id)?.key ?? "a removed task";
   const same = incoming.find((e) => e.mode === "session");
   if (same) return { text: `Same session as ${key(same.fromTaskId)}`, short: "Same session", tone: "queued" };
-  const blocking = incoming.filter((e) => !satisfied(e, byId.get(e.fromTaskId), now));
+  const blocking = incoming.filter((e) => !satisfied(e, byId.get(e.fromTaskId), now, held));
+  // Held back by a partly done or blocked hand-back: it goes on when the user marks that task done.
+  const heldBy = blocking.filter((e) => byId.get(e.fromTaskId)?.status === "review" && held.has(e.fromTaskId));
+  if (blocking.length && heldBy.length === blocking.length) {
+    return { text: `When you mark ${joinAnd(heldBy.map((e) => key(e.fromTaskId)))} done`, short: "Waits for you", tone: "next" };
+  }
   if (blocking.length === 1 && blocking[0].mode === "manual") {
     return { text: `When you mark ${key(blocking[0].fromTaskId)} done`, short: "Manual start", tone: "next" };
   }
-  if (blocking.length && blocking.every((e) => e.mode === "time" && e.atTime && READY.has(byId.get(e.fromTaskId)?.status ?? ""))) {
+  if (blocking.length && blocking.every((e) => e.mode === "time" && e.atTime && byId.has(e.fromTaskId) && ready(byId.get(e.fromTaskId)!, held))) {
     const at = when(blocking.map((e) => e.atTime!).sort().at(-1)!, today);
     return { text: `Starts ${at}`, short: `At ${at}`, tone: "queued" };
   }
@@ -156,11 +170,12 @@ function stateOf(t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Ma
  * What each task is doing or waiting for, from its status, its newest session and the
  * connections that lead into it: "Running in Codex", "When you mark DEV-21 done", …
  */
-export function taskStates(tasks: Task[], sessions: Record<number, Session>, edges: FlowEdge[], now = new Date()): Record<number, TaskState> {
+export async function taskStates(tasks: Task[], sessions: Record<number, Session>, edges: FlowEdge[], now = new Date()): Promise<Record<number, TaskState>> {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const today = toDateStr(now);
   const stamp = toDateTimeStr(now);
+  const held = await repo.heldOutcomes();
   return Object.fromEntries(
-    tasks.map((t) => [t.id, stateOf(t, sessions[t.id], edges.filter((e) => e.toTaskId === t.id), byId, today, stamp)]),
+    tasks.map((t) => [t.id, stateOf(t, sessions[t.id], edges.filter((e) => e.toTaskId === t.id), byId, today, stamp, held)]),
   );
 }

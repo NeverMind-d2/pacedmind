@@ -1,0 +1,100 @@
+---
+title: Review finished work
+description: Where finished agent sessions show up, how to read an agent's report, how to send the work back with Request changes, what a partly done or blocked hand-back holds up, and what Mark done changes.
+---
+
+When an agent hands a task back, it sends a report: what it changed, its answer to each item of the task's **Done when** list, screenshots, and how to check the result. The session is then **finished, waiting for you** and the task is **In review**, as they are when a session is marked finished. The agent never marks its own task done: that's yours to do after looking at the result.
+
+In a flow, tasks connected **Manually** wait for that. Tasks connected **Automatically**, **In the same session** or **At a set time** can already start when the task is in review, unless the agent handed it back partly done or blocked ([below](#partly-done-or-blocked)).
+
+## Where finished sessions show up
+
+| Place | Sign |
+| --- | --- |
+| Desktop notification | *DEV-21 is finished*, *DEV-21 is partly done* or *DEV-21 is blocked*, followed by *· 2 questions for you* when the agent asks something. It shows the task's title and the report's summary. Click it to open the session. |
+| Tray icon | Its tooltip reads *PacedMind · 2 waiting for you*. |
+| Sidebar | The **Sessions** count. |
+| **Sessions** | The **Finished, waiting for you** group, newest first. |
+| Task rows | *Session finished*, with a navy dot. |
+| Task details | *Claude Code finished at 12:22 · waiting for you*, *Claude Code handed back part of it at 12:22 · waiting for you* or *Claude Code got stuck at 12:22 · needs you*, with the report and **Mark done**. |
+| **Roadmap** | *2 finished sessions waiting for you* in the header, and **Open session** on the task's row. |
+| **Flows** | The session's card reads *Waiting for you*, *Partly done* or *Blocked*; its panel adds *Finished 12:22, check it and mark done*, *Handed back part of it at 12:22, check it and mark done* or *Got stuck at 12:22, it needs you*. |
+| **Timeline** | A navy outline around the task's bar and a navy dot after it. |
+| **Calendar**, week | A 45-minute block to check the result, *Check DEV-21*, planned in your focus time. |
+
+## The report
+
+The report shows in the task's details, at the top of the panel, and in **Sessions** when the session is selected. From top to bottom, with the parts the agent left empty left out:
+
+| Part | What it holds |
+| --- | --- |
+| Summary | One or two sentences on what changed and what to look at first. **Partly done** or **Blocked** comes before it when the agent didn't finish everything. |
+| **Done when** | The agent's answer to each item of the task's **Done when** list: **Met**, **Partly met** or **Not met**, with a note on how it checked, and a count such as *2 of 3 met*. In the task's details, the answers show next to the items of the list itself. |
+| Images | Screenshots, or other images that show the result. |
+| **Questions for you** | Decisions or answers the agent needs from you. |
+| **How to check it** | Steps to check the result: a command to run, a page to open, what to look for. |
+| **Details** | Anything longer: what the agent did and why, trade-offs, test results, findings. Long details are cut short, with **Show all**. |
+| Links and follow-ups | Pull requests, commits, previews or documents, and the tasks the agent created for work outside this one. A follow-up opens its task. |
+
+An item added to the **Done when** list, or reworded, after the report shows as *Not answered*.
+
+Select an image to open it in the viewer. <kbd>←</kbd> and <kbd>→</kbd> move between the images, a click on the image shows it at its actual size, **Open** opens it on its own in the browser, and <kbd>Esc</kbd> closes the viewer. Images the agent attaches while it's still working show under **Images so far**, and join its report when it hands the task back. PacedMind keeps its own copy of each image in its data folder. See [Where your data lives](/getting-started/data).
+
+Every hand-back adds a report. With more than one, the arrows next to *Report 2 of 2* page back to the earlier ones.
+
+A session without a report shows the agent's note instead, if it left one. That's the case for sessions marked finished with **Mark finished**, for Codex cloud tasks, and for hand-backs from before reports existed.
+
+## Review a session
+
+1. Open the session: from the notification, from **Sessions**, or from the task's details.
+2. Read the report: the summary, the **Done when** answers, the images and the questions.
+3. Check the work, starting with the report's **How to check it**. The agent's terminal or app stays open, and the changed files are in the session's folder. For a cloud session, open its pull request.
+4. Decide:
+   * **Mark done** when the result is right.
+   * **Request changes** when it isn't, for a session that ran in a terminal on this computer ([below](#request-changes)). You can also continue the conversation in the agent's terminal or app yourself: the agent hands the task back again, with a new report, when it's done. If it picks the task up again with `start_task` first, the session shows as **Running** in the meantime.
+   * To start over with a fresh agent: for a running session, select **Close session**, then **New session**. For a finished session, start a new one from **Sessions** (**Start session**) or with the start button in **Flows**; the finished one keeps waiting for review until the task is marked done.
+
+## Request changes
+
+**Request changes**, under the report in the task's details or in **Sessions**, sends the work back to the agent with what you want changed. It's offered on the task's latest report, for a session that ran in a terminal on this computer, and still after the task was marked done.
+
+1. Select **Request changes**.
+2. Write what should change in the field (*What should change? Be as specific as you'd be with a colleague.*). The agent reads it as written, so answer its questions there too.
+3. Select **Send to Claude Code** (or **Send to Codex**), or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>. **Cancel** or <kbd>Esc</kbd> drops the text.
+
+PacedMind adds your changes to the report, under **You asked for changes**, and opens a new terminal in the session's folder: a new tab in Windows Terminal, a new window otherwise. *Sent to Claude Code in a new terminal* confirms it. Then:
+
+* **Claude Code** continues its conversation, as a new branch of it (*Claude Code continues its conversation in a new terminal.*). The old terminal can stay open or be closed. **Codex**, and Claude Code without a conversation to go back to, start again, with the last report and your changes (*Codex starts again in a new terminal, with its last report and your changes.*).
+* The task goes back to **In progress**, from **Done** too, and the session to **Running**: *Claude Code is working on your changes since 14:05*. The earlier report folds away under **The report from 25 Sep 12:22**.
+* The agent reads your changes first, makes them without starting the task over, and hands the task back with a new report whose summary starts with what it changed. You're notified again. The earlier report keeps your changes.
+
+For a session in the Claude or Codex app, or in the cloud, write the changes to the agent where it runs. A session that ran on another computer takes its changes from PacedMind on that computer. An agent you're talking to can send changes the same way, with the MCP tool [`request_changes`](/mcp/tools/sessions#request_changes), when you ask it to.
+
+## Partly done or blocked
+
+An agent that can't finish everything still hands the task back, and says so in its report:
+
+| In the report | Meaning | Task details |
+| --- | --- | --- |
+| No label | Everything asked for is ready. | *Claude Code finished at 12:22 · waiting for you* |
+| **Partly done** | Only part of it is ready; the report says what's missing. | *Claude Code handed back part of it at 12:22 · waiting for you* |
+| **Blocked** | The agent can't go on without you. Its questions say what it needs. | *Claude Code got stuck at 12:22 · needs you* |
+
+The notification reads *DEV-21 is partly done* or *DEV-21 is blocked*, and the row in **Sessions** *partly done 12:22* or *stuck 12:22*. The session stays in **Finished, waiting for you**.
+
+A partly done or blocked hand-back holds up the flow: no task that waits for this one starts, whatever its connection, until you mark the task done, the agent hands it back again as done (for example after **Request changes**), or a newer session of the task is marked finished. Tasks connected **In the same session** don't continue in the agent's session: marking the task done starts them as a new session.
+
+## What Mark done does
+
+**Mark done**, in the task's details or in **Sessions**, marks the task **Done**. Setting the status to **Done** any other way, including by the status icon in a list, has the same effect. Then:
+
+* the task's finished sessions become **Done** (*You marked it done*) and leave the waiting count;
+* the check block leaves the week plan;
+* in a flow, tasks connected **Manually** after this one can start, and so can any task whose other connections were already satisfied. After a partly done or blocked hand-back, this is also when tasks connected **Automatically** or **At a set time** start, and a task connected **In the same session** starts as a new session;
+* if this was the last task of the project's flow, projects that start after it begin their flows.
+
+The message names the sessions that started, such as *Started DEV-23, DEV-24*. See [Automate with flows](/agents/flows). **Request changes** stays available afterwards, and moves the task back to **In progress**.
+
+## Follow-up work
+
+Agents record work they found outside the task as new tasks in the same project, and list them in their report, where each one opens its task. They appear in the project's task list and, when they're for an agent, in the **Flows** list **Add to the flow**.

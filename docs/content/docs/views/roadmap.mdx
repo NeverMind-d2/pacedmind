@@ -1,0 +1,60 @@
+---
+title: Roadmap
+description: The roadmap shows when each project runs and in which order a project's tasks come, and holds the project's session settings.
+---
+
+The **Roadmap** answers two questions: when do the projects run, and in which order does one project's work happen. **Roadmap** and **Flow**, at the top left, switch between this view and the same project's [flow](/views/flows).
+
+<img src="/docs/screenshots/roadmap.png" alt="The Roadmap with the project timeline, the task order and the session settings" width="1920" height="1200" loading="lazy" />
+
+## The header
+
+* The months covered, such as *Sep to Dec 2026*.
+* *2 finished sessions waiting for you*, when agents have finished work to review. Select it to open **Sessions**.
+* The project picker, at the right, which switches the selected project.
+
+The roadmap opens on the project from its link (**Open roadmap** in a project's menu, or **Roadmap** on a project page), else on the first project with tasks in a flow, else on the first project.
+
+## Project timeline
+
+The top part shows every project on a 14-week timeline that starts two weeks before the current week.
+
+* Each row has the project's diamond and name, and its default agent (*Claude* or *Codex*) when it has one.
+* The bar runs from the start date to the target date. Without a start date, it starts today; without a target date, it runs to the end of the range. The filled part shows the done tasks, and the label counts them, such as *3 of 8 tasks*, or says *No tasks yet*.
+* A project that hasn't started and starts later has a dashed bar labeled *Starts 5 Oct*, or *Starts after* the project it waits for.
+* A hollow diamond marks the target date. The current day is labeled at the top and marked with a navy line.
+* Arrows connect a project to the ones that start after it.
+* A project without dates says *No dates yet*.
+
+Select a project's row to select that project.
+
+## Task order
+
+The lower left part, **Task order**, lists the selected project's tasks (canceled ones left out) in the project's roadmap order. Agents follow the same order: it decides which task `get_next_task` offers first. Task lists use it too, after priority.
+
+Each row shows the position, the status, the key and the title, then:
+
+* where the task stands in the flow: *After DEV-19, DEV-21*, *Start of flow*, or *Done by you* for tasks that are yours;
+* what the task is doing or waiting for, such as *Running in Claude Code*, *Finished 12:22, waiting for you* (with a navy dot), *Partly done 12:22, waiting for you*, *Blocked 12:22, needs you*, *When you mark DEV-21 done*, *Starts Tue 09:00*, *Waits for DEV-22* or *Planned for today*;
+* **Open session**, for a finished session that waits for review.
+
+Hover a row and use the arrows (**Move up**, **Move down**) to change the order. Select a row to open the task's details. **Open as flow** opens the project in **Flows**.
+
+After the list, a dashed row names the project that starts once this one is done, such as *Then Portfolio site, 3 tasks, once Organizer app is done*, with its estimated start.
+
+## Session settings
+
+The right part, **Sessions** and the project's name, sets how the project's agent sessions run. It gives way to the task's details while a task is selected.
+
+| Setting | Meaning |
+| --- | --- |
+| **Flow on** | *Next sessions start on their own*, or *Paused*. See [Automate with flows](/agents/flows). |
+| **Default agent** | **Claude Code** or **Codex**, for tasks that don't name their agent. |
+| **Opens in** | The terminal sessions open in, as set in **Settings → Starting sessions**: **Windows Terminal** or **Command Prompt** on Windows, **Terminal** or **iTerm** on macOS. |
+| **Folder** | The folder sessions work in (*A new folder per task* when empty). Type the path and press <kbd>Enter</kbd>; <kbd>Esc</kbd> undoes the edit. |
+| **Starts after** | *Nothing, starts any time*, or a project that must finish first. |
+| **After this project** | *Nothing*, or the project that starts once this one is done. Choosing one replaces any project that followed before. |
+
+The menus leave out projects that would make two projects wait for each other. The note below the settings sums up PacedMind's part: *PacedMind only tracks state. You work with the agent in its own terminal, and it tells PacedMind when it starts and when it's finished.*
+
+With no projects, the roadmap says *No projects yet*.

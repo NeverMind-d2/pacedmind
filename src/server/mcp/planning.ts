@@ -25,9 +25,9 @@ async function launched(rs: { ok: boolean; session?: { taskId: number } }[]): Pr
 
 /*
  * A session PacedMind started works on one task. It may note follow-up work as new open tasks and edit its own
- * task's details, but never change a status (finish_task does that), who does a task or where it lives, and
- * never touch other tasks: a session led astray must not be able to start flows or plant instructions in
- * tasks other sessions will read.
+ * task's details, but never change a status (finish_task does that), who does a task, where it lives, or where
+ * and in which folder its sessions run, and never touch other tasks: a session led astray must not be able to
+ * start flows, send work elsewhere or plant instructions in tasks other sessions will read.
  */
 function sessionMayCreate(status: string | undefined) {
   if (callerSession() && status && status !== "todo" && status !== "backlog") {
@@ -35,13 +35,16 @@ function sessionMayCreate(status: string | undefined) {
   }
 }
 
-function sessionMayUpdate(t: Task, changes: { status?: unknown; agent?: unknown; project?: unknown; area?: unknown }) {
+function sessionMayUpdate(
+  t: Task, changes: { status?: unknown; agent?: unknown; project?: unknown; area?: unknown; runs_in?: unknown; folder?: unknown },
+) {
   const me = callerSession();
   if (!me) return;
   if (t.id !== me.taskId) fail(`This session can only change its own task, not ${t.key}. Create a new task for follow-up work instead.`);
   if (changes.status !== undefined || changes.agent !== undefined || changes.project !== undefined || changes.area !== undefined) {
     fail("A session can't change its task's status, agent, project or area. Call finish_task when the work is ready to check.");
   }
+  if (changes.runs_in !== undefined || changes.folder !== undefined) fail("A session can't change where or in which folder its task's sessions run.");
 }
 
 /** For fields that can be cleared: undefined leaves them alone, null or "" clears them. */
@@ -50,8 +53,12 @@ const clearable = <T>(v: string | null | undefined, read: (s: string) => T): T |
 
 /* ---------- task input shared by create_task, create_tasks and update_task ---------- */
 
+const doneWhenSchema = z.array(z.string()).max(20)
+  .describe("What must be true when the task is finished: one checkable outcome per item, e.g. \"/reports has a Download CSV button\" or \"A screenshot of the new page\". Agents answer each item when they hand the task back");
+
 const newTaskFields = {
-  description: z.string().optional().describe("Details in plain text or Markdown: context, acceptance criteria, links"),
+  description: z.string().optional().describe("Details in plain text or Markdown: why it matters, context, constraints, links"),
+  done_when: doneWhenSchema.optional(),
   status: statusSchema.optional().describe("Defaults to todo"),
   priority: prioritySchema.optional(),
   due: dateTimeInput.optional().describe("Deadline, with an optional time"),
@@ -66,7 +73,7 @@ const newTaskFields = {
 const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim().replace(/^#/, "").toLowerCase()).filter(Boolean))];
 
 type NewTask = {
-  title: string; description?: string; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
+  title: string; description?: string; done_when?: string[]; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
   due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: Doer;
 };
 
@@ -76,6 +83,7 @@ async function createOne(input: NewTask, place: { projectId: string | null; area
   const t = await repo.createTask({
     title: input.title,
     description: input.description?.trim() ?? "",
+    doneWhen: input.done_when,
     projectId: place.projectId,
     areaId: place.areaId,
     status: input.status ? statusOf(input.status) : "todo",
@@ -423,7 +431,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "get_task", {
     title: "Get task",
-    description: "A task's full details: description, numbered sub-tasks, dates, estimate, labels, flow connections and latest session.",
+    description: "A task's full details: description, numbered Done when items and sub-tasks, dates, estimate, labels, flow connections, latest session and the latest report an agent handed back.",
     input: z.object({ task: taskRef }),
     kind: "read",
   }, async ({ task }) => describeTask(await findTask(task)));
@@ -443,7 +451,8 @@ export function registerPlanningTools(server: McpServer) {
     sessionMayCreate(args.status);
     const t = await createOne(args, await placeFor(args.project, args.area));
     const started = t.status === "done" ? await launched(await afterTaskDone(t.id)) : [];
-    return [`Created ${taskLine(t, await names())}${t.subtasks.length ? ` · ${t.subtasks.length} sub-tasks` : ""}.`, ...started].join("\n");
+    const extra = [t.doneWhen.length ? plural(t.doneWhen.length, "Done when item") : null, t.subtasks.length ? plural(t.subtasks.length, "sub-task") : null];
+    return [`Created ${taskLine(t, await names())}${extra.filter(Boolean).map((x) => ` · ${x}`).join("")}.`, ...started].join("\n");
   });
 
   tool(server, "create_tasks", {
@@ -475,12 +484,13 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "update_task", {
     title: "Update task",
     description:
-      "Change anything about a task: title, description (replace or append), status, priority, dates, estimate, labels, project or area, agent, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area or agent. Setting status to done may start sessions that wait for it in a flow.",
+      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run and their folder, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
       description: z.string().optional().describe("Replaces the description"),
       append_to_description: z.string().optional().describe("Adds a paragraph at the end of the description"),
+      done_when: doneWhenSchema.optional().describe("Replaces the Done when list; [] clears it"),
       status: statusSchema.optional(),
       priority: prioritySchema.optional(),
       due: dateTimeInput.nullable().optional(),
@@ -492,6 +502,9 @@ export function registerPlanningTools(server: McpServer) {
       project: projectRef.nullable().optional().describe("Move to this project (and its area), or null to take it out of its project"),
       area: areaRef.nullable().optional().describe('Move to this area without a project, or null / "inbox" for the Inbox'),
       agent: doerSchema.nullable().optional().describe("human takes the task out of its flow for good"),
+      runs_in: z.enum(["terminal", "desktop", "cloud"]).nullable().optional()
+        .describe("Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. null: a terminal when the agent's CLI is installed, else its desktop app"),
+      folder: z.string().nullable().optional().describe("Absolute folder its sessions work in, when it isn't the project's; null for the project's folder"),
       add_subtasks: z.array(z.string()).optional(),
       complete_subtasks: z.array(z.string()).optional().describe("Sub-task numbers or titles to tick off"),
       reopen_subtasks: z.array(z.string()).optional(),
@@ -502,6 +515,11 @@ export function registerPlanningTools(server: McpServer) {
     const t = await findTask(args.task);
     sessionMayUpdate(t, args);
     if (args.title !== undefined && !args.title.trim()) fail("The title can't be empty.");
+    const folder = args.folder === undefined ? undefined : args.folder?.trim() || null;
+    if (folder) {
+      const problem = folderProblem(folder);
+      if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
+    }
     const { projectId, areaId } = await moveTarget(t, args.project, args.area);
     let labels = args.labels ? cleanLabels(args.labels) : [...t.labels];
     if (args.add_labels) labels = cleanLabels([...labels, ...args.add_labels]);
@@ -523,6 +541,7 @@ export function registerPlanningTools(server: McpServer) {
     await repo.updateTask(t.id, {
       title: args.title?.trim(),
       description,
+      doneWhen: args.done_when,
       status,
       priority: args.priority ? priorityOf(args.priority) : undefined,
       dueDate,
@@ -532,6 +551,8 @@ export function registerPlanningTools(server: McpServer) {
       projectId,
       areaId,
       agent: args.agent,
+      runIn: args.runs_in,
+      folder,
     });
     for (const s of complete) await repo.setSubtaskDone(s.id, true);
     for (const s of reopen) await repo.setSubtaskDone(s.id, false);
@@ -540,7 +561,8 @@ export function registerPlanningTools(server: McpServer) {
     const leftFlow = args.agent === "human" && (await keepYoursOutOfFlow(t.id)) ? [`${t.key} is the user's now, so it left the flow.`] : [];
     const started = status === "done" && t.status !== "done" ? await launched(await afterTaskDone(t.id)) : [];
     const after = (await repo.getTask(t.id))!;
-    const subs = after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "";
+    const subs = (args.done_when ? ` · ${plural(after.doneWhen.length, "Done when item")}` : "") +
+      (after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "");
     return [`Updated ${taskLine(after, await names())}${subs}.`, ...leftFlow, ...started].join("\n");
   });
 

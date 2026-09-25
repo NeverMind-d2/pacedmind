@@ -1,0 +1,34 @@
+---
+title: Inbox
+description: The Inbox collects open tasks that have neither an area nor a project, so they can be captured quickly and sorted later.
+---
+
+The **Inbox** lists open tasks without an area and without a project: *Tasks without an area or project*. It's the place to capture a task quickly and decide later where it belongs.
+
+## What it shows
+
+* Only open tasks. Done and canceled tasks leave the Inbox.
+* Grouped by status: **In review**, **In progress**, **Todo**, **Backlog**. Within a group, the most urgent priority comes first.
+* The sidebar shows how many open tasks the Inbox holds.
+
+An empty Inbox says *Your inbox is clear*.
+
+## Add to the Inbox
+
+Tasks land in the Inbox when they're created without an area or project:
+
+* In quick add, leave the area chip on **Inbox** and the project chip empty (**Project**).
+* Agents create Inbox tasks with `create_task` when they leave out both `project` and `area`.
+
+Inbox tasks get **INB** keys, such as INB-3. The key stays when the task moves to an area later.
+
+## Sort the Inbox
+
+Open a task and give it a place in the details panel:
+
+* **Project**: puts the task in a project and in the project's area.
+* **Area**: puts it directly in an area, without a project.
+
+The task then leaves the Inbox. While sorting, it's a good moment to set a priority, a planned day or a due date, and an estimate, or to cancel what won't be done.
+
+An agent can triage the Inbox too: the **pacedmind-review** skill goes through it in small batches and suggests a place and dates for each task. See [Agent skills](/skills).

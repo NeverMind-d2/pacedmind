@@ -1,6 +1,8 @@
 import "server-only";
+import { changesProblemIn } from "./ops";
 import * as repo from "./repo";
-import type { Area, Project, Session, SessionEvent, Task, TaskContext, Usage } from "@/lib/types";
+import { MODE } from "./supabase";
+import { isLiveSession, type Area, type Project, type Session, type Task, type TaskContext, type Usage } from "@/lib/types";
 
 export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const ids = new Set(tasks.map((t) => t.id));
@@ -9,8 +11,19 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   for (const s of all) {
     if (ids.has(s.taskId) && !sessions[s.taskId]) sessions[s.taskId] = s;
   }
-  const sessionEvents: Record<string, SessionEvent[]> = await repo.sessionEventsFor(Object.values(sessions).map((s) => s.id));
-  return { areas, projects, sessions, sessionEvents };
+  const shown = Object.values(sessions).map((s) => s.id);
+  const [sessionEvents, reports, pending] = await Promise.all([repo.sessionEventsFor(shown), repo.reportsForTasks([...ids]), repo.pendingImages(shown)]);
+  const live = new Set(all.filter(isLiveSession).map((s) => s.taskId));
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const changesOk = Object.fromEntries(
+    Object.values(sessions).filter((s) => s.status === "finished" || s.status === "done").map((s) => [
+      s.id, !changesProblemIn(s, { task: byId.get(s.taskId), live: live.has(s.taskId), newest: reports.get(s.taskId)?.[0] }),
+    ]),
+  );
+  return {
+    areas, projects, sessions, sessionEvents, reports: Object.fromEntries(reports), pending: Object.fromEntries(pending), changesOk,
+    desktop: MODE === "desktop",
+  };
 }
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";

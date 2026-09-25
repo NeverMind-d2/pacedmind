@@ -1,0 +1,36 @@
+---
+title: Who does a task
+description: The Done by field decides whether a task is yours or an agent's, and with it whether the task can run as an agent session, join a flow, and fill your focus time.
+---
+
+Every task has someone who does it, set in the details panel under **Done by**:
+
+| Choice | Meaning |
+| --- | --- |
+| **You** | Only you can do it (*Stays out of flows*). |
+| **Claude Code** | Claude Code works on it in a session. |
+| **Codex** | Codex works on it in a session. |
+| **Project default, Claude Code** (or **Codex**) | The project's default agent does it. Shown as **Not decided** when the project has no default agent. |
+
+## What it changes
+
+| | You | Claude Code or Codex | Project default or Not decided |
+| --- | --- | --- | --- |
+| Agent session | Can't start. The details panel shows *None, this one is yours*. | **Start in** that agent. | **Start in** the project's agent, or Claude Code when there is none. |
+| Flow | Never in a flow. Choosing **You** for a task on a flow takes it off the canvas and deletes its connections. | Can be placed in the flow, run by that agent. | Can be placed in the flow, run by the project's agent. |
+| Auto-planner | Planned into your focus time. | Left to the agent. When its session finishes, a 45-minute block to check the result is planned for you. | Planned into your focus time. |
+
+When a task that was in a flow becomes yours, PacedMind says so: *WRK-12 is yours now, so it left the flow.*
+
+## How it gets set
+
+* **New tasks in a project** get the project's default agent. A project with Codex as its default agent creates tasks done by Codex.
+* **New tasks elsewhere** start without a doer (**Not decided**).
+* **Starting a session** sets the doer to the agent that runs it.
+* **Adding a task to a flow** sets the doer to the agent shown on its node. Clicking the agent on a node switches it between Claude Code and Codex.
+* **Agents** set it with `agent`: `claude`, `codex`, or `human` for you. `create_task` leaves it out for the project default; `update_task` takes `null` for that.
+* **Changing a project's default agent** later affects new tasks and tasks set to the project default. Tasks created earlier keep the agent they were given.
+
+## Your tasks and dependencies
+
+Tasks that are yours can still wait for other tasks: a dependency drawn on the **Timeline** applies to them too. PacedMind never starts a session for them, so they wait for you to pick them up. A task that was on a flow canvas loses its connections when it becomes yours; draw its dependencies again on the **Timeline** if it should keep waiting. See [Timeline](/views/timeline#dependencies).

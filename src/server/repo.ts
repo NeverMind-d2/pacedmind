@@ -3,19 +3,26 @@ import crypto from "node:crypto";
 import { addDays } from "date-fns";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { MODE, NotSignedIn, authState, supabase } from "./supabase";
-import { confirmedFlow, flowArmed, forgetProject, projectFolder, reconfirmFlow, setFlowArmed, setProjectFolder } from "./device";
+import { removeImageFiles, type StoredImage } from "./attachments";
+import {
+  confirmedFlow, deviceConfig, flowArmed, forgetProject, forgetTask, projectFolder, reconfirmFlow, setFlowArmed, setProjectFolder,
+  setTaskFolder, taskFolder,
+} from "./device";
 import { nowStamp, parseLocal, toDateStr } from "@/lib/dates";
-import type {
-  AgentId, Area, CalEvent, Device, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequest, LaunchRequestStatus, Priority,
-  Project, RemoteStart, Session, SessionEvent, SessionStatus, Settings, Status, Subtask, Task,
+import {
+  NO_AGENT_TOOLS, taskHref,
+  type AgentId, type AgentTools, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
+  type FlowEdge, type LaunchRequest, type LaunchRequestStatus, type Priority, type Project, type RemoteStart, type Report,
+  type ReportCriterion, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask,
+  type Surface, type Task,
 } from "@/lib/types";
 
 /*
  * Every query runs as the signed-in account, and row level security limits it to that account's rows, so
  * nothing here filters by user. New rows get their user_id from the database.
  *
- * A project's folder and flow switch are this computer's (device.ts), merged in here so the rest of the app
- * sees one Project. The hosted web app has neither.
+ * A project's folder and flow switch, and a task's own folder, are this computer's (device.ts), merged in
+ * here so the rest of the app sees one Project and one Task. The hosted web app has neither.
  */
 
 type Row = Record<string, unknown>;
@@ -68,8 +75,25 @@ function columns(patch: object, cols: Record<string, string>): Row {
   return out;
 }
 
-/** Area and project ids are UUIDs; anything else (an old link, a typo) can't match one. */
-const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+/** Area, project and device ids are UUIDs; anything else (an old link, a typo) can't match one. */
+export const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+/** Ids in chunks, so a filter on many of them keeps the request's URL short. */
+function chunks<T>(xs: T[], size = 100): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < xs.length; i += size) out.push(xs.slice(i, i + size));
+  return out;
+}
+
+/**
+ * A Codex cloud environment's label or id. It becomes part of a command line (`codex cloud exec --env …`), so
+ * it's held to letters, digits, spaces and . _ / : - (the database checks the same, and the launcher again).
+ */
+export const CODEX_ENV = /^[A-Za-z0-9][A-Za-z0-9 ._/:-]{0,99}$/;
+
+export function codexEnvProblem(value: string): string | null {
+  return CODEX_ENV.test(value) ? null : "Use the environment's label or id: letters, digits, spaces and . _ / : - (up to 100 characters).";
+}
 
 /* ---------- areas and projects ---------- */
 
@@ -130,8 +154,9 @@ export async function deleteProject(id: string) {
 
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
-  folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id),
-  flowOn: MODE === "desktop" && flowArmed(String(r.id)), sort: Number(r.sort),
+  folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env),
+  agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id), flowOn: MODE === "desktop" && flowArmed(String(r.id)),
+  sort: Number(r.sort),
 });
 
 export async function listProjects(): Promise<Project[]> {
@@ -151,12 +176,14 @@ export async function getProject(id: string): Promise<Project | null> {
  * folderProblem first, because the project exists by the time the folder is set.
  */
 export async function createProject(input: {
-  name: string; areaId: string; folder?: string | null; agent?: AgentId | null; targetDate?: string | null; color?: string | null;
+  name: string; areaId: string; folder?: string | null; deviceId?: string | null; agent?: AgentId | null; targetDate?: string | null;
+  color?: string | null;
 }): Promise<Project> {
   const db = await accountDb();
   const last = many(await db.from("projects").select("sort").order("sort", { ascending: false }).limit(1));
   const r = one(await db.from("projects").insert({
     area_id: input.areaId, name: input.name.trim(), start_date: toDateStr(new Date()), target_date: input.targetDate ?? null,
+    device_id: input.deviceId && isUuid(input.deviceId) ? input.deviceId : null,
     agent: input.agent ?? null, sort: Number(last[0]?.sort ?? 0) + 1, color: input.color ?? null,
   }).select().single());
   if (input.folder && MODE === "desktop") setProjectFolder(String(r!.id), input.folder);
@@ -165,7 +192,7 @@ export async function createProject(input: {
 
 const PROJECT_COLS: Record<string, string> = {
   areaId: "area_id", name: "name", color: "color", startDate: "start_date", targetDate: "target_date", agent: "agent",
-  afterProjectId: "after_project_id", sort: "sort",
+  afterProjectId: "after_project_id", sort: "sort", deviceId: "device_id", codexEnv: "codex_env",
 };
 
 /**
@@ -184,6 +211,13 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
     // Switching a flow on confirms its connections as they are now (see device.ts, `confirmed`).
     if (patch.flowOn !== undefined) setFlowArmed(id, patch.flowOn, patch.flowOn ? await flowSnapshot(id) : undefined);
   }
+  if (patch.codexEnv !== undefined) {
+    const env = patch.codexEnv?.trim() || null;
+    const problem = env && codexEnvProblem(env);
+    if (problem) throw new Error(problem);
+    patch = { ...patch, codexEnv: env };
+  }
+  if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, PROJECT_COLS);
   if (!Object.keys(values).length) return;
   const db = await accountDb();
@@ -198,7 +232,9 @@ const toTask = (r: Row): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
-  reminder: s(r.reminder), agent: s(r.agent) as Doer | null, sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
+  doneWhen: (r.done_when as string[] | null) ?? [], reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder(Number(r.id)) : null,
+  sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
   subtasks: ((r.subtasks as Row[] | undefined) ?? []).map(toSubtask).sort((a, b) => a.sort - b.sort || a.id - b.id),
 });
@@ -251,8 +287,13 @@ export interface TaskInput {
   plannedDate?: string | null;
   estimateMin?: number;
   labels?: string[];
+  doneWhen?: string[];
   agent?: Doer | null;
 }
+
+/** "Done when" items without blanks or repeats, as many and as long as the database keeps. */
+export const cleanDoneWhen = (items: string[]) =>
+  [...new Set(items.map((x) => x.replace(/\s+/g, " ").trim().slice(0, 400)).filter(Boolean))].slice(0, 50);
 
 /** Creates a task at the end of its project (or of the loose tasks). The database gives it its key. */
 export async function createTask(input: TaskInput): Promise<Task> {
@@ -266,20 +307,40 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const r = one(await db.from("tasks").insert({
     key: "", area_id: areaId, project_id: input.projectId ?? null, title: input.title.trim(), description: input.description ?? "",
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
-    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], agent: input.agent ?? project?.agent ?? null,
-    sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
+    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []),
+    agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
   }).select(TASK_SELECT).single());
   return toTask(r!);
 }
 
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
-  dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", labels: "labels", reminder: "reminder",
-  agent: "agent", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
+  dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
+  reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
 };
 
-export async function updateTask(id: number, patch: Partial<TaskInput & { reminder: string | null; sortOrder: number; flowX: number | null; flowY: number | null }>) {
+export type TaskPatch = Partial<TaskInput & {
+  reminder: string | null; sortOrder: number; flowX: number | null; flowY: number | null;
+  runIn: Surface | null; deviceId: string | null; folder: string | null;
+}>;
+
+/**
+ * `folder` is this computer's setting (device.ts), like a project's folder: the desktop app sets it (the web app
+ * can't), and a new one switches the task's project's flow off until you switch it on again, since a flow runs
+ * unattended in its folders.
+ */
+export async function updateTask(id: number, patch: TaskPatch) {
+  if (patch.folder !== undefined) {
+    if (MODE !== "desktop") throw new Error("Folders are set in the PacedMind desktop app.");
+    const before = taskFolder(id);
+    const problem = setTaskFolder(id, patch.folder);
+    if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
+    const projectId = (await getTask(id))?.projectId;
+    if ((patch.folder || null) !== before && projectId && flowArmed(projectId)) setFlowArmed(projectId, false);
+  }
+  if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, TASK_COLS);
+  if (patch.doneWhen) values.done_when = cleanDoneWhen(patch.doneWhen);
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();
@@ -287,9 +348,15 @@ export async function updateTask(id: number, patch: Partial<TaskInput & { remind
   check(await db.from("tasks").update(values).eq("id", id));
 }
 
+/** Deletes a task with its sub-tasks, sessions, reports and images (the files this computer keeps too). */
 export async function deleteTask(id: number) {
   const db = await accountDb();
+  const files = await localImageFiles(id);
   check(await db.from("tasks").delete().eq("id", id));
+  if (MODE === "desktop") {
+    removeImageFiles(files);
+    forgetTask(id);
+  }
 }
 
 export async function addSubtask(taskId: number, title: string) {
@@ -377,15 +444,22 @@ const stampMin = (d: Date) => `${toDateStr(d)}T${String(d.getHours()).padStart(2
 /* ---------- sessions ---------- */
 
 const toSession = (r: Row): Session => ({
-  id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, deviceId: s(r.device_id), folder: s(r.folder), branch: s(r.branch),
+  id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
+  deviceId: s(r.device_id), folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
   note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id),
 });
+
+/** A link the app may show for a session: https only, as the database keeps it. */
+const SESSION_URL = /^https:\/\/[^\s<>"']{1,1000}$/;
 
 export interface SessionFilter {
   taskId?: number;
   status?: SessionStatus[];
   continuesSessionId?: string;
+  surface?: Surface;
+  agent?: AgentId;
+  deviceId?: string;
 }
 
 /** Sessions, newest first. */
@@ -396,6 +470,9 @@ export async function listSessions(filter: SessionFilter = {}): Promise<Session[
     if (filter.taskId !== undefined) q = q.eq("task_id", filter.taskId);
     if (filter.status) q = q.in("status", filter.status);
     if (filter.continuesSessionId) q = q.eq("continues_session_id", filter.continuesSessionId);
+    if (filter.surface) q = q.eq("surface", filter.surface);
+    if (filter.agent) q = q.eq("agent", filter.agent);
+    if (filter.deviceId) q = q.eq("device_id", filter.deviceId);
     return q.order("started_at", { ascending: false }).order("id").range(from, to);
   });
   return rows.map(toSession);
@@ -416,21 +493,25 @@ export async function latestSession(taskId: number): Promise<Session | null> {
 
 export async function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; deviceId?: string | null; branch?: string | null; status?: SessionStatus;
-  cliSessionId?: string | null; continuesSessionId?: string | null;
+  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null;
 }): Promise<Session> {
   const db = await accountDb();
   const r = one(await db.from("sessions").insert({
-    id: crypto.randomBytes(8).toString("hex"), task_id: input.taskId, agent: input.agent, device_id: input.deviceId ?? null,
-    folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting", started_at: nowStamp(),
+    id: crypto.randomBytes(8).toString("hex"), task_id: input.taskId, agent: input.agent, surface: input.surface ?? "terminal",
+    device_id: input.deviceId ?? null, folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting", started_at: nowStamp(),
     cli_session_id: input.cliSessionId ?? null, continues_session_id: input.continuesSessionId ?? null,
   }).select().single());
   return toSession(r!);
 }
 
-export async function updateSession(id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId">>) {
+export async function updateSession(
+  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url">>,
+) {
   const values = columns(patch, {
     status: "status", folder: "folder", finishedAt: "finished_at", endedAt: "ended_at", note: "note", branch: "branch", cliSessionId: "cli_session_id",
+    url: "url",
   });
+  if (typeof values.url === "string" && !SESSION_URL.test(values.url)) delete values.url;
   if (!Object.keys(values).length) return;
   const db = await accountDb();
   check(await db.from("sessions").update(values).eq("id", id));
@@ -472,6 +553,257 @@ export async function doneTimes(): Promise<Map<string, string>> {
     if (!out.has(id) || at > out.get(id)!) out.set(id, at);
   }
   return out;
+}
+
+/* ---------- reports (what agents hand back) and their images ---------- */
+
+const toAttachment = (r: Row): Attachment => ({
+  id: String(r.id), taskId: Number(r.task_id), sessionId: s(r.session_id), reportId: n(r.report_id), mime: String(r.mime),
+  bytes: Number(r.bytes), width: n(r.width), height: n(r.height), caption: String(r.caption ?? ""), createdAt: String(r.created_at),
+});
+
+const ATTACHMENT_COLS = "id, task_id, session_id, report_id, mime, bytes, width, height, caption, created_at";
+
+/** The images of these reports, or of these sessions (with `pending`, only the ones no report took yet). */
+async function attachmentsWhere(column: "report_id" | "session_id", ids: (string | number)[], pending = false): Promise<Attachment[]> {
+  if (!ids.length) return [];
+  const db = await accountDb();
+  const out: Attachment[] = [];
+  for (const part of chunks(ids)) {
+    let q = db.from("attachments").select(ATTACHMENT_COLS).in(column, part);
+    if (pending) q = q.is("report_id", null);
+    out.push(...many(await q.order("created_at").order("id")).map(toAttachment));
+  }
+  return out;
+}
+
+/** How many images a session attached, reported or not. */
+export async function countSessionImages(sessionId: string): Promise<number> {
+  const db = await accountDb();
+  const { count, error } = await db.from("attachments").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/**
+ * An attachment's file name and type, and whether this computer keeps the file: images stay on the computer
+ * the agent saved them on.
+ */
+export async function attachmentFile(id: string): Promise<{ file: string; mime: string; here: boolean } | null> {
+  const db = await accountDb();
+  const r = one(await db.from("attachments").select("file, mime, device_id").eq("id", id).maybeSingle());
+  if (!r) return null;
+  const device = MODE === "desktop" ? deviceConfig().deviceId : null;
+  return { file: String(r.file), mime: String(r.mime), here: !!device && s(r.device_id) === device };
+}
+
+/** The files of a task's images that this computer keeps, to delete them with the task. */
+async function localImageFiles(taskId: number): Promise<string[]> {
+  const device = MODE === "desktop" ? deviceConfig().deviceId : null;
+  if (!device) return [];
+  const db = await accountDb();
+  return many(await db.from("attachments").select("file").eq("task_id", taskId).eq("device_id", device)).map((r) => String(r.file));
+}
+
+/** Records an image this computer stored (attachments.ts). If the database refuses it, the copy goes too. */
+export async function addAttachment(
+  img: StoredImage, to: { taskId: number; sessionId: string | null; reportId?: number | null; caption?: string },
+): Promise<Attachment> {
+  const db = await accountDb();
+  const res = await db.from("attachments").insert({
+    id: img.id, task_id: to.taskId, session_id: to.sessionId, report_id: to.reportId ?? null, device_id: deviceConfig().deviceId,
+    file: img.file, mime: img.mime, bytes: img.bytes, width: img.width, height: img.height,
+    caption: (to.caption ?? "").trim().slice(0, 500), created_at: nowStamp(),
+  }).select(ATTACHMENT_COLS).single();
+  if (res.error) {
+    removeImageFiles([img.file]);
+    throw new Error(res.error.message);
+  }
+  return toAttachment(res.data as Row);
+}
+
+/** Images each session attached while it worked, not yet part of a report, by session id. */
+export async function pendingImages(sessionIds: string[]): Promise<Map<string, Attachment[]>> {
+  const map = new Map<string, Attachment[]>();
+  for (const a of await attachmentsWhere("session_id", sessionIds, true)) map.set(a.sessionId!, [...(map.get(a.sessionId!) ?? []), a]);
+  return map;
+}
+
+export interface ReportInput {
+  sessionId: string;
+  taskId: number;
+  outcome: ReportOutcome;
+  summary: string;
+  details?: string;
+  criteria?: ReportCriterion[];
+  verify?: string[];
+  questions?: string[];
+  links?: { label: string; url: string }[];
+  followUps?: string[];
+  /** Defaults to now. */
+  createdAt?: string;
+}
+
+/** Records a hand-back. Images the session attached while it worked become part of it. */
+export async function createReport(input: ReportInput): Promise<number> {
+  const db = await accountDb();
+  const r = one(await db.from("reports").insert({
+    session_id: input.sessionId, task_id: input.taskId, outcome: input.outcome, summary: input.summary.trim(),
+    details: (input.details ?? "").trim(), criteria: input.criteria ?? [], verify: input.verify ?? [], questions: input.questions ?? [],
+    links: input.links ?? [], follow_ups: input.followUps ?? [], created_at: input.createdAt ?? nowStamp(),
+  }).select("id").single());
+  const id = Number(r!.id);
+  check(await db.from("attachments").update({ report_id: id }).eq("session_id", input.sessionId).is("report_id", null));
+  return id;
+}
+
+/*
+ * A report's lists come from the cloud, which any browser or computer signed in to the account can write:
+ * keep only the shapes the app shows, and only http and https links.
+ */
+const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+const VERDICTS = new Set<string>(["met", "partly", "not_met"]);
+
+function criteriaOf(v: unknown): ReportCriterion[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((c): c is Row => !!c && typeof c === "object" && typeof (c as Row).text === "string").map((c) => ({
+    text: String(c.text),
+    verdict: VERDICTS.has(String(c.verdict)) ? (c.verdict as ReportCriterion["verdict"]) : null,
+    note: typeof c.note === "string" ? c.note : "",
+  }));
+}
+
+function linksOf(v: unknown): { label: string; url: string }[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((l): l is Row => !!l && typeof l === "object" && typeof (l as Row).url === "string" && /^https?:\/\//i.test(String((l as Row).url)))
+    .map((l) => ({ label: typeof l.label === "string" && l.label.trim() ? l.label : String(l.url), url: String(l.url) }));
+}
+
+const REPORT_SELECT = "*, session:sessions(agent)";
+
+/** Report rows with their images, agent and follow-up tasks filled in, in the order given. */
+async function toReports(rows: Row[]): Promise<Report[]> {
+  if (!rows.length) return [];
+  const ids = rows.map((r) => Number(r.id));
+  const images = await attachmentsWhere("report_id", ids);
+  const keys = [...new Set(rows.flatMap((r) => strings(r.follow_ups)))];
+  const tasks = new Map<string, { title: string; href: string }>();
+  if (keys.length) {
+    const db = await accountDb();
+    for (const part of chunks(keys)) {
+      for (const t of many(await db.from("tasks").select("key, title, project_id, area_id").in("key", part))) {
+        tasks.set(String(t.key), { title: String(t.title), href: taskHref({ key: String(t.key), projectId: s(t.project_id), areaId: s(t.area_id) }) });
+      }
+    }
+  }
+  return rows.map((r) => ({
+    id: Number(r.id), sessionId: String(r.session_id), taskId: Number(r.task_id),
+    agent: (s((r.session as Row | null)?.agent) ?? "claude") as AgentId,
+    outcome: String(r.outcome) as ReportOutcome, summary: String(r.summary), details: String(r.details ?? ""),
+    criteria: criteriaOf(r.criteria), verify: strings(r.verify), questions: strings(r.questions), links: linksOf(r.links),
+    followUps: strings(r.follow_ups).map((key) => ({ key, title: tasks.get(key)?.title ?? null, href: tasks.get(key)?.href ?? null })),
+    createdAt: String(r.created_at),
+    images: images.filter((a) => a.reportId === Number(r.id)),
+    changes: s(r.changes),
+    changesAt: s(r.changes_at),
+  }));
+}
+
+/** What the user asked to change after reading a report; null takes the request back. */
+export async function setReportChanges(reportId: number, changes: string | null, at: string | null) {
+  const db = await accountDb();
+  check(await db.from("reports").update({ changes, changes_at: at }).eq("id", reportId));
+}
+
+/** Takes back a report that turned out not to be needed. The images it took wait for the next one again. */
+export async function deleteReport(reportId: number) {
+  const db = await accountDb();
+  check(await db.from("attachments").update({ report_id: null }).eq("report_id", reportId));
+  check(await db.from("reports").delete().eq("id", reportId));
+}
+
+/** Every report of these tasks or sessions, newest first. */
+async function reportRows(column: "task_id" | "session_id", ids: (string | number)[], select = REPORT_SELECT): Promise<Row[]> {
+  if (!ids.length) return [];
+  const db = await accountDb();
+  const out: Row[] = [];
+  for (const part of chunks(ids)) {
+    out.push(...await all((from, to) => db.from("reports").select(select).in(column, part).order("id", { ascending: false }).range(from, to)
+      .returns<Row[]>()));
+  }
+  return out.sort((a, b) => Number(b.id) - Number(a.id));
+}
+
+/** Each task's latest reports (at most `perTask`), newest first. */
+export async function reportsForTasks(taskIds: number[], perTask = 5): Promise<Map<number, Report[]>> {
+  const seen = new Map<number, number>();
+  const rows = (await reportRows("task_id", taskIds)).filter((r) => {
+    const count = (seen.get(Number(r.task_id)) ?? 0) + 1;
+    seen.set(Number(r.task_id), count);
+    return count <= perTask;
+  });
+  const map = new Map<number, Report[]>();
+  for (const rep of await toReports(rows)) map.set(rep.taskId, [...(map.get(rep.taskId) ?? []), rep]);
+  return map;
+}
+
+/** Each session's newest report in brief: its outcome and how many questions it asks (for notifications). */
+export async function reportBriefs(sessionIds: string[]): Promise<Map<string, { outcome: ReportOutcome; questions: number }>> {
+  const map = new Map<string, { outcome: ReportOutcome; questions: number }>();
+  for (const r of await reportRows("session_id", sessionIds, "id, session_id, outcome, questions")) {
+    if (!map.has(String(r.session_id))) map.set(String(r.session_id), { outcome: String(r.outcome) as ReportOutcome, questions: strings(r.questions).length });
+  }
+  return map;
+}
+
+/** Each session's reports, newest first. */
+export async function reportsForSessions(sessionIds: string[]): Promise<Map<string, Report[]>> {
+  const map = new Map<string, Report[]>();
+  for (const rep of await toReports(await reportRows("session_id", sessionIds))) map.set(rep.sessionId, [...(map.get(rep.sessionId) ?? []), rep]);
+  return map;
+}
+
+export async function latestReport(taskId: number): Promise<Report | null> {
+  const db = await accountDb();
+  const rows = many(await db.from("reports").select(REPORT_SELECT).eq("task_id", taskId).order("id", { ascending: false }).limit(1));
+  return (await toReports(rows))[0] ?? null;
+}
+
+export async function latestSessionReport(sessionId: string): Promise<Report | null> {
+  const db = await accountDb();
+  const rows = many(await db.from("reports").select(REPORT_SELECT).eq("session_id", sessionId).order("id", { ascending: false }).limit(1));
+  return (await toReports(rows))[0] ?? null;
+}
+
+/**
+ * Tasks whose latest hand-back was partial or blocked, with that outcome. Flows don't go on after them until the user
+ * marks them done. The report has to come from the task's latest session: a later session that was marked finished,
+ * or finished in the cloud, brings no report of its own, and moves the task on.
+ */
+export async function heldOutcomes(): Promise<Map<number, Exclude<ReportOutcome, "done">>> {
+  const db = await accountDb();
+  const held = new Map<number, Exclude<ReportOutcome, "done">>();
+  // Only tasks with a partial or blocked hand-back at all can be held: usually a handful.
+  const candidates = [...new Set(
+    (await all((from, to) => db.from("reports").select("task_id").neq("outcome", "done").order("id").range(from, to))).map((r) => Number(r.task_id)),
+  )];
+  if (!candidates.length) return held;
+  const latest = new Map<number, Row>();
+  for (const r of await reportRows("task_id", candidates, "id, task_id, outcome, session_id")) if (!latest.has(Number(r.task_id))) latest.set(Number(r.task_id), r);
+  const newest = new Map<number, string>();
+  for (const part of chunks(candidates)) {
+    const rows = await all((from, to) => db.from("sessions").select("id, task_id, started_at").in("task_id", part)
+      .order("started_at", { ascending: false }).order("id").range(from, to));
+    for (const r of rows) if (!newest.has(Number(r.task_id))) newest.set(Number(r.task_id), String(r.id));
+  }
+  for (const [taskId, r] of latest) {
+    if (r.outcome !== "done" && newest.get(taskId) === String(r.session_id)) held.set(taskId, String(r.outcome) as Exclude<ReportOutcome, "done">);
+  }
+  return held;
+}
+
+export async function heldTaskIds(): Promise<Set<number>> {
+  return new Set((await heldOutcomes()).keys());
 }
 
 /* ---------- flow edges ---------- */
@@ -572,12 +904,37 @@ export async function setSettings(patch: Partial<Settings>) {
 
 /* ---------- computers and requests to start sessions ---------- */
 
-const DEVICE_COLS = "id, name, platform, remote_start, created_at, last_seen_at, revoked_at";
+const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at";
 
-const toDevice = (r: Row): Device => ({
-  id: String(r.id), name: String(r.name), platform: String(r.platform) as Device["platform"], remoteStart: String(r.remote_start) as RemoteStart,
-  createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), revokedAt: s(r.revoked_at),
-});
+/**
+ * What a computer found of one agent, as the cloud has it: for display only. The launcher uses what this
+ * computer found itself (devices.ts), so a path from here never reaches a command line; it isn't even kept.
+ */
+function toolsOf(v: unknown): AgentTools {
+  if (!v || typeof v !== "object") return NO_AGENT_TOOLS;
+  const t = v as Row;
+  const cli = t.cli && typeof t.cli === "object" && typeof (t.cli as Row).version === "string" ? { version: String((t.cli as Row).version) } : null;
+  const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
+  const mcp = t.mcp === "connected" || t.mcp === "elsewhere" ? t.mcp : "missing";
+  return { cli, app, mcp };
+}
+
+const toDevice = (r: Row): Device => {
+  const agents = (r.agents && typeof r.agents === "object" ? r.agents : {}) as Row;
+  return {
+    id: String(r.id), name: String(r.name), platform: String(r.platform) as Device["platform"], remoteStart: String(r.remote_start) as RemoteStart,
+    agents: { claude: toolsOf(agents.claude), codex: toolsOf(agents.codex) },
+    createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), checkedAt: s(r.checked_at), revokedAt: s(r.revoked_at),
+  };
+};
+
+/** Records what this computer found of the agents, for Settings on every computer (without where the tools are). */
+export async function saveDeviceTools(id: string, agents: Device["agents"]) {
+  if (!isUuid(id)) return;
+  const plain = Object.fromEntries(Object.entries(agents).map(([agent, t]) => [agent, { cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp }]));
+  const db = await accountDb();
+  check(await db.from("devices").update({ agents: plain, checked_at: new Date().toISOString() }).eq("id", id));
+}
 
 /** The account's computers, signed-in ones first. */
 export async function listDevices(): Promise<Device[]> {

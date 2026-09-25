@@ -120,10 +120,13 @@ const NAV: [string, IconName, number?][] = [
   ["Projects", "box"], ["Roadmap", "roadmap"], ["Flows", "flow"], ["Sessions", "terminal", 1],
 ];
 
-/** The app's window: title bar with the wordmark, the sidebar, and the view's panel. */
+/**
+ * The app's window: title bar with the wordmark, the sidebar, and the view's panel. Its made-up tasks
+ * and times are never quoted in a search result (data-nosnippet).
+ */
 export function AppWindow({ id, current, label, children }: { id: string; current: string; label: string; children: ReactNode }) {
   return (
-    <div role="img" aria-label={label}
+    <div role="img" aria-label={label} data-nosnippet=""
       className="flex flex-col overflow-hidden rounded-[14px] border border-app-line2 bg-app-bg font-app text-[13px] text-app-fg"
       style={{ width: SCREEN.w, height: SCREEN.h }}>
       <div aria-hidden="true" className="flex h-10 shrink-0 items-center gap-0.5 border-b border-app-line px-2 text-app-mut">

@@ -1,0 +1,84 @@
+---
+title: Desktop app
+description: The PacedMind window and title bar, the tray or menu bar icon and its menu, notifications for finished sessions, starting at sign-in, and what happens when the app's server has a problem.
+---
+
+The desktop app runs PacedMind's server and shows the planner in a window. It keeps running when the window is closed, in the tray on Windows and in the menu bar on macOS, so agents can report back at any time.
+
+## The window
+
+* The window remembers its size, its position and whether it was maximized. It opens at 1440 × 900 the first time and can't be made smaller than 960 × 600.
+* The title bar is PacedMind's header: the **Go back** and **Go forward** buttons, the wordmark, and the window's own buttons, at the header's right end on Windows and at its left end on macOS. Drag the empty part of the header to move the window.
+* The mouse's back and forward buttons also move through the views. On macOS, so does a three-finger swipe, when the trackpad's **Swipe between pages** setting allows three fingers.
+* The title bar follows the dark or light theme.
+* Links to other websites open in the default browser.
+* Opening PacedMind while it's already running brings the existing window to the front instead of starting a second copy.
+
+While the server starts, the window shows *Starting PacedMind…*.
+
+## Closing and quitting
+
+Closing the window hides it; PacedMind keeps running. The first time, a notification titled *PacedMind is still running* explains how to quit.
+
+| | Windows | macOS |
+| --- | --- | --- |
+| Close the window | Its **×** button, or <kbd>Ctrl</kbd>+<kbd>W</kbd> | Its close button, or <kbd>⌘</kbd>+<kbd>W</kbd> |
+| Where PacedMind keeps running | The tray (*It stays in the tray so agents can report back. Right-click the icon to quit.*) | The menu bar, with its icon in the Dock (*It stays in the menu bar so agents can report back. Quit it from the menu bar icon or with ⌘Q.*) |
+| Open the window again | Click the tray icon | Click the Dock icon, or select **Open PacedMind** in the menu bar icon's menu |
+| Quit | Right-click the tray icon and select **Quit PacedMind**, or press <kbd>Ctrl</kbd>+<kbd>Q</kbd> in the window | Select **Quit PacedMind** in the menu bar icon's menu, or press <kbd>⌘</kbd>+<kbd>Q</kbd> |
+
+Quitting stops the server: agents can't reach PacedMind, and so can't report back, until it runs again.
+
+## The tray and menu bar icon
+
+On Windows, PacedMind's icon sits in the tray: click it to open the window, and right-click it for its menu. On macOS, the pd icon sits in the menu bar and follows its light or dark look: click it for its menu. The icon's tooltip reads *PacedMind*, or *PacedMind · 2 waiting for you* when finished sessions wait for review.
+
+| Item | Result |
+| --- | --- |
+| **Open PacedMind** | Opens the window. |
+| **Start with Windows** (Windows), **Open at Login** (macOS) | When checked, PacedMind starts when you sign in, in the tray or the menu bar, without opening the window. macOS lists it under **Login Items** in System Settings. |
+| **Open data folder** | Opens the `data` folder in File Explorer or Finder. |
+| **Open server log** | Opens the server's log file. |
+| **Quit PacedMind** | Stops the app and its server. |
+
+## Notifications
+
+When a session is finished, usually because its agent handed the task back, PacedMind shows a notification. Its title says how the work stands:
+
+| Title | When |
+| --- | --- |
+| *DEV-21 is finished* | The work is ready for your check. |
+| *DEV-21 is partly done* | The agent handed back part of the work. |
+| *DEV-21 is blocked* | The agent can't go on without you. |
+
+When the agent's report has questions for you, the title adds *· 1 question for you* or *· 2 questions for you*, such as *DEV-22 is blocked · 2 questions for you*. Below the title come the task's title and the summary of the agent's report. Click the notification to open the session in **Sessions**.
+
+PacedMind checks for finished sessions every five seconds while it runs, so a session sent back with **Request changes** notifies again when the agent hands the task back. Sessions that were already waiting when PacedMind started don't get a notification; the icon's tooltip and the **Sessions** count include them.
+
+Notifications follow the system's own settings:
+
+* **Windows:** if none appear, check that notifications for PacedMind are on in Windows **Settings → System → Notifications**, and that Do not disturb (Focus assist on Windows 10) is off.
+* **macOS:** the first notification asks whether PacedMind may send notifications. To change the answer later, open **System Settings → Notifications → PacedMind**. A Focus mode can hold them back too.
+
+## The server
+
+The app runs its server at `http://127.0.0.1:4319`, reachable only from the same computer. It writes a log to `%APPDATA%\Organizer\logs\server.log` on Windows and `~/Library/Logs/PacedMind/server.log` on macOS (the icon's menu → **Open server log**).
+
+If the server can't start, a dialog says *PacedMind could not start.* and asks whether something else uses port 4319, with **Try again**, **Open log** (which opens the log and closes PacedMind) and **Quit**. If it stops while the app runs, a dialog says *PacedMind's server stopped.*, with **Restart**, **Open log** (which opens the log and restarts the server) and **Quit**. See [Troubleshooting](/troubleshooting#pacedmind-could-not-start).
+
+## Keyboard shortcuts in the window
+
+| Windows | macOS | Action |
+| --- | --- | --- |
+| <kbd>Ctrl</kbd>+<kbd>W</kbd> | <kbd>⌘</kbd>+<kbd>W</kbd> | Close the window (PacedMind keeps running). |
+| <kbd>Ctrl</kbd>+<kbd>Q</kbd> | <kbd>⌘</kbd>+<kbd>Q</kbd> | Quit PacedMind. |
+| <kbd>Alt</kbd>+<kbd>Left</kbd>, <kbd>Alt</kbd>+<kbd>Right</kbd> | <kbd>⌘</kbd>+<kbd>[</kbd>, <kbd>⌘</kbd>+<kbd>]</kbd> | Back and forward. |
+| <kbd>Ctrl</kbd>+<kbd>R</kbd> | <kbd>⌘</kbd>+<kbd>R</kbd> | Reload the view. |
+| <kbd>Ctrl</kbd>+<kbd>+</kbd>, <kbd>Ctrl</kbd>+<kbd>-</kbd>, <kbd>Ctrl</kbd>+<kbd>0</kbd> | <kbd>⌘</kbd>+<kbd>+</kbd>, <kbd>⌘</kbd>+<kbd>-</kbd>, <kbd>⌘</kbd>+<kbd>0</kbd> | Zoom in, zoom out, reset the zoom. |
+| <kbd>F11</kbd> | <kbd>Ctrl</kbd>+<kbd>⌘</kbd>+<kbd>F</kbd> | Full screen. |
+
+On macOS, the menu bar also has the usual **Hide PacedMind** (<kbd>⌘</kbd>+<kbd>H</kbd>) and **Minimize** (<kbd>⌘</kbd>+<kbd>M</kbd>). All shortcuts are on the [Keyboard shortcuts](/keyboard-shortcuts) page.
+
+## Updating and uninstalling
+
+Install a newer download over the existing one; the data stays. See [Install PacedMind](/getting-started/install#update) for updating and uninstalling on each system.
