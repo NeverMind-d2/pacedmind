@@ -25,10 +25,36 @@ fs.mkdirSync(profile, { recursive: true });
 app.setPath("userData", profile);
 app.setPath("sessionData", profile);
 
-// A content-specific path lets Windows refresh icons without clearing its global cache.
+// Claude and Codex are MSIX apps: what they start sees new files under %APPDATA% redirected into their own
+// folder in %LOCALAPPDATA%\Packages, so PacedMind would open, or half-write, a separate copy of the data.
+// Paths look the same from inside, even through realpath, so write a file and look for it there by file
+// ID. Returns that app's name ("Claude", "OpenAI.Codex"), or null when started normally.
+function sandboxApp() {
+  const packages = path.join(process.env.LOCALAPPDATA ?? "", "Packages");
+  if (process.platform !== "win32" || !process.env.LOCALAPPDATA || !fs.existsSync(packages)) return null;
+  const probe = path.join(profile, `sandbox-probe-${process.pid}`);
+  fs.writeFileSync(probe, "");
+  try {
+    const { dev, ino } = fs.statSync(probe, { bigint: true });
+    for (const name of fs.readdirSync(packages)) {
+      try {
+        const copy = fs.statSync(path.join(packages, name, "LocalCache", "Roaming", "Organizer", path.basename(probe)), { bigint: true, throwIfNoEntry: false });
+        if (copy && copy.ino === ino && copy.dev === dev) return name.split("_")[0];
+      } catch {
+        // A package folder we can't read isn't where the probe went.
+      }
+    }
+    return null;
+  } finally {
+    fs.rmSync(probe, { force: true });
+  }
+}
+const sandbox = sandboxApp();
+
+// A content-specific path lets Windows refresh icons without clearing its global cache. It lives next to
+// the exe, not in the profile, because Explorer can't see those redirected folders. Updates replace it.
 const iconBytes = fs.readFileSync(ICON);
-const shortcutIcon = path.join(profile, "icons", `pacedmind-${createHash("sha256").update(iconBytes).digest("hex").slice(0, 12)}.ico`);
-fs.mkdirSync(path.dirname(shortcutIcon), { recursive: true });
+const shortcutIcon = path.join(path.dirname(process.execPath), `pacedmind-${createHash("sha256").update(iconBytes).digest("hex").slice(0, 12)}.ico`);
 if (!fs.existsSync(shortcutIcon)) fs.writeFileSync(shortcutIcon, iconBytes);
 
 let win = null;
@@ -463,6 +489,19 @@ if (process.argv.includes("--install")) {
 } else if (process.argv.includes("--quit")) {
   // Asked to quit, but nothing was running.
   app.exit(0);
+} else if (sandbox) {
+  // A PacedMind that was already running got focus above. Release the lock so the Start Menu works
+  // while this dialog is still open.
+  app.releaseSingleInstanceLock();
+  app.whenReady().then(() => {
+    dialog.showMessageBoxSync({
+      type: "warning",
+      title: "PacedMind",
+      message: "Open PacedMind from the Start Menu.",
+      detail: `It was started from inside ${sandbox}, which keeps its own copy of AppData for the programs it starts. PacedMind would open a separate database there.`,
+    });
+    app.exit(1);
+  });
 } else {
   app.on("second-instance", (_e, argv) => (argv.includes("--quit") ? quit() : showWindow()));
   app.on("window-all-closed", () => {

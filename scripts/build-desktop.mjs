@@ -1,6 +1,7 @@
 // Builds the PacedMind desktop app and updates the existing Organizer installation in place.
 //
 //   npm run desktop                 build, package, install to %LOCALAPPDATA%\Programs\Organizer and start it
+//                                   (not when run from Claude or Codex: open it from the Start Menu then)
 //   npm run desktop -- --no-install build and package only (output in dist/package)
 //
 // The app keeps its data in %APPDATA%\Organizer, so reinstalling never touches it.
@@ -38,6 +39,23 @@ function assertChildPath(target, parent) {
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
     throw new Error(`Unsafe output path: ${target}`);
   }
+}
+
+/**
+ * The MSIX app (Claude, Codex) whose private copy of `dir` this terminal sees, or undefined. Those apps
+ * redirect %APPDATA% for what they start, and paths look the same from inside, so compare file IDs.
+ */
+function sandboxApp(dir) {
+  const packages = path.join(process.env.LOCALAPPDATA, "Packages");
+  const { dev, ino } = fs.statSync(dir, { bigint: true });
+  return fs.readdirSync(packages).find((name) => {
+    try {
+      const copy = fs.statSync(path.join(packages, name, "LocalCache", "Roaming", path.basename(dir)), { bigint: true, throwIfNoEntry: false });
+      return copy?.ino === ino && copy.dev === dev;
+    } catch {
+      return false; // A package folder we can't read isn't where this profile lives.
+    }
+  })?.split("_")[0];
 }
 assertChildPath(stage, root);
 assertChildPath(path.join(dist, "package"), root);
@@ -115,7 +133,12 @@ fs.cpSync(packaged, installDir, { recursive: true });
 execFileSync(installedExe, ["--install"], { windowsHide: true }); // Start Menu and desktop shortcuts.
 console.log("  Added PacedMind to the Start Menu and the desktop.");
 
-if (!flags.has("--no-launch")) {
+// An app started from inside Claude or Codex would open their copy of the data (--install created the
+// profile folder, so it can be checked now).
+const sandbox = sandboxApp(path.join(process.env.APPDATA ?? "", "Organizer"));
+if (sandbox) {
+  console.log(`  Not starting it from inside ${sandbox}, which keeps its own copy of AppData. Open PacedMind from the Start Menu.`);
+} else if (!flags.has("--no-launch")) {
   spawn(installedExe, [], { detached: true, stdio: "ignore" }).unref();
   console.log("  Started PacedMind.");
 }
