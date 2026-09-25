@@ -89,7 +89,7 @@ See [Review finished work](/agents/review).
 
 ## Sessions started outside PacedMind
 
-An agent that was started by hand, and connected to PacedMind over MCP, can report on a task too. When it calls `start_task` without a session id of that task, and the task has no running session, PacedMind creates a session record for it (*Started outside PacedMind*), with the project's folder, and the session appears in **Sessions** like any other. PacedMind refuses this for tasks that are yours. Such sessions can't be reopened with **Resume in terminal**; start a new session instead.
+An agent that was started by hand, and connected to PacedMind over MCP, can report on a task too. When it calls `start_task` without a session id of that task, and the task has no running session, PacedMind creates a session record for it (*Started outside PacedMind*), with the project's folder, and the session appears in **Sessions** like any other. PacedMind refuses this for tasks that are yours. **Resume in terminal** reopens such a session in its folder, or the task's when it has none. Claude Code starts a new conversation there, because PacedMind doesn't know the one the agent was in. See [Resume a session](/agents/start-and-manage#resume-a-session).
 
 ## What PacedMind records
 

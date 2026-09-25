@@ -107,7 +107,7 @@ Everything else, such as deleting, moving calendar events, changing projects or 
 * **Claude Code** continues the same conversation, with its full history.
 * **Codex** continues its most recent session in that folder.
 
-PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. Resuming works for sessions PacedMind started; for a session an agent reported on its own (*Started outside PacedMind*), start a new session instead.
+PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. A session an agent reported on its own (*Started outside PacedMind*) resumes too, in its folder, or the task's when it has none. PacedMind doesn't know that agent's conversation, so Claude Code starts a new one on the task, which later resumes continue; Codex continues its most recent session in the folder.
 
 Sessions elsewhere have their own buttons:
 
