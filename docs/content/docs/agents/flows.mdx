@@ -11,10 +11,12 @@ Flows are built in the [Flows](/views/flows) editor, or by an agent with `connec
 
 | Mode | In the editor | The next session starts | "Ready" means |
 | --- | --- | --- | --- |
-| **Automatically** | **Auto**, a solid line | In a new terminal, as soon as the task before it is finished. | The task before it is **In review** (the agent handed it back) or **Done**. |
-| **Manually** | **Manual**, a dashed line | In a new terminal, after you mark the task before it done. | The task before it is **Done**. |
-| **In the same session** | **Same session**, a thicker line | In the same terminal: the agent carries on without stopping. | The task before it is finished. |
-| **At a set time** | The day and time, a dotted line | In a new terminal, at the set time, once the task before it is finished. | The task before it is **In review** or **Done**, and the time has come. |
+| **Automatically** | **Auto**, a solid line | As a new session, as soon as the task before it is finished. | The task before it is **In review** (the agent handed it back) or **Done**. |
+| **Manually** | **Manual**, a dashed line | As a new session, after you mark the task before it done. | The task before it is **Done**. |
+| **In the same session** | **Same session**, a thicker line | In the same session: the agent carries on without stopping. | The task before it is finished. |
+| **At a set time** | The day and time, a dotted line | As a new session, at the set time, once the task before it is finished. | The task before it is **In review** or **Done**, and the time has come. |
+
+A new session runs where its task says: in a terminal or the agent's desktop app on your computer, or in the agent's cloud. See [Where a session runs](/agents/start-and-manage#where-a-session-runs).
 
 **Automatically** lets agents work through a chain without waiting for review. **Manually** puts your review between two sessions. **In the same session** keeps the agent's context, for small steps that belong together. **At a set time** starts work at a chosen moment, such as the next morning.
 
@@ -29,27 +31,29 @@ With **Flow on**, PacedMind starts a task's session on its own when all of these
 * the task has at least one connection leading to it, none of them **Same session**, and every one is ready;
 * the task has no running session.
 
-PacedMind checks this when an agent hands a task back, when you mark a task done, and every minute for timed connections. A session started this way notes *Started on its own* in the editor. Switching the flow on, or adding a connection, doesn't go back over tasks that are already ready: start those by hand, for example with **Start session now**.
+PacedMind checks this when an agent hands a task back, when a session is marked finished, when you mark a task done, and every minute for timed connections. A session started this way notes *Started on its own* in the editor. Switching the flow on, or adding a connection, doesn't go back over tasks that are already ready: start those by hand, for example with the start button in the editor's panel.
+
+A session in the cloud, or in a desktop app that isn't connected to PacedMind, can't hand its task back. **Mark finished** does it for the session, and the flow goes on from there. PacedMind notices finished Codex cloud tasks by itself.
 
 **Flow on** is set per project: in the **Flows** header, in the **Roadmap**'s session panel, or in **Settings → Projects and folders**. With the flow **Paused**, nothing starts on its own; connections still show the order, and sessions can be started by hand.
 
-Tasks without connections leading to them, the first ones in a flow, don't start on their own, except when the project [starts after another one](#projects-in-sequence) and that one finishes. Start them yourself, for example with **Start session now** in the editor.
+Tasks without connections leading to them, the first ones in a flow, don't start on their own, except when the project [starts after another one](#projects-in-sequence) and that one finishes. Start them yourself, for example with the start button in the editor's panel.
 
-**Same session** connections don't depend on **Flow on**: the agent carries on in its terminal even while the flow is paused.
+**Same session** connections don't depend on **Flow on**: the agent carries on in its session even while the flow is paused.
 
 ## Same-session chains
 
-A **Same session** connection continues the previous task's terminal session:
+A **Same session** connection continues the previous task's session:
 
 1. The agent finishes task A and calls `finish_task`.
-2. PacedMind answers with task B and a new session id, and records *Continues session … in the same terminal*.
-3. The agent calls `start_task` for B and keeps working in the same terminal, with everything it learned on A.
+2. PacedMind answers with task B and a new session id, and records *Continues session … in the same terminal*, or *in the same app session* in a desktop app.
+3. The agent calls `start_task` for B and keeps working in the same session, with everything it learned on A.
 
-One session can't switch agents, so a chain of same-session tasks runs with one agent. Choosing **In the same session** hands the task to the agent of the task before it; switching the agent on one task of the chain switches all of them. The editor draws a box around the chain, labeled *One Claude Code session*.
+One session can't switch agents or places, so a chain of same-session tasks runs with one agent, on one computer, in one place. Choosing **In the same session** hands the task to the agent and the place of the task before it; switching either on one task of the chain switches all of them. The editor draws a box around the chain, labeled *One Claude Code session*.
 
 When the chain's terminal closes, every session in it that is still running closes too.
 
-The next task continues only when the agent hands the task before it back with `finish_task`. If that task is marked done by hand instead, or its terminal closes first, start the next task yourself.
+The next task continues only when the agent hands the task before it back with `finish_task`. If the session is marked finished by hand instead, the next task starts as a new session. If the task is marked done by hand, or the terminal closes first, start the next task yourself. Cloud sessions can't continue one another, so a task after a cloud session starts as a new session.
 
 ## Projects in sequence
 
@@ -61,11 +65,11 @@ Tasks that are yours are never part of a flow. They can still have connections, 
 
 ## Build a flow step by step
 
-1. Give the project a folder and a default agent in **Settings → Projects and folders**.
+1. Give the project a folder and a default agent in **Settings → Projects and folders**, or bring your projects over with **Import from Claude and Codex** there.
 2. Break the work into tasks with clear descriptions and acceptance criteria. See [Tasks](/concepts/tasks#description-and-sub-tasks).
 3. Open **Flows** for the project and drag the tasks onto the canvas in order. Dropping a task just below another connects it automatically.
-4. Set how each session starts: select it and choose under **Starts**. Use **Manually** where you want to review before the next step.
+4. Set how each session starts, and where it runs: select it and choose under **Starts** and **Runs in**. Use **Manually** where you want to review before the next step.
 5. Select **Tidy up** to line the flow up, then switch **Flow on**.
-6. Start the first session with **Start session now**. The rest follows as the tasks finish.
+6. Start the first session with the start button in its panel. The rest follows as the tasks finish.
 
 An agent can do the same with the **pacedmind-projects** skill: it marks who does each task, connects the agent tasks with `connect_tasks`, and switches the flow on only when asked, because that lets PacedMind start agents on the computer. See [Agent skills](/skills).

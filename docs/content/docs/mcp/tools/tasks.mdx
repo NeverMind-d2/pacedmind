@@ -30,7 +30,7 @@ Returns the number of matches and one line per task. When there are more than th
 
 **Read-only. Allowed without asking.**
 
-Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, the project's folder, the description, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, and when it was created, updated and finished.
+Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, the description, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, and when it was created, updated and finished.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -79,7 +79,7 @@ All dates are checked before anything is created, so one wrong date doesn't leav
 
 **Changes data. Allowed without asking.**
 
-Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area or the agent.
+Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`.
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -97,6 +97,8 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `project` | string or `null` | Moves the task to this project and its area, or takes it out of its project. |
 | `area` | string or `null` | Moves the task to this area; `null` or `inbox` moves it to the Inbox. The task leaves its project when that project is in another area. With `project`, leave it out: a different area is refused. |
 | `agent` | `claude`, `codex`, `human` or `null` | Who does it. `human` takes the task out of its flow for good. |
+| `runs_in` | `terminal`, `desktop`, `cloud` or `null` | Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. `null`: a terminal when the agent's command-line tool is installed, else its desktop app. |
+| `folder` | string or `null` | An absolute folder its sessions work in instead of the project's, checked right away. `null` goes back to the project's folder. |
 | `add_subtasks` | string list | New sub-tasks. |
 | `complete_subtasks` | string list | Sub-tasks to tick off, by number (as `get_task` shows them) or title. |
 | `reopen_subtasks` | string list | Sub-tasks to reopen. |

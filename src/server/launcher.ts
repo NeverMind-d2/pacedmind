@@ -216,7 +216,8 @@ export function taskFolder(task: Task): { folder?: string; own: boolean; error?:
   const folder = task.folder ?? project?.folder ?? null;
   if (folder) {
     const problem = folderProblem(folder);
-    if (problem) return { own: !!task.folder, error: `Can't use the folder ${folder}: ${problem}` };
+    const where = task.folder ? "in the task's details" : "in Settings";
+    if (problem) return { own: !!task.folder, error: `Can't use the folder ${folder}: ${problem} Change it ${where}.` };
     return { folder, own: !!task.folder };
   }
   const scratch = path.join(dataDir(), "workspaces", task.key.toLowerCase());

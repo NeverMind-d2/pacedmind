@@ -1,11 +1,11 @@
 ---
 title: Sessions
-description: The Sessions view lists Claude Code and Codex sessions by state, shows what PacedMind heard from each agent, and has the buttons to resume, close, mark done or start the next session.
+description: The Sessions view lists Claude Code and Codex sessions by state, shows where each one runs and what PacedMind heard from its agent, and has the buttons to resume, finish, close, mark done or start the next session.
 ---
 
 **Sessions** lists the agent sessions started from PacedMind, or reported by agents: *Claude Code and Codex sessions started from PacedMind*. The sidebar counts the finished ones that wait for review.
 
-<img src="/docs/screenshots/sessions.png" alt="The Sessions view with a finished session selected, its note, details, events and the Mark done button" width="1920" height="1200" loading="lazy" />
+<img src="/docs/screenshots/sessions.png" alt="The Sessions view with a finished session selected, its report, where it ran, and the Mark done button" width="1920" height="1200" loading="lazy" />
 
 ## Groups
 
@@ -16,12 +16,12 @@ description: The Sessions view lists Claude Code and Codex sessions by state, sh
 | **Ended today** | Sessions that ended today: marked done, closed or failed. |
 | **Earlier** | Older ended sessions, the latest 30. Collapsed unless the selected session is in it. |
 
-Each row shows the session's state dot, the task's key and title, the project and the agent (on wide windows), and a short state:
+Each row shows the session's state dot, the task's key and title, the project and the agent with its mark and the icon of where it runs (on wide windows), and a short state:
 
 | State | Row text |
 | --- | --- |
 | Finished | *finished 12:22* |
-| Running | *since 09:40*, or *waiting in its terminal* when the agent hasn't checked in after 90 seconds |
+| Running | *since 09:40*, or *in the cloud since 09:40*. When the agent hasn't checked in after 90 seconds: *waiting in its terminal*, or *waiting in the Claude app* |
 | Done | *done yesterday 18:10* |
 | Closed | *closed before finishing* |
 | Failed | *couldn't start* |
@@ -30,16 +30,17 @@ Select a row to show its details. The selected session is part of the page's add
 
 ## Start a session
 
-**Start session**, in the header, lists up to 20 tasks an agent could pick up now: tasks in progress, to do or in the backlog, handed to an agent (their own or the project's), and without a running session. Tasks in progress come first, then those to do, then the backlog; within each, by priority, then by project and task order. Choosing one opens a terminal with that task's agent.
+**Start session**, in the header, lists up to 20 tasks an agent could pick up now: tasks in progress, to do or in the backlog, handed to an agent (their own or the project's), and without a running session. Tasks in progress come first, then those to do, then the backlog; within each, by priority, then by project and task order. Choosing one starts that task's agent where the task runs.
 
-With no sessions yet, the view explains: *Sessions appear here when you start one from a task. Open a task and choose Start in Claude Code or Codex, or switch on a project's flow to have them start one after another.*
+With no sessions yet, the view explains: *Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex, or switch on a project's flow to have them start one after another.*
 
 ## Session details
 
 The details panel shows the project and the key, **Open task**, the task's title, and a line about the state:
 
-* *Running in Claude Code since 09:40* (or *Starting*);
-* *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*;
+* *Running in Claude Code since 09:40* (or *Starting*), and outside a terminal with the place: *Running in the Claude app on DESKTOP-1 since 09:40* or *Running in Claude Code on the web since 09:40*;
+* *Sending to Codex cloud since 09:40*, while Codex takes the task on;
+* *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.*;
 * *Claude Code finished at 12:22 · waiting for you*, with the agent's note in quotes;
 * *Done · Claude Code finished at 12:22*;
 * *Closed before the agent finished*;
@@ -49,23 +50,29 @@ Below it:
 
 | Field | Shows |
 | --- | --- |
-| **Agent** | Claude Code or Codex. |
+| **Agent** | Claude Code or Codex, with its mark. |
+| **Runs in** | Where the session runs: *Terminal on DESKTOP-1*, *Claude app on DESKTOP-1*, or *Claude Code on the web*. |
 | **Folder** | Where the agent works. |
 | **Branch** | The branch name recorded for the session. |
-| **Started** | When, and how: *from PacedMind*, or *in the same terminal* for a session that continues another one. |
+| **Started** | When, and how: *from PacedMind*, or *in the same session* for a session that continues another one. |
 | **Duration** | How long the agent worked: until now while it runs, else until it finished or its terminal closed. |
 | **Session** | The session's id, which agents use in `start_task` and `finish_task`. |
-| **Claude session** | For Claude Code, its own conversation id, used to resume it. |
-| **Continues** | For a session in the same terminal as another one: that session (*DEV-22's session*). Select it to open it. |
+| **Claude session** | For Claude Code in a terminal, its own conversation id, used to resume it. |
+| **Continues** | For a session that carries on another one: that session (*DEV-22's session*). Select it to open it. |
 
-**What PacedMind heard** lists the session's events with their times, such as *Started Claude Code in a new terminal*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it done*, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*.
+**What PacedMind heard** lists the session's events with their times, such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it finished*, *You marked it done*, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*. See [How a session runs](/agents/lifecycle#what-pacedmind-records) for all of them.
 
 ## Buttons
 
 | Button | When | Result |
 | --- | --- | --- |
-| **Resume in terminal** | The session isn't running and didn't fail. | Opens a terminal in the session's folder again. Claude Code continues the same conversation; Codex opens its list of sessions to resume. |
-| **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, then marks the session closed. A task in progress goes back to **Todo**. |
+| **Resume in terminal** | A terminal session that isn't running and didn't fail. | Opens a terminal in the session's folder again. Claude Code continues the same conversation; Codex continues its most recent session in the folder. |
+| **Continue in Claude app** | A Claude Code session from a terminal. | Moves the conversation into the Claude app. |
+| **Open the Claude app** or **Open the Codex app** | A session in a desktop app. | Brings the app forward. |
+| **Open the task** or **Open Claude Code on the web** | A cloud session. | Opens the Codex cloud task, or Claude Code on the web, in the browser. |
+| **Pull into terminal** | A Claude Code on the web session. | Opens a terminal in the folder with `claude --teleport`, which pulls a cloud session and its branch in. |
+| **Mark finished** | A running session outside a terminal, which may not report back. | The session is finished and the task goes to **In review**, as if the agent had handed it back. The flow may start the next sessions. |
+| **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, or for a session outside a terminal *Close this session in PacedMind? It keeps running where it is.*, then marks the session closed. A task in progress goes back to **Todo**. |
 | **Mark done** | The agent finished. | Marks the task done. The session counts as reviewed, and the flow may start the next sessions. |
 
 Under the buttons, *Next in* the project names the next open task the flow leads to, with **Start session** when that task is still to do or in the backlog and has no running session.

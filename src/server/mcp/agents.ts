@@ -202,6 +202,8 @@ export function registerAgentTools(server: McpServer) {
       const toAgent = mode === "session" ? fromAgent : agentFor(to) ?? "claude";
       if (to.flowX === null || to.flowY === null) placeInFlow(to.id, toAgent, from.id);
       else if (toAgent !== agentFor(to)) repo.updateTask(to.id, { agent: toAgent });
+      // One session also runs in one place.
+      if (mode === "session") repo.updateTask(to.id, { runIn: from.runIn, deviceId: from.deviceId });
       repo.createEdge(from.id, to.id, mode);
       repo.setIncomingMode(to.id, mode, at);
     });

@@ -53,7 +53,7 @@ Each tool is marked for the client as one of:
 * **read-only**: never changes anything;
 * **changes data**: creates or updates;
 * **deletes**: removes something;
-* **opens a terminal**: `start_session`, which starts an agent on the user's computer.
+* **starts an agent**: `start_session`, which starts an agent on the user's computer or in its cloud.
 
 In Claude Code sessions that PacedMind starts, 16 tools run without asking; the rest ask for approval in the agent's terminal. They're marked **Allowed without asking** on the tool pages. Codex sessions follow Codex's own approval settings.
 
@@ -78,7 +78,7 @@ In Claude Code sessions that PacedMind starts, 16 tools run without asking; the 
 | [`get_task`](/mcp/tools/tasks#get_task) | Everything about one task. |
 | [`create_task`](/mcp/tools/tasks#create_task) | Add a task. |
 | [`create_tasks`](/mcp/tools/tasks#create_tasks) | Add up to 50 tasks at once. |
-| [`update_task`](/mcp/tools/tasks#update_task) | Change anything about a task, including its sub-tasks. |
+| [`update_task`](/mcp/tools/tasks#update_task) | Change anything about a task, including its sub-tasks, its folder and where its sessions run. |
 | [`bulk_update_tasks`](/mcp/tools/tasks#bulk_update_tasks) | Apply one change to up to 100 tasks. |
 | [`delete_task`](/mcp/tools/tasks#delete_task) | Delete a task. |
 | [`list_events`](/mcp/tools/calendar#list_events) | Calendar activities in a date range, with ids. |
@@ -93,7 +93,7 @@ In Claude Code sessions that PacedMind starts, 16 tools run without asking; the 
 | [`add_to_flow`](/mcp/tools/flows#add_to_flow) | Put a task on the flow canvas. |
 | [`remove_from_flow`](/mcp/tools/flows#remove_from_flow) | Take a task off the flow canvas. |
 | [`list_sessions`](/mcp/tools/sessions#list_sessions) | Agent sessions, newest first. |
-| [`start_session`](/mcp/tools/sessions#start_session) | Open a terminal with an agent working on a task. |
+| [`start_session`](/mcp/tools/sessions#start_session) | Start an agent on a task: in a terminal, its desktop app or its cloud. |
 | [`close_session`](/mcp/tools/sessions#close_session) | Mark a stuck session closed. |
 | [`get_next_task`](/mcp/tools/sessions#get_next_task) | The next ready task in a project. |
 | [`start_task`](/mcp/tools/sessions#start_task) | For agents: start work on a task. |

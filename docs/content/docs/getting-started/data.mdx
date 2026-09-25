@@ -3,15 +3,16 @@ title: Where your data lives
 description: The files PacedMind keeps on the computer, who can reach its server, and how to back up, move or reset the data.
 ---
 
-PacedMind keeps everything in one SQLite database on the computer: areas, projects, tasks, activities, flows, agent sessions and settings, including the MCP access token. The app's server reads and writes it; nothing is sent elsewhere.
+PacedMind keeps everything in one SQLite database on the computer: areas, projects, tasks, activities, flows, agent sessions, the computers it runs on and settings, including the MCP access token. The app's server reads and writes it; nothing is sent elsewhere. The exception is a session you send to an agent's cloud: the agent's own tool takes the task's title, description, **Done when** list and sub-tasks there.
 
 ## File locations
 
 | What | Where |
 | --- | --- |
 | The database | `%APPDATA%\Organizer\data\organizer.db`, with `organizer.db-wal` and `organizer.db-shm` next to it |
+| This computer's id in PacedMind, which sessions use to know where they run | `%APPDATA%\Organizer\data\device.json` |
 | Files for each agent session: the start script and, for Claude Code, its MCP and hook settings | `%APPDATA%\Organizer\data\sessions\<session id>\` |
-| Working folders for tasks without a project folder, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
+| Working folders for tasks without their own folder or a project folder, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
 | Window size and position, the theme, and whether the tray hint was shown | `%APPDATA%\Organizer\window-state.json` |
 | The server log | `%APPDATA%\Organizer\logs\server.log` |
 | The app itself | `%LOCALAPPDATA%\Programs\Organizer\` |
@@ -41,7 +42,7 @@ The database is written continuously while PacedMind runs, so copy it only while
 
 To restore, quit PacedMind, delete the `organizer.db*` files in the `data` folder, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
 
-The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects and folders** afterwards.
+The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects and folders** afterwards, and tasks' own folders in their details.
 
 ## Reset
 

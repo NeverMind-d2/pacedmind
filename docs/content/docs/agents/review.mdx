@@ -3,7 +3,7 @@ title: Review finished work
 description: Where finished agent sessions show up, how to review them, and what Mark done changes.
 ---
 
-When an agent hands a task back, the session is **finished, waiting for you** and the task is **In review**. The agent never marks its own task done: that's yours to do after looking at the result. In a flow, tasks connected **Manually** wait for that; tasks connected **Automatically**, **In the same session** or **At a set time** can already start when the task is in review.
+When an agent hands a task back, or its session is marked finished, the session is **finished, waiting for you** and the task is **In review**. The agent never marks its own task done: that's yours to do after looking at the result. In a flow, tasks connected **Manually** wait for that; tasks connected **Automatically**, **In the same session** or **At a set time** can already start when the task is in review.
 
 ## Where finished sessions show up
 
@@ -16,7 +16,7 @@ When an agent hands a task back, the session is **finished, waiting for you** an
 | Task rows | *Session finished*, with a navy dot. |
 | Task details | *Claude Code finished at 12:22 · waiting for you*, with the note and **Mark done**. |
 | **Roadmap** | *2 finished sessions waiting for you* in the header, and **Open session** on the task's row. |
-| **Flows** | The session's state reads *Waiting for you*, and its note *Finished 12:22, check it and mark done*. |
+| **Flows** | The session's card reads *Waiting for you*; its panel adds *Finished 12:22, check it and mark done*. |
 | **Timeline** | A navy outline around the task's bar and a navy dot after it. |
 | **Calendar**, week | A 45-minute block to check the result, *Check DEV-21*, planned in your focus time. |
 
@@ -24,11 +24,11 @@ When an agent hands a task back, the session is **finished, waiting for you** an
 
 1. Open the session: from the notification, from **Sessions**, or from the task's details.
 2. Read the agent's note. It says what changed and where to look first.
-3. Check the work: switch to the agent's terminal, which stays open, and look at the changed files in the session's folder. **Resume in terminal** reopens the conversation if its terminal was closed.
+3. Check the work: switch to the agent's terminal or app, which stay open, and look at the changed files in the session's folder. For a cloud session, open its pull request. **Resume in terminal** reopens the conversation if its terminal was closed.
 4. Decide:
    * **Mark done** when the result is right.
-   * To ask for changes, continue the conversation in the terminal. The agent hands the task back again, with a new note, when it's done. If it picks the task up again with `start_task` first, the session shows as **Running** in the meantime.
-   * To start over with a fresh agent: for a running session, select **Close session**, then **New session**. For a finished session, start a new one from **Sessions** (**Start session**) or with **Start session now** in **Flows**; the finished one keeps waiting for review until the task is marked done.
+   * To ask for changes, continue the conversation in the terminal or app. The agent hands the task back again, with a new note, when it's done. If it picks the task up again with `start_task` first, the session shows as **Running** in the meantime.
+   * To start over with a fresh agent: for a running session, select **Close session**, then **New session**. For a finished session, start a new one from **Sessions** (**Start session**) or with the start button in **Flows**; the finished one keeps waiting for review until the task is marked done.
 
 ## What Mark done does
 

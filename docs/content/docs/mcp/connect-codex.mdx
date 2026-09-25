@@ -1,11 +1,15 @@
 ---
 title: Connect Codex
-description: Add PacedMind's MCP server to Codex's configuration and give it the access token, for Codex sessions PacedMind starts and for your own.
+description: Add PacedMind's MCP server to Codex's configuration, for the Codex app and the Codex sessions you start yourself, check the connection, and update it after a new token.
 ---
 
-Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`. PacedMind needs one entry there, for the Codex sessions it starts as well as for your own.
+Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`, which the Codex command-line tool and the Codex app share. Sessions PacedMind starts in a terminal bring their own connection to PacedMind. The Codex app, and Codex sessions you start yourself, need PacedMind's entry in that file.
 
-## Add the server
+## With Connect in Settings
+
+In **Settings → Devices**, select **Connect** next to **Codex** and confirm. PacedMind adds the section below to `config.toml`, in place of an earlier `organizer` section, and keeps the previous file as `config.toml.pacedmind-backup`. The Codex row then says *Reports to PacedMind*.
+
+## By hand
 
 1. Open **Settings → Connect your agents** and select **Copy config** next to **Codex**. It copies:
 
@@ -13,42 +17,25 @@ Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`.
    # ~/.codex/config.toml
    [mcp_servers.organizer]
    url = "http://127.0.0.1:4319/api/mcp"
-   bearer_token_env_var = "ORGANIZER_TOKEN"
+   http_headers = { Authorization = "Bearer org_..." }
    ```
 
-2. Open `config.toml` in the `.codex` folder of your user profile, such as `C:\Users\Anna\.codex\config.toml` on Windows or `/Users/anna/.codex/config.toml` on macOS, and paste the section at its end. Create the file if it doesn't exist.
+2. Open `config.toml` in the `.codex` folder of your user profile, such as `C:\Users\Anna\.codex\config.toml` on Windows or `/Users/anna/.codex/config.toml` on macOS, and paste the section at its end, in place of an earlier `[mcp_servers.organizer]` section. Create the file if it doesn't exist.
 
 Keep the name `organizer`: PacedMind's skills and first messages refer to the server by that name.
 
-## Give Codex the token
-
-The configuration doesn't contain the token itself. Codex reads it from the `ORGANIZER_TOKEN` environment variable:
-
-* **Sessions PacedMind starts** get the variable from their terminal: nothing to do.
-* **Your own Codex sessions** need it set. Copy the token from **Settings → MCP server** and store it for your user.
-
-  On Windows, in PowerShell:
-
-  ```powershell
-  setx ORGANIZER_TOKEN "org_..."
-  ```
-
-  On macOS, add this line to `~/.zshrc`, the settings file of the default shell:
-
-  ```bash
-  export ORGANIZER_TOKEN="org_..."
-  ```
-
-  Both apply to terminals opened afterwards. Open a new terminal before starting Codex.
-
-After **Regenerate** in **Settings → MCP server**, set the variable again with the new token. Sessions PacedMind starts pick up the new token on their own.
+The section holds the token itself, because the Codex app has no environment variable to read it from. Keep `config.toml` private. An older section with `bearer_token_env_var = "ORGANIZER_TOKEN"` works only where that variable is set, which isn't the case in the Codex app: replace it with the one above.
 
 ## Check the connection
 
-Start Codex and ask something that needs the planner, such as *List my overdue tasks in PacedMind.* Codex should call the `organizer` tools, such as `get_overview` or `list_tasks`. If it can't, see [Troubleshooting](/troubleshooting#an-agent-cant-reach-pacedmind).
+Start Codex, in the app or a terminal, and ask something that needs the planner, such as *List my overdue tasks in PacedMind.* Codex should call the `organizer` tools, such as `get_overview` or `list_tasks`. If it can't, see [Troubleshooting](/troubleshooting#an-agent-cant-reach-pacedmind).
 
 With the [agent skills](/skills) installed in `~/.codex/skills`, Codex also knows how to plan, triage and run project work with the tools.
 
+## After regenerating the token
+
+A new token in **Settings → MCP server** disconnects Codex until its configuration has the new one: select **Connect** in **Settings → Devices** again, or copy and paste the section again. Sessions PacedMind starts in a terminal pick up the new token on their own.
+
 ## Remove the connection
 
-Delete the `[mcp_servers.organizer]` section from `config.toml`, and the `ORGANIZER_TOKEN` variable: from your user's environment variables on Windows, or its line in `~/.zshrc` on macOS.
+Delete the `[mcp_servers.organizer]` section from `config.toml`. An `ORGANIZER_TOKEN` variable set up for the older section isn't needed either: remove it from your user's environment variables on Windows, or its line in `~/.zshrc` on macOS.

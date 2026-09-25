@@ -7,7 +7,7 @@ description: "Reference for the session tools: list_sessions, start_session and 
 
 **Read-only. Allowed without asking.**
 
-Agent sessions, newest first. Each line shows the session id, the task, the agent, the state, the time and the agent's note: `Session 3f2a9c1b · DEV-21 MCP server skeleton · Claude Code · finished, waiting for the user's review · 2026-09-24 13:53:07 · MCP endpoint added at /api/mcp. Tests pass.`
+Agent sessions, newest first. Each line shows the session id, the task, the agent and where it runs, the state, the time and the agent's note: `Session 3f2a9c1b · DEV-21 MCP server skeleton · Claude Code in a terminal on DESKTOP-1 · finished, waiting for the user's review · 2026-09-24 13:53:07 · MCP endpoint added at /api/mcp. Tests pass.`
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -20,16 +20,17 @@ The states read: *starting*, *running*, *finished, waiting for the user's review
 
 ## `start_session`
 
-**Opens a terminal on the user's computer. Agents ask the user first.**
+**Starts an agent on the user's computer or in its cloud. Agents ask the user first.**
 
-Opens a new terminal with Claude Code or Codex working on a task, in the project's folder, the same way as **Start in Claude Code** in the app. See [Start, resume and close sessions](/agents/start-and-manage).
+Starts Claude Code or Codex working on a task, in the task's folder, the same way as **Start with Claude Code** in the app: where the task runs, unless `where` says otherwise. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-runs).
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `task` | string | yes | The task key. |
 | `agent` | `claude` or `codex` | no | Defaults to the task's agent, else the project's, else Claude Code. |
+| `where` | `terminal`, `desktop` or `cloud` | no | A terminal, the agent's desktop app (the first message is written there, and the user sends it), or the agent's cloud (Claude Code on the web, Codex cloud). |
 
-Returns *Started DEV-22 in Claude Code (session 3f2a9c1b). A terminal opened on the user's computer.* Fails when the task already has a running session, when it's the user's own task, or when the project's folder can't be used.
+Returns *Started DEV-22 with Claude Code in a terminal on DESKTOP-1 (session 3f2a9c1b).* For the desktop app, it adds *The first message is written there; the user sends it.*; for the cloud, *Cloud sessions can't report back to PacedMind; the user marks the task finished or done.* Fails when the task already has a running session, when it's the user's own task, when the computer lacks the agent's tool or app, when the folder can't be used, or, for the cloud, without a git repository or, for Codex, without the project's Codex environment.
 
 ## `close_session`
 
@@ -87,3 +88,5 @@ The session becomes **Finished** with the note, and the task **In review**. The 
 
 * *Next in this same session: DEV-22 · Start sessions from the app.* and *Call start_task with task DEV-22 and session 9c0d1e2f, then keep working.*, when a **Same session** connection continues;
 * *You can stop here.*, otherwise.
+
+A session that can't call `finish_task`, in the cloud or in a desktop app without PacedMind's MCP server, is marked finished in the app instead, with the same effect; a **Same session** task after it then starts as a new session.

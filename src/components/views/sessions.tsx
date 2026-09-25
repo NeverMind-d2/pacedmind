@@ -251,7 +251,7 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
             <div className="flex flex-col items-center gap-3 px-8 py-24 text-center">
               <div className="text-[14px] text-fg2">No sessions yet</div>
               <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">
-                Sessions appear here when you start one from a task. Open a task and choose Start in Claude Code or Codex,
+                Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex,
                 or switch on a project&apos;s flow to have them start one after another.
               </div>
             </div>

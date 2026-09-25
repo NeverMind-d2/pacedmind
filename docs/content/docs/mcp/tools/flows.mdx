@@ -9,7 +9,7 @@ A flow chains a project's tasks so their agent sessions start one after another.
 
 **Read-only. Allowed without asking.**
 
-A project's flow: whether it's on, which project it starts after and which follow it, the tasks in the flow grouped by the agent that runs them, and for each task what it starts after and how. Also the open tasks outside the flow and the next ready task.
+A project's flow: whether it's on, which project it starts after and which follow it, the tasks in the flow grouped by the agent that runs them, and for each task what it starts after and how, and where it runs. Also the open tasks outside the flow and the next ready task.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -21,12 +21,12 @@ Example:
 Flow for Organizer app (id organizer) · off: nothing starts on its own
 
 Run by Claude Code:
-- DEV-21 · In review · MCP server skeleton · after DEV-19 (auto)
-- DEV-22 · Todo · Start sessions from the app · after DEV-21 (manual)
-- DEV-23 · Todo · Session tracking over MCP · after DEV-22 (same session)
+- DEV-21 · In review · MCP server skeleton · after DEV-19 (auto) · runs in a terminal on DESKTOP-1
+- DEV-22 · Todo · Start sessions from the app · after DEV-21 (manual) · runs in the Claude app on DESKTOP-1
+- DEV-23 · Todo · Session tracking over MCP · after DEV-22 (same session) · runs in the Claude app on DESKTOP-1
 
 Run by Codex:
-- DEV-24 · Todo · Auto-planner for time blocks · after DEV-21 (auto)
+- DEV-24 · Todo · Auto-planner for time blocks · after DEV-21 (auto) · runs in Codex cloud
 ```
 
 ## `connect_tasks`
@@ -46,10 +46,10 @@ Makes one task's session start after another's, within one project. Tasks not ye
 | --- | --- |
 | `auto` | Automatically when `from` is finished. |
 | `manual` | After the user marks `from` done. |
-| `same_session` | In the same terminal session as `from`, with the same agent. |
+| `same_session` | In the same session as `from`, with the same agent. |
 | `at_time` | At the set time, once `from` is finished. |
 
-The mode belongs to the second task, so it applies to all connections leading to it. `same_session` also hands the second task to the first task's agent.
+The mode belongs to the second task, so it applies to all connections leading to it. `same_session` also hands the second task to the first task's agent, and runs it where the first one runs.
 
 Refused when:
 

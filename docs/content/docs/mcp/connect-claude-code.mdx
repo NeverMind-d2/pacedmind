@@ -1,25 +1,25 @@
 ---
 title: Connect Claude Code
-description: Register PacedMind's MCP server in Claude Code, for one project or for all of them, check the connection, and update it after a new token.
+description: Register PacedMind's MCP server in Claude Code, for the Claude app and the sessions you start yourself, check the connection, and update it after a new token.
 ---
 
-Claude Code sessions that PacedMind starts from a task are connected automatically. For Claude Code sessions you start yourself, register PacedMind's MCP server once.
+Claude Code sessions that PacedMind starts in a terminal are connected automatically. For sessions in the Claude app, and Claude Code sessions you start yourself, register PacedMind's MCP server once, for all projects: the Claude app's Code sessions use the same registration.
+
+## With Connect in Settings
+
+In **Settings → Devices**, select **Connect** next to **Claude Code** and confirm. PacedMind replaces an earlier registration for all projects with one for this PacedMind, with the current token. The Claude Code row then says *Reports to PacedMind*.
 
 ## With the command from Settings
 
 1. Open **Settings → Connect your agents** and select **Copy command** next to **Claude Code**. The command contains the address and the access token:
 
    ```powershell
-   claude mcp add --transport http organizer http://127.0.0.1:4319/api/mcp --header "Authorization: Bearer org_..."
+   claude mcp add --transport http --scope user organizer http://127.0.0.1:4319/api/mcp --header "Authorization: Bearer org_..."
    ```
 
 2. Paste it into a terminal and run it.
 
-As copied, the command registers PacedMind for the project folder the terminal is in, Claude Code's default. To use PacedMind in every project, add `--scope user`:
-
-```powershell
-claude mcp add --scope user --transport http organizer http://127.0.0.1:4319/api/mcp --header "Authorization: Bearer org_..."
-```
+The command registers PacedMind for all projects (`--scope user`). Without `--scope user`, it would register PacedMind only for the project folder the terminal is in, Claude Code's default.
 
 Keep the name `organizer`: PacedMind's skills and the sessions it starts refer to the server by that name.
 
@@ -49,7 +49,7 @@ A new token in **Settings → MCP server** disconnects Claude Code until it has 
 1. Remove the old registration with `claude mcp remove organizer`, adding `--scope user` if it was registered for all projects.
 2. Run the updated command from **Settings → Connect your agents**.
 
-For a registration made for all projects, `npm run connect` does both steps at once.
+For a registration made for all projects, **Connect** in **Settings → Devices** and `npm run connect` do both steps at once.
 
 ## Remove the connection
 

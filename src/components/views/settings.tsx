@@ -55,7 +55,7 @@ function AgentTools({ agent, device, here, pending, onConnect }: {
       <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
         {part(!!t.cli, t.cli ? `CLI ${t.cli.version}` : "No CLI")}
         <span className="text-faint">·</span>
-        {part(!!t.app, t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent].toLowerCase()}`)}
+        {part(!!t.app, t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent]}`)}
         <span className="text-faint">·</span>
         {part(t.mcp === "connected", MCP_TEXT[t.mcp])}
       </span>
