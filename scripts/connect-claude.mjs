@@ -7,6 +7,7 @@
 // It reads the token from the app's database and never prints it.
 import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
@@ -39,7 +40,10 @@ if (process.argv.includes("--remove")) {
   process.exit(0);
 }
 
-const dbFile = path.join(process.env.APPDATA ?? "", "Organizer", "data", "organizer.db");
+// Where the desktop app keeps its data (desktop/main.mjs): %APPDATA%\Organizer on Windows,
+// ~/Library/Application Support/Organizer on macOS.
+const appData = process.platform === "darwin" ? path.join(os.homedir(), "Library", "Application Support") : process.env.APPDATA ?? "";
+const dbFile = path.join(appData, "Organizer", "data", "organizer.db");
 if (!fs.existsSync(dbFile)) {
   console.error(`PacedMind's data isn't at ${dbFile}. Install and start the desktop app first (npm run desktop).`);
   process.exit(1);

@@ -1,5 +1,7 @@
 // Exports PacedMind's connected pd emblem, as solid as the wordmark's first p.
-//   desktop/icon.ico, desktop/icon.png  – app, window, tray and shortcut icon
+//   desktop/icon.ico, desktop/icon.png  – app, window, tray and shortcut icon on Windows
+//   desktop/icon.icns                   – app icon on macOS, on Apple's icon grid
+//   desktop/trayTemplate.png (+ @2x)    – macOS menu bar icon: black on clear, so macOS can tint it
 //   src/app/favicon.ico                 – browser tab
 // Run with: npm run icons
 import fs from "node:fs";
@@ -20,14 +22,19 @@ const STEMS = [
   { x: 80, top: 128, bottom: 256 },
   { x: 176, top: 0, bottom: 128 },
 ];
+// Without a tile to run into, the menu bar glyph's stems end in round caps inside the icon.
+const GLYPH_STEMS = STEMS.map(({ x, top, bottom }) => ({ x, top: Math.max(top, STROKE), bottom: Math.min(bottom, 256 - STROKE) }));
+// Apple's icon grid keeps the tile to the middle 824 of 1024 pixels. The Windows tile fills 94% of
+// its icon, so the macOS icon draws the same tile shrunk by this share of the size on each side.
+const MAC_INSET = 0.072;
 
-function insideEmblem(x, y, size) {
+function insideEmblem(x, y, size, stems = STEMS) {
   x *= 256;
   y *= 256;
   // An optical weight adjustment keeps the entire mark solid at tray sizes.
   const adjust = size <= 32 ? 1.5 : 0;
   const outer = Math.hypot(x - OUTER.x, y - OUTER.y) <= OUTER.r + adjust;
-  const stem = STEMS.some(({ x: cx, top, bottom }) =>
+  const stem = stems.some(({ x: cx, top, bottom }) =>
     Math.hypot(x - cx, y - Math.min(Math.max(y, top), bottom)) <= STROKE / 2 + adjust);
   const inner = Math.hypot(x - INNER.x, y - INNER.y) < INNER.r - adjust;
   return (outer || stem) && !inner;
@@ -40,8 +47,11 @@ function insideRoundedRect(x, y, lo, hi, r) {
   return Math.hypot(x - cx, y - cy) <= r;
 }
 
-/** RGBA pixels, drawn with 8×8 supersampling so small sizes stay smooth. */
-function render(size) {
+/**
+ * RGBA pixels, drawn with 8×8 supersampling so small sizes stay smooth. `inset` shrinks the tile
+ * toward the middle by that share of the size on each side.
+ */
+function render(size, inset = 0) {
   const ss = 8;
   const out = Buffer.alloc(size * size * 4);
   for (let py = 0; py < size; py++) {
@@ -50,8 +60,8 @@ function render(size) {
       let inMark = 0;
       for (let sy = 0; sy < ss; sy++) {
         for (let sx = 0; sx < ss; sx++) {
-          const x = (px + (sx + 0.5) / ss) / size;
-          const y = (py + (sy + 0.5) / ss) / size;
+          const x = ((px + (sx + 0.5) / ss) / size - inset) / (1 - 2 * inset);
+          const y = ((py + (sy + 0.5) / ss) / size - inset) / (1 - 2 * inset);
           if (!insideRoundedRect(x, y, 0.03, 0.97, 0.22)) continue;
           inRect++;
           if (insideEmblem(x, y, size)) inMark++;
@@ -67,6 +77,41 @@ function render(size) {
     }
   }
   return out;
+}
+
+/** The pd glyph alone, black with its coverage as alpha: a macOS template image for the menu bar. */
+function glyph(size) {
+  const ss = 8;
+  const out = Buffer.alloc(size * size * 4);
+  for (let py = 0; py < size; py++) {
+    for (let px = 0; px < size; px++) {
+      let inMark = 0;
+      for (let sy = 0; sy < ss; sy++) {
+        for (let sx = 0; sx < ss; sx++) {
+          if (insideEmblem((px + (sx + 0.5) / ss) / size, (py + (sy + 0.5) / ss) / size, size, GLYPH_STEMS)) inMark++;
+        }
+      }
+      out[(py * size + px) * 4 + 3] = Math.round((255 * inMark) / (ss * ss));
+    }
+  }
+  return out;
+}
+
+/** A macOS .icns: PNG images at every size Finder and the Dock ask for, with iconutil's type codes. */
+function icns() {
+  const types = [["icp4", 16], ["icp5", 32], ["ic11", 32], ["ic12", 64], ["ic07", 128], ["ic13", 256], ["ic08", 256], ["ic14", 512], ["ic09", 512], ["ic10", 1024]];
+  const pngs = new Map();
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(8);
+    head.write(type, 0, "ascii");
+    head.writeUInt32BE(data.length + 8, 4);
+    return Buffer.concat([head, data]);
+  };
+  const body = Buffer.concat(types.map(([type, size]) => {
+    if (!pngs.has(size)) pngs.set(size, png(size, render(size, MAC_INSET)));
+    return chunk(type, pngs.get(size));
+  }));
+  return chunk("icns", body);
 }
 
 function png(size, rgba) {
@@ -153,6 +198,9 @@ const write = (rel, data) => {
 
 write("desktop/icon.ico", ico([16, 20, 24, 32, 40, 48, 64, 128, 256]));
 write("desktop/icon.png", png(256, render(256)));
+write("desktop/icon.icns", icns());
+write("desktop/trayTemplate.png", png(16, glyph(16)));
+write("desktop/trayTemplate@2x.png", png(32, glyph(32)));
 write("src/app/favicon.ico", ico([16, 32, 48]));
 write("public/brand/pacedmind-emblem.png", png(512, render(512)));
 

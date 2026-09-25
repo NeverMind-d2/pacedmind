@@ -20,7 +20,8 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 ## Run
 
 - `npm run dev` serves the app and the MCP server at http://127.0.0.1:4320 (bound to localhost only). Its data is `data/organizer.db` (SQLite through the built-in `node:sqlite`), created with sample data on first start. Settings → Data can reset it.
-- `npm run desktop` builds the Electron app and installs it for the user (`scripts/build-desktop.mjs`). The app runs `.next/standalone/server.js` with Electron's own Node on port 4319, with its data in `%APPDATA%\Organizer\data` (`ORGANIZER_DB`), starting empty (`ORGANIZER_SEED=empty`). Dev and app never share a port or a database.
+- `npm run desktop` builds the Electron app and installs it for the user (`scripts/build-desktop.mjs`): on Windows in `%LOCALAPPDATA%\Programs\Organizer`, on macOS as `~/Applications/PacedMind.app`. The app runs `.next/standalone/server.js` with Electron's own Node on port 4319, with its data in `%APPDATA%\Organizer\data` (macOS: `~/Library/Application Support/Organizer/data`; `ORGANIZER_DB`), starting empty (`ORGANIZER_SEED=empty`). Dev and app never share a port or a database.
+- `npm run release` builds the downloadable installer for the system it runs on (Windows NSIS, or a signed and notarized macOS DMG) and uploads it to the VPS (`scripts/release.mjs`, README.md).
 - `npm run typecheck` generates route types and runs `tsc`. `npm run icons` redraws the icons.
 
 ## Layout
@@ -43,7 +44,8 @@ A personal, Linear-style planner (tasks, time blocks, calendar, deadlines) that 
 - `src/app/api/sessions/[id]/ended` is called by the Claude Code `SessionEnd` hook that the launcher installs per session.
 - `src/app/api/state` returns a version that changes on every database write, plus the sessions waiting for the user. Pages poll it to refresh (`live-refresh.tsx`); the desktop app polls it for notifications.
 - `src/proxy.ts` rejects requests whose Host isn't 127.0.0.1 or localhost (DNS rebinding).
-- `desktop/main.mjs` is the Electron main process: starts the server, window, tray, notifications, `--install`/`--uninstall`/`--quit`/`--hidden`.
+- `desktop/main.mjs` is the Electron main process: starts the server, window, tray (the menu bar on macOS), notifications, `--install`/`--uninstall`/`--quit`/`--hidden`. Keep both systems working: Windows-only calls (shortcuts, balloons, the title bar overlay's colors) stay behind `WINDOWS`, and nothing may write into the macOS app bundle, which would break its signature.
+- Agent terminals: `launcher.ts` opens Windows Terminal or Command Prompt on Windows, Terminal or iTerm on macOS (a `.command` file opened with `open -a`); the choices live in `src/lib/terminals.ts`.
 - `src/app/actions.ts` holds the Server Actions. Every mutation ends with `refresh()` from `next/cache`, or the page will not re-render.
 - `src/lib/` is shared by client and server: types, dates, colors (`colors.ts`), the quick-add parser (`parse.ts`), the auto-planner (`planner.ts`).
 - `src/components/` holds the UI kit (`ui.tsx`, `icons.tsx`, `popover.tsx`, `dialog.tsx`), task UI (`task-list`, `task-row`, `task-detail`, `quick-add`) and the area/project menus (`entity-menu.tsx`, used by the sidebar and `/projects`). Views live in `src/components/views/`.

@@ -9,7 +9,7 @@ npm run dev      # http://127.0.0.1:4330
 npm run build    # static files in out/
 ```
 
-The site runs at https://pacedmind.com, with the docs (`../docs`, also a static export) at `/docs` on the same domain. The server setup and the deploy script for both are in the repository's `deploy/` (see `deploy/Caddyfile`), and `deploy/README.md` here has the steps for Google Search Console and Bing Webmaster Tools. Any static host works if it does what the Caddyfile does: serve `{path}.html` for `{path}`, answer unknown addresses with `404.html` and a 404 status, and redirect `www` and `http://` to `https://pacedmind.com`. Before launch, set the download links in `lib/site.ts`.
+The site runs at https://pacedmind.com, with the docs (`../docs`, also a static export) at `/docs` on the same domain. The server setup and the deploy script for both are in the repository's `deploy/` (see `deploy/Caddyfile`), and `deploy/README.md` here has the steps for Google Search Console and Bing Webmaster Tools. Any static host works if it does what the Caddyfile does: serve `{path}.html` for `{path}`, answer unknown addresses with `404.html` and a 404 status, and redirect `www` and `http://` to `https://pacedmind.com`. The download buttons point at `/download/windows` and `/download/mac`, which lead to the installers that `npm run release` (in the repository's root) builds and uploads.
 
 ## Prices
 

@@ -71,6 +71,21 @@ pacedmind.com {
 	@manifest path *.webmanifest
 	header @manifest Content-Type application/manifest+json
 
+	# The installers `npm run release` uploads to /srv/pacedmind/download. The site's buttons link to
+	# /download/windows and /download/mac, which lead to the current ones.
+	redir /download/windows /download/PacedMind-Windows.exe
+	redir /download/mac /download/PacedMind-macOS.dmg
+	handle /download/* {
+		root * /srv/pacedmind
+		header X-Robots-Tag noindex
+		# Set types, so an installer is never guessed to be text and compressed on the fly.
+		@exe path *.exe
+		header @exe Content-Type application/vnd.microsoft.portable-executable
+		@dmg path *.dmg
+		header @dmg Content-Type application/x-apple-diskimage
+		file_server
+	}
+
 	# The docs. A section has both views.html and a views/ folder; /docs is docs/index.html.
 	@docs path /docs /docs/*
 	handle @docs {

@@ -122,7 +122,8 @@ export interface Settings {
   lunchStart: string;
   lunchEnd: string;
   workDays: number[];
-  terminal: "wt" | "cmd";
+  /** Windows Terminal or Command Prompt on Windows, Terminal or iTerm on macOS (src/lib/terminals.ts). */
+  terminal: "wt" | "cmd" | "terminal" | "iterm";
   claudeCommand: string;
   codexCommand: string;
   mcpToken: string;

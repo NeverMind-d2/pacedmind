@@ -8,6 +8,7 @@ import * as repo from "../repo";
 import { planTimeBlocks, type PlanResult } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, hhmm, minutesOf, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import { PRIORITY_LABEL, type CalEvent } from "@/lib/types";
+import { terminalFor } from "@/lib/terminals";
 import {
   areaRef, dateInput, dateTimeInput, eventLine, fail, findAreaOrInbox, findEvent, fmtMinutes, fmtWhen, isOpen, names,
   taskLine, todayLine, tool, when,
@@ -267,7 +268,7 @@ export function registerCalendarTools(server: McpServer) {
     return [
       `Work hours: ${s.workStart}–${s.workEnd} · Break: ${s.lunchStart}–${s.lunchEnd}`,
       `Work days: ${s.workDays.map((d) => DAY_NAMES[d - 1]).join(", ")}`,
-      `Sessions open in: ${s.terminal === "wt" ? "Windows Terminal" : "Command Prompt"} · Claude Code command: ${s.claudeCommand} · Codex command: ${s.codexCommand}`,
+      `Sessions open in: ${terminalFor(s.terminal, process.platform).label} · Claude Code command: ${s.claudeCommand} · Codex command: ${s.codexCommand}`,
       `MCP address: ${mcpUrl()}`,
     ].join("\n");
   });

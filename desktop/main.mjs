@@ -1,7 +1,7 @@
 // PacedMind desktop app. Runs the built Next.js server (server/server.js) with Electron's own Node,
-// shows it in a window and keeps running in the tray, so agents can still report back after the
-// window is closed. Built and installed by scripts/build-desktop.mjs.
-import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeTheme, screen, session, shell } from "electron";
+// shows it in a window and keeps running in the tray (the menu bar on macOS), so agents can still
+// report back after the window is closed. Built and installed by scripts/build-desktop.mjs.
+import { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, nativeTheme, screen, session, shell } from "electron";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -10,9 +10,13 @@ import path from "node:path";
 
 const PORT = 4319;
 const ORIGIN = `http://127.0.0.1:${PORT}`;
+const WINDOWS = process.platform === "win32";
+const MAC = process.platform === "darwin";
 const APP_ID = "Organizer.Desktop"; // Keep the existing Windows identity and notification grouping.
 const ICON = path.join(import.meta.dirname, "icon.ico");
 const ICON_PNG = path.join(import.meta.dirname, "icon.png");
+// Black on clear with "Template" in its name, so macOS tints it for a light or dark menu bar.
+const TRAY_TEMPLATE = path.join(import.meta.dirname, "trayTemplate.png");
 const SERVER_DIR = path.join(import.meta.dirname, "server");
 const THEME_COLORS = {
   dark: { background: "#010101", symbol: "#a1a1a8", line: "#121214" },
@@ -53,21 +57,27 @@ const sandbox = sandboxApp();
 
 // A content-specific path lets Windows refresh icons without clearing its global cache. It lives next to
 // the exe, not in the profile, because Explorer can't see those redirected folders. Updates replace it.
-const iconBytes = fs.readFileSync(ICON);
-const shortcutIcon = path.join(path.dirname(process.execPath), `pacedmind-${createHash("sha256").update(iconBytes).digest("hex").slice(0, 12)}.ico`);
-if (!fs.existsSync(shortcutIcon)) fs.writeFileSync(shortcutIcon, iconBytes);
+// Windows only: on macOS a file written into the app bundle would break its signature.
+let shortcutIcon = null;
+if (WINDOWS) {
+  const iconBytes = fs.readFileSync(ICON);
+  shortcutIcon = path.join(path.dirname(process.execPath), `pacedmind-${createHash("sha256").update(iconBytes).digest("hex").slice(0, 12)}.ico`);
+  if (!fs.existsSync(shortcutIcon)) fs.writeFileSync(shortcutIcon, iconBytes);
+}
 
 let win = null;
 let tray = null;
 let server = null;
 let quitting = false;
 let serverReady = false;
+let hidden = process.argv.includes("--hidden");
 const notifications = new Set();
 
 const dataDir = () => path.join(app.getPath("userData"), "data");
 const logFile = () => path.join(app.getPath("logs"), "server.log");
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
-const loginArgs = { name: "Organizer", path: process.execPath, args: ["--hidden"] };
+// On Windows the login item starts the exe with --hidden; macOS has its own login items for the app.
+const loginArgs = WINDOWS ? { name: "Organizer", path: process.execPath, args: ["--hidden"] } : {};
 
 /* ---------- small helpers ---------- */
 
@@ -221,12 +231,15 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     title: "PacedMind",
-    icon: ICON,
+    ...(WINDOWS ? { icon: ICON } : {}), // macOS takes the icon from the app bundle.
     backgroundColor: THEME_COLORS[activeTheme].background,
-    ...(process.platform === "win32" ? {
+    ...(WINDOWS ? {
       titleBarStyle: "hidden",
       titleBarOverlay: { color: THEME_COLORS[activeTheme].background, symbolColor: THEME_COLORS[activeTheme].symbol, height: 40 },
     } : {}),
+    // The traffic lights sit in the app's 40 px header, and the overlay tells its CSS where they end
+    // (env(titlebar-area-x) in src/app/globals.css).
+    ...(MAC ? { titleBarStyle: "hidden", titleBarOverlay: true, trafficLightPosition: { x: 14, y: 13 } } : {}),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -243,7 +256,8 @@ function createWindow() {
   // maximize() also shows the window, so wait until it should appear (not at all with --hidden).
   win.once("show", () => saved.maximized && win.maximize());
   win.once("ready-to-show", () => {
-    if (!process.argv.includes("--hidden")) win.show();
+    if (!hidden) win.show();
+    hidden = false; // Later windows (the Dock, a notification, the tray) always show.
   });
   win.on("close", (e) => {
     writeState({ bounds: win.getNormalBounds(), maximized: win.isMaximized() });
@@ -252,11 +266,18 @@ function createWindow() {
     win.hide();
     if (!readState().trayHintShown) {
       writeState({ trayHintShown: true });
-      tray?.displayBalloon({
-        iconType: "info",
-        title: "PacedMind is still running",
-        content: "It stays in the tray so agents can report back. Right-click the icon to quit.",
-      });
+      if (WINDOWS) {
+        tray?.displayBalloon({
+          iconType: "info",
+          title: "PacedMind is still running",
+          content: "It stays in the tray so agents can report back. Right-click the icon to quit.",
+        });
+      } else if (Notification.isSupported()) {
+        new Notification({
+          title: "PacedMind is still running",
+          body: "It stays in the menu bar so agents can report back. Quit it from the menu bar icon or with ⌘Q.",
+        }).show();
+      }
     }
   });
   win.on("closed", () => (win = null));
@@ -265,11 +286,16 @@ function createWindow() {
     quitting = true;
     stopServer();
   });
-  // Mouse back and forward buttons.
+  // Mouse back and forward buttons, and on macOS a swipe on the trackpad.
   win.on("app-command", (_e, cmd) => {
     const nav = win.webContents.navigationHistory;
     if (cmd === "browser-backward" && nav.canGoBack()) nav.goBack();
     if (cmd === "browser-forward" && nav.canGoForward()) nav.goForward();
+  });
+  win.on("swipe", (_e, direction) => {
+    const nav = win.webContents.navigationHistory;
+    if (direction === "right" && nav.canGoBack()) nav.goBack();
+    if (direction === "left" && nav.canGoForward()) nav.goForward();
   });
 
   const wc = win.webContents;
@@ -298,14 +324,14 @@ function showWindow(url) {
 /* ---------- tray, menu, notifications ---------- */
 
 function trayMenu() {
-  const startsWithWindows = app.getLoginItemSettings(loginArgs).openAtLogin;
+  const startsAtLogin = app.getLoginItemSettings(loginArgs).openAtLogin;
   return Menu.buildFromTemplate([
     { label: "Open PacedMind", click: () => showWindow() },
     { type: "separator" },
     {
-      label: "Start with Windows",
+      label: MAC ? "Open at Login" : "Start with Windows",
       type: "checkbox",
-      checked: startsWithWindows,
+      checked: startsAtLogin,
       click: (item) => {
         app.setLoginItemSettings({ ...loginArgs, openAtLogin: item.checked });
         tray.setContextMenu(trayMenu());
@@ -319,18 +345,22 @@ function trayMenu() {
 }
 
 function createTray() {
-  tray = new Tray(ICON);
+  const image = MAC ? nativeImage.createFromPath(TRAY_TEMPLATE) : ICON;
+  if (MAC) image.setTemplateImage(true);
+  tray = new Tray(image);
   tray.setToolTip("PacedMind");
   tray.setContextMenu(trayMenu());
-  tray.on("click", () => showWindow());
+  // A click on a macOS menu bar icon opens its menu, which has Open PacedMind.
+  if (!MAC) tray.on("click", () => showWindow());
 }
 
 function appMenu() {
-  // Hidden menu bar; it only provides the keyboard shortcuts.
+  // Windows hides the menu bar, so there it only provides the keyboard shortcuts. macOS shows it,
+  // with the app menu (About, Hide, Quit) and the Window menu (Minimize, Close) of every Mac app.
   const nav = () => win?.webContents.navigationHistory;
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      {
+      MAC ? { role: "appMenu" } : {
         label: "PacedMind",
         submenu: [
           { label: "Close window", accelerator: "CmdOrCtrl+W", click: () => win?.close() },
@@ -350,10 +380,11 @@ function appMenu() {
           { role: "zoomOut" },
           { type: "separator" },
           { role: "togglefullscreen" },
-          { label: "Back", accelerator: "Alt+Left", click: () => nav()?.canGoBack() && nav().goBack() },
-          { label: "Forward", accelerator: "Alt+Right", click: () => nav()?.canGoForward() && nav().goForward() },
+          { label: "Back", accelerator: MAC ? "Cmd+[" : "Alt+Left", click: () => nav()?.canGoBack() && nav().goBack() },
+          { label: "Forward", accelerator: MAC ? "Cmd+]" : "Alt+Right", click: () => nav()?.canGoForward() && nav().goForward() },
         ],
       },
+      ...(MAC ? [{ role: "windowMenu" }] : []),
     ]),
   );
 }
@@ -420,7 +451,9 @@ function quit() {
   app.quit();
 }
 
+/** Start Menu and desktop shortcuts on Windows. A Mac app in Applications needs none. */
 function writeShortcuts() {
+  if (!WINDOWS) return;
   const options = {
     target: process.execPath,
     cwd: path.dirname(process.execPath),
@@ -463,14 +496,16 @@ function writeShortcuts() {
 }
 
 function removeShortcuts() {
-  const programs = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
-  for (const file of [path.join(programs, "PacedMind.lnk"), path.join(app.getPath("desktop"), "PacedMind.lnk")]) {
-    fs.rmSync(file, { force: true });
+  if (WINDOWS) {
+    const programs = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
+    for (const file of [path.join(programs, "PacedMind.lnk"), path.join(app.getPath("desktop"), "PacedMind.lnk")]) {
+      fs.rmSync(file, { force: true });
+    }
   }
   app.setLoginItemSettings({ ...loginArgs, openAtLogin: false });
 }
 
-app.setAppUserModelId(APP_ID);
+if (WINDOWS) app.setAppUserModelId(APP_ID);
 
 if (process.argv.includes("--install")) {
   app.whenReady().then(() => {
@@ -507,11 +542,17 @@ if (process.argv.includes("--install")) {
   app.on("window-all-closed", () => {
     // Stay in the tray.
   });
+  // macOS: clicking the Dock icon, or opening the app again from Finder, brings the window back.
+  app.on("activate", (_e, hasVisibleWindows) => {
+    if (!hasVisibleWindows) showWindow();
+  });
   app.on("before-quit", () => {
     quitting = true;
     stopServer();
   });
   app.whenReady().then(() => {
+    // Opened as a login item: stay in the menu bar, like the Windows login item's --hidden.
+    if (MAC && app.getLoginItemSettings().wasOpenedAtLogin) hidden = true;
     nativeTheme.themeSource = activeTheme;
     session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(permission === "clipboard-sanitized-write"));
     appMenu();

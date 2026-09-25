@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { createProjectAction, resetDataAction, updateProjectAction, updateSettingsAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { AGENT_LABEL, type AgentId, type Area, type Project, type Settings } from "@/lib/types";
+import { TERMINALS, terminalFor } from "@/lib/terminals";
 import { Icon } from "../icons";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -46,8 +47,10 @@ function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(() => toast(`${what} copied`), () => toast("Couldn't copy", "error"));
 }
 
-export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessionsCount }: {
+export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessionsCount, platform }: {
   settings: Settings; projects: Project[]; areas: Area[]; mcpUrl: string; dbFile: string; sessionsCount: number;
+  /** The server's system, which decides the terminals sessions can open in. */
+  platform: NodeJS.Platform;
 }) {
   const { run } = useAction();
   const [showToken, setShowToken] = useState(false);
@@ -111,10 +114,12 @@ export function SettingsView({ settings, projects, areas, mcpUrl, dbFile, sessio
             </Section>
 
             <Section title="Starting sessions">
-              <Row label="Terminal">
-                <Segmented value={settings.terminal} onChange={(v) => save({ terminal: v })}
-                  options={[{ value: "wt", label: "Windows Terminal" }, { value: "cmd", label: "Command Prompt" }]} />
-              </Row>
+              {TERMINALS[platform] && (
+                <Row label="Terminal">
+                  <Segmented value={terminalFor(settings.terminal, platform).value} onChange={(v) => save({ terminal: v })}
+                    options={TERMINALS[platform]} />
+                </Row>
+              )}
               <Row label="Claude command">
                 <input className={input} defaultValue={settings.claudeCommand} aria-label="Claude command"
                   onBlur={(e) => e.target.value.trim() && e.target.value !== settings.claudeCommand && save({ claudeCommand: e.target.value.trim() })} />

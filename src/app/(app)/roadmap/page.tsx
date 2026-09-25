@@ -4,6 +4,7 @@ import { taskContext } from "@/server/views";
 import { latestSessions, projectStats, taskStates } from "@/server/timeline";
 import { addDaysStr, mondayOf, toDateStr, toStamp } from "@/lib/dates";
 import type { Task } from "@/lib/types";
+import { terminalFor } from "@/lib/terminals";
 
 /** The project timeline shows 14 weeks, starting on the Monday two weeks ago. */
 const WEEKS = 14;
@@ -43,7 +44,7 @@ export default async function RoadmapPage(props: PageProps<"/roadmap">) {
       stats={projectStats(projects, tasks)}
       selectedId={project?.id ?? null}
       items={items}
-      terminal={repo.getSettings().terminal === "wt" ? "Windows Terminal" : "Command Prompt"}
+      terminal={terminalFor(repo.getSettings().terminal, process.platform).label}
       waiting={repo.listSessions("status = 'finished'").length}
       ctx={taskContext(own)}
       initialKey={typeof sp.task === "string" ? sp.task : null}

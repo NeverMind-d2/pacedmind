@@ -11,6 +11,7 @@ The server is an OVH VPS (Ubuntu 26.04, `vps-60cf32b8.vps.ovh.net`, 57.131.192.1
 | `https://app.pacedmind.com` | the web app |
 | `https://pacedmind.com` | the public site (`site/out`) |
 | `https://pacedmind.com/docs` | the docs (the docs app's static build) |
+| `https://pacedmind.com/download/windows`, `/download/mac` | the current desktop installers (step 4) |
 | `https://www.pacedmind.com` | redirects to `pacedmind.com` |
 
 ## 0. DNS
@@ -63,6 +64,16 @@ A checkout without the hosted web mode (`src/server/supabase.ts`) refuses to dep
 
 New migrations go out with `npx supabase db push` before a deploy that needs them.
 
+## 4. Release the desktop app
+
+The site's download buttons lead to `/download/windows` and `/download/mac`, which the Caddyfile sends on to `PacedMind-Windows.exe` and `PacedMind-macOS.dmg` in `/srv/pacedmind/download`. `npm run release` builds each one on its own system and uploads it there, so run it once on a PC and once on a Mac (the one-time Mac signing setup is in the repository's README.md):
+
+```bash
+npm run release -- ubuntu@57.131.192.185
+```
+
+It creates the folder the first time, checks each upload against its checksum before switching to it, and keeps the previous file as `<name>.old`. `deploy.sh` never touches that folder. Until the first release, the buttons end on the site's 404 page.
+
 ## Firewall (optional)
 
 Only SSH (22), and Caddy's 80 and 443 once deployed, listen on public addresses. To also block everything else, run on the server:
@@ -76,7 +87,7 @@ sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw --force enable
 - `provision.sh`: the one-time server setup.
 - `deploy.sh`: builds and switches the app, uploads the static parts, installs the Caddy config.
 - `pacedmind-web.service`: the systemd unit (`HOSTNAME=127.0.0.1`, `PORT=3000`, `ORGANIZER_MODE=web`, `TZ=Europe/Warsaw`).
-- `Caddyfile`: the server's whole Caddy config, for Caddy 2.6.2 as Ubuntu ships it: HTTPS, `www` and `http://` to `https://pacedmind.com`, one URL per page (no `.html`, no trailing slash), the site's and the docs' 404 pages with a 404 status, caching, and the docs' Markdown copies, search index and navigation files marked `noindex`. The docs need their own `/docs` block because a docs section has both `views.html` and a `views/` folder.
+- `Caddyfile`: the server's whole Caddy config, for Caddy 2.6.2 as Ubuntu ships it: HTTPS, `www` and `http://` to `https://pacedmind.com`, one URL per page (no `.html`, no trailing slash), the site's and the docs' 404 pages with a 404 status, caching, and the docs' Markdown copies, search index and navigation files marked `noindex`. The docs need their own `/docs` block because a docs section has both `views.html` and a `views/` folder. `/download/*` serves the installers from `/srv/pacedmind/download` (step 4).
 - `app.caddy` and `app-placeholder.caddy`: what `app.pacedmind.com` does, the app or a redirect to the site; `deploy.sh` installs one of them as `/etc/caddy/app.caddy`.
 
 The steps for Google Search Console and Bing Webmaster Tools are in `site/deploy/README.md`.

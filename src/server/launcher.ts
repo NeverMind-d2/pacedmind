@@ -2,12 +2,13 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { dbPath } from "./db";
 import { folderProblem } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { AGENT_LABEL, agentOf, type AgentId, type Session, type Task } from "@/lib/types";
+import { terminalFor } from "@/lib/terminals";
 
 export interface LaunchResult {
   ok: boolean;
@@ -89,7 +90,7 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
         script,
         ["@echo off", "chcp 65001 >nul", `title ${title}`, `cd /d "${folder}"`, `set ORGANIZER_TOKEN=${token}`, command, ""].join("\r\n"),
       );
-      if (repo.getSettings().terminal === "wt") {
+      if (terminalFor(repo.getSettings().terminal, "win32").value === "wt") {
         const child = spawn("wt.exe", ["-w", "organizer", "new-tab", "--title", title, "-d", folder, "cmd", "/k", script], {
           detached: true, stdio: "ignore", env,
         });
@@ -100,12 +101,10 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
       }
       return null;
     }
+    if (process.platform === "darwin") return openMacTerminal(dir, folder, title, token, command);
     const script = path.join(dir, "start.sh");
     fs.writeFileSync(script, ["#!/bin/sh", `cd "${folder}"`, `export ORGANIZER_TOKEN=${token}`, command, ""].join("\n"), { mode: 0o755 });
-    const child = process.platform === "darwin"
-      ? spawn("open", ["-a", "Terminal", script], { detached: true, stdio: "ignore", env })
-      : spawn("x-terminal-emulator", ["-e", script], { detached: true, stdio: "ignore", env });
-    child.unref();
+    spawn("x-terminal-emulator", ["-e", script], { detached: true, stdio: "ignore", env }).unref();
     return null;
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
@@ -114,6 +113,29 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
 
 function openCmdWindow(title: string, script: string, env: NodeJS.ProcessEnv) {
   spawn("cmd.exe", ["/c", `start "${title}" cmd /k "${script}"`], { detached: true, stdio: "ignore", windowsVerbatimArguments: true, env }).unref();
+}
+
+/**
+ * macOS: a .command file opens in a new Terminal or iTerm window. Terminal runs it from a login shell,
+ * so the agent finds the user's own PATH, and `open` needs no permission to control another app.
+ * The escape sequence names the window. Without iTerm installed, the session opens in Terminal.
+ */
+function openMacTerminal(dir: string, folder: string, title: string, token: string, command: string): string | null {
+  const script = path.join(dir, "start.command");
+  fs.writeFileSync(script, [
+    "#!/bin/sh", `printf '\\033]0;%s\\007' "${title}"`, `cd "${folder}" || exit 1`, `export ORGANIZER_TOKEN=${token}`, command, "",
+  ].join("\n"), { mode: 0o755 });
+  const apps = terminalFor(repo.getSettings().terminal, "darwin").value === "iterm" ? ["iTerm", "Terminal"] : ["Terminal"];
+  let error = "";
+  for (const app of apps) {
+    try {
+      execFileSync("open", ["-a", app, script], { stdio: "pipe" });
+      return null;
+    } catch (e) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+  return `Couldn't open a terminal: ${error}`;
 }
 
 function resolveFolder(task: Task): { folder?: string; error?: string } {

@@ -1,17 +1,16 @@
-/**
- * Public addresses. The repository has no public remote yet, so its links are the expected ones:
- * change them here when the repository and its releases exist.
- */
+// The one canonical origin, without www and without a trailing slash. The server redirects
+// http:// and www.pacedmind.com here (deploy/).
+const url = "https://pacedmind.com";
+
+/** Public addresses: the site, its docs and the downloads. */
 export const SITE = {
-  // The one canonical origin, without www and without a trailing slash. The server redirects
-  // http:// and www.pacedmind.com here (deploy/).
-  url: "https://pacedmind.com",
+  url,
   // The documentation, a separate app served from the same domain.
   docs: "/docs",
-  repo: "https://github.com/NeverMind-d2/pacedmind",
+  // The current installers, which `npm run release` uploads (deploy/Caddyfile leads these to them).
   downloads: {
-    windows: "https://github.com/NeverMind-d2/pacedmind/releases/latest",
-    mac: "https://github.com/NeverMind-d2/pacedmind/releases/latest",
+    windows: `${url}/download/windows`,
+    mac: `${url}/download/mac`,
   },
   // Search engine ownership tokens, printed as <meta> tags when set. Leave them empty when the
   // domain is verified through DNS, which also covers every subdomain and protocol.

@@ -12,6 +12,7 @@ export default async function SettingsPage() {
       mcpUrl={mcpUrl()}
       dbFile={dbPath()}
       sessionsCount={repo.listSessions().length}
+      platform={process.platform}
     />
   );
 }

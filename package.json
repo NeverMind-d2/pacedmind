@@ -6,6 +6,7 @@
     "dev": "next dev -p 4320 -H 127.0.0.1",
     "build": "next build",
     "desktop": "node scripts/build-desktop.mjs",
+    "release": "node scripts/release.mjs",
     "icons": "node scripts/make-icons.mjs",
     "skills": "node scripts/install-skills.mjs",
     "connect": "node scripts/connect-claude.mjs",
