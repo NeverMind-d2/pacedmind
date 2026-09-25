@@ -13,7 +13,7 @@ The site runs at https://pacedmind.com, with the docs (`../docs`, also a static 
 
 ## Prices
 
-There are two plans, and both start with 7 days free. Cloud costs the same as Spotify Premium Individual in each country (in India, where that plan is called Premium Standard); One device costs half of that (`ONE_DEVICE_SHARE` in `lib/content.ts`, rounded to the cent by `planAmount()` in `lib/markets.ts`). The prices are in `prices.json`. Visitors see the prices for their country, guessed from their time zone and then their browser language, and can pick another country. Anyone else sees the US price. The page itself never names Spotify: it says "a music subscription".
+There are two plans. One device is free and needs no account. Cloud costs the same as Spotify Premium Individual in each country (in India, where that plan is called Premium Standard) and starts with 7 days free. The prices are in `prices.json`. Visitors see the prices for their country, guessed from their time zone and then their browser language, and can pick another country. Anyone else sees the US price. The page itself never names Spotify: it says "a music subscription".
 
 Check the prices regularly:
 
@@ -27,7 +27,7 @@ A change of more than 40% is never saved, because it more likely means the page 
 ## Search and answer engines
 
 - The page's words live in `lib/content.ts`, which the page, `/llms.txt`, `/llms-full.txt` and the structured data all read, so they can't drift apart (the hero and the pricing heading are still written out in `app/page.tsx` too). The FAQ there is shown on the page and repeated in its FAQPage data word for word; never add a question to one without the other. The entity is always "PacedMind".
-- No price for PacedMind itself appears in the metadata, the JSON-LD, the FAQ or llms.txt until the new plans (not free on one device, with a 7-day trial) are on the page. When they are, add an Offer per plan and a price question, both matching the page.
+- The FAQ's price question and llms.txt say what the pricing section says (`COST` in `lib/content.ts`). In the JSON-LD, the SoftwareApplication offers One device at a price of 0. Cloud gets no Offer: its price differs by country, and one Offer can't state that.
 - Every page that should be found gets its canonical URL, link preview and robots tag from `pageMetadata()` in `lib/seo.ts`. URLs have no trailing slash, and `SITE.url` in `lib/site.ts` is the one origin.
 - `lib/seo.ts` also builds the JSON-LD: Organization and WebSite on every page, SoftwareApplication and FAQPage on the home page, joined by stable `@id`s. The docs point at the same ids (`https://pacedmind.com/#organization`, `#website`, `#software`) rather than describe PacedMind again.
 - `app/sitemap.ts` lists this site's pages, dated by the last commit that changed them (build from a checkout with its history). `app/robots.ts` is the only robots.txt crawlers read for the whole domain: it names both sitemaps, and repeats any rule the docs app adds, with the `/docs` prefix. The docs disallow nothing: assistants read `/docs/llms.mdx/` and link previews fetch `/docs/og/`, and the server sends `X-Robots-Tag: noindex` for the Markdown copies instead.

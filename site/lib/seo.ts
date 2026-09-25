@@ -66,9 +66,10 @@ export function website(): Node {
 }
 
 /**
- * The app. It has no Offer until its plans can be bought and are on the page: the prices differ by
- * country, which one Offer can't say honestly. Google shows a software rich result only with genuine
- * ratings or reviews, so this is for understanding the entity, not for stars.
+ * The app, with the free One device plan as its Offer: a price of 0 is the same in every currency.
+ * Cloud has none: its price differs by country, which one Offer can't say honestly. Google shows a
+ * software rich result only with genuine ratings or reviews, so this is for understanding the entity,
+ * not for stars.
  */
 export function softwareApplication(): Node {
   return {
@@ -83,6 +84,7 @@ export function softwareApplication(): Node {
     operatingSystem: "Windows, macOS",
     downloadUrl: [...new Set(Object.values(SITE.downloads))],
     featureList: ONE_DEVICE,
+    offers: { "@type": "Offer", name: "One device", price: "0", priceCurrency: "USD", url: absoluteUrl("/#pricing") },
     publisher: { "@id": IDS.organization },
   };
 }
