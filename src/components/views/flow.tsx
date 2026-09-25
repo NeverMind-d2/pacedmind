@@ -451,7 +451,7 @@ function nextWorkMorning(now: number, workStart: string, workDays: number[]): st
   const d = new Date(now);
   for (let i = 1; i <= 7; i++) {
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate() + i);
-    if (!workDays.length || workDays.includes(day.getDay())) return `${toDateStr(day)}T${workStart}`;
+    if (!workDays.length || workDays.includes(day.getDay() || 7)) return `${toDateStr(day)}T${workStart}`;
   }
   return `${toDateStr(new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1))}T${workStart}`;
 }

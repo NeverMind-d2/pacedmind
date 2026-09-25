@@ -2,11 +2,11 @@ import "server-only";
 import { tx } from "./db";
 import * as repo from "./repo";
 import type { StoredImage } from "./attachments";
-import { afterDone, afterFinished } from "./flow";
+import { afterDone, afterFinished, afterFlowOn } from "./flow";
 import { reopenForChanges, startSession, type LaunchResult } from "./launcher";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
-import { AGENT_LABEL, type AgentId, type ReportCriterion, type ReportOutcome, type Session, type Task } from "@/lib/types";
+import { AGENT_LABEL, type AgentId, type Project, type ReportCriterion, type ReportOutcome, type Session, type Task } from "@/lib/types";
 
 /* Operations shared by the Server Actions (the UI) and the MCP tools, so both behave the same. */
 
@@ -89,6 +89,13 @@ export function finishTask(taskId: number, sessionId: string | null, note: strin
 export function startedLines(started: LaunchResult[]): string[] {
   return started.flatMap((r) =>
     r.ok && r.session ? [`PacedMind started ${repo.getTask(r.session.taskId)?.key} in a new ${AGENT_LABEL[r.session.agent]} session.`] : []);
+}
+
+/** Saves a project. Switching its flow on starts the sessions it would have started while it was paused. */
+export function saveProject(id: string, patch: Partial<Omit<Project, "id">>): LaunchResult[] {
+  const wasOn = repo.getProject(id)?.flowOn;
+  repo.updateProject(id, patch);
+  return patch.flowOn && !wasOn ? afterFlowOn(id) : [];
 }
 
 /** Closes a session by hand, e.g. when its terminal was closed or it got stuck before the agent checked in. */

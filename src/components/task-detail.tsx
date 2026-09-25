@@ -164,7 +164,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 <Gallery images={soFar} />
               </div>
             )}
-            <div className="truncate font-mono text-[11px] text-mut2">{session.folder}{session.branch ? ` · ${session.branch}` : ""}</div>
+            <div className="truncate font-mono text-[11px] text-mut2">{[session.folder, session.branch].filter(Boolean).join(" · ")}</div>
             {asking && canAsk ? (
               <RequestChangesForm agent={session.agent} resumes={session.agent === "claude" && !!session.cliSessionId} pending={pending}
                 onCancel={() => setAsking(false)}
@@ -248,7 +248,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           <Prop label="Area">
             <Menu trigger={<button type="button" className={pv}>{area ? <Dot color={area.color} /> : <Icon name="inbox" size={14} />}{area?.name ?? "Inbox"}</button>}
               items={[{ value: null as string | null, label: "Inbox, no area" }, ...ctx.areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <Dot color={a.color} /> }))]}
-              onSelect={(v) => save({ areaId: v })} />
+              onSelect={(v) => save({ areaId: v, ...(project && project.areaId !== v ? { projectId: null } : {}) })} />
           </Prop>
           <Prop label="Project">
             <Menu trigger={<button type="button" className={cx(pv, !project && "text-mut2")}><Icon name="layers" size={14} />{project?.name ?? "Add to project"}</button>}

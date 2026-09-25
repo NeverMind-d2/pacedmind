@@ -107,7 +107,7 @@ Changes a project. Parameters left out keep their value; `null` clears a field.
 | `target_date` | date or `null` | no | The target date. |
 | `folder` | string or `null` | no | The absolute folder path for agent sessions. |
 | `agent` | `claude`, `codex` or `null` | no | The default agent. |
-| `flow_on` | boolean | no | Switches the flow on or off. |
+| `flow_on` | boolean | no | Switches the flow on or off. Switching it on starts the sessions of the tasks that are ready now, and the result lists them (*Started a session for DEV-24.*). |
 | `starts_after` | string or `null` | no | A project that must be finished first, or `null` for none. |
 
 A project can't start after itself or after a project that waits for it: *… can't start after …: they would wait for each other.*

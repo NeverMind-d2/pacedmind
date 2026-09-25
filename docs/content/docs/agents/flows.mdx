@@ -31,13 +31,13 @@ With **Flow on**, PacedMind starts a task's session on its own when all of these
 * the task has at least one connection leading to it, none of them **Same session**, and every one is ready;
 * the task has no running session.
 
-PacedMind checks this when an agent hands a task back, when a session is marked finished, when you mark a task done, and every minute for timed connections. A session started this way notes *Started on its own* in the editor. Switching the flow on, or adding a connection, doesn't go back over tasks that are already ready: start those by hand, for example with the start button in the editor's panel.
+PacedMind checks this when an agent hands a task back, when a session is marked finished, when you mark a task done, and every minute for timed connections. A session started this way notes *Started on its own* in the editor. Switching the flow on checks every task in the project the same way, so tasks that became ready while it was paused start right away. Adding a connection doesn't go back over tasks that are already ready: start those by hand, for example with the start button in the editor's panel.
 
 A session in the cloud, or in a desktop app that isn't connected to PacedMind, can't hand its task back. **Mark finished** does it for the session, and the flow goes on from there. PacedMind notices finished Codex cloud tasks by itself.
 
 **Flow on** is set per project: in the **Flows** header, in the **Roadmap**'s session panel, or in **Settings → Projects and folders**. With the flow **Paused**, nothing starts on its own; connections still show the order, and sessions can be started by hand.
 
-Tasks without connections leading to them, the first ones in a flow, don't start on their own, except when the project [starts after another one](#projects-in-sequence) and that one finishes. Start them yourself, for example with the start button in the editor's panel.
+Tasks without connections leading to them, the first ones in a flow, don't start on their own, except when the project [starts after another one](#projects-in-sequence) and that one finishes, or has already finished when you switch the flow on. Start them yourself, for example with the start button in the editor's panel.
 
 **Same session** connections don't depend on **Flow on**: the agent carries on in its session even while the flow is paused.
 
@@ -57,7 +57,7 @@ The next task continues only when the agent hands the task before it back with `
 
 ## Projects in sequence
 
-A project can **start after** another one, set in the **Roadmap**'s session panel (**Starts after**, **After this project**) or by an agent. When every task in the first project's flow is done or canceled, marking the last one done starts the next project's flow: PacedMind starts the sessions of its first tasks, those without connections leading to them, if that project's flow is on.
+A project can **start after** another one, set in the **Roadmap**'s session panel (**Starts after**, **After this project**) or by an agent. When every task in the first project's flow is done or canceled, marking the last one done starts the next project's flow: PacedMind starts the sessions of its first tasks, those without connections leading to them, if that project's flow is on. If it's paused then, switching it on later starts them.
 
 ## Your own tasks
 

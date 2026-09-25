@@ -119,3 +119,23 @@ export function nextReadyTask(projectId: string): Task | null {
     .sort((a, b) => a.sortOrder - b.sortOrder);
   return open.find((t) => incoming(t.id, edges).every((e) => satisfied(e, tasks.get(e.fromTaskId), held))) ?? null;
 }
+
+/**
+ * Called when a project's flow is switched on: starts what it would have started while it was paused. That is
+ * the tasks whose connections are all ready and, if the project starts after another one whose flow is finished,
+ * its first tasks, as startNextProject does when that flow finishes.
+ */
+export function afterFlowOn(projectId: string): LaunchResult[] {
+  const snap = snapshot();
+  const { edges, tasks } = snap;
+  const own = [...tasks.values()].filter((t) => t.projectId === projectId).sort((a, b) => a.sortOrder - b.sortOrder);
+  const started = own.map((t) => maybeStart(t, snap)).filter((r): r is LaunchResult => r !== null);
+  const before = repo.getProject(projectId)?.afterProjectId;
+  const prior = before ? [...tasks.values()].filter((t) => t.projectId === before && t.flowX !== null) : [];
+  if (prior.length && prior.every((t) => t.status === "done" || t.status === "canceled")) {
+    for (const t of own) {
+      if (t.flowX !== null && (t.status === "todo" || t.status === "backlog") && !incoming(t.id, edges).length) started.push(startSession(t.id));
+    }
+  }
+  return started;
+}

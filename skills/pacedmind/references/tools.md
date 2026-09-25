@@ -20,7 +20,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 - `list_projects` (read): each project with progress, target date, agent, folder, flow and "starts after". Optional area filter.
 - `get_project` (read): the project's tasks in roadmap order, grouped by status, plus the next ready task.
 - `create_project`: name and area, plus optional color, start_date, target_date, folder, agent, starts_after and flow_on.
-- `update_project`: any of the above, including moving the project to another area (its tasks move with it). `color: "area"` makes it follow the area's color. Pass null to clear a field.
+- `update_project`: any of the above, including moving the project to another area (its tasks move with it). `color: "area"` makes it follow the area's color. Pass null to clear a field. Switching `flow_on` on starts the sessions of tasks that are already ready.
 - `delete_project`: its tasks stay in the area. Ask first.
 - `reorder_tasks`: the roadmap order of a project's tasks.
 

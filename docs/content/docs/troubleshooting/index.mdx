@@ -120,7 +120,7 @@ Requests without the right token get `401 Unauthorized`.
 
 Check, in order:
 
-1. **Was the flow on when the task before it finished?** PacedMind looks at **Automatically** and **Manually** connections only at that moment: when the agent hands the task back, or when it's marked done. Switching the flow on afterwards doesn't start what was missed; start it with the start button in the editor's panel.
+1. **Was the flow on when the task before it finished?** PacedMind looks at **Automatically** and **Manually** connections when the agent hands a task back, when a session is marked finished, when a task is marked done, and when the flow is switched on, which starts what was missed while it was paused. A connection added after the task before it finished isn't checked until then; start the task with the start button in the editor's panel.
 2. **Did the task before it hand its work back?** A session in the cloud, or in a desktop app that isn't connected to PacedMind, can't. Select **Mark finished** for it.
 3. **Is the task before it ready?** **Automatically** needs it **In review** or **Done**; **Manually** needs it **Done**. **At a set time** also waits for the time, and is checked every minute.
 4. **Is the next task Todo or Backlog?** Tasks already in progress, in review or finished don't start again.

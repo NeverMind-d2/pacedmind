@@ -7,7 +7,7 @@ import { checkThisDevice, connectClaude, connectCodex, thisDeviceId } from "@/se
 import { folderProblem } from "@/server/folders";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
 import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
-import { afterTaskDone, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges } from "@/server/ops";
+import { afterTaskDone, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject } from "@/server/ops";
 import { AGENT_LABEL, type AgentId, type EdgeMode, type Project, type Settings, type Surface } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -177,8 +177,7 @@ export async function deleteEdgeAction(edgeId: number) {
 }
 
 export async function setFlowOnAction(projectId: string, on: boolean) {
-  repo.updateProject(projectId, { flowOn: on });
-  return done();
+  return done({ ok: true, message: launched(saveProject(projectId, { flowOn: on })) });
 }
 
 /* ---------- projects and settings ---------- */
@@ -222,8 +221,7 @@ export async function deleteAreaAction(id: string) {
 }
 
 export async function updateProjectAction(id: string, patch: Partial<Omit<Project, "id">>) {
-  repo.updateProject(id, patch);
-  return done();
+  return done({ ok: true, message: launched(saveProject(id, patch)) });
 }
 
 export async function updateSettingsAction(patch: Partial<Settings>) {

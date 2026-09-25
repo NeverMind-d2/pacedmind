@@ -184,8 +184,8 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
   );
   const projects: [string, string, string, number, number, string | null, string | null, string | null][] = [
-    ["organizer", "dev", "Organizer app", -3, 22, process.cwd(), "claude", null],
-    ["chessv2", "dev", "ChessV2", 25, 50, "C:\\Users\\mikob\\Documents\\Projekty\\ChessV2\\chessv2", "codex", "organizer"],
+    ["organizer", "dev", "Organizer app", -3, 22, null, "claude", null],
+    ["chessv2", "dev", "ChessV2", 25, 50, null, "codex", "organizer"],
     ["portfolio", "dev", "Portfolio site", 4, 43, null, "codex", null],
     ["q4", "work", "Q4 planning", -10, 7, null, null, null],
     ["move", "personal", "Apartment move", -3, 21, null, null, null],
@@ -288,10 +288,9 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insEv = conn.prepare("INSERT INTO session_events (session_id, at, kind, text) VALUES (?, ?, ?, ?)");
-  const folder = process.cwd();
-  insSession.run("seed18", ids["DEV-18"], "claude", folder, "agent/dev-18", "done", ago(60 * 72), ago(60 * 71), ago(60 * 70), "Scaffold ready.", null);
-  insSession.run("seed19", ids["DEV-19"], "claude", folder, "agent/dev-19", "done", ago(240), ago(190), ago(180), "List and detail views work.", null);
-  insSession.run("seed21", ids["DEV-21"], "claude", folder, "agent/dev-21", "finished", ago(50), ago(12), null, "MCP endpoint added at /api/mcp. Tests pass.", null);
+  insSession.run("seed18", ids["DEV-18"], "claude", null, "agent/dev-18", "done", ago(60 * 72), ago(60 * 71), ago(60 * 70), "Scaffold ready.", null);
+  insSession.run("seed19", ids["DEV-19"], "claude", null, "agent/dev-19", "done", ago(240), ago(190), ago(180), "List and detail views work.", null);
+  insSession.run("seed21", ids["DEV-21"], "claude", null, "agent/dev-21", "finished", ago(50), ago(12), null, "MCP endpoint added at /api/mcp. Tests pass.", null);
   insEv.run("seed21", ago(50), "started", "Session started in a new terminal");
   insEv.run("seed21", ago(49), "picked_up", "Claude read the task over MCP");
   insEv.run("seed21", ago(12), "finished", "MCP endpoint added at /api/mcp. Tests pass.");

@@ -73,7 +73,7 @@ export function dayLoads(tasks: Task[], sessions: Session[], from: string, days:
     for (const b of plan.blocks) add(dateOnly(b.start), "planned", minutesOf(timeOf(b.end)!) - minutesOf(timeOf(b.start)!));
   }
   for (const t of tasks) {
-    if (t.status !== "done" || !t.completedAt || t.agent) continue;
+    if (t.status !== "done" || !t.completedAt || (t.agent && t.agent !== "human")) continue;
     const day = dateOnly(t.completedAt);
     if (day >= from && day < today) add(day, "done", t.estimateMin);
   }

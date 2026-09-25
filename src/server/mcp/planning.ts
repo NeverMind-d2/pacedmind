@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { tx } from "../db";
 import { folderProblem } from "../folders";
 import { nextReadyTask } from "../flow";
-import { afterTaskDone, keepYoursOutOfFlow, startsAfterWouldLoop } from "../ops";
+import { afterTaskDone, keepYoursOutOfFlow, saveProject, startsAfterWouldLoop } from "../ops";
 import * as repo from "../repo";
 import { usage } from "../views";
 import { nextColor } from "@/lib/colors";
@@ -309,7 +309,7 @@ export function registerPlanningTools(server: McpServer) {
       target_date: dateInput.nullable().optional(),
       folder: z.string().nullable().optional().describe("Absolute folder path for agent sessions"),
       agent: agentSchema.nullable().optional(),
-      flow_on: z.boolean().optional(),
+      flow_on: z.boolean().optional().describe("Switching it on also starts the sessions of the tasks that are ready now"),
       starts_after: projectRef.nullable().optional().describe("A project that must be finished first, or null for none"),
     }),
     kind: "write",
@@ -328,7 +328,7 @@ export function registerPlanningTools(server: McpServer) {
       if (after.id === p.id || startsAfterWouldLoop(p.id, after.id)) fail(`${p.name} can't start after ${after.name}: they would wait for each other.`);
       afterProjectId = after.id;
     }
-    repo.updateProject(p.id, {
+    const started = saveProject(p.id, {
       name: args.name?.trim(),
       areaId: args.area ? findArea(args.area).id : undefined,
       color: args.color === undefined ? undefined : /^area$/i.test(args.color.trim()) ? null : colorFrom(args.color),
@@ -339,7 +339,7 @@ export function registerPlanningTools(server: McpServer) {
       flowOn: args.flow_on,
       afterProjectId,
     });
-    return `Updated ${projectLine(repo.getProject(p.id)!, names(), undefined)}.`;
+    return [`Updated ${projectLine(repo.getProject(p.id)!, names(), undefined)}.`, ...launched(started)].join("\n");
   });
 
   tool(server, "delete_project", {
