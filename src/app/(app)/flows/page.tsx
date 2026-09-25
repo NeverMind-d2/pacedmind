@@ -1,5 +1,6 @@
-import { FlowView, type FlowTask } from "@/components/views/flow";
+import { FlowView, type FlowDevice, type FlowTask } from "@/components/views/flow";
 import { Icon } from "@/components/icons";
+import { thisDevice } from "@/server/devices";
 import * as repo from "@/server/repo";
 import { projectColor } from "@/lib/colors";
 import { nowStamp, parseLocal } from "@/lib/dates";
@@ -66,11 +67,18 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
     })
     .map((s) => s.taskId);
 
+  // This computer first, then the other computers PacedMind runs on.
+  const me = thisDevice();
+  const devices: FlowDevice[] = [me, ...repo.listDevices().filter((d) => d.id !== me.id)].map((d) => ({
+    id: d.id, name: d.name, here: d.id === me.id, checked: !!d.checkedAt, agents: d.agents,
+  }));
+
   // Tasks that are yours ("human") never run as agent sessions, so they aren't offered to the flow.
   const flowTasks: FlowTask[] = tasks.flatMap((t) => {
     const agent = agentOf(t, project.agent);
     return agent ? [{
       id: t.id, key: t.key, title: t.title, status: t.status, agent,
+      runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? me.id, folder: t.folder ?? project.folder, ownFolder: !!t.folder,
       flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt,
     }] : [];
   });
@@ -80,8 +88,12 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   return (
     <FlowView
       key={project.id}
-      project={{ id: project.id, name: project.name, flowOn: project.flowOn, folder: project.folder, color: projectColor(project, areas) }}
+      project={{
+        id: project.id, name: project.name, flowOn: project.flowOn, folder: project.folder, color: projectColor(project, areas),
+        codexEnv: project.codexEnv,
+      }}
       projects={projects.map((p) => ({ id: p.id, name: p.name, color: projectColor(p, areas), inFlow: inFlow(p.id) }))}
+      devices={devices}
       tasks={flowTasks}
       yours={yours}
       edges={edges}

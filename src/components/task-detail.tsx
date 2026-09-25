@@ -3,17 +3,25 @@
 import { useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import {
-  addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, markSessionDoneAction, resumeSessionAction,
-  startSessionAction, toggleSubtaskAction, updateTaskAction,
+  addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction,
+  resumeSessionAction, startSessionAction, toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
 import { dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf, type AgentId, type Doer, type Priority, type Session, type SessionEvent,
-  type Status, type Task, type TaskContext,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf,
+  type AgentId, type Doer, type Priority, type Session, type SessionEvent, type Status, type Surface, type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
-import { Icon, PriorityIcon, StatusIcon } from "./icons";
+import { AgentIcon, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
 import { Button, Dot, IconButton, Menu, cx, useAction } from "./ui";
+
+/** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
+const placeOf = (agent: AgentId, surface: Surface) =>
+  surface === "cloud" ? `in ${CLOUD_LABEL[agent]}` : surface === "desktop" ? `in the ${APP_LABEL[agent]}` : "in a terminal";
+
+/** A doer's icon: the agent's mark, or a person for tasks that are yours. */
+const DoerIcon = ({ doer, size }: { doer: Doer | null; size: number }) =>
+  doer === "human" ? <Icon name="user" size={size} /> : doer ? <AgentIcon agent={doer} size={size - 1} /> : <Icon name="terminal" size={size} />;
 
 const ESTIMATES = [15, 30, 45, 60, 90, 120, 180, 240];
 
@@ -33,8 +41,15 @@ function sessionHead(s: Session, events: SessionEvent[]): { dot: string; text: s
   switch (s.status) {
     case "starting":
     case "running":
-      if (waitingInTerminal(s, events)) return { dot: "var(--color-accent)", text: `${who} hasn't checked in yet. It may be waiting for you in its terminal.` };
-      return { dot: "var(--color-fg3)", text: `Running in ${who} since ${fmtTime(s.startedAt)}` };
+      if (s.surface !== "cloud" && waitingInTerminal(s, events)) {
+        return {
+          dot: "var(--color-accent)",
+          text: s.surface === "desktop"
+            ? `Opened in the ${APP_LABEL[s.agent]}. Send the first message there to start.`
+            : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`,
+        };
+      }
+      return { dot: "var(--color-fg3)", text: `Running ${s.surface === "terminal" ? `in ${who}` : placeOf(s.agent, s.surface)} since ${fmtTime(s.startedAt)}` };
     case "finished":
       return { dot: "var(--color-accent)", text: `${who} finished at ${fmtTime(s.finishedAt ?? s.startedAt)} · waiting for you` };
     case "done":
@@ -137,13 +152,18 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             <Menu width={240}
               trigger={
                 <button type="button" className={cx(pv, !task.agent && "text-mut2")}>
-                  <Icon name={task.agent === "human" ? "user" : "terminal"} size={14} />
+                  <DoerIcon doer={task.agent ?? project?.agent ?? null} size={14} />
                   {task.agent ? DOER_LABEL[task.agent] : project?.agent ? `${AGENT_LABEL[project.agent]}, the project's default` : "Not decided"}
                 </button>
               }
-              items={doers.map((d) => ({ ...d, icon: <Icon name={d.value === "human" ? "user" : "terminal"} size={13} /> }))}
+              items={doers.map((d) => ({ ...d, icon: <DoerIcon doer={d.value ?? project?.agent ?? null} size={13} /> }))}
               onSelect={(v) => save({ agent: v })} />
           </Prop>
+          {agent && (
+            <Prop label="Folder">
+              <FolderProp task={task} projectFolder={project?.folder ?? null} onSave={(folder) => save({ folder })} />
+            </Prop>
+          )}
           <Prop label="Labels">
             <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
               {task.labels.map((l) => (
@@ -165,22 +185,29 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           <Prop label="Session">
             {session && session.status !== "failed" ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>
-                <Icon name="terminal" size={14} />{AGENT_LABEL[session.agent]}
-                <span className="truncate text-mut2">{session.status === "finished" ? "finished" : session.status}</span>
+                <AgentIcon agent={session.agent} size={13} />{AGENT_LABEL[session.agent]}
+                <span className="truncate text-mut2">{session.status === "finished" ? "finished" : session.status} {placeOf(session.agent, session.surface)}</span>
               </a>
             ) : !agent ? (
               <span className="px-2 text-mut2">None, this one is yours</span>
             ) : (
               <div className="flex px-2">
-                <div className="flex h-[26px] overflow-hidden rounded-md border border-ctl">
-                  <button type="button" disabled={pending} onClick={() => run(() => startSessionAction(task.id, agent))}
-                    className="flex items-center gap-1.5 px-2.5 text-[12px] text-fg hover:bg-hover">
-                    <Icon name="terminal" size={13} />Start in {AGENT_LABEL[agent]}
+                {/* No overflow-hidden here: it would clip the menu. The halves round their own corners. */}
+                <div className="flex h-[26px] rounded-md border border-ctl">
+                  <button type="button" disabled={pending} onClick={() => run(() => startSessionAction(task.id, agent, task.runIn ?? undefined))}
+                    title={task.runIn ? `Runs ${placeOf(agent, task.runIn)}` : "Runs in a terminal when the CLI is installed, else in the desktop app"}
+                    className="flex items-center gap-1.5 rounded-l-[5px] px-2.5 text-[12px] text-fg hover:bg-hover">
+                    <AgentIcon agent={agent} size={12} />Start with {AGENT_LABEL[agent]}
                   </button>
-                  <Menu align="right" width={180}
-                    trigger={<button type="button" aria-label="Choose agent" className="flex h-full w-6 items-center justify-center border-l border-ctl text-mut hover:bg-hover"><Icon name="chevronDown" size={12} /></button>}
-                    items={(["claude", "codex"] as AgentId[]).map((a) => ({ value: a, label: `Start in ${AGENT_LABEL[a]}` }))}
-                    onSelect={(a) => run(() => startSessionAction(task.id, a))} />
+                  <Menu align="right" width={250} className="flex"
+                    trigger={<button type="button" aria-label="Choose agent and where it runs" className="flex h-full w-6 items-center justify-center rounded-r-[5px] border-l border-ctl text-mut hover:bg-hover"><Icon name="chevronDown" size={12} /></button>}
+                    items={(["claude", "codex"] as AgentId[]).flatMap((a) => (["terminal", "desktop", "cloud"] as Surface[]).map((s) => ({
+                      value: `${a}:${s}`, label: s === "cloud" ? CLOUD_LABEL[a] : `${AGENT_LABEL[a]} ${placeOf(a, s)}`, icon: <SurfaceIcon surface={s} size={13} />,
+                    })))}
+                    onSelect={(v) => {
+                      const [a, s] = v.split(":") as [AgentId, Surface];
+                      run(() => startSessionAction(task.id, a, s));
+                    }} />
                 </div>
               </div>
             )}
@@ -196,8 +223,20 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             {session.note && session.status !== "failed" && <p className="text-[12.5px] leading-relaxed text-mut">“{session.note}”</p>}
             <div className="truncate font-mono text-[11px] text-mut2">{session.folder}{session.branch ? ` · ${session.branch}` : ""}</div>
             <div className="mt-0.5 flex flex-wrap gap-2">
-              {!active && session.status !== "failed" && (
+              {!active && session.status !== "failed" && session.surface === "terminal" && (
                 <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="terminal" size={13} />Resume in terminal</Button>
+              )}
+              {session.surface === "desktop" && session.status !== "failed" && (
+                <Button onClick={() => run(() => resumeSessionAction(session.id))}><Icon name="appWindow" size={13} />Open the {APP_LABEL[session.agent]}</Button>
+              )}
+              {session.surface === "cloud" && session.url && (
+                <a href={session.url} target="_blank" rel="noreferrer"
+                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
+                  <Icon name="cloud" size={13} />Open in the cloud
+                </a>
+              )}
+              {active && session.surface !== "terminal" && (
+                <Button onClick={() => run(() => finishSessionAction(session.id))}><Icon name="check" size={13} />Mark finished</Button>
               )}
               {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
                 <Button onClick={() => run(() => startSessionAction(task.id, agent))}><Icon name="plus" size={13} />New session</Button>
@@ -249,6 +288,40 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
         </div>
       </div>
     </aside>
+  );
+}
+
+/** The folder a task's sessions work in: its own, or its project's. Click to type one; empty goes back to the project's. */
+function FolderProp({ task, projectFolder, onSave }: { task: Task; projectFolder: string | null; onSave: (folder: string | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(task.folder ?? "");
+  const shown = task.folder ?? projectFolder;
+  const save = () => {
+    setEditing(false);
+    const next = draft.trim() || null;
+    const own = next && next !== projectFolder ? next : null;
+    if (own !== task.folder) onSave(own);
+  };
+  if (editing) {
+    return (
+      <input autoFocus value={draft} aria-label="Folder for this task" placeholder={projectFolder ?? "C:\\path\\to\\folder"}
+        onChange={(e) => setDraft(e.target.value)} onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") { e.stopPropagation(); setDraft(task.folder ?? ""); setEditing(false); }
+        }}
+        className="h-7 w-full rounded-md border border-ctl bg-input px-2 font-mono text-[11.5px] text-fg2 outline-none" />
+    );
+  }
+  return (
+    <button type="button" onClick={() => { setDraft(task.folder ?? ""); setEditing(true); }} className={cx(pv, "w-full min-w-0")}
+      title={shown ? `${shown}\nClick to give this task its own folder` : "Click to give this task a folder"}>
+      <Icon name="folder" size={14} className="shrink-0" />
+      <span className={cx("min-w-0 truncate font-mono text-[11.5px]", !shown && "font-sans text-[12.5px] text-mut2")}>
+        {shown ?? "PacedMind workspace"}
+      </span>
+      <span className="shrink-0 text-[11.5px] text-mut2">{task.folder ? "own" : shown ? "project's" : ""}</span>
+    </button>
   );
 }
 

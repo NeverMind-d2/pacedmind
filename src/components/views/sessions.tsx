@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { closeSessionAction, markSessionDoneAction, resumeSessionAction, startSessionAction } from "@/app/actions";
-import { Icon } from "@/components/icons";
+import { closeSessionAction, finishSessionAction, markSessionDoneAction, resumeSessionAction, startSessionAction } from "@/app/actions";
+import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
-import { AGENT_LABEL, type AgentId, type SessionEvent, type SessionStatus } from "@/lib/types";
+import { AGENT_LABEL, APP_LABEL, CLOUD_LABEL, type AgentId, type SessionEvent, type SessionStatus, type Surface } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
 
@@ -16,6 +16,11 @@ export interface SessionItem {
   id: string;
   status: SessionStatus;
   agent: AgentId;
+  /** Where it runs: a terminal or the desktop app on `device`, or the agent's cloud. */
+  surface: Surface;
+  device: string | null;
+  /** Where to follow it, e.g. its Codex cloud task. */
+  url: string | null;
   folder: string | null;
   branch: string | null;
   startedAt: string;
@@ -92,13 +97,30 @@ function duration(span: number): string {
   return `${Math.floor(h / 24)} d ${h % 24} h`;
 }
 
+/** A session on a device whose agent hasn't checked in: waiting in its terminal, or for you to send it in the app. */
+const unheard = (s: SessionItem, now: number) => s.surface !== "cloud" && waitingInTerminal(s, s.events, new Date(now));
+
+/** "a terminal on mikolaj_pc", "the Claude app on mikolaj_pc" or "Claude Code on the web". */
+function place(s: SessionItem): string {
+  if (s.surface === "cloud") return CLOUD_LABEL[s.agent];
+  const on = s.device ? ` on ${s.device}` : "";
+  return s.surface === "desktop" ? `the ${APP_LABEL[s.agent]}${on}` : `a terminal${on}`;
+}
+
+/** "Terminal on mikolaj_pc", "Claude app on mikolaj_pc" or "Claude Code on the web". */
+function placeTitle(s: SessionItem): string {
+  if (s.surface === "cloud") return CLOUD_LABEL[s.agent];
+  return `${s.surface === "desktop" ? APP_LABEL[s.agent] : "Terminal"}${s.device ? ` on ${s.device}` : ""}`;
+}
+
 function meta(s: SessionItem, now: number): string {
   switch (s.status) {
     case "finished":
       return `finished ${clock(s.finishedAt ?? s.startedAt, now)}`;
     case "starting":
     case "running":
-      return waitingInTerminal(s, s.events, new Date(now)) ? "waiting in its terminal" : `since ${clock(s.startedAt, now)}`;
+      if (unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
+      return `${s.surface === "cloud" ? "in the cloud " : ""}since ${clock(s.startedAt, now)}`;
     case "done":
       return `done ${clock(s.endAt ?? s.startedAt, now)}`;
     case "closed":
@@ -110,12 +132,16 @@ function meta(s: SessionItem, now: number): string {
 
 function headline(s: SessionItem, now: number): string {
   const who = AGENT_LABEL[s.agent];
-  if (waitingInTerminal(s, s.events, new Date(now))) return `${who} hasn't checked in yet. It may be waiting for you in its terminal.`;
+  if (unheard(s, now)) {
+    return s.surface === "desktop"
+      ? `Opened in the ${APP_LABEL[s.agent]}. Send the first message there to start.`
+      : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`;
+  }
   switch (s.status) {
     case "starting":
-      return `Starting ${who} since ${clockLong(s.startedAt, now)}`;
+      return s.surface === "cloud" ? `Sending to ${CLOUD_LABEL[s.agent]} since ${clockLong(s.startedAt, now)}` : `Starting ${who} since ${clockLong(s.startedAt, now)}`;
     case "running":
-      return `Running in ${who} since ${clockLong(s.startedAt, now)}`;
+      return s.surface === "terminal" ? `Running in ${who} since ${clockLong(s.startedAt, now)}` : `Running in ${place(s)} since ${clockLong(s.startedAt, now)}`;
     case "finished":
       return `${who} finished at ${clockLong(s.finishedAt ?? s.startedAt, now)} · waiting for you`;
     case "done":
@@ -243,7 +269,10 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
       <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2">{s.task?.key ?? "—"}</span>
       <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? "Deleted task"}</span>
       <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project?.name ?? "No project"}</span>
-      <span className="hidden w-[90px] shrink-0 text-[12px] text-mut2 @2xl:block">{AGENT_LABEL[s.agent]}</span>
+      <span title={`${AGENT_LABEL[s.agent]} in ${place(s)}`} className="hidden w-[110px] shrink-0 items-center gap-1.5 text-[12px] text-mut2 @2xl:flex">
+        <AgentIcon agent={s.agent} size={12} className="text-mut" />{AGENT_LABEL[s.agent]}
+        <SurfaceIcon surface={s.surface} size={11} className="text-dim" />
+      </span>
       <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px]", s.status === "finished" ? "text-fg2" : "text-mut2")}>
         {meta(s, now)}
       </span>
@@ -257,10 +286,11 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
   const worked = workedFor(s, now);
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
-    s.origin === "outside" ? "outside PacedMind" : s.origin === "continued" ? "in the same terminal" : "from PacedMind"
+    s.origin === "outside" ? "outside PacedMind" : s.origin === "continued" ? "in the same session" : "from PacedMind"
   }`;
   const props: [string, ReactNode, boolean][] = [
-    ["Agent", AGENT_LABEL[s.agent], false],
+    ["Agent", <span key="a" className="flex items-center gap-1.5"><AgentIcon agent={s.agent} size={12} className="text-fg3" />{AGENT_LABEL[s.agent]}</span>, false],
+    ["Runs in", <span key="r" className="flex items-center gap-1.5"><SurfaceIcon surface={s.surface} size={12} className="text-mut" />{placeTitle(s)}</span>, false],
     ["Folder", s.folder ?? "—", true],
     ["Branch", s.branch ?? "—", true],
     ["Started", started, false],
@@ -325,14 +355,41 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
       </div>
 
       <div className="flex shrink-0 flex-col gap-3 border-t border-line pb-4 pl-6 pr-4 pt-3.5">
-        <div className="flex items-center gap-2">
-          {!active && s.status !== "failed" && (
+        <div className="flex flex-wrap items-center gap-2">
+          {!active && s.status !== "failed" && s.surface === "terminal" && (
             <Button disabled={pending} onClick={() => run(() => resumeSessionAction(s.id))}>
               <Icon name="terminal" size={13} strokeWidth={2} />Resume in terminal
             </Button>
           )}
+          {s.surface === "terminal" && s.agent === "claude" && s.cliSessionId && s.status !== "failed" && (
+            <Button disabled={pending} title="Moves this Claude Code conversation into the Claude app" onClick={() => run(() => resumeSessionAction(s.id, "desktop"))}>
+              <Icon name="appWindow" size={13} strokeWidth={2} />Continue in {APP_LABEL.claude}
+            </Button>
+          )}
+          {s.surface === "desktop" && s.status !== "failed" && (
+            <Button disabled={pending} onClick={() => run(() => resumeSessionAction(s.id))}>
+              <Icon name="appWindow" size={13} strokeWidth={2} />Open the {APP_LABEL[s.agent]}
+            </Button>
+          )}
+          {s.surface === "cloud" && s.url && (
+            <a href={s.url} target="_blank" rel="noreferrer"
+              className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
+              <Icon name="cloud" size={13} strokeWidth={2} />{s.url.includes("/tasks/") ? "Open the task" : `Open ${CLOUD_LABEL[s.agent]}`}
+            </a>
+          )}
+          {s.surface === "cloud" && s.agent === "claude" && s.status !== "failed" && (
+            <Button disabled={pending} title="Pulls the cloud session and its branch into a terminal (claude --teleport)" onClick={() => run(() => resumeSessionAction(s.id))}>
+              <Icon name="terminal" size={13} strokeWidth={2} />Pull into terminal
+            </Button>
+          )}
+          {active && s.surface !== "terminal" && (
+            <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check, and what comes next may start."
+              onClick={() => run(() => finishSessionAction(s.id))}>
+              <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
+            </Button>
+          )}
           {active && (
-            <Button disabled={pending} onClick={() => confirm("Close this session in PacedMind? The terminal stays open.") && run(() => closeSessionAction(s.id))}>
+            <Button disabled={pending} onClick={() => confirm(`Close this session in PacedMind? ${s.surface === "terminal" ? "The terminal stays open." : "It keeps running where it is."}`) && run(() => closeSessionAction(s.id))}>
               Close session
             </Button>
           )}

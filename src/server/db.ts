@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS areas (
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
   start_date TEXT, target_date TEXT, folder TEXT, agent TEXT, after_project_id TEXT,
-  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT
+  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT, device_id TEXT, codex_env TEXT
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'todo',
   priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
   labels TEXT NOT NULL DEFAULT '[]', reminder TEXT, agent TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
-  flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT
+  flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT,
+  run_in TEXT, device_id TEXT, folder TEXT
 );
 CREATE TABLE IF NOT EXISTS subtasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -35,7 +36,12 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, agent TEXT NOT NULL,
   folder TEXT, branch TEXT, status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, ended_at TEXT,
-  note TEXT, cli_session_id TEXT, continues_session_id TEXT
+  note TEXT, cli_session_id TEXT, continues_session_id TEXT,
+  surface TEXT NOT NULL DEFAULT 'terminal', device_id TEXT, url TEXT
+);
+CREATE TABLE IF NOT EXISTS devices (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, platform TEXT NOT NULL, agents TEXT NOT NULL DEFAULT '{}',
+  seen_at TEXT NOT NULL, checked_at TEXT
 );
 CREATE TABLE IF NOT EXISTS session_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -83,8 +89,15 @@ export function db(): DatabaseSync {
 
 /** Adds columns introduced after a database was first created. */
 function migrate(conn: DatabaseSync) {
-  const cols = (conn.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map((c) => c.name);
-  if (!cols.includes("color")) conn.exec("ALTER TABLE projects ADD COLUMN color TEXT");
+  const added: Record<string, [string, string][]> = {
+    projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"]],
+    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"]],
+    sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],
+  };
+  for (const [table, columns] of Object.entries(added)) {
+    const have = (conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+    for (const [name, type] of columns) if (!have.includes(name)) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  }
 }
 
 export function tx<T>(fn: () => T): T {

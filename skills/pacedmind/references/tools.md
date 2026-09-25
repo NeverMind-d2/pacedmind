@@ -36,6 +36,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
   - labels (replace, add or remove);
   - move to a project or area;
   - agent (`human` also takes the task out of its flow);
+  - where its agent sessions run (`runs_in`: `terminal`, `desktop` for the agent's desktop app, or `cloud`) and its own `folder`, when it shouldn't work in the project's folder (null goes back to the project's);
   - sub-tasks: add, complete, reopen or remove, by number or title.
   - Setting status done may start sessions that wait for the task in a flow.
 - `bulk_update_tasks`: the same status, priority, due, planned, `shift_days`, project, area or label change for up to 100 tasks.
@@ -52,7 +53,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 
 ## Agent flows
 
-- `get_flow` (read): a project's flow sessions and which agent runs each, what starts after what and how, whether the flow is on, and the next ready task.
+- `get_flow` (read): a project's flow sessions, which agent runs each and where (a terminal or the desktop app on which computer, or the cloud), what starts after what and how, whether the flow is on, and the next ready task.
 - `connect_tasks`: from → to, with mode auto, manual, same_session or at_time (plus `at`). It adds the tasks to the flow if needed. Call it again to change the mode.
 - `disconnect_tasks`: removes a connection.
 - `add_to_flow`: puts a task on the flow canvas, under the rest of the flow.
@@ -61,7 +62,7 @@ Every tool the `organizer` MCP server offers, grouped by purpose. The tool descr
 ## Agent sessions
 
 - `list_sessions` (read): filter by `waiting` (finished and needing review), `running` or `all`, and by project or task.
-- `start_session`: opens a terminal with Claude Code or Codex working on the task. Only when the user asks.
+- `start_session`: starts Claude Code or Codex working on the task, where the task says or where `where` says: `terminal`, `desktop` (the Claude or Codex app opens with the first message written; the user sends it) or `cloud` (Claude Code on the web, Codex cloud). Cloud sessions can't call PacedMind's tools, so the user marks them finished; PacedMind notices finished Codex cloud tasks by itself. Only when the user asks.
 - `close_session`: marks a stuck or abandoned session closed, and the task goes back to todo.
 
 ## Protocol for agents working on a task

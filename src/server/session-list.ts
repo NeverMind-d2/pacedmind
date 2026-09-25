@@ -29,6 +29,7 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
   const edges = repo.listEdges();
   const done = doneTimes();
   const byId = new Map(all.map((s) => [s.id, s]));
+  const devices = new Map(repo.listDevices().map((d) => [d.id, d.name]));
   const busy = new Set(all.filter(active).map((s) => s.taskId));
   const today = todayStr();
 
@@ -54,6 +55,9 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
       id: s.id,
       status: s.status,
       agent: s.agent,
+      surface: s.surface,
+      device: s.deviceId ? devices.get(s.deviceId) ?? null : null,
+      url: s.url,
       folder: s.folder,
       branch: s.branch,
       startedAt: s.startedAt,

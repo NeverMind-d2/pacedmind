@@ -2,12 +2,16 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { tx } from "../db";
-import { afterFinished, nextReadyTask } from "../flow";
+import { deviceFor } from "../devices";
+import { nextReadyTask } from "../flow";
 import { startSession } from "../launcher";
-import { closeSession, edgeWouldLoop, flowNeedsTidy, placeInFlow, removeFromFlow, tidyFlow } from "../ops";
+import {
+  activeSession, closeSession, edgeWouldLoop, finishTask, flowNeedsTidy, placeInFlow, removeFromFlow, startedLines, tidyFlow,
+} from "../ops";
 import * as repo from "../repo";
-import { nowStamp } from "@/lib/dates";
-import { AGENT_LABEL, STATUS_LABEL, agentOf, type AgentId, type EdgeMode, type Session, type Task } from "@/lib/types";
+import {
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, STATUS_LABEL, agentOf, surfaceOf, type AgentId, type EdgeMode, type Session, type Surface, type Task,
+} from "@/lib/types";
 import {
   agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, names, projectRef, taskRef, tool, when,
 } from "./common";
@@ -26,25 +30,31 @@ const SESSION_TEXT: Record<Session["status"], string> = {
   closed: "closed", failed: "failed",
 };
 
+/** "in a terminal on DESKTOP-1", "in the Claude app on DESKTOP-1" or "in Claude Code on the web". */
+function placeText(agent: AgentId, surface: Surface, deviceId: string | null): string {
+  if (surface === "cloud") return `in ${CLOUD_LABEL[agent]}`;
+  const device = deviceFor(deviceId, null).name;
+  return surface === "desktop" ? `in the ${APP_LABEL[agent]} on ${device}` : `in a terminal on ${device}`;
+}
+
 function sessionLine(s: Session): string {
   const t = repo.getTask(s.taskId);
   const at = (s.finishedAt ?? s.endedAt ?? s.startedAt).replace("T", " ");
-  return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} · ${SESSION_TEXT[s.status]} · ${at}${s.note ? ` · ${s.note}` : ""}`;
+  return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId)} · ${SESSION_TEXT[s.status]} · ${at}${s.note ? ` · ${s.note}` : ""}`;
 }
 
-/** The agent a task runs with: its own, else its project's, else Claude Code. */
 /** The agent that runs a task: its own, else the project's, else Claude Code. None for a task that is the user's own. */
 const agentFor = (t: Task): AgentId | null => agentOf(t, t.projectId ? repo.getProject(t.projectId)?.agent : null);
 const notYours = (t: Task) => {
   if (t.agent === "human") fail(`${t.key} is marked as the user's own task (human), so it stays out of flows and agent sessions. Ask the user before changing that with update_task.`);
 };
 
-function activeSession(taskId: number, sessionId?: string | null) {
-  if (sessionId) {
-    const s = repo.getSession(sessionId);
-    if (s && s.taskId === taskId) return s;
-  }
-  return repo.listSessions("task_id = ? AND status IN ('starting', 'running')", taskId)[0] ?? null;
+/** Where a task's sessions run, in words. */
+function runsText(t: Task): string {
+  const agent = agentFor(t) ?? "claude";
+  const project = t.projectId ? repo.getProject(t.projectId) : null;
+  const device = deviceFor(t.deviceId, project?.deviceId);
+  return placeText(agent, surfaceOf(t.runIn, device.agents[agent]), device.id);
 }
 
 export function registerAgentTools(server: McpServer) {
@@ -78,7 +88,7 @@ export function registerAgentTools(server: McpServer) {
         const how = inc.length
           ? `after ${inc.map((e) => `${keyOf.get(e.fromTaskId) ?? `#${e.fromTaskId}`} (${modeName(e.mode)}${e.mode === "time" && e.atTime ? ` ${e.atTime.replace("T", " ")}` : ""})`).join(", ")}`
           : "first, started by the user";
-        lines.push(`- ${t.key} · ${STATUS_LABEL[t.status]} · ${t.title} · ${how}`);
+        lines.push(`- ${t.key} · ${STATUS_LABEL[t.status]} · ${t.title} · ${how} · runs ${runsText(t)}`);
       }
     }
     if (!inFlow.length) lines.push("\nNo tasks in the flow yet. connect_tasks or add_to_flow adds them.");
@@ -193,14 +203,22 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "start_session", {
     title: "Start agent session",
     description:
-      "Open a new terminal on the user's computer with Claude Code or Codex working on a task, in the project's folder. Only when the user asks for it.",
-    input: z.object({ task: taskRef, agent: agentSchema.optional() }),
+      "Start Claude Code or Codex working on a task, where the task says unless `where` is given: in a terminal or the agent's desktop app on the user's computer, in the task's folder, or in the agent's cloud (Claude Code on the web, Codex cloud). Only when the user asks for it.",
+    input: z.object({
+      task: taskRef,
+      agent: agentSchema.optional(),
+      where: z.enum(["terminal", "desktop", "cloud"]).optional()
+        .describe("terminal, desktop (the Claude or Codex app, with the first message written for the user to send) or cloud"),
+    }),
     kind: "launch",
-  }, ({ task, agent }) => {
+  }, ({ task, agent, where }) => {
     const t = findTask(task);
-    const r = startSession(t.id, agent);
+    const r = startSession(t.id, { agent, surface: where });
     if (!r.ok || !r.session) fail(r.error ?? "The session didn't start.");
-    return `Started ${t.key} in ${AGENT_LABEL[r.session.agent]} (session ${r.session.id}). A terminal opened on the user's computer.`;
+    const s = r.session;
+    return `Started ${t.key} with ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId)} (session ${s.id}).` +
+      (s.surface === "desktop" ? " The first message is written there; the user sends it." : "") +
+      (s.surface === "cloud" ? " Cloud sessions can't report back to PacedMind; the user marks the task finished or done." : "");
   });
 
   tool(server, "close_session", {
@@ -266,26 +284,11 @@ export function registerAgentTools(server: McpServer) {
     kind: "write",
   }, ({ task, session, note }) => {
     const t = findTask(task);
-    const s = activeSession(t.id, session);
-    if (s) {
-      repo.updateSession(s.id, { status: "finished", finishedAt: nowStamp(), note });
-      repo.addSessionEvent(s.id, "finished", note);
-    }
-    repo.updateTask(t.id, { status: "review" });
-    const { continueWith, started } = afterFinished(t.id);
-    const lines = [`Recorded. ${t.key} is finished and waits for the user's check.`];
-    for (const r of started) {
-      if (r.ok && r.session) lines.push(`PacedMind started ${repo.getTask(r.session.taskId)?.key} in a new ${AGENT_LABEL[r.session.agent]} session.`);
-    }
-    if (continueWith) {
-      const next = repo.createSession({
-        taskId: continueWith.id, agent: s?.agent ?? "claude", folder: s?.folder ?? null, status: "running",
-        cliSessionId: s?.cliSessionId ?? null, continuesSessionId: s?.id ?? null,
-      });
-      repo.addSessionEvent(next.id, "started", `Continues session ${s?.id ?? ""} in the same terminal`);
-      repo.updateTask(continueWith.id, { status: "progress" });
+    const { continueWith, continued, started } = finishTask(t.id, session ?? null, note, "agent");
+    const lines = [`Recorded. ${t.key} is finished and waits for the user's check.`, ...startedLines(started)];
+    if (continueWith && continued) {
       lines.push(`\nNext in this same session: ${continueWith.key} · ${continueWith.title}.`);
-      lines.push(`Call start_task with task ${continueWith.key} and session ${next.id}, then keep working.`);
+      lines.push(`Call start_task with task ${continueWith.key} and session ${continued.id}, then keep working.`);
     } else {
       lines.push("You can stop here.");
     }

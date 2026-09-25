@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 import { tx } from "@/server/db";
 import * as repo from "@/server/repo";
-import type { AgentId, EdgeMode } from "@/lib/types";
+import type { AgentId, EdgeMode, Surface } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -40,6 +40,28 @@ export async function setAgentsAction(taskIds: number[], agent: AgentId): Promis
   if (!AGENTS.has(agent)) return { ok: false, error: "Unknown agent" };
   tx(() => {
     for (const id of taskIds) if (Number.isFinite(id) && repo.getTask(id)) repo.updateTask(id, { agent });
+  });
+  refresh();
+  return { ok: true };
+}
+
+const SURFACES = new Set<Surface>(["terminal", "desktop", "cloud"]);
+
+/**
+ * Sets where tasks' sessions run: in a terminal or the desktop app on a device, or in the agent's cloud. The canvas
+ * sends a task together with the tasks that share its session, since one session runs in one place.
+ */
+export async function setRunAction(taskIds: number[], patch: { runIn?: Surface | null; deviceId?: string | null }): Promise<Result> {
+  if (patch.runIn && !SURFACES.has(patch.runIn)) return { ok: false, error: "Unknown place to run" };
+  if (patch.deviceId && !repo.getDevice(patch.deviceId)) return { ok: false, error: "That device isn't connected to PacedMind" };
+  tx(() => {
+    for (const id of taskIds) {
+      if (!Number.isFinite(id) || !repo.getTask(id)) continue;
+      repo.updateTask(id, {
+        ...(patch.runIn !== undefined ? { runIn: patch.runIn } : {}),
+        ...(patch.deviceId !== undefined ? { deviceId: patch.deviceId } : {}),
+      });
+    }
   });
   refresh();
   return { ok: true };
