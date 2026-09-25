@@ -1,56 +1,15 @@
-# Hosting and search engines
+# Checks and search engines
 
-https://pacedmind.com is two static builds on the OVH VPS (Ubuntu 26.04, Caddy from Ubuntu's repositories), next to the web app at app.pacedmind.com: the home page (`site/out`) in `/srv/pacedmind/site`, and the docs (`docs/out`, basePath `/docs`) in `/srv/pacedmind/docs`, served at `/docs`. The repository's `deploy/` sets up the server and uploads all three. `Caddyfile` here is the server's whole Caddy configuration; `nginx.conf` is the same setup for Nginx.
-
-## DNS
-
-In the OVHcloud Control Panel (Web Cloud → Domain names → pacedmind.com → DNS zone), point both `pacedmind.com` and `www.pacedmind.com` at the VPS: an A record with its IPv4 address, and an AAAA record with its IPv6 address if it has one. The server redirects www to the bare domain.
-
-## Build and upload
-
-Build from a clone with its full history: both sitemaps date each page by the last commit that changed it. A shallow clone (`git clone --depth 1`, CI's default) gives every page the same date; `git fetch --unshallow` fixes that.
-
-```bash
-(cd site && npm ci && npm run build)
-(cd docs && npm ci && npm run build)   # includes scripts/postbuild.mjs, which moves out/en/ to out/
-```
-
-Compress the text files once, so every browser gets Brotli or gzip without the server compressing each request. That includes the docs' Markdown copies and their search index, a 2.9 MB JSON file without an extension:
-
-```bash
-find site/out docs/out -type f \( -name '*.html' -o -name '*.txt' -o -name '*.xml' -o -name '*.md' -o -name '*.js' -o -name '*.css' -o -name '*.svg' -o -name '*.webmanifest' -o -name '*.ico' -o -path '*/api/search' \) -exec brotli -kf -q 11 {} + -exec gzip -kf -9 {} +
-```
-
-Then `deploy/deploy.sh` (in the repository's root) uploads each `out/` folder to its own folder on the server, replacing what was there, so either can change on its own.
-
-## Server
-
-**Caddy** gets and renews the certificates itself. `Caddyfile` works with Caddy 2.6.2, the version Ubuntu 26.04 ships, and later ones. It includes the web app's block, so it can replace `/etc/caddy/Caddyfile` as it is:
-
-```bash
-caddy validate --config /etc/caddy/Caddyfile
-systemctl reload caddy
-```
-
-`deploy/deploy.sh` currently writes its own, shorter Caddyfile over `/etc/caddy/Caddyfile` on every deploy, which would undo this one. That one has no 404 pages or statuses, no redirects to one URL per page and no noindex or cache headers, and its `try_files {path} {path}/ {path}.html` sends docs section pages such as `/docs/views` to their folder, which answers 404. deploy.sh should install this file instead.
-
-**Nginx** needs the certificate before its HTTPS servers can start. Enable only the first `server` block (port 80), then:
-
-```bash
-mkdir -p /var/www/letsencrypt
-certbot certonly --webroot -w /var/www/letsencrypt -d pacedmind.com -d www.pacedmind.com --deploy-hook "systemctl reload nginx"
-```
-
-Then enable the whole file, and run `nginx -t && systemctl reload nginx`.
+https://pacedmind.com is two static builds on the OVH VPS (Ubuntu 26.04, Caddy from Ubuntu's repositories), next to the web app at app.pacedmind.com: the home page (`site/out`) in `/srv/pacedmind/site`, and the docs (`docs/out`, basePath `/docs`) in `/srv/pacedmind/docs`, served at `/docs`. The repository's `deploy/` sets up the server, holds its whole Caddy config (`deploy/Caddyfile`) and uploads all three: see `deploy/README.md`. This page has the checks after a deploy and the setup for search engines.
 
 ## Check
 
 ```bash
-curl -sI http://pacedmind.com/                # 308 (Caddy) or 301 (Nginx) to https://pacedmind.com/
+curl -sI http://pacedmind.com/                # 308 to https://pacedmind.com/
 curl -sI "http://www.pacedmind.com/?a=1"      # 301 to https://pacedmind.com/?a=1, in one hop
 curl -sI https://pacedmind.com/index.html     # 301 to /
 curl -sI https://pacedmind.com/nope           # 404, the site's 404 page
-curl -sI -H 'Accept-Encoding: br' https://pacedmind.com/   # content-encoding: br, cache-control: no-cache
+curl -sI -H 'Accept-Encoding: gzip' https://pacedmind.com/ # content-encoding: gzip, cache-control: no-cache
 curl -sI https://pacedmind.com/docs/          # 301 to /docs
 curl -sI https://pacedmind.com/docs/nope      # 404, the docs' 404 page
 curl -sI https://pacedmind.com/docs/views/timeline.mdx     # text/markdown, x-robots-tag: noindex
@@ -89,4 +48,4 @@ Bing's index also feeds Microsoft Copilot and DuckDuckGo, and some AI answer eng
 
 - A new page on the site: give it `pageMetadata("/path")` (lib/seo.ts) and add it to `app/sitemap.ts` with the files it's made of. Never list a URL that robots.txt disallows.
 - New robots rules in the docs app: repeat them in `site/app/robots.ts` with the `/docs` prefix, because only the root robots.txt counts. Today the docs disallow nothing.
-- A new domain: `SITE.url` in `site/lib/site.ts`, `siteUrl` in `docs/src/lib/shared.ts`, the host names in `Caddyfile` or `nginx.conf`, and a new Search Console property.
+- A new domain: `SITE.url` in `site/lib/site.ts`, `siteUrl` in `docs/src/lib/shared.ts`, the host names in `deploy/Caddyfile`, and a new Search Console property.

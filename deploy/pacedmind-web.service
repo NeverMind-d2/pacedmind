@@ -1,0 +1,31 @@
+# The hosted PacedMind web app (ORGANIZER_MODE=web), behind Caddy. Install:
+#   sudo cp deploy/pacedmind-web.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pacedmind-web
+[Unit]
+Description=PacedMind web app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pacedmind
+WorkingDirectory=/srv/pacedmind/app/.next/standalone
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+# Only Caddy on this machine talks to it.
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+Environment=NODE_ENV=production
+Environment=ORGANIZER_MODE=web
+# Dates like "today" are computed in this time zone (see AGENTS.md).
+Environment=TZ=Europe/Warsaw
+# SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (public values; see .env.example).
+EnvironmentFile=/srv/pacedmind/web.env
+NoNewPrivileges=true
+ProtectSystem=strict
+# Next writes its cache next to the build.
+ReadWritePaths=/srv/pacedmind/app/.next
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,13 +1,14 @@
-# The VPS's whole /etc/caddy/Caddyfile: the web app at app.pacedmind.com, and on pacedmind.com the
-# home page (site/out in /srv/pacedmind/site) and the docs (docs/out in /srv/pacedmind/docs, served at
-# /docs), both static (deploy/README.md). Works with Caddy 2.6.2, the version Ubuntu 26.04 ships.
-# Caddy gets and renews the HTTPS certificates itself and redirects http:// to https://.
-# Check and load it with: caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+# The VPS's whole Caddy config: the web app at app.pacedmind.com, and on pacedmind.com the home page
+# (site/out in /srv/pacedmind/site) and the docs (docs/out in /srv/pacedmind/docs, served at /docs),
+# both static. Works with Caddy 2.6.2, the version Ubuntu 26.04 ships.
+#
+# deploy.sh installs it as /etc/caddy/Caddyfile next to app.caddy (this folder's app.caddy, or
+# app-placeholder.caddy before the web app launches), after `caddy validate` has passed, and reloads
+# Caddy. Caddy gets and renews the HTTPS certificates itself and redirects http:// to https://.
 
-# The web app, as in the repository's deploy/ (before it launches, deploy.sh redirects this host to the site).
+# The web app, or a redirect to the site before it launches.
 app.pacedmind.com {
-	encode zstd gzip
-	reverse_proxy 127.0.0.1:3000
+	import app.caddy
 }
 
 # The one canonical host is pacedmind.com; www is only a way in, in one hop from http:// too.
@@ -77,8 +78,6 @@ pacedmind.com {
 		@notpage path /docs/404.html /docs/_not-found.html
 		error @notpage 404
 		file_server {
-			# Serves the .br and .gz files made before upload; `encode` compresses the rest.
-			precompressed br gzip
 			disable_canonical_uris
 		}
 	}
@@ -90,7 +89,6 @@ pacedmind.com {
 		@notpage path /404.html /_not-found.html
 		error @notpage 404
 		file_server {
-			precompressed br gzip
 			disable_canonical_uris
 		}
 	}

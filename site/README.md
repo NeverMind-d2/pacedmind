@@ -9,11 +9,11 @@ npm run dev      # http://127.0.0.1:4330
 npm run build    # static files in out/
 ```
 
-The site runs at https://pacedmind.com, with the docs (`../docs`, also a static export) at `/docs` on the same domain. `deploy/` has the server setup for both, for Caddy or Nginx, and the steps for Google Search Console and Bing Webmaster Tools. Any static host works if it does what those configs do: serve `{path}.html` for `{path}`, answer unknown addresses with `404.html` and a 404 status, and redirect `www` and `http://` to `https://pacedmind.com`. Before the first deploy, set the repository and the download links in `lib/site.ts`.
+The site runs at https://pacedmind.com, with the docs (`../docs`, also a static export) at `/docs` on the same domain. The server setup and the deploy script for both are in the repository's `deploy/` (see `deploy/Caddyfile`), and `deploy/README.md` here has the steps for Google Search Console and Bing Webmaster Tools. Any static host works if it does what the Caddyfile does: serve `{path}.html` for `{path}`, answer unknown addresses with `404.html` and a 404 status, and redirect `www` and `http://` to `https://pacedmind.com`. Before launch, set the download links in `lib/site.ts`.
 
-## Cloud price
+## Prices
 
-Cloud costs the same as Spotify Premium Individual in each country (in India, where that plan is called Premium Standard). The prices are in `prices.json`. Visitors see the price for their country, guessed from their time zone and then their browser language, and can pick another country. Anyone else sees the US price. The page itself never names Spotify: it says "a music subscription".
+There are two plans, and both start with 7 days free. Cloud costs the same as Spotify Premium Individual in each country (in India, where that plan is called Premium Standard); One device costs half of that (`ONE_DEVICE_SHARE` in `lib/content.ts`, rounded to the cent by `planAmount()` in `lib/markets.ts`). The prices are in `prices.json`. Visitors see the prices for their country, guessed from their time zone and then their browser language, and can pick another country. Anyone else sees the US price. The page itself never names Spotify: it says "a music subscription".
 
 Check the prices regularly:
 

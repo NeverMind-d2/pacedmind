@@ -33,98 +33,30 @@ Everything lives under `/docs` (`basePath: '/docs'`), so search authority stays 
 | `/docs/robots.txt` | Inert: crawlers only read robots.txt at the domain root. |
 | `/docs/404.html` | The page for unknown addresses. |
 
-### For the home page's SEO files
+### What the home page's files say about the docs
 
-`../site` owns the root files. They should point to the docs:
+`../site` owns the files at the domain root, where crawlers look for them:
 
-* `https://pacedmind.com/robots.txt`: add `Sitemap: https://pacedmind.com/docs/sitemap.xml` (or list it in a sitemap index), and don't disallow `/docs/llms.mdx/` or `/docs/og/`: AI assistants read the Markdown copies, and link previews (X honours robots.txt) fetch the images.
-* `https://pacedmind.com/llms.txt`: link to `https://pacedmind.com/docs/llms.txt` and `https://pacedmind.com/docs/llms-full.txt`.
+* `https://pacedmind.com/robots.txt` (`site/app/robots.ts`) lists `https://pacedmind.com/docs/sitemap.xml` and disallows nothing under `/docs`. AI assistants read the Markdown copies in `/docs/llms.mdx/`, and link previews (X's crawler follows robots.txt) fetch the images in `/docs/og/`.
+* `https://pacedmind.com/llms.txt` (`site/lib/llms.ts`) links to `/docs/llms.txt` and `/docs/llms-full.txt`, and the docs' `llms.txt` links back to it.
+* The docs' JSON-LD points at the home page's Organization, WebSite and SoftwareApplication by `@id` (`schemaIds` in `src/lib/shared.ts`) instead of describing PacedMind again.
 
-To keep the Markdown copies out of search results, the web server sends `X-Robots-Tag: noindex` for `/docs/llms.mdx/` (below).
+The web server keeps the Markdown copies, the search index and the navigation files out of search results with an `X-Robots-Tag: noindex` header.
 
 ## Deploy
 
-Put the two static builds in one folder: the home page at its root and the docs in `docs/` inside it.
+The server setup is in the repository's `deploy/`: `deploy/Caddyfile` is the whole Caddy config for pacedmind.com and its `/docs`, and `deploy/deploy.sh` uploads `site/out` and `docs/out` (see `deploy/README.md`). Build first:
 
 ```bash
-(cd site && npm run build)
-(cd docs && npm run build)
-rsync -a --delete --exclude /docs/ site/out/ server:/srv/pacedmind/www/
-rsync -a --delete docs/out/ server:/srv/pacedmind/www/docs/
+(cd docs && npm ci && npm run build)
+APP_PLACEHOLDER=1 deploy/deploy.sh ubuntu@<server>
 ```
 
-The docs' files already carry the `/docs` prefix in every link and asset URL, so they work from that folder as they are.
+`docs/out` goes to `/srv/pacedmind/docs`, served at `/docs`. The docs' files already carry the `/docs` prefix in every link and asset URL. Whatever serves them has to:
 
-### Caddy
-
-```caddy
-pacedmind.com {
-	root * /srv/pacedmind/www
-	encode zstd gzip
-
-	# Optional: /docs/<page>.mdx returns the page as Markdown, as on Fumadocs sites with a server.
-	@mdx path_regexp mdx ^/docs/(.+)\.mdx$
-	rewrite @mdx /docs/llms.mdx/{re.mdx.1}/content.md
-
-	header /docs/llms.mdx/* {
-		Content-Type "text/markdown; charset=utf-8"
-		X-Robots-Tag "noindex"
-	}
-	header /docs/api/search Content-Type "application/json"
-	header /_next/static/* Cache-Control "public, max-age=31536000, immutable"
-	header /docs/_next/static/* Cache-Control "public, max-age=31536000, immutable"
-
-	try_files {path} {path}.html {path}/index.html
-	file_server
-
-	handle_errors 404 {
-		@docs path /docs /docs/*
-		rewrite @docs /docs/404.html
-		rewrite * /404.html
-		file_server
-	}
-}
-```
-
-### Nginx
-
-```nginx
-server {
-    server_name pacedmind.com;
-    root /srv/pacedmind/www;
-
-    location / {
-        try_files $uri $uri.html $uri/index.html =404;
-    }
-
-    location /docs/ {
-        try_files $uri $uri.html $uri/index.html =404;
-        error_page 404 /docs/404.html;
-    }
-
-    location /docs/llms.mdx/ {
-        types { }
-        default_type "text/markdown; charset=utf-8";
-        add_header X-Robots-Tag "noindex";
-    }
-
-    location = /docs/api/search {
-        default_type application/json;
-    }
-
-    # Optional: /docs/<page>.mdx returns the page as Markdown.
-    location ~ ^/docs/(.+)\.mdx$ {
-        default_type "text/markdown; charset=utf-8";
-        try_files /docs/llms.mdx/$1/content.md =404;
-    }
-
-    location ~ ^/(docs/)?_next/static/ {
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
-
-    error_page 404 /404.html;
-}
-```
+* map `/docs/<path>` to `<path>`, `<path>.html` or `<path>/index.html`, in that order (a section has both `views.html` and a `views/` folder, so `.html` must come before the folder);
+* answer unknown addresses under `/docs` with `404.html` and a 404 status;
+* send `text/markdown; charset=utf-8` for `/docs/llms.mdx/` and `application/json` for `/docs/api/search`, a file without an extension.
 
 ## How the static export works
 
@@ -138,7 +70,7 @@ Fumadocs sites usually run on a Next.js server. These parts make the docs work a
 
 What a static export can't do, compared with a Fumadocs server:
 
-* **Content negotiation.** A server can answer `Accept: text/markdown` with the page's Markdown. Here, AI tools use `/docs/llms.txt` and the `llms.mdx` URLs instead; the web server can add the `.mdx` suffix URLs (above).
+* **Content negotiation.** A server can answer `Accept: text/markdown` with the page's Markdown. Here, AI tools use `/docs/llms.txt` and the `llms.mdx` URLs instead, and `deploy/Caddyfile` also serves `/docs/<page>.mdx` as the page's Markdown.
 * **Search on the server.** The browser downloads the index once instead of querying a search API. Hosted search would need a server or a search service.
 
 Neither needs a server for the docs to work.
