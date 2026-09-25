@@ -67,7 +67,9 @@ pacedmind.com {
 	@markdown path *.mdx /docs/llms.mdx/*
 	header @markdown Content-Type "text/markdown; charset=utf-8"
 	header /docs/api/search Content-Type application/json
-	header *.webmanifest Content-Type application/manifest+json
+	# An inline path matcher has to start with "/", so a suffix needs a named matcher.
+	@manifest path *.webmanifest
+	header @manifest Content-Type application/manifest+json
 
 	# The docs. A section has both views.html and a views/ folder; /docs is docs/index.html.
 	@docs path /docs /docs/*

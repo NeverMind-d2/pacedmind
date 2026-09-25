@@ -85,6 +85,7 @@ if [ -n "$PLACEHOLDER" ]; then
 else
   remote 'systemctl is-active pacedmind-web caddy; curl -s -o /dev/null -w "app on 127.0.0.1:3000: %{http_code}\n" http://127.0.0.1:3000/login'
 fi
+# printf for the newline: Git Bash turns a backslash in curl's -w argument into a slash.
 for url in https://pacedmind.com/ https://pacedmind.com/docs https://app.pacedmind.com/; do
-  curl -s -o /dev/null -w "$url: %{http_code}\n" "$url" || echo "$url: no answer"
+  printf '%s: %s\n' "$url" "$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 'no answer')"
 done
