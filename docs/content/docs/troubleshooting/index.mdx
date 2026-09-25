@@ -9,8 +9,10 @@ description: Solutions for common problems with the desktop app, agent sessions,
 
 The dialog *PacedMind could not start.* appears when the app's server stops while starting (*The server stopped while starting.*) or doesn't answer within 30 seconds (*The server did not answer within 30 seconds.*). It asks whether something else is using port 4319, the usual cause.
 
-1. Check whether another program uses the port. In PowerShell: `Get-NetTCPConnection -LocalPort 4319`. The owning process id is in the `OwningProcess` column.
-2. If it's a PacedMind server left over from a crash (`Organizer.exe`) that no longer answers, end it in Task Manager. A leftover server that still answers is reused on its own.
+1. Check whether another program uses the port:
+   * Windows, in PowerShell: `Get-NetTCPConnection -LocalPort 4319`. The owning process id is in the `OwningProcess` column.
+   * macOS, in Terminal: `lsof -nP -iTCP:4319 -sTCP:LISTEN`. The process id is in the `PID` column.
+2. If it's a PacedMind server left over from a crash that no longer answers, end it: on Windows, `Organizer.exe` in Task Manager; on macOS, `kill` followed by the process id, in Terminal. A leftover server that still answers is reused on its own.
 3. Select **Try again**.
 
 **Open log** opens the server log and closes PacedMind; start it again after reading the log.
@@ -21,18 +23,23 @@ The dialog *PacedMind's server stopped.* shows the exit code and the log's locat
 
 ### The data looks empty, or the icon is blank
 
-Claude's and Codex's desktop apps keep a separate copy of `AppData` for the programs they start. When PacedMind is installed or started from a terminal inside one of them, it can open a second, separate database, and its shortcuts can lose their icon.
+On Windows, Claude's and Codex's desktop apps keep a separate copy of `AppData` for the programs they start. When PacedMind is installed or started from a terminal inside one of them, it can open a second, separate database, and its shortcuts can lose their icon.
 
 * Quit that copy (tray icon → **Quit PacedMind**) and open PacedMind from the Start Menu.
 * Run `npm run desktop` from a terminal that wasn't started by those apps, such as Windows Terminal opened from the Start Menu.
 
 ### The window doesn't open
 
-PacedMind may be running in the tray only: click its tray icon, or open it from the Start Menu, which brings the existing window forward. With **Start with Windows** on, PacedMind starts in the tray after signing in.
+PacedMind may be running without its window:
+
+* **Windows:** it's in the tray. Click its tray icon, or open it from the Start Menu, which brings the existing window forward.
+* **macOS:** it's in the menu bar. Click its Dock icon, or select **Open PacedMind** in the menu bar icon's menu.
+
+With **Start with Windows** or **Open at Login** on, PacedMind starts without its window after signing in.
 
 ### A page doesn't show the latest changes
 
-Views refresh on their own a few seconds after data changes, while the window is visible. Press <kbd>Ctrl</kbd>+<kbd>R</kbd> to reload.
+Views refresh on their own a few seconds after data changes, while the window is visible. Press <kbd>Ctrl</kbd>+<kbd>R</kbd> (<kbd>⌘</kbd>+<kbd>R</kbd> on macOS) to reload.
 
 ### "Organizer only answers on 127.0.0.1"
 
@@ -49,16 +56,17 @@ The task's details and **Sessions** show *Couldn't start:* and the reason, or a 
 | *… already has a running session* | Open the running session, or close it with **Close session** first. |
 | *… is marked as yours. Hand it to Claude Code or Codex before starting a session.* | Set **Done by** to an agent. |
 | *Can't use the folder …: That folder doesn't exist.* | Correct the project's folder in **Settings → Projects and folders**. |
-| *… Use an absolute path, like C:\code\my-app.* | Enter the full path, starting with the drive letter. |
+| *… Use an absolute path, like C:\Users\Anna\code\my-app.* (on macOS, *like /Users/anna/code/my-app*) | Enter the full path, starting with the drive letter on Windows, or with `/` on macOS. |
 | *… The path contains characters that can't be passed to a terminal safely …* | Move or rename the folder so its path has none of `"` `%` `!` `^` `&` `\|` `<` `>` `` ` `` `$`. |
+| *… The path contains a backslash, which can't be passed to a terminal safely.* (macOS) | Move or rename the folder so its path has no `\`. |
 
 ### The terminal opens, but the agent doesn't start
 
-The terminal shows an error such as *'claude' is not recognized as an internal or external command*. The agent isn't installed, or isn't on the `PATH` that PacedMind sees.
+The terminal shows an error such as *'claude' is not recognized as an internal or external command* on Windows, or *claude: command not found* on macOS. The agent isn't installed, or isn't on the `PATH` that the session sees.
 
 * Check in a new terminal that `claude --version` or `codex --version` works.
 * Or enter the agent's full path in **Settings → Starting sessions** (**Claude command**, **Codex command**). The command is used as typed, so put a path with spaces in double quotes, such as `"C:\Program Files\Tools\claude.exe"`.
-* After installing an agent, quit and restart PacedMind, so it sees the new `PATH`.
+* On Windows, after installing an agent, quit and restart PacedMind, so it sees the new `PATH`. On macOS, each session starts in a new login shell, which reads the `PATH` from your shell's settings, such as `~/.zshrc`.
 
 Then close the stuck session with **Close session** and start a new one.
 
@@ -83,11 +91,11 @@ Claude Code reports its exit to PacedMind; Codex doesn't. A Codex session, or a 
 
 ### An agent can't reach PacedMind
 
-* **PacedMind isn't running.** Agents can only connect while the app runs, in the window or the tray.
+* **PacedMind isn't running.** Agents can only connect while the app runs, in the window, the tray or the menu bar.
 * **The token changed.** After **Regenerate**, register Claude Code again, and set `ORGANIZER_TOKEN` again for your own Codex sessions. See [MCP server](/mcp#the-access-token).
 * **Wrong port.** The desktop app uses 4319; a development copy started with `npm run dev` uses 4320.
 * **Claude Code: the tools are missing in one project.** The server was registered for another project folder. Register it with `--scope user`. See [Connect Claude Code](/mcp/connect-claude-code).
-* **Codex: `ORGANIZER_TOKEN` isn't set** in the terminal where Codex runs. Set it with `setx` and open a new terminal.
+* **Codex: `ORGANIZER_TOKEN` isn't set** in the terminal where Codex runs. Set it with `setx` on Windows, or in `~/.zshrc` on macOS, and open a new terminal. See [Connect Codex](/mcp/connect-codex#give-codex-the-token).
 
 Requests without the right token get `401 Unauthorized`.
 
@@ -140,4 +148,4 @@ The app adds activities but doesn't edit them yet. Ask an agent to rename, move 
 
 ### Where are the logs and the data?
 
-The tray icon's menu has **Open data folder** and **Open server log**. See [Where your data lives](/getting-started/data).
+The menu of the tray icon (the menu bar icon on macOS) has **Open data folder** and **Open server log**. See [Where your data lives](/getting-started/data).

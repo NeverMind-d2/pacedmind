@@ -16,7 +16,7 @@ Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`.
    bearer_token_env_var = "ORGANIZER_TOKEN"
    ```
 
-2. Open `config.toml` in the `.codex` folder of your user profile, such as `C:\Users\Anna\.codex\config.toml`, and paste the section at its end. Create the file if it doesn't exist.
+2. Open `config.toml` in the `.codex` folder of your user profile, such as `C:\Users\Anna\.codex\config.toml` on Windows or `/Users/anna/.codex/config.toml` on macOS, and paste the section at its end. Create the file if it doesn't exist.
 
 Keep the name `organizer`: PacedMind's skills and first messages refer to the server by that name.
 
@@ -25,15 +25,23 @@ Keep the name `organizer`: PacedMind's skills and first messages refer to the se
 The configuration doesn't contain the token itself. Codex reads it from the `ORGANIZER_TOKEN` environment variable:
 
 * **Sessions PacedMind starts** get the variable from their terminal: nothing to do.
-* **Your own Codex sessions** need it set. Copy the token from **Settings → MCP server** and store it for your Windows user:
+* **Your own Codex sessions** need it set. Copy the token from **Settings → MCP server** and store it for your user.
+
+  On Windows, in PowerShell:
 
   ```powershell
   setx ORGANIZER_TOKEN "org_..."
   ```
 
-  `setx` applies to terminals opened afterwards. Open a new terminal before starting Codex.
+  On macOS, add this line to `~/.zshrc`, the settings file of the default shell:
 
-After **Regenerate** in **Settings → MCP server**, run `setx` again with the new token. Sessions PacedMind starts pick up the new token on their own.
+  ```bash
+  export ORGANIZER_TOKEN="org_..."
+  ```
+
+  Both apply to terminals opened afterwards. Open a new terminal before starting Codex.
+
+After **Regenerate** in **Settings → MCP server**, set the variable again with the new token. Sessions PacedMind starts pick up the new token on their own.
 
 ## Check the connection
 
@@ -43,4 +51,4 @@ With the [agent skills](/skills) installed in `~/.codex/skills`, Codex also know
 
 ## Remove the connection
 
-Delete the `[mcp_servers.organizer]` section from `config.toml`, and the `ORGANIZER_TOKEN` variable from your user's environment variables.
+Delete the `[mcp_servers.organizer]` section from `config.toml`, and the `ORGANIZER_TOKEN` variable: from your user's environment variables on Windows, or its line in `~/.zshrc` on macOS.

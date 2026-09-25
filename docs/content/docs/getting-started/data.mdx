@@ -16,10 +16,12 @@ PacedMind keeps everything in one SQLite database on the computer: areas, projec
 | The server log | `%APPDATA%\Organizer\logs\server.log` |
 | The app itself | `%LOCALAPPDATA%\Programs\Organizer\` |
 
+On macOS, the same files are in `~/Library/Application Support/Organizer` instead of `%APPDATA%\Organizer`, for example `~/Library/Application Support/Organizer/data/organizer.db`. The server log is `~/Library/Logs/PacedMind/server.log`, and the app is `PacedMind.app` in the Applications folder.
+
 Two shortcuts help:
 
 * **Settings → Data** shows the database's full path and how many sessions it has recorded.
-* The tray icon's menu has **Open data folder** and **Open server log**.
+* The menu of the tray icon (the menu bar icon on macOS) has **Open data folder** and **Open server log**.
 
 ## Who can reach it
 
@@ -33,11 +35,11 @@ The session files contain the access token: the start script passes it to the ag
 
 The database is written continuously while PacedMind runs, so copy it only while the app is closed. Its recent changes can sit in `organizer.db-wal` rather than in `organizer.db`, so always copy all three `organizer.db*` files together:
 
-1. Right-click the tray icon and select **Quit PacedMind**.
-2. Copy the folder `%APPDATA%\Organizer\data`, or at least every `organizer.db*` file in it.
+1. Quit PacedMind: its tray icon → **Quit PacedMind** on Windows, <kbd>⌘</kbd>+<kbd>Q</kbd> on macOS.
+2. Copy the `data` folder (`%APPDATA%\Organizer\data`, or `~/Library/Application Support/Organizer/data` on macOS), or at least every `organizer.db*` file in it.
 3. Start PacedMind again.
 
-To restore, quit PacedMind, delete the `organizer.db*` files in `%APPDATA%\Organizer\data`, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
+To restore, quit PacedMind, delete the `organizer.db*` files in the `data` folder, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
 
 The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects and folders** afterwards.
 
@@ -54,8 +56,8 @@ Neither can be undone. Both keep the settings: work hours, how sessions start, a
 
 ## Reinstalling and uninstalling
 
-Updating or reinstalling PacedMind never touches `%APPDATA%\Organizer`. Uninstalling doesn't either; delete that folder to remove the data. See [Install PacedMind](/getting-started/install#uninstall).
+Updating or reinstalling PacedMind never touches the data folder (`%APPDATA%\Organizer`, or `~/Library/Application Support/Organizer` on macOS). Uninstalling doesn't either; delete that folder to remove the data. See [Install PacedMind](/getting-started/install#uninstall).
 
 ## A development copy
 
-Running PacedMind from its source code with `npm run dev` starts a separate copy at `http://127.0.0.1:4320`. It uses its own database, `data\organizer.db` inside the source folder, filled with sample data on its first start. It never reads or changes the desktop app's data.
+Running PacedMind from its source code with `npm run dev` starts a separate copy at `http://127.0.0.1:4320`. It uses its own database, `data/organizer.db` inside the source folder, filled with sample data on its first start. It never reads or changes the desktop app's data.

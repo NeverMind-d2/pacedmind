@@ -19,7 +19,7 @@ PacedMind **doesn't** chat with the agent, show its output or review its code. T
 ## Requirements
 
 * **Claude Code**, **Codex**, or both, installed and signed in. PacedMind runs them with the commands `claude` and `codex`; other commands or full paths can be set in **Settings → Starting sessions**.
-* **Windows Terminal**, for sessions in tabs of one window. Without it, or with **Command Prompt** chosen in **Settings**, each session opens in its own Command Prompt window.
+* On Windows, **Windows Terminal**, for sessions in tabs of one window. Without it, or with **Command Prompt** chosen in **Settings**, each session opens in its own Command Prompt window. On macOS, each session opens in its own window of the built-in Terminal, or of iTerm when it's chosen in **Settings**.
 * For code projects, a **folder** set on the project. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-works).
 
 Claude Code sessions started by PacedMind are connected to its MCP server automatically. Codex reads its MCP servers from its own configuration, so it needs PacedMind's entry there once; PacedMind then supplies the access token for its sessions. See [Connect Codex](/mcp/connect-codex). Connecting Claude Code by hand is only needed for sessions started outside PacedMind. See [MCP server](/mcp).
