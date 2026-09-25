@@ -24,11 +24,16 @@ const markets: Market[] = Object.entries(prices.markets)
 const SCREENS = { Today: <TodayScreen />, Timeline: <TimelineScreen />, Flow: <FlowScreen /> };
 const VIEWS: DeckItem[] = VIEW_COPY.map((view) => ({ ...view, screen: SCREENS[view.tab] }));
 
+// Beside the text, the screens take the column's width. In a short window they give up to 120 px of it, so the
+// header, the padding and the tabs and caption (372 px together) fit around a 990 × 666 deck; narrower still,
+// the caption goes below the fold. They keep to the column's right edge, under the menu.
+const DECK_WIDTH = "lg:justify-self-end lg:w-[min(100%,max(100%_-_120px,calc((100svh_-_372px)*1.4865)))]";
+
 export default function Home() {
   return (
     <>
       <JsonLd data={graph(softwareApplication(), faqPage(FAQ))} />
-      <header className="mx-auto flex h-[76px] max-w-[1120px] items-center justify-between px-5 sm:px-8">
+      <header className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="PacedMind" className="rounded-[7px]"><Emblem size={30} /></Link>
         <nav className="flex gap-[30px] text-[16px] text-mut">
           <a href="#pricing" className="hover:text-ink">Pricing</a>
@@ -36,13 +41,13 @@ export default function Home() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-[1120px] px-5 sm:px-8">
+      <main className="mx-auto max-w-[1440px] px-5 sm:px-8">
         {/*
-          The first view: the promise on the left, the app on the right, filling the window. The screens run off
-          the right edge instead of shrinking into the column. Narrower windows stack the two.
+          The first view: the promise on the left and the app on the right, centered on the same line, with the tabs
+          and the caption under the screens. The screens end where the menu does. Narrower windows stack them.
         */}
-        <section className="grid gap-y-16 pt-[clamp(40px,8vh,88px)] lg:min-h-[calc(100svh-76px)] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-center lg:gap-x-12 lg:py-12 xl:grid-cols-[440px_minmax(0,1fr)] xl:gap-x-16">
-          <div>
+        <section className="grid pt-[clamp(40px,8vh,88px)] lg:min-h-[calc(100svh-76px)] lg:grid-cols-[380px_minmax(0,1fr)] lg:content-center lg:items-center lg:gap-x-16 lg:py-12 xl:grid-cols-[440px_minmax(0,1fr)] xl:gap-x-24">
+          <div className="mb-16 lg:mb-0">
             <h1><Wordmark id="hero-wordmark" unfold className="w-full max-w-[560px] text-ink lg:max-w-[380px] xl:max-w-[440px]" /></h1>
             <p className="mt-8 text-[clamp(32px,4vw,46px)] leading-[1.08] font-light tracking-[-0.01em] text-ink sm:mt-10">
               {TAGLINE}
@@ -53,9 +58,7 @@ export default function Home() {
               <a className="download" data-os="mac" href={SITE.downloads.mac}>Download for macOS</a>
             </div>
           </div>
-          <div className="min-w-0 lg:mr-[calc((min(100vw,1120px)_-_100vw)/2_-_2rem)]">
-            <ScreenDeck items={VIEWS} />
-          </div>
+          <ScreenDeck items={VIEWS} className={{ stage: `min-w-0 ${DECK_WIDTH}`, controls: `lg:col-start-2 ${DECK_WIDTH}` }} />
         </section>
 
         <section id="pricing" className="mt-24 scroll-mt-8 sm:mt-[150px]">
@@ -104,7 +107,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="mx-auto mt-24 max-w-[1120px] px-5 sm:mt-32 sm:px-8">
+      <footer className="mx-auto mt-24 max-w-[1440px] px-5 sm:mt-32 sm:px-8">
         <div className="flex items-center justify-between border-t border-line py-8 text-[15px] text-mut">
           <span className="flex items-center gap-3 text-text"><Emblem size={20} />PacedMind</span>
           <div className="flex gap-6">
