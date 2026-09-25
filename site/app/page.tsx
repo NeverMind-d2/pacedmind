@@ -33,28 +33,33 @@ export default function Home() {
         <nav className="flex gap-[30px] text-[16px] text-mut">
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
-          <a href={SITE.repo} className="hover:text-ink">GitHub</a>
         </nav>
       </header>
 
       <main className="mx-auto max-w-[1120px] px-5 sm:px-8">
-        <section className="pt-[clamp(56px,12vh,112px)]">
-          <h1><Wordmark id="hero-wordmark" unfold className="w-full max-w-[780px] text-ink" /></h1>
-          <p className="mt-[34px] text-[clamp(34px,4.6vw,58px)] leading-[1.05] font-light tracking-[-0.01em] text-ink sm:mt-11">
-            Find your pace.
-          </p>
-          <p className="mt-[22px] max-w-[560px] text-[18px] leading-[1.55] text-mut sm:text-[20px]">
-            A calm planner for your tasks, time blocks and deadlines. It starts your Claude Code and Codex
-            sessions and tells you when one is waiting for you.
-          </p>
-          <div className="mt-[38px] flex flex-wrap gap-3">
-            <a className="download" data-os="windows" href={SITE.downloads.windows}>Download for Windows</a>
-            <a className="download" data-os="mac" href={SITE.downloads.mac}>Download for macOS</a>
+        {/*
+          The first view: the promise on the left, the app on the right, filling the window. The screens run off
+          the right edge instead of shrinking into the column. Narrower windows stack the two.
+        */}
+        <section className="grid gap-y-16 pt-[clamp(40px,8vh,88px)] lg:min-h-[calc(100svh-76px)] lg:grid-cols-[380px_minmax(0,1fr)] lg:items-center lg:gap-x-12 lg:py-12 xl:grid-cols-[440px_minmax(0,1fr)] xl:gap-x-16">
+          <div>
+            <h1><Wordmark id="hero-wordmark" unfold className="w-full max-w-[560px] text-ink lg:max-w-[380px] xl:max-w-[440px]" /></h1>
+            <p className="mt-8 text-[clamp(32px,4vw,46px)] leading-[1.08] font-light tracking-[-0.01em] text-ink sm:mt-10">
+              Find your pace.
+            </p>
+            <p className="mt-5 max-w-[520px] text-[18px] leading-[1.55] text-pretty text-mut">
+              A calm planner for your tasks, time blocks and deadlines. It starts your Claude Code and Codex
+              sessions and tells you when one is waiting for you.
+            </p>
+            <div className="mt-9 flex flex-wrap gap-3">
+              <a className="download" data-os="windows" href={SITE.downloads.windows}>Download for Windows</a>
+              <a className="download" data-os="mac" href={SITE.downloads.mac}>Download for macOS</a>
+            </div>
           </div>
-          <p className="mt-4 text-[15px] text-mut">Free and open source on one device.</p>
+          <div className="min-w-0 lg:mr-[calc((min(100vw,1120px)_-_100vw)/2_-_2rem)]">
+            <ScreenDeck items={VIEWS} />
+          </div>
         </section>
-
-        <ScreenDeck items={VIEWS} />
 
         <section id="pricing" className="mt-24 scroll-mt-8 sm:mt-[150px]">
           <h2 className="max-w-[20em] text-[clamp(30px,3.9vw,46px)] leading-[1.15] font-light tracking-[-0.01em] text-ink">
@@ -104,7 +109,7 @@ export default function Home() {
           <span className="flex items-center gap-3 text-text"><Emblem size={20} />PacedMind</span>
           <div className="flex gap-6">
             <a href={SITE.docs} className="hover:text-ink">Docs</a>
-            <a href={SITE.repo} className="hover:text-ink">Source on GitHub</a>
+            <span>© 2026</span>
           </div>
         </div>
       </footer>
