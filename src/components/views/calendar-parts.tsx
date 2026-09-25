@@ -6,12 +6,18 @@ import { toDateTimeStr } from "@/lib/dates";
 import { Icon, type IconName } from "../icons";
 import { cx } from "../ui";
 
-export function ViewHeader({ icon, title, subtitle, children }: { icon: IconName; title: string; subtitle?: ReactNode; children?: ReactNode }) {
+/**
+ * A view's title row. On a phone it drops the icon and tightens up; `phoneSubtitleOnly` also drops the title there,
+ * for views whose subtitle says more (the calendar's month or day; the menu shows which view is open).
+ */
+export function ViewHeader({ icon, title, subtitle, phoneSubtitleOnly, children }: {
+  icon: IconName; title: string; subtitle?: ReactNode; phoneSubtitleOnly?: boolean; children?: ReactNode;
+}) {
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
-      <Icon name={icon} className="text-mut" />
-      <h1 className="text-[14px] font-semibold text-strong">{title}</h1>
-      {subtitle && <span className="text-mut2">{subtitle}</span>}
+    <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4 max-sm:gap-2 max-sm:pl-4 max-sm:pr-3">
+      <Icon name={icon} className="shrink-0 text-mut max-sm:hidden" />
+      <h1 className={cx("shrink-0 text-[14px] font-semibold text-strong", phoneSubtitleOnly && subtitle && "max-sm:sr-only")}>{title}</h1>
+      {subtitle && <span className={cx("min-w-0 truncate", phoneSubtitleOnly ? "max-sm:font-semibold max-sm:text-strong sm:text-mut2" : "text-mut2")}>{subtitle}</span>}
       {children}
     </div>
   );
@@ -20,7 +26,7 @@ export function ViewHeader({ icon, title, subtitle, children }: { icon: IconName
 export function PeriodNav({ unit, prev, next, today }: { unit: "month" | "week"; prev: string; next: string; today: string }) {
   const arrow = "flex h-[26px] w-[26px] items-center justify-center rounded-md text-mut hover:bg-hover";
   return (
-    <div className="ml-1.5 flex items-center gap-0.5">
+    <div className="ml-1.5 flex shrink-0 items-center gap-0.5 max-sm:ml-0">
       <Link href={prev} aria-label={`Previous ${unit}`} title={`Previous ${unit}`} className={arrow}>
         <Icon name="chevronLeft" size={14} strokeWidth={2} />
       </Link>
@@ -36,10 +42,10 @@ export function PeriodNav({ unit, prev, next, today }: { unit: "month" | "week";
 export function ViewSwitch({ value, month, week }: { value: "month" | "week"; month: string; week: string }) {
   const options = [{ value: "month", label: "Month", href: month }, { value: "week", label: "Week", href: week }] as const;
   return (
-    <nav aria-label="Calendar view" className="flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
+    <nav aria-label="Calendar view" className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
       {options.map((o) => (
         <Link key={o.value} href={o.href} aria-current={o.value === value ? "page" : undefined}
-          className={cx("flex h-[22px] items-center rounded-[5px] px-2.5 text-[12px]", o.value === value ? "bg-sel text-strong" : "text-mut hover:text-fg2")}>
+          className={cx("flex h-[22px] items-center rounded-[5px] px-2.5 text-[12px] max-sm:px-2", o.value === value ? "bg-sel text-strong" : "text-mut hover:text-fg2")}>
           {o.label}
         </Link>
       ))}

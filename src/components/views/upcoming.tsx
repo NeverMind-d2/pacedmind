@@ -172,15 +172,16 @@ function TargetRow({ target: p, ctx }: { target: ProjectTarget; ctx: TaskContext
   const pos = Math.min(100, Math.max(0, (p.daysLeft / WINDOW) * 100));
   const health = HEALTH[p.health];
   return (
-    <Link href={`/project/${p.id}`} className="flex h-[46px] items-center gap-4 border-b border-hover pl-5 pr-4 hover:bg-hover">
+    // In a narrow column (a phone) the name keeps its room: no progress bar, and the date without "in N days".
+    <Link href={`/project/${p.id}`} className="flex h-[46px] items-center gap-4 border-b border-hover pl-5 pr-4 hover:bg-hover @max-md:gap-3">
       <Diamond color={color} size={12} />
       <span className="min-w-0 flex-1 truncate font-medium text-fg @5xl:w-[150px] @5xl:flex-none">{p.name}</span>
       <span className="hidden w-20 shrink-0 items-center gap-[7px] text-[12px] text-mut @3xl:flex">
         <Dot color={color} size={7} />
         <span className="truncate">{area?.name}</span>
       </span>
-      <span className="flex w-[170px] shrink-0 items-center gap-2.5">
-        <span className="h-1 w-[90px] overflow-hidden rounded-sm bg-line2">
+      <span className="flex w-[170px] shrink-0 items-center gap-2.5 @max-md:w-auto">
+        <span className="h-1 w-[90px] overflow-hidden rounded-sm bg-line2 @max-md:hidden">
           <span className="block h-1 rounded-sm" style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%`, background: color }} />
         </span>
         <span className="text-[12px] text-mut">{p.total ? `${p.done}/${p.total}` : "No tasks"}</span>
@@ -192,10 +193,10 @@ function TargetRow({ target: p, ctx }: { target: ProjectTarget; ctx: TaskContext
         <span className="absolute left-0 top-1.5 h-2.5 w-0.5 rounded-[1px] bg-accent" />
         <span className="absolute top-[5px] -ml-1.5 flex" style={{ left: `${pos}%` }}><Diamond color={color} size={12} /></span>
       </span>
-      <span className="w-[150px] shrink-0 truncate text-[12.5px] text-fg2">
-        {format(parseLocal(p.targetDate), "EEE d MMM")} <span className="text-mut2">· {inDays(p.daysLeft)}</span>
+      <span className="w-[150px] shrink-0 truncate text-[12.5px] text-fg2 @max-md:w-auto">
+        {format(parseLocal(p.targetDate), "EEE d MMM")} <span className="text-mut2 @max-md:hidden">· {inDays(p.daysLeft)}</span>
       </span>
-      <span className={cx("w-[72px] shrink-0 text-right text-[12px]", health.className)}>{health.label}</span>
+      <span className={cx("w-[72px] shrink-0 text-right text-[12px] @max-md:w-auto", health.className)}>{health.label}</span>
     </Link>
   );
 }

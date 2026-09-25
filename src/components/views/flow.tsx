@@ -4,7 +4,7 @@ import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Fragment, createContext, useCallback, useContext, useEffect, useMemo, useOptimistic, useRef, useState, useTransition,
+  Fragment, createContext, useCallback, useContext, useEffect, useMemo, useOptimistic, useRef, useState, useSyncExternalStore, useTransition,
   type CSSProperties, type DragEvent, type ReactNode,
 } from "react";
 import {
@@ -21,7 +21,7 @@ import {
 import { startSessionOrAsk } from "@/components/remote-start";
 import { addToFlowAction, setAgentsAction, setRunAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
 import { AgentIcon, Icon, StatusIcon, SurfaceIcon } from "@/components/icons";
-import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast } from "@/components/ui";
+import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast, type MenuItem } from "@/components/ui";
 import { parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
 import { GRID, NODE_H, NODE_W, freeSpot, layoutFlow, snap, type Point } from "@/lib/flow-layout";
 import {
@@ -106,9 +106,13 @@ const HANDLES: NodeHandle[] = [
   { type: "source", position: Position.Bottom, x: (NODE_W - HANDLE) / 2, y: NODE_H - HANDLE / 2, width: HANDLE, height: HANDLE },
 ];
 const HANDLE_STYLE = { width: HANDLE, height: HANDLE, minWidth: 0, minHeight: 0, background: "transparent", border: "none" };
+/** On a phone the dots only show where connections meet: a finger on one pans the canvas like anywhere else. */
+const HANDLE_STYLE_IDLE = { ...HANDLE_STYLE, pointerEvents: "none" as const };
 const DELETE_KEYS = ["Delete", "Backspace"];
 const CONNECTION_LINE = { stroke: ACCENT_LINE, strokeWidth: 1.5, strokeDasharray: "5 4" };
 const DEFAULT_VIEWPORT = { x: 40, y: 40, zoom: 1 };
+/** The smallest zoom a phone opens a flow at: below it a session's text gets too small to read. */
+const PHONE_ZOOM = 0.75;
 /** React Flow asks to keep its attribution unless you subscribe to Pro; this lets it blend into the canvas. */
 const CANVAS_STYLE = { "--xy-attribution-background-color": "transparent" } as CSSProperties;
 
@@ -508,6 +512,24 @@ function useNow(initial: string): number {
   return now;
 }
 
+/** Tailwind's md breakpoint: below it the view is laid out for a phone (the max-md: classes). */
+const WIDE = "(min-width: 48rem)";
+const narrow = () => !window.matchMedia(WIDE).matches;
+
+function subscribeWidth(onChange: () => void) {
+  const m = window.matchMedia(WIDE);
+  m.addEventListener("change", onChange);
+  return () => m.removeEventListener("change", onChange);
+}
+
+/**
+ * Whether the window is phone-sized. There the canvas is for looking and tapping: a finger pans and pinches it and a
+ * tap opens a session; moving sessions and drawing connections stay with a mouse. The server renders for a computer.
+ */
+function usePhone(): boolean {
+  return useSyncExternalStore(subscribeWidth, narrow, () => false);
+}
+
 /* ---------- the view ---------- */
 
 export function FlowView(props: FlowViewProps) {
@@ -520,8 +542,8 @@ export function FlowView(props: FlowViewProps) {
 
 /** Lets an edge label select the task its connection leads into. */
 const PickNode = createContext<(taskId: number) => void>(() => {});
-/** Lets a node's agent chip hand the task to the other agent. */
-const SwitchAgent = createContext<(taskId: number) => void>(() => {});
+/** Lets a node's agent chip hand the task to the other agent. Null on a phone, where a tap on a node opens it. */
+const SwitchAgent = createContext<((taskId: number) => void) | null>(null);
 
 const nodeTypes: NodeTypes = { task: TaskNodeView };
 const edgeTypes: EdgeTypes = { mode: ModeEdgeView };
@@ -540,6 +562,9 @@ function FlowEditor(props: FlowViewProps) {
   const [drag, setDrag] = useState<{ id: number; x: number; y: number } | null>(null);
   const [paletteDrag, setPaletteDrag] = useState<number | null>(null);
   const [ghost, setGhost] = useState<Ghost | null>(null);
+  const phone = usePhone();
+  // On a phone the palette opens over the canvas, from the header's menu.
+  const [adding, setAdding] = useState(false);
 
   const autoStarted = useMemo(() => new Set(props.autoStarted), [props.autoStarted]);
   const graph = useMemo(() => buildGraph(tasks, edges), [tasks, edges]);
@@ -617,7 +642,10 @@ function FlowEditor(props: FlowViewProps) {
     });
   }, [startTransition]);
 
-  /** Shows the whole flow, zoomed out only as far as needed and never in past 100%. */
+  /**
+   * Shows the whole flow, zoomed out only as far as needed and never in past 100%. A phone keeps the sessions readable
+   * instead: it fits the flow's width down to PHONE_ZOOM, from the top, and starts at the left of a wider flow.
+   */
   const fitTo = useCallback((points: Point[], ms = 0) => {
     const box = canvasRef.current?.getBoundingClientRect();
     if (!box || !box.width || !box.height) return;
@@ -627,6 +655,14 @@ function FlowEditor(props: FlowViewProps) {
     const top = Math.min(...ys);
     const width = Math.max(...xs) + NODE_W - left;
     const height = Math.max(...ys) + NODE_H - top;
+    if (narrow()) {
+      const pad = 16;
+      const room = box.width - 2 * pad;
+      const zoom = Math.min(1, Math.max(PHONE_ZOOM, room / width));
+      const x = width * zoom <= room ? (box.width - width * zoom) / 2 : pad;
+      void rf.setViewport({ x: x - left * zoom, y: pad - top * zoom, zoom }, { duration: ms });
+      return;
+    }
     const pad = 48;
     const zoom = Math.min(1, Math.max(0.4, Math.min((box.width - 2 * pad) / width, (box.height - 2 * pad) / height)));
     const y = height * zoom < box.height - 2 * pad ? Math.min(pad, (box.height - height * zoom) / 2) : pad;
@@ -754,13 +790,14 @@ function FlowEditor(props: FlowViewProps) {
 
   const pickNode = useCallback((id: number) => setSel({ kind: "node", id }), []);
 
-  // The canvas opens where you left it in this project; the first time, it fits the flow.
+  // The canvas opens where you left it in this project; the first time, it fits the flow. A phone always opens it
+  // fitted: a view left in a wider window may show nothing on its screen.
   const onInit = () => {
-    const view = savedView(project.id);
+    const view = narrow() ? null : savedView(project.id);
     if (view) void rf.setViewport(view);
     else fitTo(placed.map(positionOf));
   };
-  const onMoveEnd: OnMove = (_e, view) => saveView(project.id, view);
+  const onMoveEnd: OnMove = (_e, view) => { if (!narrow()) saveView(project.id, view); };
 
   const onNodeDragStop: OnNodeDrag<TaskNode> = (_e, node) => {
     setDrag(null);
@@ -847,7 +884,10 @@ function FlowEditor(props: FlowViewProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !(e.target as HTMLElement).closest?.("input, textarea, [role=menu]")) setSel(null);
+      if (e.key === "Escape" && !(e.target as HTMLElement).closest?.("input, textarea, [role=menu]")) {
+        setSel(null);
+        setAdding(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -879,25 +919,30 @@ function FlowEditor(props: FlowViewProps) {
         onStart={(mode, at) => setStart(selectedTask, mode, at)}
         onStartNow={() => act(() => {}, () => startSessionOrAsk(selectedTask.id, selectedTask.agent, run.surface))}
         onFinished={() => session && act(() => {}, () => finishSessionAction(session.id))}
-        onRemove={() => remove(selectedTask)} />
+        onRemove={() => remove(selectedTask)} onClose={() => setSel(null)} />
     );
   } else if (selectedEdge) {
-    inspector = <EdgeInspector edge={selectedEdge} graph={graph} onPick={pickNode} onRemove={() => removeEdge(selectedEdge)} />;
+    inspector = (
+      <EdgeInspector edge={selectedEdge} graph={graph} onPick={pickNode} onRemove={() => removeEdge(selectedEdge)} onClose={() => setSel(null)} />
+    );
   }
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
       <FlowHeader project={project} projects={props.projects} summary={summary} agents={agentStatus} flowOn={flowOn}
-        canTidy={placed.length > 0} onFlow={toggleFlow} onTidy={tidyUp} onFit={() => fitTo(placed.map(positionOf), 250)} />
+        canTidy={placed.length > 0} onFlow={toggleFlow} onTidy={tidyUp} onFit={() => fitTo(placed.map(positionOf), 250)}
+        onAdd={() => setAdding(true)} />
       <div className="flex min-h-0 flex-1">
         <Palette project={project} tasks={palette} total={tasks.length} yours={props.yours} dragging={paletteDrag}
-          onDragStart={(t) => setPaletteDrag(t.id)} onDragEnd={() => { setPaletteDrag(null); setGhost(null); }} onAdd={addAtEnd} />
+          open={adding} draggable={!phone} onClose={() => setAdding(false)}
+          onDragStart={(t) => setPaletteDrag(t.id)} onDragEnd={() => { setPaletteDrag(null); setGhost(null); }}
+          onAdd={(t) => { setAdding(false); addAtEnd(t); }} />
 
         <section aria-label="Flow canvas" className="relative min-w-0 flex-1 overflow-hidden"
           onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}>
           <div ref={canvasRef} className="absolute inset-0">
             <PickNode.Provider value={pickNode}>
-            <SwitchAgent.Provider value={switchAgent}>
+            <SwitchAgent.Provider value={phone ? null : switchAgent}>
               <ReactFlow<TaskNode, ModeEdge>
                 nodes={nodes}
                 edges={links}
@@ -912,6 +957,9 @@ function FlowEditor(props: FlowViewProps) {
                 onPaneClick={() => setSel(null)}
                 onInit={onInit}
                 onMoveEnd={onMoveEnd}
+                // A finger on a session pans the canvas (sessions that can't be dragged let it through); a tap selects it.
+                nodesDraggable={!phone}
+                nodesConnectable={!phone}
                 deleteKeyCode={DELETE_KEYS}
                 selectionKeyCode={null}
                 multiSelectionKeyCode={null}
@@ -952,7 +1000,7 @@ function FlowEditor(props: FlowViewProps) {
             </SwitchAgent.Provider>
             </PickNode.Provider>
           </div>
-          {!placed.length && !ghost && <EmptyCanvas />}
+          {!placed.length && !ghost && <EmptyCanvas onAdd={() => setAdding(true)} />}
         </section>
 
         {inspector}
@@ -963,7 +1011,9 @@ function FlowEditor(props: FlowViewProps) {
 
 /* ---------- header ---------- */
 
-function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlow, onTidy, onFit }: {
+type More = "add" | "fit" | "tidy" | "roadmap";
+
+function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlow, onTidy, onFit, onAdd }: {
   project: FlowViewProps["project"];
   projects: FlowViewProps["projects"];
   summary: string;
@@ -973,14 +1023,22 @@ function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlo
   onFlow: (on: boolean) => void;
   onTidy: () => void;
   onFit: () => void;
+  onAdd: () => void;
 }) {
   const router = useRouter();
+  const more: MenuItem<More>[] = [
+    { value: "add", label: "Add tasks" },
+    ...(canTidy ? [{ value: "fit" as const, label: "Fit to screen" }, { value: "tidy" as const, label: "Tidy up" }] : []),
+    { value: "roadmap", label: "Roadmap" },
+  ];
+  const doMore: Record<More, () => void> = { add: onAdd, fit: onFit, tidy: onTidy, roadmap: () => router.push(`/roadmap?p=${project.id}`) };
   return (
-    <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-3.5 pr-4">
+    // On a phone: the project, the switch and a menu with the rest on one line, the summary under them.
+    <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-3.5 pr-4 max-md:grid max-md:h-auto max-md:grid-cols-[minmax(0,1fr)_auto_auto] max-md:gap-x-1 max-md:gap-y-0.5 max-md:py-1.5 max-md:pl-2 max-md:pr-2">
       <h1 className="sr-only">Flow for {project.name}</h1>
-      <Menu width={260}
+      <Menu width={260} className="max-md:max-w-full max-md:justify-self-start"
         trigger={
-          <button type="button" aria-haspopup="menu" className="flex h-[30px] items-center gap-[7px] rounded-md px-2 hover:bg-hover">
+          <button type="button" aria-haspopup="menu" className="flex h-[30px] items-center gap-[7px] rounded-md px-2 hover:bg-hover max-md:max-w-full">
             <Dot color={project.color} size={7} />
             <span className="max-w-[240px] truncate text-[14px] font-semibold text-strong">{project.name}</span>
             <Icon name="chevronDown" size={13} strokeWidth={2} className="text-mut2" />
@@ -990,7 +1048,7 @@ function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlo
           value: p.id, label: p.name, icon: <Dot color={p.color} size={7} />, hint: p.inFlow ? `${p.inFlow} in flow` : undefined,
         }))}
         onSelect={(id) => { if (id !== project.id) router.push(`/flows?p=${id}`); }} />
-      <div className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
+      <div className="flex h-7 shrink-0 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5 max-md:hidden">
         <Link href={`/roadmap?p=${project.id}`} className="flex h-[22px] items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] text-mut hover:bg-hover hover:text-fg2">
           <Icon name="roadmap" size={12} strokeWidth={2} />Roadmap
         </Link>
@@ -998,8 +1056,8 @@ function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlo
           <Icon name="flow" size={12} strokeWidth={2} />Flow
         </span>
       </div>
-      <span className="ml-1.5 min-w-0 truncate text-[12px] text-mut2">{summary}</span>
-      <span className="flex-1" />
+      <span className="ml-1.5 min-w-0 truncate text-[12px] text-mut2 max-md:order-last max-md:col-span-full max-md:ml-0 max-md:px-2">{summary}</span>
+      <span className="flex-1 max-md:hidden" />
       {agents.map((a) => (
         <span key={a.agent} className="hidden shrink-0 items-center gap-1.5 whitespace-nowrap text-[12px] text-mut2 xl:flex">
           <AgentIcon agent={a.agent} size={13} className="text-fg3" />
@@ -1008,22 +1066,31 @@ function FlowHeader({ project, projects, summary, agents, flowOn, canTidy, onFlo
         </span>
       ))}
       <ZoomControls onFit={onFit} />
-      <Button onClick={onTidy} disabled={!canTidy} title="Line the sessions up in the order they run">Tidy up</Button>
+      <Button onClick={onTidy} disabled={!canTidy} title="Line the sessions up in the order they run" className="max-md:hidden">Tidy up</Button>
       <label className="flex h-7 shrink-0 cursor-pointer items-center gap-2 pl-1 text-[12.5px] text-fg3"
         title="When the flow is on, PacedMind starts the next session on its own">
         {flowOn ? "Flow on" : "Paused"}
         <Switch on={flowOn} onChange={onFlow} label="Flow on" />
       </label>
+      <Menu<More> width={200} align="right" className="md:hidden"
+        trigger={
+          <button type="button" aria-label="More" aria-haspopup="menu"
+            className="flex h-8 w-8 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2">
+            <Icon name="more" size={16} />
+          </button>
+        }
+        items={more} onSelect={(v) => doMore[v]()} />
     </div>
   );
 }
 
+/** Pinching does this on a phone, so there it's only in the header's menu (Fit). */
 function ZoomControls({ onFit }: { onFit: () => void }) {
   const { zoom } = useViewport();
   const { zoomIn, zoomOut } = useReactFlow();
   const btn = "flex h-[26px] w-[26px] items-center justify-center rounded-md hover:bg-hover hover:text-fg2";
   return (
-    <div className="flex h-7 shrink-0 items-center rounded-[7px] border border-line2 text-[12px] text-mut">
+    <div className="flex h-7 shrink-0 items-center rounded-[7px] border border-line2 text-[12px] text-mut max-md:hidden">
       <button type="button" aria-label="Zoom out" className={btn} onClick={() => zoomOut({ duration: 150 })}>
         <Icon name="minus" size={11} strokeWidth={2.4} />
       </button>
@@ -1039,26 +1106,35 @@ function ZoomControls({ onFit }: { onFit: () => void }) {
 
 /* ---------- palette ---------- */
 
-function Palette({ project, tasks, total, yours, dragging, onDragStart, onDragEnd, onAdd }: {
+function Palette({ project, tasks, total, yours, dragging, open, draggable, onDragStart, onDragEnd, onAdd, onClose }: {
   project: FlowViewProps["project"];
   tasks: FlowTask[];
   total: number;
   yours: number;
   dragging: number | null;
+  /** Shown over the canvas on a phone; beside it, it's always there. */
+  open: boolean;
+  /** Phones add with a tap only. */
+  draggable: boolean;
   onDragStart: (t: FlowTask) => void;
   onDragEnd: () => void;
   onAdd: (t: FlowTask) => void;
+  onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const list = q ? tasks.filter((t) => t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)) : tasks;
-  const empty = q
+  const empty: ReactNode = q
     ? "No tasks match."
-    : total ? `Every open task in ${project.name} is in the flow.` : `No tasks in ${project.name} yet. Press C to add one.`;
+    : total ? `Every open task in ${project.name} is in the flow.` : <>No tasks in {project.name} yet.<span className="max-md:hidden"> Press C to add one.</span></>;
   return (
-    <aside aria-label="Add to the flow" className="flex w-[250px] shrink-0 flex-col border-r border-line">
+    <aside aria-label="Add to the flow" className={cx("flex w-[250px] shrink-0 flex-col border-r border-line",
+      open ? "max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-r-0 max-md:bg-panel" : "max-md:hidden")}>
       <div className="flex flex-col gap-2.5 px-3.5 pb-2 pt-3.5">
-        <div className="text-[12.5px] font-medium text-fg2">Add to the flow</div>
+        <div className="flex items-center justify-between text-[12.5px] font-medium text-fg2">
+          Add to the flow
+          <BackToFlow onClick={onClose} className="-my-1" />
+        </div>
         <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" placeholder="Search tasks"
           className="h-[30px] rounded-md border border-line2 bg-input px-2.5 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
       </div>
@@ -1068,7 +1144,7 @@ function Palette({ project, tasks, total, yours, dragging, onDragStart, onDragEn
           <span className="truncate">{project.name}</span>
         </div>
         {list.map((t) => (
-          <button key={t.id} type="button" draggable title="Drag onto the canvas, or click to add it at the end of the flow"
+          <button key={t.id} type="button" draggable={draggable} title="Drag onto the canvas, or click to add it at the end of the flow"
             onDragStart={(e) => {
               e.dataTransfer.setData(DND_TYPE, String(t.id));
               e.dataTransfer.effectAllowed = "move";
@@ -1076,9 +1152,10 @@ function Palette({ project, tasks, total, yours, dragging, onDragStart, onDragEn
             }}
             onDragEnd={onDragEnd}
             onClick={() => onAdd(t)}
-            className={cx("flex h-8 w-full items-center gap-2 rounded-md border px-1.5 text-left",
+            className={cx("flex h-8 w-full items-center gap-2 rounded-md border px-1.5 text-left max-md:h-11",
               dragging === t.id ? "border-dashed border-ctl text-dim" : "border-transparent text-fg2 hover:bg-hover")}>
-            <Grip />
+            <Grip className="max-md:hidden" />
+            <Icon name="plus" size={12} strokeWidth={2} className="shrink-0 text-mut2 md:hidden" />
             <span className="w-11 shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
             <span className="min-w-0 flex-1 truncate text-[12.5px]">{t.title}</span>
             <span title={`Run by ${AGENT_LABEL[t.agent]}`} className="flex shrink-0 text-mut2"><AgentIcon agent={t.agent} size={11} /></span>
@@ -1110,9 +1187,9 @@ function Palette({ project, tasks, total, yours, dragging, onDragStart, onDragEn
   );
 }
 
-function Grip() {
+function Grip({ className }: { className?: string }) {
   return (
-    <svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true" className="shrink-0">
+    <svg width="8" height="12" viewBox="0 0 8 12" aria-hidden="true" className={cx("shrink-0", className)}>
       {[2, 6, 10].flatMap((y) => [2, 6].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1" fill="var(--color-faint)" />))}
     </svg>
   );
@@ -1120,13 +1197,20 @@ function Grip() {
 
 /* ---------- canvas layers ---------- */
 
-function EmptyCanvas() {
+function EmptyCanvas({ onAdd }: { onAdd: () => void }) {
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-8 text-center">
-      <div className="text-[13.5px] text-fg2">Drag tasks here to build the flow</div>
+      <div className="text-[13.5px] text-fg2">
+        <span className="max-md:hidden">Drag tasks here to build the flow</span>
+        <span className="md:hidden">Add tasks to build the flow</span>
+      </div>
       <div className="max-w-xs text-[12.5px] leading-relaxed text-mut2">
         Each task runs as one agent session. Connect them to decide which session starts after which.
       </div>
+      {/* A phone has no palette beside the canvas to drag from. */}
+      <Button className="pointer-events-auto mt-2 md:hidden" onClick={onAdd}>
+        <Icon name="plus" size={12} strokeWidth={2.2} />Add tasks
+      </Button>
     </div>
   );
 }
@@ -1186,15 +1270,16 @@ function HandleDot({ on = false }: { on?: boolean }) {
   );
 }
 
-function TaskNodeView({ id, data, selected }: NodeProps<TaskNode>) {
+function TaskNodeView({ id, data, selected, isConnectable }: NodeProps<TaskNode>) {
   const done = data.tone === "done" || data.tone === "canceled";
+  const handleStyle = isConnectable ? HANDLE_STYLE : HANDLE_STYLE_IDLE;
   return (
     <div className={cx(
       "group flex h-full w-full flex-col gap-[3px] rounded-lg border px-3 py-[7px]",
       done ? "bg-panel" : "bg-raised",
       selected ? "border-accent shadow-[0_0_0_1px_var(--color-accent)]" : done ? "border-line" : "border-ctl",
     )}>
-      <Handle type="target" position={Position.Top} isConnectableStart={false} style={HANDLE_STYLE}><HandleDot /></Handle>
+      <Handle type="target" position={Position.Top} isConnectableStart={false} style={handleStyle}><HandleDot /></Handle>
       <div className="flex h-[14px] items-center gap-[7px] leading-[14px]">
         <ToneIcon tone={data.tone} />
         <span className="font-mono text-[11px] text-mut2">{data.key}</span>
@@ -1210,17 +1295,21 @@ function TaskNodeView({ id, data, selected }: NodeProps<TaskNode>) {
           <span className="truncate">{data.place}</span>
         </span>
       </div>
-      <Handle type="source" position={Position.Bottom} style={HANDLE_STYLE}><HandleDot on={data.linkOut} /></Handle>
+      {/* Handles start connections on their own (nodesConnectable doesn't reach them), so the node passes it on. */}
+      <Handle type="source" position={Position.Bottom} isConnectableStart={isConnectable} style={handleStyle}><HandleDot on={data.linkOut} /></Handle>
     </div>
   );
 }
 
-/** Who runs the session. Clicking hands it to the other agent (with anything that shares its session). */
+/**
+ * Who runs the session. Clicking hands it to the other agent (with anything that shares its session). On a phone it
+ * is only a label: a tap there opens the session, whose panel changes the agent.
+ */
 function AgentChip({ taskId, agent, done }: { taskId: number; agent: AgentId; done: boolean }) {
   const switchAgent = useContext(SwitchAgent);
   const label = <><AgentIcon agent={agent} size={10} />{AGENT_LABEL[agent]}</>;
   const look = "flex h-4 shrink-0 items-center gap-1 whitespace-nowrap rounded-[4px] border border-ctl px-1.5 text-[10.5px] leading-none text-mut";
-  if (done) return <span className={look}>{label}</span>;
+  if (done || !switchAgent) return <span className={look}>{label}</span>;
   return (
     <button type="button" title={`${AGENT_LABEL[agent]} runs this. Click to hand it to ${AGENT_LABEL[otherAgent(agent)]}.`}
       onClick={(e) => { e.stopPropagation(); switchAgent(taskId); }}
@@ -1249,7 +1338,8 @@ function ModeEdgeView({ id, target, sourceX, sourceY, targetX, targetY, data, se
         strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       {data.showLabel && (
         <EdgeLabelRenderer>
-          <button type="button" title="Change how it starts" onClick={() => pick(Number(target))}
+          {/* It renders in a portal, but its click still bubbles to the connection, which would select itself instead. */}
+          <button type="button" title="Change how it starts" onClick={(e) => { e.stopPropagation(); pick(Number(target)); }}
             className={cx(
               "nodrag nopan absolute left-0 top-0 flex h-5 items-center whitespace-nowrap rounded-full border bg-raised px-2 text-[11px] hover:border-line-strong",
               hot ? "border-accent/60 text-fg2" : data.spent ? "border-ctl text-dim" : "border-ctl text-mut",
@@ -1347,9 +1437,21 @@ function FolderField({ task, projectFolder, onSave }: { task: FlowTask; projectF
   );
 }
 
+/** The side panels, which cover the screen on a phone like the task details, with a way back to the canvas. */
+const PANEL = "flex w-[320px] shrink-0 flex-col border-l border-line max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-l-0 max-md:bg-panel";
+
+function BackToFlow({ onClick, className }: { onClick: () => void; className?: string }) {
+  return (
+    <button type="button" aria-label="Back to the flow" onClick={onClick}
+      className={cx("flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2 md:hidden", className)}>
+      <Icon name="x" size={15} />
+    </button>
+  );
+}
+
 function Inspector({
   project, task, info, run, devices, session, graph, flowOn, now, defaultAt, onAgent, onRun, onFolder, onCodexEnv, onStart, onStartNow, onFinished,
-  onRemove,
+  onRemove, onClose,
 }: {
   project: FlowViewProps["project"];
   task: FlowTask;
@@ -1369,6 +1471,7 @@ function Inspector({
   onStartNow: () => void;
   onFinished: () => void;
   onRemove: () => void;
+  onClose: () => void;
 }) {
   const incoming = graph.incoming.get(task.id) ?? [];
   const outgoing = graph.outgoing.get(task.id) ?? [];
@@ -1399,18 +1502,22 @@ function Inspector({
   const commitTime = () => {
     if (validDraft && draft !== at) onStart("time", draft);
   };
-  const next = outgoing.length ? outgoing.map((e) => nextText(e, graph)) : ["Nothing yet. Drag a task below it to continue."];
+  // Tasks are placed and connected with a mouse; a phone's canvas only pans.
+  const next: ReactNode[] = outgoing.length
+    ? outgoing.map((e) => nextText(e, graph))
+    : [<>Nothing yet.<span className="max-md:hidden"> Drag a task below it to continue.</span></>];
 
   return (
-    <aside aria-label="Selected session" className="flex w-[320px] shrink-0 flex-col border-l border-line">
+    <aside aria-label="Selected session" className={PANEL}>
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line pl-5 pr-3 text-[12.5px] text-mut">
-        <span className="font-mono text-[11.5px] text-mut2">{task.key}</span>
+        <span className="shrink-0 font-mono text-[11.5px] text-mut2">{task.key}</span>
         <span className="text-faint">·</span>
         <span className="truncate">{project.name}</span>
         <span className="flex-1" />
         <Link href={`/project/${project.id}?task=${task.key}`} className="inline-flex h-[26px] shrink-0 items-center rounded-md px-2 text-fg3 hover:bg-hover">
           Open task
         </Link>
+        <BackToFlow onClick={onClose} />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-[18px]">
@@ -1521,7 +1628,9 @@ function Inspector({
             </div>
           ) : (
             <p className="text-[12.5px] leading-relaxed text-mut2">
-              Nothing leads here, so you start it yourself. To run it after another task, drag from the dot under that task to the dot above this one.
+              Nothing leads here, so you start it yourself.
+              <span className="max-md:hidden"> To run it after another task, drag from the dot under that task to the dot above this one.</span>
+              <span className="md:hidden"> To run it after another task, connect the two on a computer.</span>
             </p>
           )}
         </Section>
@@ -1559,17 +1668,21 @@ function Inspector({
   );
 }
 
-function EdgeInspector({ edge, graph, onPick, onRemove }: {
+function EdgeInspector({ edge, graph, onPick, onRemove, onClose }: {
   edge: FlowEdge;
   graph: Graph;
   onPick: (taskId: number) => void;
   onRemove: () => void;
+  onClose: () => void;
 }) {
   const from = graph.byId.get(edge.fromTaskId);
   const to = graph.byId.get(edge.toTaskId);
   return (
-    <aside aria-label="Selected connection" className="flex w-[320px] shrink-0 flex-col border-l border-line">
-      <div className="flex h-11 shrink-0 items-center border-b border-line px-5 text-[12.5px] text-mut">Connection</div>
+    <aside aria-label="Selected connection" className={PANEL}>
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-5 text-[12.5px] text-mut max-md:pr-3">
+        Connection
+        <BackToFlow onClick={onClose} />
+      </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-[18px]">
         <div className="flex items-center gap-2 font-mono text-[13px] text-fg2">
           {from?.key}<Icon name="arrowRight" size={13} className="text-dim" />{to?.key}
@@ -1584,15 +1697,16 @@ function EdgeInspector({ edge, graph, onPick, onRemove }: {
       <div className="flex shrink-0 items-center gap-2 border-t border-line px-5 pb-4 pt-3">
         <Button variant="ghost" onClick={onRemove}><Icon name="trash" size={13} />Remove connection</Button>
         <span className="flex-1" />
-        <Kbd>Delete</Kbd>
+        <span className="flex max-md:hidden"><Kbd>Delete</Kbd></span>
       </div>
     </aside>
   );
 }
 
+/** Help for the canvas beside it. A phone shows the canvas alone until a session is tapped. */
 function EmptyInspector() {
   return (
-    <aside aria-label="Selected session" className="flex w-[320px] shrink-0 flex-col border-l border-line">
+    <aside aria-label="Selected session" className="flex w-[320px] shrink-0 flex-col border-l border-line max-md:hidden">
       <div className="flex h-11 shrink-0 items-center border-b border-line px-5 text-[12.5px] text-mut">Nothing selected</div>
       <div className="flex flex-col gap-3 px-5 py-[18px] text-[12.5px] leading-relaxed text-mut2">
         <p>Select a session on the canvas to choose its agent, where it runs and how it starts.</p>

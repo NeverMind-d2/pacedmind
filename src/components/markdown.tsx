@@ -79,7 +79,8 @@ function inline(text: string): ReactNode[] {
     const at = m.index ?? 0;
     if (at > last) out.push(text.slice(last, at));
     const key = out.length;
-    if (m[1] !== undefined) out.push(<code key={key} className="rounded bg-hover px-1 py-px font-mono text-[11.5px] text-fg3">{m[1]}</code>);
+    // A path or command in backticks breaks anywhere on a phone rather than widening the page.
+    if (m[1] !== undefined) out.push(<code key={key} className="rounded bg-hover px-1 py-px font-mono text-[11.5px] text-fg3 max-md:wrap-anywhere">{m[1]}</code>);
     else if (m[2] !== undefined) out.push(<strong key={key} className="font-semibold text-fg2">{m[2]}</strong>);
     else if (m[3] !== undefined) out.push(<a key={key} href={m[4]} target="_blank" rel="noreferrer" className={linkClass}>{m[3]}</a>);
     else if (m[5] !== undefined) out.push(<a key={key} href={m[5]} target="_blank" rel="noreferrer" className={`${linkClass} break-all`}>{m[5]}</a>);
@@ -96,8 +97,9 @@ export function InlineMarkdown({ text }: { text: string }) {
 }
 
 export function Markdown({ text, className }: { text: string; className?: string }) {
+  // On a phone, a word longer than the line breaks; code and tables keep their lines and scroll sideways.
   return (
-    <div className={`flex flex-col gap-2 text-[12.5px] leading-relaxed text-mut ${className ?? ""}`}>
+    <div className={`flex flex-col gap-2 text-[12.5px] leading-relaxed text-mut max-md:wrap-break-word ${className ?? ""}`}>
       {blocks(text).map((b, i) => {
         switch (b.kind) {
           case "h":

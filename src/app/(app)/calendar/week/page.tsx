@@ -53,8 +53,6 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
       }}
       ctx={await taskContext(tasks)}
       nav={{
-        prev: `/calendar/week?w=${addDaysStr(start, -7)}`,
-        next: `/calendar/week?w=${addDaysStr(start, 7)}`,
         month: current ? "/calendar" : `/calendar?m=${month}`,
         week: current ? "/calendar/week" : `/calendar/week?w=${start}`,
       }}

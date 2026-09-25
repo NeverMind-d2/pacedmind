@@ -56,7 +56,7 @@ export function CriterionRow({ c }: { c: ReportCriterion }) {
 export function ChangesNote({ report }: { report: Report }) {
   if (!report.changes) return null;
   return (
-    <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-3">
+    <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-3 max-md:wrap-break-word">
       <div className="flex items-center gap-1.5 text-[12px] font-medium text-fg3">
         <Icon name="user" size={12} className="text-mut2" />
         You asked for changes
@@ -117,7 +117,7 @@ export function RequestChangesForm({ agent, resumes, pending, onSend, onCancel }
       <div className="flex items-center justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button variant="primary" disabled={!text.trim() || pending} onClick={send}>
-          Send to {AGENT_LABEL[agent]} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px]">Ctrl ↵</span>
+          Send to {AGENT_LABEL[agent]} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
         </Button>
       </div>
     </div>
@@ -135,7 +135,8 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
   const clipped = long && !open;
   const web = (url: string) => /^https?:\/\//i.test(url);
   return (
-    <div className="flex flex-col gap-4">
+    // On a phone, a word longer than the line (a path, an address) breaks instead of widening the sheet.
+    <div className="flex flex-col gap-4 max-md:wrap-break-word">
       <p className="text-[13px] leading-[1.6] text-fg2">
         {report.outcome !== "done" && (
           <span className="mr-2 inline-flex h-5 translate-y-[-1px] items-center rounded-full border border-line-strong px-2 align-middle text-[11.5px] font-medium text-fg3">
@@ -277,7 +278,8 @@ export function Lightbox({ images, start, onClose }: { images: Attachment[]; sta
           <Icon name="x" size={16} />
         </button>
       </div>
-      <div className={cx("relative flex min-h-0 flex-1", actual ? "overflow-auto" : "items-center justify-center px-14 pb-8")}
+      {/* On a phone the image takes the width; the arrows sit over its edges. */}
+      <div className={cx("relative flex min-h-0 flex-1", actual ? "overflow-auto" : "items-center justify-center px-14 pb-8 max-md:px-3 max-md:pb-3")}
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
         {/* eslint-disable-next-line @next/next/no-img-element -- served from disk by /api/attachments, nothing to optimize */}
         <img key={a.id} src={imageUrl(a)} alt={a.caption || "Screenshot"} onClick={() => setActual((x) => !x)}

@@ -219,6 +219,10 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
     earlier: !groups.find((g) => g.id === "earlier")?.items.some((s) => s.id === initialId),
   }));
   const select = (id: string) => window.history.replaceState(null, "", `?s=${id}`);
+  // On a phone the details cover the list, so they open only for a session you chose (or a link named), not
+  // for the one picked for you; closing them goes back to the list.
+  const chosen = !!fromUrl && fromUrl === sel;
+  const backToList = () => window.history.replaceState(null, "", window.location.pathname);
 
   return (
     <div className="flex min-w-0 flex-1">
@@ -261,7 +265,7 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
           )}
         </div>
       </section>
-      {selected && <Detail key={selected.id} s={selected} now={now} onSelect={select} />}
+      {selected && <Detail key={selected.id} s={selected} now={now} onSelect={select} chosen={chosen} onClose={backToList} />}
     </div>
   );
 }
@@ -290,24 +294,26 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
     <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined}
       className={cx("flex h-[42px] w-full items-center gap-3 border-b border-hover px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
       <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} /></span>
-      <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2">{s.task?.key ?? "—"}</span>
+      <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2 @max-md:hidden">{s.task?.key ?? "—"}</span>
       <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? "Deleted task"}</span>
       <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project?.name ?? "No project"}</span>
       <span title={`${AGENT_LABEL[s.agent]} in ${place(s)}`} className="hidden w-[110px] shrink-0 items-center gap-1.5 text-[12px] text-mut2 @2xl:flex">
         <AgentIcon agent={s.agent} size={12} className="text-mut" />{AGENT_LABEL[s.agent]}
         <SurfaceIcon surface={s.surface} size={11} className="text-dim" />
       </span>
-      <span title={images ? `${images} image${images === 1 ? "" : "s"}` : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2">
+      <span title={images ? `${images} image${images === 1 ? "" : "s"}` : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2 @max-md:w-auto">
         {images > 0 && <><Icon name="image" size={13} />{images}</>}
       </span>
-      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px]", s.status === "finished" ? "text-fg2" : "text-mut2")}>
+      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.status === "finished" ? "text-fg2" : "text-mut2")}>
         {meta(s, now)}
       </span>
     </button>
   );
 }
 
-function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (id: string) => void }) {
+function Detail({ s, now, onSelect, chosen, onClose }: {
+  s: SessionItem; now: number; onSelect: (id: string) => void; chosen: boolean; onClose: () => void;
+}) {
   const { run, pending } = useAction();
   const active = isActive(s);
   const [viewing, setViewing] = useState(0);
@@ -332,8 +338,9 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
   if (s.cliSessionId) props.push(["Claude session", s.cliSessionId, true]);
 
   return (
-    <aside aria-label="Session details" className="flex w-[420px] shrink-0 flex-col border-l border-line">
-      <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line pl-6 pr-4 text-[12.5px] text-mut">
+    <aside aria-label="Session details" className={cx("flex w-[420px] shrink-0 flex-col border-l border-line",
+      "max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-l-0 max-md:bg-panel", !chosen && "max-md:hidden")}>
+      <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line pl-6 pr-4 text-[12.5px] text-mut max-md:pl-5 max-md:pr-3">
         <span className="truncate">{s.project?.name ?? "No project"}</span>
         <span className="text-faint">›</span>
         <span className="font-mono text-[11.5px] text-mut2">{s.task?.key}</span>
@@ -341,6 +348,10 @@ function Detail({ s, now, onSelect }: { s: SessionItem; now: number; onSelect: (
         {s.href && (
           <Link href={s.href} className="inline-flex h-7 shrink-0 items-center rounded-md px-2.5 text-fg3 hover:bg-hover">Open task</Link>
         )}
+        <button type="button" aria-label="Back to sessions" onClick={onClose}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2 md:hidden">
+          <Icon name="x" size={15} />
+        </button>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 py-[22px]">

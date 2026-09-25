@@ -316,16 +316,20 @@ export function MonthView({
   return (
     <div className="flex min-w-0 flex-1">
       <section aria-label="Calendar" className="flex min-w-0 flex-1 flex-col">
-        <ViewHeader icon="calendar" title="Calendar" subtitle={title}>
+        {/* On a phone the month's name is short, so it fits beside the buttons. */}
+        <ViewHeader icon="calendar" title="Calendar" phoneSubtitleOnly subtitle={<>
+          <span className="max-sm:hidden">{title}</span>
+          <span className="sm:hidden">{format(parseLocal(`${month}-01`), "MMM yyyy")}</span>
+        </>}>
           <PeriodNav unit="month" prev={nav.prev} next={nav.next} today="/calendar" />
           <span className="flex-1" />
           <ViewSwitch value="month" month={nav.month} week={nav.week} />
         </ViewHeader>
 
-        <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px]">
+        <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px] max-md:overflow-x-auto max-md:px-3">
           {FILTERS.map((f) => (
             <button key={f.value} type="button" aria-pressed={show[f.value]} onClick={() => setShow((s) => ({ ...s, [f.value]: !s[f.value] }))}
-              className={cx("flex h-[26px] items-center gap-1.5 rounded-[13px] border px-[9px] hover:bg-hover", show[f.value] ? "border-ctl text-fg2" : "border-line text-dim")}>
+              className={cx("flex h-[26px] shrink-0 items-center gap-1.5 rounded-[13px] border px-[9px] hover:bg-hover", show[f.value] ? "border-ctl text-fg2" : "border-line text-dim")}>
               <span className={cx("flex items-center", !show[f.value] && "opacity-50")}>
                 {f.value === "due" && <Icon name="flag" size={12} strokeWidth={2.2} />}
                 {f.value === "event" && <span className="h-[7px] w-[7px] rounded-full bg-mut" />}
@@ -336,7 +340,7 @@ export function MonthView({
             </button>
           ))}
           <span className="flex-1" />
-          <span className={summary.danger ? "text-danger" : "text-mut2"}>{summary.text}</span>
+          <span className={cx("shrink-0 max-sm:hidden", summary.danger ? "text-danger" : "text-mut2")}>{summary.text}</span>
         </div>
 
         <div className="flex min-h-0 flex-1">
@@ -401,9 +405,10 @@ export function MonthView({
             </div>
           </div>
 
+          {/* Dragging tasks onto days needs a mouse: on a phone the month gets the whole width. */}
           {(!selected || dragDated) && (
             <aside aria-label="Tasks without a date" inert={!panelOpen} {...clearTarget}
-              className={cx("shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none",
+              className={cx("shrink-0 overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none max-md:hidden",
                 panelOpen ? "w-[280px] border-l border-line" : "w-0")}>
               <div className={cx("flex h-full w-[280px] flex-col", overClear && "bg-accent/[0.04]")}>
                 <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-4">

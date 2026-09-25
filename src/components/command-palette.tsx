@@ -69,10 +69,11 @@ export function CommandPalette({ tasks, projects }: { tasks: PaletteTask[]; proj
   const current = Math.min(active, Math.max(entries.length - 1, 0));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-28" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
-      <div role="dialog" aria-label="Command menu" className="flex h-fit max-h-[460px] w-[600px] flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]">
+    // On a phone it sits at the top, clear of the on-screen keyboard, with a margin at the sides.
+    <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-28 max-md:px-3 max-md:pt-3" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+      <div role="dialog" aria-label="Command menu" className="flex h-fit max-h-[460px] w-[600px] max-w-full flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)] max-md:max-h-[min(460px,calc(100dvh-24px))]">
         <div className="flex h-12 items-center gap-2.5 border-b border-line px-4">
-          <Icon name="search" size={15} className="text-mut2" />
+          <Icon name="search" size={15} className="shrink-0 text-mut2" />
           <input ref={input} value={q} aria-label="Search tasks, projects and pages" placeholder="Search tasks, projects and pages…"
             onChange={(e) => { setQ(e.target.value); setActive(0); }}
             onKeyDown={(e) => {
@@ -81,7 +82,13 @@ export function CommandPalette({ tasks, projects }: { tasks: PaletteTask[]; proj
               if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
               if (e.key === "Enter") entries[current]?.run();
             }}
-            className="flex-1 bg-transparent text-[14px] text-strong outline-none placeholder:text-dim" />
+            // 16 px on a phone: Safari zooms into a smaller field when it gets focus.
+            className="min-w-0 flex-1 bg-transparent text-[14px] text-strong outline-none placeholder:text-dim max-md:text-[16px]" />
+          {/* Without Esc, a phone closes it here (or with a tap on the page around it). */}
+          <button type="button" aria-label="Close" onClick={() => setOpen(false)}
+            className="-mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-mut hover:bg-hover md:hidden">
+            <Icon name="x" size={15} />
+          </button>
         </div>
         <div className="overflow-y-auto p-1.5">
           {entries.map((en, i) => (
@@ -94,7 +101,8 @@ export function CommandPalette({ tasks, projects }: { tasks: PaletteTask[]; proj
           ))}
           {!entries.length && <div className="px-3 py-6 text-center text-[12.5px] text-mut2">No matches. Try a task key like DEV-21.</div>}
         </div>
-        <div className="flex h-9 items-center gap-3 border-t border-line px-4 text-[11.5px] text-mut2">
+        {/* Keys: a phone has none of them. */}
+        <div className="flex h-9 items-center gap-3 border-t border-line px-4 text-[11.5px] text-mut2 max-md:hidden">
           <span>↑↓ to move</span><span>↵ to open</span><span>Esc to close</span>
         </div>
       </div>

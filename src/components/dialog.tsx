@@ -22,8 +22,8 @@ export function ConfirmDialog({ title, children, confirmLabel, danger, onConfirm
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel, onConfirm]);
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay pt-40" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div role="alertdialog" aria-label={title} className="flex w-[440px] flex-col gap-3 rounded-xl border border-line2 bg-raised p-5 shadow-[var(--shadow-popover)]">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay pt-40 max-md:px-3 max-md:pt-24" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <div role="alertdialog" aria-label={title} className="flex w-[440px] max-w-full flex-col gap-3 rounded-xl border border-line2 bg-raised p-5 shadow-[var(--shadow-popover)]">
         <h2 className="text-[15px] font-semibold text-strong">{title}</h2>
         <div className="text-[13px] leading-relaxed text-mut">{children}</div>
         <div className="mt-2 flex justify-end gap-2">

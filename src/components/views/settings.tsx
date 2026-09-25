@@ -61,10 +61,10 @@ function AgentTools({ agent, device, here, pending, onConnect }: {
   const t = device.agents[agent];
   const part = (on: boolean, text: string) => <span className={on ? "text-fg3" : "text-dim"}>{text}</span>;
   return (
-    <div className="flex min-h-9 items-center gap-2.5 text-[12.5px]">
+    <div className="flex min-h-9 items-center gap-2.5 text-[12.5px] max-sm:flex-wrap max-sm:py-1.5">
       <AgentIcon agent={agent} size={14} className="text-fg3" />
-      <span className="w-[92px] shrink-0 text-fg2">{AGENT_LABEL[agent]}</span>
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px]">
+      <span className="w-[92px] shrink-0 text-fg2 max-sm:w-auto max-sm:flex-1">{AGENT_LABEL[agent]}</span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] max-sm:order-last max-sm:basis-full max-sm:pl-6">
         {part(!!t.cli, t.cli ? `CLI ${t.cli.version}` : "No CLI")}
         <span className="text-faint">·</span>
         {part(!!t.app, t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent]}`)}
@@ -83,10 +83,11 @@ function AgentTools({ agent, device, here, pending, onConnect }: {
   );
 }
 
+/** A label and its controls; on a phone the label goes above them. */
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-h-12 items-center gap-3 border-b border-line px-3.5 last:border-b-0">
-      <span className="w-[120px] shrink-0 text-[12.5px] text-mut2">{label}</span>
+    <div className="flex min-h-12 items-center gap-3 border-b border-line px-3.5 last:border-b-0 max-sm:flex-col max-sm:items-stretch max-sm:gap-1.5 max-sm:py-2.5">
+      <span className="w-[120px] shrink-0 text-[12.5px] text-mut2 max-sm:w-auto">{label}</span>
       <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
     </div>
   );
@@ -160,10 +161,10 @@ export function SettingsView({ settings, projects, areas, account, devices, this
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <Icon name="settings" className="text-mut" />
         <h1 className="text-[14px] font-semibold text-strong">Settings</h1>
-        <span className="text-mut2">Account, security, this computer and planning</span>
+        <span className="truncate text-mut2 max-sm:hidden">Account, security, this computer and planning</span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-10 px-10 py-8">
+        <div className="mx-auto grid max-w-[1180px] grid-cols-2 gap-10 px-10 py-8 max-md:grid-cols-1 max-md:gap-7 max-md:px-4 max-md:py-5">
           <div className="flex flex-col gap-7">
             {!account && (
               <Section title="PacedMind Cloud" note="Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.">

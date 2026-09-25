@@ -90,45 +90,48 @@ export function Menu<V>({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; width: number; maxHeight: number } | null>(null);
   useEffect(() => {
     if (!open) return;
     const inside = (t: EventTarget | null) => !!ref.current?.contains(t as Node) || !!list.current?.contains(t as Node);
-    const onDown = (e: MouseEvent) => { if (!inside(e.target)) setOpen(false); };
+    // Pointer, not mouse: Safari on a phone sends no mouse events for a tap on something that isn't clickable.
+    const onDown = (e: PointerEvent) => { if (!inside(e.target)) setOpen(false); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     // The list floats over the page, so it can't follow its button when something scrolls or the window resizes.
     const onScroll = (e: Event) => { if (!list.current?.contains(e.target as Node)) setOpen(false); };
     const onResize = () => setOpen(false);
-    document.addEventListener("mousedown", onDown);
+    document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
     return () => {
-      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
     };
   }, [open]);
   // Below the button, or above it when the window has no room below (a dialog's footer, say). It is rendered into
-  // document.body, so a dialog or scrolling panel that hides its overflow can't cut it off.
+  // document.body, so a dialog or scrolling panel that hides its overflow can't cut it off. On a phone narrower
+  // than the list, it takes the window's width less a margin.
   useLayoutEffect(() => {
     if (!open) return;
     const box = ref.current?.getBoundingClientRect();
     if (!box) return;
     const h = list.current?.scrollHeight ?? 0;
+    const w = Math.min(width, window.innerWidth - 16);
     const roomBelow = window.innerHeight - 8 - (box.bottom + 4);
     const roomAbove = box.top - 4 - 8;
     const down = h <= roomBelow || roomBelow >= roomAbove;
     const maxHeight = Math.max(80, Math.min(320, down ? roomBelow : roomAbove));
-    const left = Math.max(8, Math.min(align === "right" ? box.right - width : box.left, window.innerWidth - width - 8));
-    setPos({ left, maxHeight, top: down ? box.bottom + 4 : box.top - 4 - Math.min(h, maxHeight) });
+    const left = Math.max(8, Math.min(align === "right" ? box.right - w : box.left, window.innerWidth - w - 8));
+    setPos({ left, width: w, maxHeight, top: down ? box.bottom + 4 : box.top - 4 - Math.min(h, maxHeight) });
   }, [open, align, width]);
   return (
     <div ref={ref} className={cx("relative", className)}>
       <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
       {open && createPortal(
-        <div ref={list} role="menu" style={{ width, left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight ?? 320 }}
+        <div ref={list} role="menu" style={{ width: pos?.width ?? width, left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight ?? 320 }}
           className="fixed z-[80] overflow-auto rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]">
           {items.map((it, i) => (
             <button key={i} type="button" role="menuitem" onClick={() => { onSelect(it.value); setOpen(false); }}
@@ -167,7 +170,8 @@ export function Toaster() {
     return () => window.removeEventListener("organizer:toast", on);
   }, []);
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+    // On a phone a long message wraps inside the screen's margins.
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex flex-col gap-2 max-md:left-4 max-md:items-end">
       {items.map((t) => (
         <div key={t.id} role="status"
           className={cx("pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-lg border bg-raised px-3.5 py-2.5 text-[12.5px] shadow-[var(--shadow-popover)]",

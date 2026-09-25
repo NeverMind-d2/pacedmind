@@ -32,12 +32,23 @@ function navigationSnapshot() {
 }
 const initialNavigation = () => 0;
 
-/** Shared app header; Electron supplies the native window buttons over its right edge. */
+/** Opens or closes the sidebar, which on a phone is a panel over the page (sidebar.tsx). */
+export function toggleMenu() {
+  window.dispatchEvent(new CustomEvent("organizer:menu"));
+}
+
+/**
+ * Shared app header; Electron supplies the native window buttons over its right edge. On a phone it has the
+ * menu button instead of back and forward, which the browser has.
+ */
 export function AppHeader({ email }: { email: string | null }) {
   const history = useSyncExternalStore(subscribe, navigationSnapshot, initialNavigation);
   return (
     <header className="app-titlebar" aria-label="PacedMind">
       <div className="app-titlebar__content">
+        <button type="button" className="app-titlebar__button app-titlebar__menu" aria-label="Menu" onClick={toggleMenu}>
+          <Icon name="menu" size={18} />
+        </button>
         <div className="app-titlebar__navigation" role="group" aria-label="Page navigation">
           <button type="button" className="app-titlebar__button" aria-label="Go back" title="Go back (Alt+Left)"
             disabled={!(history & 1)} onClick={() => window.history.back()}>

@@ -22,19 +22,20 @@ export function DueChip({ due, done }: { due: string | null; done?: boolean }) {
 export function SessionChip({ task, ctx }: { task: Task; ctx: TaskContext }) {
   const s = ctx.sessions[task.id];
   if (!s) return null;
+  // On a phone only the dot shows; the words would take the title's room.
   if (s.status === "running" || s.status === "starting") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-mut">
+      <span title={`${AGENT_LABEL[s.agent]} running`} className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-mut">
         <span className="h-1.5 w-1.5 rounded-full bg-fg3" />
-        {AGENT_LABEL[s.agent]} running
+        <span className="max-sm:hidden">{AGENT_LABEL[s.agent]} running</span>
       </span>
     );
   }
   if (s.status === "finished") {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-fg3">
+      <span title="Session finished" className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-fg3">
         <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-        Session finished
+        <span className="max-sm:hidden">Session finished</span>
       </span>
     );
   }
@@ -45,12 +46,13 @@ export function TaskRow({ task, ctx, selected, onSelect }: { task: Task; ctx: Ta
   const { run } = useAction();
   const done = task.status === "done" || task.status === "canceled";
   return (
-    <div className={cx("flex h-[38px] items-center gap-2.5 border-b border-hover pl-5 pr-4", selected ? "bg-sel" : "hover:bg-hover")}>
+    // On a phone: taller rows and a bigger target for the status, without the key and labels.
+    <div className={cx("flex h-[38px] items-center gap-2.5 border-b border-hover pl-5 pr-4 max-sm:h-[46px] max-sm:pl-3.5", selected ? "bg-sel" : "hover:bg-hover")}>
       <span title={PRIORITY_LABEL[task.priority]} className="flex w-4 shrink-0 justify-center"><PriorityIcon priority={task.priority} /></span>
-      <span className="w-[54px] shrink-0 font-mono text-[11.5px] text-mut2">{task.key}</span>
+      <span className="w-[54px] shrink-0 font-mono text-[11.5px] text-mut2 max-sm:hidden">{task.key}</span>
       <button type="button" aria-label={done ? "Mark as not done" : "Mark as done"}
         onClick={() => run(() => updateTaskAction(task.id, { status: done ? "todo" : "done" }))}
-        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded hover:bg-ink/5">
+        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded hover:bg-ink/5 max-sm:h-9 max-sm:w-9 max-sm:-mx-2">
         <StatusIcon status={task.status} />
       </button>
       <button type="button" onClick={onSelect}
@@ -59,7 +61,7 @@ export function TaskRow({ task, ctx, selected, onSelect }: { task: Task; ctx: Ta
       </button>
       <SessionChip task={task} ctx={ctx} />
       {task.labels.slice(0, 2).map((l) => (
-        <span key={l} className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] text-mut">
+        <span key={l} className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] text-mut max-sm:hidden">
           <span className="h-1.5 w-1.5 rounded-full bg-mut2" />{l}
         </span>
       ))}

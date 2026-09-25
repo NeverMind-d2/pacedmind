@@ -140,9 +140,9 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const found = "border-accent/45 bg-accent/10 text-accent-fg";
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-24" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
+    <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-24 max-md:px-3 max-md:pt-3" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div role="dialog" aria-label={mode === "task" ? "New task" : "New activity"}
-        className="flex h-fit w-[640px] flex-col rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]"
+        className="flex h-fit w-[640px] max-w-full flex-col rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]"
         onKeyDown={(e) => {
           if (e.key === "Escape") close();
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
@@ -241,7 +241,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           <span className="flex-1" />
           <Button variant="ghost" onClick={close}>Cancel</Button>
           <Button variant="primary" disabled={pending} onClick={submit} className="h-8 px-3">
-            {mode === "task" ? "Create task" : "Add to calendar"} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px]">Ctrl ↵</span>
+            {mode === "task" ? "Create task" : "Add to calendar"} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
           </Button>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useOptimistic, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useLayoutEffect, useOptimistic, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { setFlowOnAction, updateProjectAction } from "@/app/actions";
 import { reorderTasksAction, setNextProjectAction } from "@/app/(app)/roadmap/actions";
@@ -12,7 +12,8 @@ import { AGENT_LABEL, type AgentId, type Area, type Project, type Session, type 
 import type { ProjectStats, StateTone, TaskState } from "@/server/timeline";
 import { Diamond, Icon, StatusIcon } from "@/components/icons";
 import { TaskDetail } from "@/components/task-detail";
-import { Menu, Switch, cx, useAction } from "@/components/ui";
+import { openAdd } from "@/components/task-list";
+import { Button, Menu, Switch, cx, useAction } from "@/components/ui";
 import { dayPos, tint, useWidth } from "./timeline";
 
 export interface RoadmapItem {
@@ -34,6 +35,34 @@ const TONE: Record<StateTone, string> = {
 };
 const EMPTY: ProjectStats = { done: 0, total: 0, started: false };
 const pv = "flex h-7 max-w-full items-center gap-2 rounded-md px-2 text-left text-fg2 hover:bg-hover";
+const NOW_LINE = "color-mix(in srgb, var(--color-accent) 70%, transparent)";
+
+/** Each project's bar: its days from `from` (the end is exclusive), whether it waits to start, and what it says. */
+function barsOf(from: string, days: number, today: string, projects: Project[], stats: Record<string, ProjectStats>, colorOf: (p: Project) => string) {
+  const byId = new Map(projects.map((p) => [p.id, p]));
+  return projects.map((p, i) => {
+    const st = stats[p.id] ?? EMPTY;
+    let s = p.startDate ? dayDiff(from, p.startDate) : null;
+    let e = p.targetDate ? dayDiff(from, p.targetDate) + 1 : null;
+    if (s === null && e !== null) s = Math.min(e - 1, dayDiff(from, today));
+    if (e === null && s !== null) e = Math.max(s + 1, days);
+    const waiting = !st.started && !!p.startDate && p.startDate > today;
+    const after = p.afterProjectId ? byId.get(p.afterProjectId) : undefined;
+    const label = waiting
+      ? after ? `Starts after ${after.name}` : `Starts ${fmtShort(p.startDate!)}`
+      : st.total ? `${st.done} of ${st.total} ${st.total === 1 ? "task" : "tasks"}` : "No tasks yet";
+    return { p, i, s, e, waiting, after, label, pct: st.total ? (st.done / st.total) * 100 : 0, color: colorOf(p) };
+  });
+}
+
+function AgentChip({ agent }: { agent: AgentId }) {
+  return (
+    <span className="inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full border border-line2 px-[7px] text-[11px] text-mut">
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: AGENT_DOT[agent] }} />
+      {AGENT_SHORT[agent]}
+    </span>
+  );
+}
 
 /* ---------- project timeline ---------- */
 
@@ -48,7 +77,6 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
   const gridW = X(days);
   const today = dateOnly(now);
   const nowPos = dayPos(from, now);
-  const byId = new Map(projects.map((p) => [p.id, p]));
 
   const lines: { x: number; strong: boolean }[] = [];
   const months: { x: number; label: string }[] = [];
@@ -63,19 +91,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
   }
   if (!months.length || months[0].x > 90) months.unshift({ x: 0, label: format(parseLocal(from), "MMMM") });
 
-  const bars = projects.map((p, i) => {
-    const st = stats[p.id] ?? EMPTY;
-    let s = p.startDate ? dayDiff(from, p.startDate) : null;
-    let e = p.targetDate ? dayDiff(from, p.targetDate) + 1 : null;
-    if (s === null && e !== null) s = Math.min(e - 1, dayDiff(from, today));
-    if (e === null && s !== null) e = Math.max(s + 1, days);
-    const waiting = !st.started && !!p.startDate && p.startDate > today;
-    const after = p.afterProjectId ? byId.get(p.afterProjectId) : undefined;
-    const label = waiting
-      ? after ? `Starts after ${after.name}` : `Starts ${fmtShort(p.startDate!)}`
-      : st.total ? `${st.done} of ${st.total} ${st.total === 1 ? "task" : "tasks"}` : "No tasks yet";
-    return { p, i, s, e, waiting, label, pct: st.total ? (st.done / st.total) * 100 : 0, color: colorOf(p) };
-  });
+  const bars = barsOf(from, days, today, projects, stats, colorOf);
 
   // A project that starts after another one: an arrow from the end of the first to the start of the second.
   const deps = bars.flatMap((b) => {
@@ -92,7 +108,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
 
   const height = projects.length * ROW;
   return (
-    <div ref={ref} className="max-h-[44vh] shrink-0 overflow-auto border-b border-line">
+    <div ref={ref} className="max-h-[44vh] shrink-0 overflow-auto border-b border-line max-md:hidden">
       <div style={{ width: LEFT + gridW }}>
         <div className="sticky top-0 z-20 flex border-b border-line bg-panel" style={{ height: HEAD }}>
           <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel px-5 text-[11.5px] text-mut2" style={{ width: LEFT }}>
@@ -130,12 +146,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
                   style={{ width: LEFT }}>
                   <Diamond color={color} />
                   <span className="min-w-0 flex-1 truncate text-fg">{p.name}</span>
-                  {p.agent && (
-                    <span className="inline-flex h-[18px] shrink-0 items-center gap-[5px] rounded-full border border-line2 px-[7px] text-[11px] text-mut">
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: AGENT_DOT[p.agent] }} />
-                      {AGENT_SHORT[p.agent]}
-                    </span>
-                  )}
+                  {p.agent && <AgentChip agent={p.agent} />}
                 </div>
                 <div className="relative shrink-0 overflow-hidden" style={{ width: gridW }}>
                   {visible && (
@@ -169,7 +180,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
             );
           })}
           {nowPos >= 0 && nowPos <= days && (
-            <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: LEFT + X(nowPos), background: "color-mix(in srgb, var(--color-accent) 70%, transparent)" }} />
+            <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: LEFT + X(nowPos), background: NOW_LINE }} />
           )}
           {deps.length > 0 && (
             <svg width={gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: LEFT }} aria-hidden="true">
@@ -187,7 +198,193 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
   );
 }
 
+/* ---------- the projects on a phone ---------- */
+
+/** Height of the month strip over the phone's project list. */
+const STRIP = 32;
+
+/**
+ * A phone has no room for the names beside the weeks, so each project is a row with its name over a bar across the
+ * same weeks, and the chosen project opens under its row (`children`: its tasks and settings).
+ */
+function PhoneProjects({ from, days, now, projects, colorOf, stats, selectedId, children }: {
+  from: string; days: number; now: string; projects: Project[]; colorOf: (p: Project) => string;
+  stats: Record<string, ProjectStats>; selectedId: string; children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const today = dateOnly(now);
+  const nowPos = dayPos(from, now);
+  const showNow = nowPos >= 0 && nowPos <= days;
+  /** A day's place on the bars, in percent of their width. */
+  const at = (d: number) => (Math.max(0, Math.min(days, d)) / days) * 100;
+  const months: { day: number; label: string }[] = [];
+  for (let i = 1; i < days; i++) {
+    const d = parseLocal(addDaysStr(from, i));
+    if (d.getDate() === 1) months.push({ day: i, label: format(d, "MMM") });
+  }
+  if (!months.length || months[0].day > 10) months.unshift({ day: 0, label: format(parseLocal(from), "MMM") });
+  const pill = `clamp(24px, ${at(nowPos)}%, calc(100% - 24px))`;
+
+  // Opening a project closes the one open above it, which would pull the new one up out of sight: bring it to the top.
+  useLayoutEffect(() => {
+    const row = ref.current?.querySelector<HTMLElement>("[aria-current=true]");
+    if (ref.current && row) ref.current.scrollTop = row.offsetTop - STRIP;
+  }, [selectedId]);
+
+  return (
+    <div ref={ref} className="relative min-h-0 flex-1 overflow-y-auto md:hidden">
+      <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_44px] gap-x-2 overflow-hidden border-b border-line bg-panel px-4" style={{ height: STRIP }}>
+        <div className="relative">
+          {months.map((m) => {
+            // Today's date covers about a week either side of it: a month that starts under it is named after it,
+            // and one that started before it is already named by it.
+            const under = showNow && Math.abs(m.day + 3.5 - nowPos) < 13;
+            if (under && m.day <= nowPos) return null;
+            return (
+              <span key={m.day} className="absolute top-[9px] pl-1 text-[11.5px] text-mut"
+                style={{ left: under ? `max(${at(m.day)}%, calc(${pill} + 24px))` : `${at(m.day)}%` }}>
+                {m.label}
+              </span>
+            );
+          })}
+          {showNow && (
+            <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-white"
+              style={{ left: pill }}>
+              {fmtShort(today)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {barsOf(from, days, today, projects, stats, colorOf).map(({ p, s, e, waiting, after, label, pct, color }) => {
+        const selected = p.id === selectedId;
+        const visible = s !== null && e !== null && e > 0 && s < days;
+        const target = p.targetDate && e !== null && e >= 0 && e <= days ? at(e) : null;
+        return (
+          <Fragment key={p.id}>
+            <Link href={`/roadmap?p=${encodeURIComponent(p.id)}`} scroll={false} aria-current={selected ? "true" : undefined}
+              className={cx("grid grid-cols-[minmax(0,1fr)_44px] items-center gap-x-2 gap-y-2 border-b border-hover px-4 py-2.5", selected ? "bg-sel" : "hover:bg-hover")}>
+              <span className="col-span-2 flex min-w-0 items-center gap-2">
+                <Diamond color={color} />
+                <span className="min-w-0 flex-1 truncate text-fg">{p.name}</span>
+                {p.agent && <AgentChip agent={p.agent} />}
+                <span className="max-w-[55%] shrink-0 truncate text-[12px] text-mut2">{after && !waiting ? `${label}, after ${after.name}` : label}</span>
+              </span>
+              <span className="relative h-4">
+                {months.map((m) => m.day > 0 && <span key={m.day} className="absolute inset-y-0 w-px bg-line2" style={{ left: `${at(m.day)}%` }} />)}
+                {visible && (
+                  <span className="absolute top-0.5 h-3 overflow-hidden rounded-[4px]"
+                    style={{ left: `${at(s)}%`, width: `max(6px, ${at(e) - at(s)}%)`, background: waiting ? "transparent" : tint(color, 14), border: `1px ${waiting ? "dashed" : "solid"} ${tint(color, waiting ? 45 : 36)}` }}>
+                    {!waiting && <span className="absolute inset-y-0 left-0" style={{ width: `${pct}%`, background: tint(color, 40) }} />}
+                  </span>
+                )}
+                {target !== null && (
+                  <span className="absolute top-[3px] flex" style={{ left: `calc(${target}% - 5px)` }}><Diamond color={color} size={10} hollow /></span>
+                )}
+                {!visible && s !== null && e !== null && (
+                  <span className={cx("absolute top-0 whitespace-nowrap text-[11px] leading-4 text-dim", e <= 0 ? "left-1" : "right-1")}>
+                    {e <= 0 ? `‹ ${fmtShort(p.targetDate ?? addDaysStr(from, e - 1))}` : `${fmtShort(p.startDate ?? addDaysStr(from, s))} ›`}
+                  </span>
+                )}
+                {s === null && <span className="absolute left-1 top-0 text-[11px] leading-4 text-dim">No dates yet</span>}
+                {showNow && <span className="absolute -inset-y-1 w-px" style={{ left: `${at(nowPos)}%`, background: NOW_LINE }} />}
+              </span>
+              <span className="text-right text-[11.5px] leading-4 text-mut">{p.targetDate && fmtShort(p.targetDate)}</span>
+            </Link>
+            {selected && <div className="border-b border-line">{children}</div>}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The chosen project's tasks on a phone, under its row. Tapping one opens its details; reordering is left to a computer. */
+function PhoneTasks({ project, items, next, stats, onSelect }: {
+  project: Project; items: RoadmapItem[]; next: Project[]; stats: Record<string, ProjectStats>; onSelect: (key: string) => void;
+}) {
+  return (
+    <section aria-label="Task order" className="pb-2">
+      <div className="flex h-11 items-center gap-2 pl-4 pr-3">
+        <h2 className="text-[12.5px] font-medium text-fg2">Task order</h2>
+        <span className="text-[12px] text-mut2">{items.length} {items.length === 1 ? "task" : "tasks"}</span>
+        <span className="flex-1" />
+        <Link href={`/flows?p=${encodeURIComponent(project.id)}`}
+          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line2 px-2.5 text-[12px] text-fg3 hover:bg-hover">
+          <Icon name="flow" size={12} strokeWidth={2} />Open as flow
+        </Link>
+      </div>
+      {items.map((it, i) => {
+        const t = it.task;
+        const after = afterOf(it);
+        return (
+          <div key={t.id} onClick={() => onSelect(t.key)} className="flex cursor-pointer items-center gap-2.5 border-t border-hover py-2 pl-4 pr-3 hover:bg-hover">
+            <span className="w-4 shrink-0 self-start font-mono text-[11px] leading-[18px] text-dim">{i + 1}</span>
+            <span className="flex h-[18px] shrink-0 items-center self-start"><StatusIcon status={t.status} /></span>
+            <span className="min-w-0 flex-1">
+              <button type="button" className={cx("block w-full truncate text-left leading-[18px]", t.status === "done" ? "text-mut2" : "text-fg")}>{t.title}</button>
+              <span className="mt-0.5 flex items-center gap-2 text-[12px] leading-4">
+                <span className="shrink-0 font-mono text-[11.5px] text-mut2">{t.key}</span>
+                {it.state.tone === "waiting" && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+                <span className={cx("min-w-0 truncate", TONE[it.state.tone])}>
+                  {it.state.text}{after && <span className="text-dim"> · {after}</span>}
+                </span>
+              </span>
+            </span>
+            {canOpen(it) && (
+              <Link href={`/sessions?s=${it.session!.id}`} onClick={(e) => e.stopPropagation()}
+                className="inline-flex h-7 shrink-0 items-center rounded-md border border-ctl px-2 text-[12px] text-fg2 hover:bg-sel">
+                Open session
+              </Link>
+            )}
+          </div>
+        );
+      })}
+      {!items.length && <NoTasks project={project} />}
+      <NextProjects project={project} next={next} stats={stats} />
+    </section>
+  );
+}
+
 /* ---------- task order ---------- */
+
+// Your own tasks are part of the plan but never of the flow.
+const afterOf = (it: RoadmapItem) =>
+  it.task.agent === "human" ? "Done by you" : it.after.length ? `After ${it.after.join(", ")}` : it.startOfFlow ? "Start of flow" : "";
+const canOpen = (it: RoadmapItem) => it.state.tone === "waiting" && !!it.session;
+
+function NoTasks({ project }: { project: Project }) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-8 py-16 text-center max-md:py-8">
+      <div className="text-[14px] text-fg2">No tasks in {project.name} yet</div>
+      <div className="text-[12.5px] text-mut2 max-md:hidden">
+        Press <span className="rounded border border-ctl px-1.5 font-mono text-[11px]">C</span> anywhere to add a task.
+      </div>
+      {/* A phone has no C key. */}
+      <Button className="md:hidden" onClick={() => openAdd({ projectId: project.id, areaId: project.areaId })}>
+        <Icon name="plus" size={13} />Add a task
+      </Button>
+    </div>
+  );
+}
+
+/** The projects that start once this one is done. */
+function NextProjects({ project, next, stats }: { project: Project; next: Project[]; stats: Record<string, ProjectStats> }) {
+  return next.map((q) => {
+    const n = (stats[q.id] ?? EMPTY).total;
+    return (
+      <Link key={q.id} href={`/roadmap?p=${encodeURIComponent(q.id)}`} scroll={false}
+        className="mx-5 mt-2 flex h-[38px] items-center gap-2.5 rounded-md border border-dashed border-ctl px-3 text-[12.5px] text-mut hover:bg-hover max-md:mx-4 max-md:h-auto max-md:py-2">
+        <Icon name="arrowRight" size={14} strokeWidth={2} />
+        {/* A phone wraps the sentence rather than cutting it off. */}
+        <span className="min-w-0 flex-1 truncate max-md:whitespace-normal">
+          Then {q.name}, {n ? `${n} ${n === 1 ? "task" : "tasks"}` : "no tasks yet"}, once {project.name} is done
+        </span>
+        {q.startDate && <span className="shrink-0 text-[12px] text-mut2">Est. {fmtShort(q.startDate)}</span>}
+      </Link>
+    );
+  });
+}
 
 function TaskOrder({ project, items, next, stats, sel, onSelect }: {
   project: Project; items: RoadmapItem[]; next: Project[]; stats: Record<string, ProjectStats>;
@@ -206,12 +403,11 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
     });
   };
   const arrow = "flex h-6 w-6 items-center justify-center rounded text-mut2 hover:bg-sel hover:text-fg2 disabled:pointer-events-none disabled:opacity-30";
-  const canOpen = (it: RoadmapItem) => it.state.tone === "waiting" && !!it.session;
   // Keeps the columns lined up when some rows have an "Open session" button.
   const actions = list.some(canOpen);
 
   return (
-    <section aria-label="Task order" className="flex min-w-0 flex-1 flex-col">
+    <section aria-label="Task order" className="flex min-w-0 flex-1 flex-col max-md:hidden">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-5">
         <h2 className="mr-1 text-[12.5px] font-medium text-fg2">Task order</h2>
         <span className="truncate text-[12px] text-mut2">{project.name} · {list.length} {list.length === 1 ? "task" : "tasks"}</span>
@@ -226,8 +422,7 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
           const t = it.task;
           const done = t.status === "done";
           const waiting = it.state.tone === "waiting";
-          // Your own tasks are part of the plan but never of the flow.
-          const after = t.agent === "human" ? "Done by you" : it.after.length ? `After ${it.after.join(", ")}` : it.startOfFlow ? "Start of flow" : "";
+          const after = afterOf(it);
           return (
             <div key={t.id} onClick={() => onSelect(t.key)}
               className={cx("group flex h-[38px] cursor-pointer items-center gap-2.5 border-b border-hover pl-5 pr-3", t.key === sel ? "bg-sel" : "hover:bg-hover")}>
@@ -263,27 +458,8 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
             </div>
           );
         })}
-        {!list.length && (
-          <div className="flex flex-col items-center gap-3 px-8 py-16 text-center">
-            <div className="text-[14px] text-fg2">No tasks in {project.name} yet</div>
-            <div className="text-[12.5px] text-mut2">
-              Press <span className="rounded border border-ctl px-1.5 font-mono text-[11px]">C</span> anywhere to add a task.
-            </div>
-          </div>
-        )}
-        {next.map((q) => {
-          const n = (stats[q.id] ?? EMPTY).total;
-          return (
-            <Link key={q.id} href={`/roadmap?p=${encodeURIComponent(q.id)}`} scroll={false}
-              className="mx-5 mt-2 flex h-[38px] items-center gap-2.5 rounded-md border border-dashed border-ctl px-3 text-[12.5px] text-mut hover:bg-hover">
-              <Icon name="arrowRight" size={14} strokeWidth={2} />
-              <span className="min-w-0 flex-1 truncate">
-                Then {q.name}, {n ? `${n} ${n === 1 ? "task" : "tasks"}` : "no tasks yet"}, once {project.name} is done
-              </span>
-              {q.startDate && <span className="shrink-0 text-[12px] text-mut2">Est. {fmtShort(q.startDate)}</span>}
-            </Link>
-          );
-        })}
+        {!list.length && <NoTasks project={project} />}
+        <NextProjects project={project} next={next} stats={stats} />
       </div>
     </section>
   );
@@ -300,9 +476,37 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function SessionPanel({ project, projects, colorOf, terminal }: {
-  project: Project; projects: Project[]; colorOf: (p: Project) => string; terminal: string;
-}) {
+type SettingsProps = { project: Project; projects: Project[]; colorOf: (p: Project) => string; terminal: string };
+
+function SessionPanel(props: SettingsProps) {
+  return (
+    <aside aria-label="Session settings" className="flex w-[380px] shrink-0 flex-col border-l border-line max-md:hidden">
+      <div className="flex h-11 shrink-0 items-center border-b border-line px-5">
+        <h2 className="truncate text-[12.5px] font-medium text-fg2">Sessions · {props.project.name}</h2>
+      </div>
+      <SessionSettings {...props} />
+    </aside>
+  );
+}
+
+/** A phone keeps the project's session settings folded away under its tasks. */
+function PhoneSessionSettings(props: SettingsProps) {
+  return (
+    // Unfolded near the bottom of the screen, they would open out of sight.
+    <details className="group/settings border-t border-hover"
+      onToggle={(e) => { if (e.currentTarget.open) e.currentTarget.scrollIntoView({ block: "nearest", behavior: "smooth" }); }}>
+      <summary className="flex h-11 cursor-pointer list-none items-center gap-2 px-4 text-[12.5px] hover:bg-hover [&::-webkit-details-marker]:hidden">
+        <Icon name="chevronRight" size={13} strokeWidth={2} className="shrink-0 text-mut2 group-open/settings:rotate-90" />
+        <span className="font-medium text-fg2">Session settings</span>
+        <span className="flex-1" />
+        <span className="shrink-0 text-mut2">{props.project.flowOn ? "Flow on" : "Paused"}</span>
+      </summary>
+      <SessionSettings key={`${props.project.id}:${props.project.folder ?? ""}`} {...props} />
+    </details>
+  );
+}
+
+function SessionSettings({ project, projects, colorOf, terminal }: SettingsProps) {
   const { run } = useAction();
   const [folder, setFolder] = useState(project.folder ?? "");
   const byId = new Map(projects.map((p) => [p.id, p]));
@@ -323,11 +527,8 @@ function SessionPanel({ project, projects, colorOf, terminal }: {
   const item = (p: Project) => ({ value: p.id as string | null, label: p.name, icon: <Diamond color={colorOf(p)} size={10} /> });
 
   return (
-    <aside aria-label="Session settings" className="flex w-[380px] shrink-0 flex-col border-l border-line">
-      <div className="flex h-11 shrink-0 items-center border-b border-line px-5">
-        <h2 className="truncate text-[12.5px] font-medium text-fg2">Sessions · {project.name}</h2>
-      </div>
-      <div className="flex flex-col gap-0.5 px-3 py-2.5">
+    <>
+      <div className="flex flex-col gap-0.5 px-3 py-2.5 max-md:px-2 max-md:pt-0">
         <Setting label="Flow on">
           <span className="px-2"><Switch on={project.flowOn} label="Flow on" onChange={(v) => run(() => setFlowOnAction(project.id, v))} /></span>
           <span className="truncate text-mut">{project.flowOn ? "Next sessions start on their own" : "Paused"}</span>
@@ -380,10 +581,10 @@ function SessionPanel({ project, projects, colorOf, terminal }: {
             onSelect={(v) => run(() => setNextProjectAction(project.id, v))} />
         </Setting>
       </div>
-      <p className="px-5 py-1.5 text-[12px] leading-[1.55] text-mut2">
+      <p className="px-5 py-1.5 text-[12px] leading-[1.55] text-mut2 max-md:px-4 max-md:pb-3">
         PacedMind only tracks state. You work with the agent in its own terminal, and it tells PacedMind when it starts and when it’s finished.
       </p>
-    </aside>
+    </>
   );
 }
 
@@ -425,13 +626,17 @@ export function Roadmap(props: {
   const first = parseLocal(from);
   const last = parseLocal(addDaysStr(from, days - 1));
   const range = `${format(first, first.getFullYear() === last.getFullYear() ? "MMM" : "MMM yyyy")} to ${format(last, "MMM yyyy")}`;
+  const waitingText = props.waiting === 1 ? "1 finished session waiting for you" : `${props.waiting} finished sessions waiting for you`;
+  const next = project ? projects.filter((p) => p.afterProjectId === project.id) : [];
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
+      {/* On a phone the header keeps the view switch and the number of finished sessions: the months are named above
+          the bars, and the list of projects is the project picker. */}
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <Icon name="roadmap" className="text-mut" />
         <h1 className="text-[14px] font-semibold text-strong">Roadmap</h1>
-        <span className="text-mut2">{range}</span>
+        <span className="text-mut2 max-md:hidden">{range}</span>
         <div className="ml-1.5 flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
           <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-sel px-2.5 text-[12px] text-strong">
             <Icon name="roadmap" size={12} strokeWidth={2} />Roadmap
@@ -443,13 +648,14 @@ export function Roadmap(props: {
         </div>
         <span className="flex-1" />
         {props.waiting > 0 && (
-          <Link href="/sessions" className="inline-flex h-[26px] items-center gap-2 rounded-full px-2.5 text-[12px] text-mut hover:bg-hover">
+          <Link href="/sessions" aria-label={waitingText} className="inline-flex h-[26px] items-center gap-2 rounded-full px-2.5 text-[12px] text-mut hover:bg-hover">
             <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-            {props.waiting === 1 ? "1 finished session waiting for you" : `${props.waiting} finished sessions waiting for you`}
+            <span className="max-md:hidden">{waitingText}</span>
+            <span className="md:hidden">{props.waiting}</span>
           </Link>
         )}
         {project && (
-          <Menu align="right" width={240}
+          <Menu align="right" width={240} className="max-md:hidden"
             trigger={<button type="button" aria-label="Project"
               className="flex h-7 max-w-[240px] items-center gap-2 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
               <Diamond color={colorOf(project)} size={10} />
@@ -464,8 +670,13 @@ export function Roadmap(props: {
       {project ? (
         <>
           <ProjectTimeline from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} stats={stats} selectedId={project.id} />
-          <div className="flex min-h-0 flex-1">
-            <TaskOrder project={project} items={items} next={projects.filter((p) => p.afterProjectId === project.id)} stats={stats}
+          <PhoneProjects from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} stats={stats} selectedId={project.id}>
+            <PhoneTasks project={project} items={items} next={next} stats={stats} onSelect={setSel} />
+            <PhoneSessionSettings project={project} projects={projects} colorOf={colorOf} terminal={props.terminal} />
+          </PhoneProjects>
+          {/* On a phone only a task's details show from here, over the whole page. */}
+          <div className="flex min-h-0 flex-1 max-md:contents">
+            <TaskOrder project={project} items={items} next={next} stats={stats}
               sel={selected?.key ?? null} onSelect={(key) => setSel((s) => (s === key ? null : key))} />
             {selected ? (
               <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />

@@ -34,7 +34,9 @@ export function Approvals({ items }: { items: ApprovalView[] }) {
   const open = items.filter((a) => a.expiresAt > now);
   if (!open.length) return null;
   return (
-    <div role="region" aria-label="Sessions waiting for you" className="fixed right-4 top-[52px] z-40 flex w-[380px] flex-col gap-2">
+    // On a phone: the screen's width less a margin, and a list that scrolls when several wait.
+    <div role="region" aria-label="Sessions waiting for you"
+      className="fixed right-4 top-[52px] z-40 flex w-[380px] flex-col gap-2 max-md:inset-x-3 max-md:max-h-[calc(100dvh-64px)] max-md:w-auto max-md:overflow-y-auto">
       {open.map((a) => (
         <div key={a.id} className="flex flex-col gap-2.5 rounded-lg border border-line2 bg-raised p-3.5 shadow-[var(--shadow-popover)]">
           <div className="flex items-center gap-2 text-[12.5px] font-medium text-strong">

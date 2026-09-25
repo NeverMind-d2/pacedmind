@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { addDaysStr, dateOnly, fmtTime, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
@@ -89,17 +89,36 @@ export function WeekView({
   tasks: Task[];
   rules: WorkRules;
   ctx: TaskContext;
-  nav: { prev: string; next: string; month: string; week: string };
+  nav: { month: string; week: string };
   initialKey: string | null;
 }) {
   const now = useNow(serverNow);
   const today = now.slice(0, 10);
   const nowMin = minutesOf(now.slice(11, 16));
   const router = useRouter();
+  const params = useSearchParams();
   const [sel, setSel] = useSelection(initialKey);
   const [on, setOn] = useState(true);
   const selected = tasks.find((t) => t.key === sel) ?? null;
   const toggle = (key: string) => setSel((s) => (s === key ? null : key));
+
+  // A phone shows one day: the one the URL names (?w=), else today, else Monday. The week arrows keep its weekday.
+  const w = params.get("w");
+  const shown = w && days.includes(w) ? w : days.includes(today) ? today : days[0];
+  const show = (day: string) => {
+    const q = new URLSearchParams(params.toString());
+    q.set("w", day);
+    // The whole week is already here, so only the URL changes: no request to the server.
+    window.history.replaceState(null, "", `?${q}`);
+  };
+
+  /** The open tasks due on `day`, whether one of them is late, and the time of a lone deadline. */
+  const deadlines = (day: string) => {
+    const dues = tasks.filter((t) => isOpenTask(t) && t.dueDate && dateOnly(t.dueDate) === day);
+    const late = dues.some((t) => (timeOf(t.dueDate) ? t.dueDate! < now : day < today));
+    return { dues, late, single: dues.length === 1 ? timeOf(dues[0].dueDate) : null };
+  };
+  const shownDues = deadlines(shown).dues;
 
   const blocksOn = (day: string) => {
     const list: Block[] = events.filter((e) => dateOnly(e.start) === day).map((e) => ({
@@ -126,24 +145,35 @@ export function WeekView({
     return to >= from ? [{ ...l, top: y(from), height: Math.max(8, y(to) - y(from)) }] : [];
   });
 
+  const legend = (
+    <>
+      <Legend swatch="border-ctl">Fixed</Legend>
+      <Legend swatch="border-ctl bg-line">Planned for you</Legend>
+      <Legend swatch="border-accent/55 bg-line">Check a finished session</Legend>
+      <span className="flex items-center gap-1.5">
+        <span className="h-3 w-1 rounded-sm" style={{ background: LANE.claude.color }} />
+        <span className="h-3 w-1 rounded-sm" style={{ background: LANE.codex.color }} />
+        Agent sessions
+      </span>
+    </>
+  );
+
   return (
     <div className="flex min-w-0 flex-1">
       <section aria-label="Week" className="flex min-w-0 flex-1 flex-col">
-        <ViewHeader icon="calendar" title="Calendar" subtitle={subtitle}>
-          <PeriodNav unit="week" prev={nav.prev} next={nav.next} today="/calendar/week" />
+        {/* On a phone the subtitle is the shown day's month, short, as in the month view; the day strip has the dates. */}
+        <ViewHeader icon="calendar" title="Calendar" phoneSubtitleOnly subtitle={<>
+          <span className="max-sm:hidden">{subtitle}</span>
+          <span className="sm:hidden">{format(parseLocal(shown), "MMM yyyy")}</span>
+        </>}>
+          <PeriodNav unit="week" prev={`/calendar/week?w=${addDaysStr(shown, -7)}`} next={`/calendar/week?w=${addDaysStr(shown, 7)}`}
+            today="/calendar/week" />
           <span className="flex-1" />
           <ViewSwitch value="week" month={nav.month} week={nav.week} />
         </ViewHeader>
 
-        <div className="flex h-10 shrink-0 items-center gap-3.5 border-b border-line px-5 text-[12px] text-mut">
-          <Legend swatch="border-ctl">Fixed</Legend>
-          <Legend swatch="border-ctl bg-line">Planned for you</Legend>
-          <Legend swatch="border-accent/55 bg-line">Check a finished session</Legend>
-          <span className="flex items-center gap-1.5">
-            <span className="h-3 w-1 rounded-sm" style={{ background: LANE.claude.color }} />
-            <span className="h-3 w-1 rounded-sm" style={{ background: LANE.codex.color }} />
-            Agent sessions
-          </span>
+        <div className="flex h-10 shrink-0 items-center gap-3.5 border-b border-line px-5 text-[12px] text-mut max-md:hidden">
+          {legend}
           <span className="flex-1" />
           {plan && (
             <span className="truncate">
@@ -152,16 +182,59 @@ export function WeekView({
           )}
         </div>
 
-        <div className="flex min-h-0 flex-1">
-          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-            <div className="sticky top-0 z-30 flex h-11 border-b border-line bg-panel">
+        {/* A phone has room for one day: the strip picks it and shows each day's deadlines. */}
+        <div role="group" aria-label="Day" className="flex shrink-0 gap-0.5 border-b border-line px-1.5 py-1 md:hidden">
+          {days.map((day, i) => {
+            const { dues, late, single } = deadlines(day);
+            const isToday = day === today;
+            const past = day < today;
+            const label = [format(parseLocal(day), "EEEE d MMMM"), isToday && "today",
+              dues.length > 0 && `${dues.length} ${past ? "missed" : "due"}`].filter(Boolean).join(", ");
+            return (
+              <button key={day} type="button" aria-pressed={day === shown} aria-label={label} onClick={() => show(day)}
+                className={cx("flex min-w-0 flex-1 flex-col items-center gap-1 rounded-md py-1", day === shown ? "bg-sel" : "hover:bg-hover")}>
+                <span className={cx("text-[11px] leading-none", isToday || day === shown ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
+                <span className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
+                  isToday ? "bg-accent text-bg" : day === shown ? "text-strong" : past ? "text-mut2" : "text-fg2")}>
+                  {Number(day.slice(8))}
+                </span>
+                <span className={cx("flex h-2.5 items-center gap-[2px] text-[10px] leading-none", late ? "text-danger" : isToday ? "text-fg2" : "text-fg3")}>
+                  {dues.length > 0 && <><Icon name="flag" size={9} strokeWidth={2.4} />{single ?? dues.length}</>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* A phone scrolls the day, the legend and the auto-plan as one page. */}
+        <div className="flex min-h-0 flex-1 max-md:flex-col max-md:overflow-y-auto">
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto max-md:flex-none max-md:overflow-visible">
+            {/* A phone can't hover a deadline flag to see its tasks, so the day's deadlines are listed, and open like blocks. */}
+            {shownDues.length > 0 && (
+              <div className="flex flex-col gap-1 border-b border-line px-3 py-2 md:hidden">
+                {shownDues.map((t) => {
+                  const time = timeOf(t.dueDate);
+                  const late = time ? t.dueDate! < now : shown < today;
+                  return (
+                    <button key={t.id} type="button" onClick={() => toggle(t.key)}
+                      className={cx("flex h-7 min-w-0 items-center gap-1.5 rounded-[5px] border px-2 text-left text-[12px]",
+                        late ? "border-ink/5 bg-ink/5 text-danger" : shown === today ? "border-ink/5 bg-ink/5 text-fg2" : "border-line2 bg-hover text-fg3")}>
+                      <Icon name="flag" size={11} strokeWidth={2.2} className="shrink-0" />
+                      {time && <span className="shrink-0 font-mono text-[10.5px] text-mut2">{time}</span>}
+                      <span className="shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
+                      <span className="truncate">{t.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="sticky top-0 z-30 flex h-11 border-b border-line bg-panel max-md:hidden">
               <div className="w-[52px] shrink-0" />
               {days.map((day, i) => {
-                const dues = tasks.filter((t) => isOpenTask(t) && t.dueDate && dateOnly(t.dueDate) === day);
+                const { dues, late, single } = deadlines(day);
                 const isToday = day === today;
                 const past = day < today;
-                const late = dues.some((t) => (timeOf(t.dueDate) ? t.dueDate! < now : past));
-                const single = dues.length === 1 ? timeOf(dues[0].dueDate) : null;
                 return (
                   <div key={day} className="flex min-w-0 flex-1 basis-0 items-center gap-1.5 border-l border-line px-2">
                     <span className={cx("text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
@@ -191,7 +264,7 @@ export function WeekView({
                 ))}
               </div>
               {days.map((day, i) => (
-                <div key={day} className="relative min-w-0 flex-1 basis-0 border-l border-line"
+                <div key={day} className={cx("relative min-w-0 flex-1 basis-0 border-l border-line", day !== shown && "max-md:hidden")}
                   style={{
                     backgroundImage: "linear-gradient(to bottom, var(--color-line) 1px, transparent 1px)",
                     backgroundSize: `100% ${PX}px`,
@@ -218,12 +291,15 @@ export function WeekView({
                 </div>
               ))}
             </div>
+
+            {/* On a phone the legend comes after the day, where it can wrap. */}
+            <div className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-line px-4 py-3 text-[12px] text-mut md:hidden">{legend}</div>
           </div>
 
-          {!selected && (
-            <AutoPlanPanel plan={plan} on={on} onToggle={setOn} current={current} tasks={tasks} areas={ctx.areas} rules={rules}
-              today={today} now={now} onOpen={toggle} onReplan={() => router.refresh()} />
-          )}
+          {/* An open task takes its place on a computer. On a phone the task covers the screen, and the panel stays under
+              it, so the page is still scrolled where it was when the task closes. */}
+          <AutoPlanPanel plan={plan} on={on} onToggle={setOn} current={current} tasks={tasks} areas={ctx.areas} rules={rules}
+            today={today} now={now} onOpen={toggle} onReplan={() => router.refresh()} taskOpen={!!selected} />
         </div>
       </section>
       {selected && <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />}
@@ -269,6 +345,12 @@ function BlockView({ block: b, color, past, selected, onOpen }: {
           ? <Icon name="terminal" size={10} strokeWidth={2.4} className={cx("shrink-0", past ? "text-dim" : "text-accent")} />
           : <Dot color={color} size={6} />}
         <span className="truncate">{b.title}</span>
+        {/* Too short for a second line: a phone can't hover for the time, but its one day has room for it here. */}
+        {height < 36 && (
+          <span className={cx("ml-auto hidden shrink-0 font-mono text-[10px] font-normal max-md:inline", past ? "text-dim" : b.kind === "fixed" ? "text-mut2" : "text-mut")}>
+            {fmtTime(b.start)}–{fmtTime(b.end)}
+          </span>
+        )}
       </span>
       {height >= 36 && (
         <span className={cx("block font-mono text-[10px]", past ? "text-dim" : b.kind === "fixed" ? "text-mut2" : "text-mut")}>
@@ -314,7 +396,7 @@ function planNotes(plan: WeekPlan, tasks: Task[], today: string, now: string) {
   return notes.slice(0, 4);
 }
 
-function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today, now, onOpen, onReplan }: {
+function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today, now, onOpen, onReplan, taskOpen }: {
   plan: WeekPlan | null;
   on: boolean;
   onToggle: (v: boolean) => void;
@@ -326,6 +408,7 @@ function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today
   now: string;
   onOpen: (key: string) => void;
   onReplan: () => void;
+  taskOpen: boolean;
 }) {
   const placed = new Set(plan?.blocks.map((b) => b.taskId));
   const byArea = new Map<string | null, number>();
@@ -346,12 +429,14 @@ function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today
   ];
 
   return (
-    <aside aria-label="Auto-plan" className="flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-line">
+    // On a phone it follows the day, full width, and scrolls with it.
+    <aside aria-label="Auto-plan" className={cx("flex w-[300px] shrink-0 flex-col overflow-hidden border-l border-line",
+      "max-md:w-auto max-md:overflow-visible max-md:border-l-0 max-md:border-t", taskOpen && "md:hidden")}>
       <div className="flex h-11 shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <h2 className="flex-1 text-[12.5px] font-medium text-fg2">Auto-plan</h2>
         <Switch on={on} onChange={onToggle} label="Show planned blocks" />
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-3.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-[18px] overflow-y-auto px-5 py-3.5 max-md:overflow-visible max-md:pb-6">
         <div className="flex flex-col gap-2">
           <div className="text-[12px] text-mut2">{status}</div>
           {plan && on && planNotes(plan, tasks, today, now).map((n, i) => (

@@ -1,13 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { deleteAreaAction, deleteProjectAction, updateAreaAction, updateProjectAction } from "@/app/actions";
 import { PALETTE, projectColor } from "@/lib/colors";
 import type { Area, Project, Usage } from "@/lib/types";
 import { ConfirmDialog } from "./dialog";
 import { Icon } from "./icons";
-import { Popover, PopoverItem, PopoverLabel, PopoverSeparator, anchorOf, type Anchor } from "./popover";
+import { Popover, PopoverItem, PopoverLabel, PopoverLink, PopoverSeparator, anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
 
 /** Which area or project menu is open, and where. */
@@ -58,15 +57,25 @@ export function InlineName({ initial, placeholder, onSave, onCancel, className }
   );
 }
 
-/** The "…" button that opens a row's menu. Shown while the row is hovered or focused, or its menu is open. */
+/**
+ * The "…" button that opens a row's menu. Shown while the row is hovered or focused, or its menu is open. A touch
+ * screen has no hover: rows that have room for it show it there with `pointer-coarse:opacity-100`.
+ */
 export function MoreButton({ label, open, onOpen, onClose, className }: {
   label: string; open: boolean; onOpen: (a: Anchor) => void; onClose: () => void; className?: string;
 }) {
+  // The popover closes itself when a press starts outside it, this button included, so the click that follows
+  // goes by whether the menu was open when the press began: a second press closes it instead of opening it again.
+  const wasOpen = useRef(false);
   return (
     <button type="button" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open}
-      // Keep the popover's outside-click handler from closing it before this click toggles it.
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => { e.preventDefault(); if (open) onClose(); else onOpen(anchorOf(e.currentTarget)); }}
+      onPointerDown={() => { wasOpen.current = open; }}
+      onClick={(e) => {
+        e.preventDefault();
+        if (open || wasOpen.current) onClose();
+        else onOpen(anchorOf(e.currentTarget));
+        wasOpen.current = false;
+      }}
       className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded text-mut hover:bg-sel hover:text-fg2",
         open ? "bg-sel text-fg2 opacity-100" : "opacity-0 group-hover:opacity-100 group-has-[:focus-visible]:opacity-100", className)}>
       <Icon name="more" size={15} />
@@ -78,7 +87,6 @@ export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject 
   area: Area; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void; onNewProject: () => void;
 }) {
   const { run } = useAction();
-  const router = useRouter();
   const [confirm, setConfirm] = useState(false);
   const u = usage.areas[area.id] ?? { projects: 0, tasks: 0, open: 0 };
   if (confirm) {
@@ -95,7 +103,7 @@ export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject 
       <PopoverLabel>{area.name} <span className="font-mono">{area.key}</span></PopoverLabel>
       <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
       <PopoverItem icon={<Icon name="plus" size={14} />} onClick={() => { onClose(); onNewProject(); }}>New project</PopoverItem>
-      <PopoverItem icon={<Icon name="layers" size={14} />} onClick={() => { onClose(); router.push(`/area/${area.id}`); }}>Open tasks</PopoverItem>
+      <PopoverLink icon={<Icon name="layers" size={14} />} href={`/area/${area.id}`} onClick={onClose}>Open tasks</PopoverLink>
       <PopoverSeparator />
       <PopoverLabel>Color</PopoverLabel>
       <ColorSwatches value={area.color} onPick={(c) => run(() => updateAreaAction(area.id, { color: c }))} />
@@ -109,12 +117,10 @@ export function ProjectMenu({ project, areas, anchor, usage, onClose, onRename }
   project: Project; areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void;
 }) {
   const { run } = useAction();
-  const router = useRouter();
   const [confirm, setConfirm] = useState(false);
   const [moving, setMoving] = useState(false);
   const area = areas.find((a) => a.id === project.areaId);
   const u = usage.projects[project.id] ?? { tasks: 0, open: 0, done: 0, pct: 0 };
-  const go = (href: string) => { onClose(); router.push(href); };
   if (confirm) {
     return (
       <ConfirmDialog title={`Delete ${project.name}?`} confirmLabel="Delete project" danger
@@ -129,9 +135,9 @@ export function ProjectMenu({ project, areas, anchor, usage, onClose, onRename }
     <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
       <PopoverLabel>{project.name}</PopoverLabel>
       <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
-      <PopoverItem icon={<Icon name="layers" size={14} />} onClick={() => go(`/project/${project.id}`)}>Open tasks</PopoverItem>
-      <PopoverItem icon={<Icon name="roadmap" size={14} />} onClick={() => go(`/roadmap?p=${project.id}`)}>Open roadmap</PopoverItem>
-      <PopoverItem icon={<Icon name="flow" size={14} />} onClick={() => go(`/flows?p=${project.id}`)}>Open flow</PopoverItem>
+      <PopoverLink icon={<Icon name="layers" size={14} />} href={`/project/${project.id}`} onClick={onClose}>Open tasks</PopoverLink>
+      <PopoverLink icon={<Icon name="roadmap" size={14} />} href={`/roadmap?p=${project.id}`} onClick={onClose}>Open roadmap</PopoverLink>
+      <PopoverLink icon={<Icon name="flow" size={14} />} href={`/flows?p=${project.id}`} onClick={onClose}>Open flow</PopoverLink>
       <PopoverSeparator />
       <PopoverLabel>Color</PopoverLabel>
       <ColorSwatches value={project.color} onPick={(c) => run(() => updateProjectAction(project.id, { color: c }))} />

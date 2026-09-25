@@ -78,9 +78,11 @@ export function RemoteStart({ devices, tasks }: { devices: Device[]; tasks: { id
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay pt-32" onMouseDown={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
+    // On a phone it sits at the top, clear of the on-screen keyboard the code needs, and scrolls if it must.
+    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay pt-32 max-md:overflow-y-auto max-md:px-3 max-md:py-3"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) setAsk(null); }}>
       <form role="dialog" aria-label="Start on a computer" onSubmit={submit}
-        className="flex w-[460px] flex-col gap-4 rounded-xl border border-line2 bg-raised p-5 shadow-[var(--shadow-popover)]">
+        className="flex w-[460px] max-w-full flex-col gap-4 rounded-xl border border-line2 bg-raised p-5 shadow-[var(--shadow-popover)] max-md:p-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-[15px] font-semibold text-strong">Start on a computer</h2>
           <p className="text-[12.5px] leading-relaxed text-mut">

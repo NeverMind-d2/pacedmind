@@ -14,7 +14,9 @@ import { fmtShort } from "@/lib/dates";
 import { AGENT_LABEL, type Area, type Project, type Usage } from "@/lib/types";
 import { ViewHeader } from "./calendar-parts";
 
-const COLS = "grid grid-cols-[minmax(160px,1fr)_128px_56px_96px_96px_minmax(0,1fr)_24px] items-center gap-3";
+// On a phone: the name (its ring shows the progress), the target date and the menu.
+const COLS = "grid grid-cols-[minmax(160px,1fr)_128px_56px_96px_96px_minmax(0,1fr)_24px] items-center gap-3 max-sm:grid-cols-[minmax(0,1fr)_auto_24px]";
+const WIDE = "max-sm:hidden";
 
 type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 
@@ -75,7 +77,8 @@ export function ProjectsView({ areas, projects, usage, today }: {
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className={cx(COLS, "h-8 border-b border-line pl-5 pr-3 text-[11.5px] text-mut2")}>
-            <span>Name</span><span>Progress</span><span>Open</span><span>Target</span><span>Agent</span><span>Folder</span><span />
+            <span>Name</span><span className={WIDE}>Progress</span><span className={WIDE}>Open</span><span>Target</span>
+            <span className={WIDE}>Agent</span><span className={WIDE}>Folder</span><span />
           </div>
 
           {areas.map((a) => {
@@ -104,10 +107,10 @@ export function ProjectsView({ areas, projects, usage, today }: {
                   </span>
                   <span className="flex-1" />
                   <button type="button" aria-label={`New project in ${a.name}`} title={`New project in ${a.name}`} onClick={() => startProject(a.id)}
-                    className="flex h-6 w-6 items-center justify-center rounded text-mut opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100">
+                    className="flex h-6 w-6 items-center justify-center rounded text-mut opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
                     <Icon name="plus" size={13} strokeWidth={2} />
                   </button>
-                  <MoreButton label={`${a.name} options`} open={menu?.kind === "area" && menu.id === a.id} onClose={closeMenu}
+                  <MoreButton label={`${a.name} options`} open={menu?.kind === "area" && menu.id === a.id} onClose={closeMenu} className="pointer-coarse:opacity-100"
                     onOpen={(anchor) => setMenu({ kind: "area", id: a.id, anchor })} />
                 </div>
 
@@ -129,13 +132,13 @@ export function ProjectsView({ areas, projects, usage, today }: {
                             <Link href={`/project/${p.id}`} className="truncate text-[13px] text-fg hover:text-strong">{p.name}</Link>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className={cx("flex items-center gap-2", WIDE)}>
                           <span className="h-1 w-14 overflow-hidden rounded-full bg-track">
                             <span className="block h-full rounded-full" style={{ width: `${u.pct}%`, background: color }} />
                           </span>
                           <span className="text-[12px] text-mut">{u.pct}%</span>
                         </div>
-                        <span className="text-[12px] text-mut">{u.open || "–"}</span>
+                        <span className={cx("text-[12px] text-mut", WIDE)}>{u.open || "–"}</span>
                         <DateField value={p.targetDate} withTime={false}
                           onChange={(v) => run(() => updateProjectAction(p.id, { targetDate: v }))}
                           trigger={
@@ -144,9 +147,9 @@ export function ProjectsView({ areas, projects, usage, today }: {
                               {p.targetDate ? fmtShort(p.targetDate) : "Set date"}
                             </button>
                           } />
-                        <span className="truncate text-[12px] text-mut">{p.agent ? AGENT_LABEL[p.agent] : "–"}</span>
-                        <span className="truncate font-mono text-[11px] text-mut2" title={p.folder ?? undefined}>{p.folder ?? "–"}</span>
-                        <MoreButton label={`${p.name} options`} open={open} onClose={closeMenu}
+                        <span className={cx("truncate text-[12px] text-mut", WIDE)}>{p.agent ? AGENT_LABEL[p.agent] : "–"}</span>
+                        <span className={cx("truncate font-mono text-[11px] text-mut2", WIDE)} title={p.folder ?? undefined}>{p.folder ?? "–"}</span>
+                        <MoreButton label={`${p.name} options`} open={open} onClose={closeMenu} className="pointer-coarse:opacity-100"
                           onOpen={(anchor) => setMenu({ kind: "project", id: p.id, anchor })} />
                       </div>
                     </div>

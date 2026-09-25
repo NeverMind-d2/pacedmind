@@ -25,9 +25,10 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ projectId: id }}
       headerRight={
+        // On a phone, icons only, like the New task button next to them: the title needs the room.
         <>
-          <Link href={`/roadmap?p=${id}`} className={link}><Icon name="roadmap" size={13} />Roadmap</Link>
-          <Link href={`/flows?p=${id}`} className={link}><Icon name="flow" size={13} />Flow</Link>
+          <Link href={`/roadmap?p=${id}`} aria-label="Roadmap" className={link}><Icon name="roadmap" size={13} /><span className="max-sm:hidden">Roadmap</span></Link>
+          <Link href={`/flows?p=${id}`} aria-label="Flow" className={link}><Icon name="flow" size={13} /><span className="max-sm:hidden">Flow</span></Link>
         </>
       }
       empty={`No tasks in ${project.name} yet`}

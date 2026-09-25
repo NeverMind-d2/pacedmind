@@ -122,7 +122,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   );
 
   return (
-    <aside aria-label="Task details" className="flex w-[420px] shrink-0 flex-col border-l border-line">
+    // On a phone the details cover the list, and the ✕ goes back to it.
+    <aside aria-label="Task details" className="flex w-[420px] shrink-0 flex-col border-l border-line max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-l-0 max-md:bg-panel">
       <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line pl-6 pr-3 text-[12.5px] text-mut">
         {area ? <Dot color={area.color} /> : <Icon name="inbox" size={13} />}
         <span>{area?.name ?? "Inbox"}</span>
@@ -341,7 +342,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 <StatusIcon status={s.done ? "done" : "todo"} />
               </button>
               <span className={cx("flex-1 truncate text-[12.5px]", s.done ? "text-mut2 line-through" : "text-fg2")}>{s.title}</span>
-              <button type="button" aria-label="Delete sub-task" onClick={() => run(() => deleteSubtaskAction(s.id))} className="hidden text-mut2 hover:text-fg2 group-hover:block">
+              <button type="button" aria-label="Delete sub-task" onClick={() => run(() => deleteSubtaskAction(s.id))} className="hidden text-mut2 hover:text-fg2 group-hover:block pointer-coarse:block">
                 <Icon name="x" size={13} />
               </button>
             </div>
@@ -449,7 +450,7 @@ function DoneWhenItem({ text, answer, reported, onSave, onDelete }: {
           className="field-sizing-content block w-full resize-none bg-transparent text-[12.5px] leading-[1.5] text-fg2 outline-none" />
         {answer?.note && <div className="text-[12px] leading-[1.5] text-mut2"><InlineMarkdown text={answer.note} /></div>}
       </div>
-      <button type="button" aria-label="Remove this item" onClick={onDelete} className="mt-[2px] hidden text-mut2 hover:text-fg2 group-hover:block">
+      <button type="button" aria-label="Remove this item" onClick={onDelete} className="mt-[2px] hidden text-mut2 hover:text-fg2 group-hover:block pointer-coarse:block">
         <Icon name="x" size={13} />
       </button>
     </div>

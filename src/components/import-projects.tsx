@@ -108,7 +108,7 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
     <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay px-4 pt-[9vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div role="dialog" aria-modal="true" aria-label="Bring your projects over"
         className="flex max-h-[80vh] w-[680px] max-w-full flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]">
-        <div className="flex flex-col gap-1.5 border-b border-line px-6 pb-4 pt-5">
+        <div className="flex flex-col gap-1.5 border-b border-line px-6 pb-4 pt-5 max-sm:px-4">
           <div className="flex items-center gap-2">
             <AgentIcon agent="claude" size={15} className="text-fg3" />
             <AgentIcon agent="codex" size={15} className="text-fg3" />
@@ -151,7 +151,7 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
                 <span title={p.sources.map((s) => SOURCE_LABEL[s]).join(", ")} className="flex shrink-0 items-center gap-1.5 text-mut">
                   {agents.map((a) => <AgentIcon key={a} agent={a} size={13} />)}
                 </span>
-                <span title={p.problem ?? undefined} className="w-[112px] shrink-0 text-right text-[12px] text-mut2">
+                <span title={p.problem ?? undefined} className="w-[112px] shrink-0 text-right text-[12px] text-mut2 max-sm:w-[76px]">
                   {taken ? "Already a project" : p.problem ? "Can't be used" : last ? ago(last, now) : ""}
                 </span>
               </div>
@@ -159,8 +159,9 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
           })}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-line px-6 py-3.5">
-          <span className="text-[12.5px] text-mut2">Add to</span>
+        {/* On a narrow phone the buttons go to a line of their own, on the right. */}
+        <div className="flex items-center gap-2 border-t border-line px-6 py-3.5 max-sm:flex-wrap max-sm:px-4">
+          <span className="whitespace-nowrap text-[12.5px] text-mut2">Add to</span>
           <Menu width={200}
             trigger={
               <button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
@@ -170,10 +171,12 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
             items={areas.map((a) => ({ value: a.id, label: a.name, icon: <Dot color={a.color} size={7} /> }))}
             onSelect={setAreaId} />
           <span className="flex-1" />
-          <Button variant="ghost" onClick={close}>{auto ? "Not now" : "Cancel"}</Button>
-          <Button variant="primary" disabled={pending || !count || !areaId} onClick={submit}>
-            {count ? `Add ${count} project${count > 1 ? "s" : ""}` : "Add projects"}
-          </Button>
+          <div className="ml-auto flex gap-2">
+            <Button variant="ghost" onClick={close}>{auto ? "Not now" : "Cancel"}</Button>
+            <Button variant="primary" disabled={pending || !count || !areaId} onClick={submit}>
+              {count ? `Add ${count} project${count > 1 ? "s" : ""}` : "Add projects"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>,

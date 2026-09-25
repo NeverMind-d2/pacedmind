@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useOptimistic, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { format, getISOWeek } from "date-fns";
+import {
+  useEffect, useLayoutEffect, useOptimistic, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode,
+} from "react";
+import { format, getDaysInMonth, getISOWeek } from "date-fns";
 import { deleteEdgeAction, linkTasksAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, minutesOf, parseLocal, timeOf, toStamp } from "@/lib/dates";
@@ -40,6 +42,20 @@ export function useWidth<T extends HTMLElement>(fallback: number) {
   return [ref, width] as const;
 }
 
+/** Below Tailwind's md breakpoint, where the `max-md:` styles apply: a phone. */
+const PHONE = "(width < 48rem)";
+
+function onPhoneChange(notify: () => void) {
+  const query = window.matchMedia(PHONE);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+}
+
+/** Whether the window is phone-sized. The server renders the computer's layout. */
+function usePhone() {
+  return useSyncExternalStore(onPhoneChange, () => window.matchMedia(PHONE).matches, () => false);
+}
+
 /* ---------- layout ---------- */
 
 export type TimelineZoom = "week" | "month" | "quarter";
@@ -61,6 +77,11 @@ const LAYERS: { id: Layer; label: string }[] = [
 ];
 
 const TREE = 260;
+/** On a phone the names get a narrow column, so the days keep most of the screen. */
+const TREE_PHONE = 148;
+/** Where the names start: areas (and "Your time"), projects and the tasks beside them, tasks in a project. */
+const INDENT = { area: 20, proj: 26, task: 26, nested: 44 };
+const INDENT_PHONE = { area: 12, proj: 16, task: 16, nested: 30 };
 const ROW_H = { cap: 40, area: 30, proj: 32, task: 28 };
 /** Task bars sit at the top of their row; agent sessions run in a thin lane below them. */
 const BAR_TOP = 4;
@@ -97,7 +118,7 @@ type ProjectRow = {
   kind: "proj"; id: string; y: number; h: number; project: Project; color: string; open: boolean;
   done: number; total: number; started: boolean; span: Span | null;
 };
-type TaskRow = { kind: "task"; id: string; y: number; h: number; task: Task; color: string; indent: number; span: TaskSpan; sessions: Session[] };
+type TaskRow = { kind: "task"; id: string; y: number; h: number; task: Task; color: string; nested: boolean; span: TaskSpan; sessions: Session[] };
 type Row = { kind: "cap"; id: string; y: number; h: number } | AreaRow | ProjectRow | TaskRow;
 
 const isActive = (x: Session) => x.status === "running" || x.status === "starting";
@@ -166,8 +187,8 @@ function buildRows(input: {
     rows.push(r);
     y += r.h;
   };
-  const taskRow = (t: Task, indent: number, color: string): TaskRow => ({
-    kind: "task", id: `t${t.id}`, y, h: ROW_H.task, task: t, color, indent, span: spans.get(t.id)!, sessions: sessionsOf.get(t.id) ?? [],
+  const taskRow = (t: Task, nested: boolean, color: string): TaskRow => ({
+    kind: "task", id: `t${t.id}`, y, h: ROW_H.task, task: t, color, nested, span: spans.get(t.id)!, sessions: sessionsOf.get(t.id) ?? [],
   });
 
   add({ kind: "cap", id: "cap", y, h: ROW_H.cap });
@@ -197,10 +218,10 @@ function buildRows(input: {
         span: s !== null && e !== null && e > s ? { s, e } : null,
       });
       if (isOpen) {
-        for (const t of pts.filter(shown).sort((a, b) => a.sortOrder - b.sortOrder || byStart(a, b))) add(taskRow(t, 44, pc));
+        for (const t of pts.filter(shown).sort((a, b) => a.sortOrder - b.sortOrder || byStart(a, b))) add(taskRow(t, true, pc));
       }
     }
-    for (const t of loose) add(taskRow(t, 26, color));
+    for (const t of loose) add(taskRow(t, false, color));
   }
   return { rows, height: y };
 }
@@ -549,7 +570,10 @@ function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
     if (zoom === "quarter") {
       // Months on top, Mondays below (today's week shows today's number instead). The range starts on a Monday.
       if (d.getDate() === 1 || (i === 0 && d.getDate() < 22)) {
-        out.push(<span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: x0 }}>{format(d, "MMMM")}</span>);
+        // The first month is shortened when the next one starts too soon for its full name (days are narrow on a phone).
+        const room = (getDaysInMonth(d) - d.getDate() + 1) * sc.dayW;
+        const name = format(d, room < textWidth(format(d, "MMMM")) + 12 ? "MMM" : "MMMM");
+        out.push(<span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: x0 }}>{name}</span>);
       }
       const thisWeek = dayDiff(day, sc.today) >= 0 && dayDiff(day, sc.today) < 7;
       if (i % 7 === 0 && !thisWeek) {
@@ -579,7 +603,8 @@ function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
 
 /* ---------- the view ---------- */
 
-function rangeLabel(from: string, days: number) {
+function rangeLabel(from: string, days: number, short = false) {
+  if (short) return `${fmtShort(from)} to ${fmtShort(addDaysStr(from, days - 1))}`;
   const a = parseLocal(from);
   const b = parseLocal(addDaysStr(from, days - 1));
   return `${format(a, a.getFullYear() === b.getFullYear() ? "d MMM" : "d MMM yyyy")} to ${format(b, "d MMM yyyy")}`;
@@ -620,6 +645,9 @@ export function Timeline(props: {
   const [depMenu, setDepMenu] = useState<{ edge: FlowEdge; from: string; to: string; anchor: Anchor } | null>(null);
   const [scrollRef, width] = useWidth<HTMLDivElement>(TREE + 924);
   const gridRef = useRef<HTMLDivElement>(null);
+  const phone = usePhone();
+  const tree = phone ? TREE_PHONE : TREE;
+  const indent = phone ? INDENT_PHONE : INDENT;
 
   useEffect(() => {
     const id = setInterval(() => setTick(toStamp(new Date())), 60_000);
@@ -636,9 +664,16 @@ export function Timeline(props: {
 
   const now = tick && tick > props.now ? tick : props.now;
   const { days, minDay } = ZOOM[zoom];
-  const dayW = Math.max(minDay, (width - TREE) / days);
+  const dayW = Math.max(minDay, (width - tree) / days);
   const X = (d: number) => Math.round(d * dayW);
   const sc: Scale = { from, days, dayW, gridW: X(days), X, now, nowPos: dayPos(from, now), today: dateOnly(now) };
+
+  // On a phone the days scroll sideways: a range opens at its start, or at the day before today when today is out of view.
+  const todayAt = dayDiff(from, sc.today);
+  const openAt = todayAt > 0 && todayAt < days && X(todayAt + 1) > width - tree ? X(todayAt - 1) : 0;
+  useLayoutEffect(() => {
+    if (phone) scrollRef.current?.scrollTo({ left: openAt });
+  }, [phone, from, zoom, openAt, scrollRef]);
 
   const sessionsOf = new Map<number, Session[]>();
   for (const x of [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
@@ -678,9 +713,12 @@ export function Timeline(props: {
   const selected = sel ? tasks.find((t) => t.key === sel) ?? null : null;
   const select = (t: Task) => setSel((s) => (s === t.key ? null : t.key));
 
-  /** Drags a bar by whole days, then saves its dates. A press without a drag still opens the task. */
+  /**
+   * Drags a bar by whole days, then saves its dates. A press without a drag still opens the task. A finger scrolls
+   * the timeline instead, since the browser keeps a touch for scrolling; a tap still opens the task.
+   */
   const grabBar = (e: ReactPointerEvent, row: TaskRow, part: BarPart) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.pointerType === "touch") return;
     e.stopPropagation();
     const { task: t, span: sp } = row;
     const x0 = e.clientX;
@@ -723,16 +761,16 @@ export function Timeline(props: {
     window.addEventListener("pointercancel", onCancel);
   };
 
-  /** Draws a dependency from one end of a bar to the task row it's dropped on. */
+  /** Draws a dependency from one end of a bar to the task row it's dropped on. Like moving bars, only with a mouse or pen. */
   const grabLink = (e: ReactPointerEvent, row: TaskRow, side: LinkSide) => {
     const grid = gridRef.current;
-    if (e.button !== 0 || !grid) return;
+    if (e.button !== 0 || e.pointerType === "touch" || !grid) return;
     e.stopPropagation();
     const source = row.task;
     const targets = rows.filter((r): r is TaskRow => r.kind === "task" && r.task.id !== source.id);
     const at = (ev: { clientX: number; clientY: number }): LinkDrag => {
       const box = grid.getBoundingClientRect();
-      const x = ev.clientX - box.left - TREE;
+      const x = ev.clientX - box.left - tree;
       const y = ev.clientY - box.top;
       const hit = targets.find((r) => y >= r.y && y < r.y + r.h)?.task;
       const problem = !hit ? null : side === "end" ? linkProblem(source, hit, edges) : linkProblem(hit, source, edges);
@@ -808,15 +846,18 @@ export function Timeline(props: {
     const s = q.toString();
     window.history.replaceState(null, "", s ? `?${s}` : window.location.pathname);
   };
+  const zoomOptions = (Object.keys(ZOOM) as TimelineZoom[]).map((z) => ({ value: z, label: ZOOM[z].label }));
 
   return (
     <div className="flex min-w-0 flex-1">
       <section aria-label="Timeline" className="flex min-w-0 flex-1 flex-col">
+        {/* On a phone the range is shorter, the buttons go to the right, and the zoom moves to the bar below. */}
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="timeline" className="text-mut" />
           <h1 className="text-[14px] font-semibold text-strong">Timeline</h1>
-          <span className="text-mut2">{rangeLabel(from, days)}</span>
-          <div className="ml-1.5 flex items-center gap-0.5">
+          <span className="text-mut2 max-md:hidden">{rangeLabel(from, days)}</span>
+          <span className="min-w-0 truncate text-mut2 md:hidden">{rangeLabel(from, days, true)}</span>
+          <div className="ml-1.5 flex items-center gap-0.5 max-md:ml-auto">
             <Link href={href(addDaysStr(from, -days))} aria-label="Earlier" title="Earlier" className={NAV}>
               <Icon name="chevronLeft" size={14} strokeWidth={2} />
             </Link>
@@ -827,28 +868,36 @@ export function Timeline(props: {
               Today
             </Link>
           </div>
-          <span className="flex-1" />
-          <Segmented value={zoom} onChange={pickZoom}
-            options={(Object.keys(ZOOM) as TimelineZoom[]).map((z) => ({ value: z, label: ZOOM[z].label }))} />
+          <span className="flex-1 max-md:hidden" />
+          <div className="contents max-md:hidden">
+            <Segmented value={zoom} onChange={pickZoom} options={zoomOptions} />
+          </div>
         </div>
 
-        <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px]">
+        {/* On a phone the zoom comes first and the filters scroll sideways. */}
+        <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px] max-md:overflow-x-auto">
+          <div className="mr-1.5 shrink-0 md:hidden">
+            <Segmented value={zoom} onChange={pickZoom} options={zoomOptions} />
+          </div>
           <span className="mr-1 text-mut2">Show</span>
           {LAYERS.map((l) => (
             <button key={l.id} type="button" aria-pressed={layers[l.id]} onClick={() => setLayers((v) => ({ ...v, [l.id]: !v[l.id] }))}
-              className={cx("flex h-[26px] items-center gap-1.5 rounded-full border px-2.5 hover:bg-hover", layers[l.id] ? "border-ctl text-fg2" : "border-line text-dim")}>
+              className={cx("flex h-[26px] items-center gap-1.5 rounded-full border px-2.5 hover:bg-hover max-md:shrink-0", layers[l.id] ? "border-ctl text-fg2" : "border-line text-dim")}>
               <span className={cx("h-1.5 w-1.5 rounded-full", layers[l.id] ? "bg-mut" : "bg-ctl")} />
               {l.label}
             </button>
           ))}
           <span className="flex-1" />
-          <span className="text-mut2">Grouped by area</span>
+          <span className="text-mut2 max-md:hidden">Grouped by area</span>
         </div>
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
-          <div style={{ width: TREE + sc.gridW }}>
+        {/* On a phone it scrolls both ways by touch, with the names and the days held in place. It stays hidden there
+            until the page knows it's on a phone, rather than first showing the computer's layout. */}
+        <div ref={scrollRef} className={cx("min-h-0 flex-1 overflow-auto max-md:overscroll-x-contain", !phone && "max-md:invisible")}>
+          <div style={{ width: tree + sc.gridW }}>
             <div className="sticky top-0 z-20 flex h-11 border-b border-line bg-panel">
-              <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel pl-5 pr-4 text-[11.5px] text-mut2" style={{ width: TREE }}>
+              <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel pl-5 pr-4 text-[11.5px] text-mut2 max-md:pl-3 max-md:pr-2 max-md:leading-4"
+                style={{ width: tree }}>
                 Areas, projects and tasks
               </div>
               <div className="relative shrink-0 overflow-hidden" style={{ width: sc.gridW }}>
@@ -859,21 +908,27 @@ export function Timeline(props: {
             <div ref={gridRef} className="relative" style={{ height }}>
               {Array.from({ length: days }, (_, i) => i).filter((i) => i % 7 >= 5).map((i) => (
                 <span key={i} className="pointer-events-none absolute inset-y-0"
-                  style={{ left: TREE + X(i), width: X(i + 1) - X(i), background: "color-mix(in srgb, var(--color-ink) 1.8%, transparent)" }} />
+                  style={{ left: tree + X(i), width: X(i + 1) - X(i), background: "color-mix(in srgb, var(--color-ink) 1.8%, transparent)" }} />
               ))}
 
               {rows.map((r) => {
                 const isSel = r.kind === "task" && r.task.key === sel;
                 const bg = r.kind === "area" ? "bg-raised" : isSel ? "bg-sel" : "bg-panel group-hover:bg-hover";
+                const line = r.kind === "task" ? "var(--color-hover)" : "var(--color-line)";
                 return (
                   <div key={r.id} className={cx("group flex", r.kind === "area" ? "bg-raised" : isSel ? "bg-sel" : "hover:bg-hover")}
-                    style={{ height: r.h, borderBottom: `1px solid ${r.kind === "task" ? "var(--color-hover)" : "var(--color-line)"}` }}>
+                    style={{ height: r.h, borderBottom: `1px solid ${line}` }}>
+                    {/* Its shadow covers the row's border as well, so the lines and bars scrolled under the names don't show through it. */}
                     <div className={cx("sticky left-0 z-10 flex shrink-0 items-center gap-2 overflow-hidden border-r border-line pr-3", bg)}
-                      style={{ width: TREE, paddingLeft: r.kind === "task" ? r.indent : r.kind === "proj" ? 26 : 20 }}>
+                      style={{
+                        width: tree, boxShadow: `0 1px 0 ${line}`,
+                        paddingLeft: r.kind === "task" ? (r.nested ? indent.nested : indent.task) : r.kind === "proj" ? indent.proj : indent.area,
+                      }}>
+                      {/* A phone's narrow column shows just the names: a task's key is in its details, a project's progress in its bar. */}
                       {r.kind === "cap" && (
                         <>
                           <span className="text-[12.5px] text-fg2">Your time</span>
-                          <span className="truncate text-[11.5px] text-mut2">hours planned per day</span>
+                          <span className="truncate text-[11.5px] text-mut2 max-md:hidden">hours planned per day</span>
                         </>
                       )}
                       {r.kind === "area" && (
@@ -891,12 +946,12 @@ export function Timeline(props: {
                           <Icon name={r.open ? "chevronDown" : "chevronRight"} size={11} strokeWidth={2.6} className={cx("shrink-0 text-dim", !r.total && "invisible")} />
                           <ProgressRing pct={r.total ? (r.done / r.total) * 100 : 0} color={r.color} />
                           <span className="min-w-0 flex-1 truncate text-fg">{r.project.name}</span>
-                          <span className="shrink-0 text-[11.5px] text-mut2">{r.total ? `${r.done} of ${r.total}` : "No tasks"}</span>
+                          <span className="shrink-0 text-[11.5px] text-mut2 max-md:hidden">{r.total ? `${r.done} of ${r.total}` : "No tasks"}</span>
                         </button>
                       )}
                       {r.kind === "task" && (
                         <button type="button" onClick={() => select(r.task)} className="flex h-full min-w-0 flex-1 items-center gap-2 text-left">
-                          <span className="w-[46px] shrink-0 font-mono text-[11px] text-mut2">{r.task.key}</span>
+                          <span className="w-[46px] shrink-0 font-mono text-[11px] text-mut2 max-md:hidden">{r.task.key}</span>
                           <span className={cx("min-w-0 flex-1 truncate text-[12.5px]", isOpenTask(r.task) ? "text-fg2" : "text-mut2")}>{r.task.title}</span>
                         </button>
                       )}
@@ -909,8 +964,8 @@ export function Timeline(props: {
                         <TaskLane row={r} state={states[r.task.id]} sc={sc} layers={layers}
                           dragText={drag?.taskId === r.task.id ? dragLabel(r.span, drag.part, from) : null}
                           linkTarget={!!link && link.target === r.task.id && !link.problem}
-                          onGrab={isOpenTask(r.task) ? (e, part) => grabBar(e, r, part) : null}
-                          onLink={isOpenTask(r.task) && layers.deps ? (e, side) => grabLink(e, r, side) : null} />
+                          onGrab={!phone && isOpenTask(r.task) ? (e, part) => grabBar(e, r, part) : null}
+                          onLink={!phone && isOpenTask(r.task) && layers.deps ? (e, side) => grabLink(e, r, side) : null} />
                       )}
                     </div>
                   </div>
@@ -918,7 +973,7 @@ export function Timeline(props: {
               })}
 
               {deps.length > 0 && (
-                <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: TREE }} aria-hidden="true">
+                <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0" style={{ left: tree }} aria-hidden="true">
                   {deps.map((p) => (
                     <g key={p.edge.id} className="group/dep">
                       <path d={p.d} fill="none" stroke="var(--color-line-strong)" strokeWidth="1.2" strokeLinejoin="round" className="group-hover/dep:stroke-mut" />
@@ -933,19 +988,19 @@ export function Timeline(props: {
                 </svg>
               )}
               {linkLine && (
-                <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0 z-[2] overflow-visible" style={{ left: TREE }} aria-hidden="true">
+                <svg width={sc.gridW} height={height} className="pointer-events-none absolute top-0 z-[2] overflow-visible" style={{ left: tree }} aria-hidden="true">
                   <path d={linkLine.d} fill="none" stroke={linkLine.ok ? ACCENT_LINE : "var(--color-line-strong)"} strokeWidth="1.5" strokeDasharray="5 4" />
                   <circle cx={linkLine.x1} cy={linkLine.y1} r="4" fill="var(--color-panel)" stroke={linkLine.ok ? ACCENT_LINE : "var(--color-line-strong)"} strokeWidth="1.5" />
                 </svg>
               )}
               {link?.problem && (
                 <span className="pointer-events-none absolute z-[3] whitespace-nowrap rounded-md border border-line2 bg-raised px-2 py-1 text-[11.5px] text-mut shadow-[var(--shadow-popover)]"
-                  style={{ left: TREE + link.x + 14, top: link.y + 12 }}>
+                  style={{ left: tree + link.x + 14, top: link.y + 12 }}>
                   {link.problem}
                 </span>
               )}
               {sc.nowPos >= 0 && sc.nowPos <= days && (
-                <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: TREE + X(sc.nowPos), background: "color-mix(in srgb, var(--color-accent) 75%, transparent)" }} />
+                <span className="pointer-events-none absolute inset-y-0 w-px" style={{ left: tree + X(sc.nowPos), background: "color-mix(in srgb, var(--color-accent) 75%, transparent)" }} />
               )}
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { addDays } from "date-fns";
 import { dateOnly, timeOf, toDateStr } from "@/lib/dates";
 import { cx } from "./ui";
@@ -16,15 +16,30 @@ export function DateField({
   align?: "left" | "right";
 }) {
   const [open, setOpen] = useState(false);
+  // How far the panel moves sideways, and whether it opens above the field, to stay inside the window (a phone).
+  const [fit, setFit] = useState<{ x: number; up: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const date = value ? dateOnly(value) : "";
   const time = timeOf(value) ?? "";
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    // Pointer, not mouse: Safari on a phone sends no mouse events for a tap on something that isn't clickable.
+    const onDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
   }, [open]);
+  // Measured where it opens by itself, below the field; moved only when that leaves the window.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const box = panel.current?.getBoundingClientRect();
+    const field = ref.current?.getBoundingClientRect();
+    if (!box || !field) return;
+    const x = box.right > window.innerWidth - 8 ? Math.max(8 - box.left, window.innerWidth - 8 - box.right) : box.left < 8 ? 8 - box.left : 0;
+    const up = box.bottom > window.innerHeight - 8 && field.top - 4 - box.height >= 8;
+    if (x || up) setFit({ x, up });
+  }, [open]);
+  const toggle = () => { setFit(null); setOpen((o) => !o); };
   const set = (d: string, t: string) => onChange(d ? (t ? `${d}T${t}` : d) : null);
   const quick = (label: string, offset: number) => (
     <button type="button" onClick={() => { set(toDateStr(addDays(new Date(), offset)), time); setOpen(false); }}
@@ -32,9 +47,11 @@ export function DateField({
   );
   return (
     <div ref={ref} className="relative">
-      <div onClick={() => setOpen((o) => !o)}>{trigger}</div>
+      <div onClick={toggle}>{trigger}</div>
       {open && (
-        <div className={cx("absolute top-full z-50 mt-1 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]", align === "right" ? "right-0" : "left-0")}>
+        <div ref={panel} style={fit ? { transform: `translateX(${fit.x}px)` } : undefined}
+          className={cx("absolute z-50 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
+            fit?.up ? "bottom-full mb-1" : "top-full mt-1", align === "right" ? "right-0" : "left-0")}>
           {quick("Today", 0)}
           {quick("Tomorrow", 1)}
           {quick("In a week", 7)}

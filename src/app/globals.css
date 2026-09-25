@@ -178,6 +178,21 @@ html[data-theme="light"] {
   opacity: 0.3;
 }
 
+/* On a phone (below Tailwind's md), the menu button opens the sidebar; the browser has back and forward. */
+.app-titlebar__menu {
+  display: none;
+}
+
+@media (width < 48rem) {
+  .app-titlebar__menu {
+    display: flex;
+  }
+
+  .app-titlebar__navigation {
+    display: none;
+  }
+}
+
 /* The pd monogram unfolds without moving the header or delaying interaction. */
 .brand-wordmark {
   display: block;
