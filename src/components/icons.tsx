@@ -1,4 +1,4 @@
-import type { AgentId, Priority, Status, Surface } from "@/lib/types";
+import type { AgentId, Priority, Status, Surface, Verdict } from "@/lib/types";
 
 type IconProps = { size?: number; className?: string; strokeWidth?: number };
 
@@ -42,6 +42,10 @@ const P = {
   appWindow: "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z M3 9h18 M6.5 6.5h.01 M9.5 6.5h.01",
   laptop: "M5 5h14a1 1 0 0 1 1 1v9H4V6a1 1 0 0 1 1-1z M2 18.5h20",
   download: "M12 4v11 M7 10l5 5 5-5 M5 20h14",
+  image: "M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z M7.5 9a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0 -3 0 M21 15l-5-5L5 20",
+  external: "M14 4h6v6 M20 4l-9 9 M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+  help: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0 M9.1 9a3 3 0 0 1 5.8 1c0 2-2.9 2.6-2.9 4 M12 17.5h.01",
+  target: "M3 12a9 9 0 1 0 18 0a9 9 0 1 0 -18 0 M7.5 12a4.5 4.5 0 1 0 9 0a4.5 4.5 0 1 0 -9 0 M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0",
 };
 
 export type IconName = keyof typeof P;
@@ -98,6 +102,37 @@ export function StatusIcon({ status, size = 14 }: { status: Status; size?: numbe
       <circle cx="7" cy="7" r="6" fill="none" stroke={s.ring} strokeWidth="1.5" strokeDasharray={s.dash} />
       {s.fillD && <path d={s.fillD} fill={s.fill} />}
       {s.mark && <path d={s.mark} fill="none" stroke="var(--color-panel)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />}
+    </svg>
+  );
+}
+
+/**
+ * An agent's answer to a "Done when" item, in grayscale like every state: a filled check (met), half a
+ * circle (partly), a cross (not met), a dashed ring (not answered). "none" is an item nobody answered yet.
+ */
+export function VerdictIcon({ verdict, size = 14 }: { verdict: Verdict | "unanswered" | "none"; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" aria-hidden="true">
+      {verdict === "met" && (
+        <>
+          <circle cx="7" cy="7" r="6.25" fill="var(--color-fg3)" />
+          <path d="M4.4 7.2 L6.2 9 L9.7 5.3" fill="none" stroke="var(--color-panel)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+      {verdict === "partly" && (
+        <>
+          <circle cx="7" cy="7" r="6" fill="none" stroke="var(--color-fg3)" strokeWidth="1.5" />
+          <path d="M7 3 A4 4 0 0 1 7 11 Z" fill="var(--color-fg3)" />
+        </>
+      )}
+      {verdict === "not_met" && (
+        <>
+          <circle cx="7" cy="7" r="6" fill="none" stroke="var(--color-mut2)" strokeWidth="1.5" />
+          <path d="M5 5 L9 9 M9 5 L5 9" fill="none" stroke="var(--color-mut2)" strokeWidth="1.5" strokeLinecap="round" />
+        </>
+      )}
+      {verdict === "unanswered" && <circle cx="7" cy="7" r="6" fill="none" stroke="var(--color-dim)" strokeWidth="1.5" strokeDasharray="2 2" />}
+      {verdict === "none" && <circle cx="7" cy="7" r="2.5" fill="var(--color-faint)" />}
     </svg>
   );
 }

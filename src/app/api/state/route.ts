@@ -13,9 +13,15 @@ const boot = crypto.randomBytes(4).toString("hex");
  */
 export function GET() {
   const { changes } = db().prepare("SELECT total_changes() AS changes").get() as { changes: number };
-  const waiting = repo.listSessions("status = 'finished'").map((s) => {
+  const finished = repo.listSessions("status = 'finished'");
+  const reports = repo.reportsForSessions(finished.map((s) => s.id));
+  const waiting = finished.map((s) => {
     const task = repo.getTask(s.taskId);
-    return { id: s.id, key: task?.key ?? null, title: task?.title ?? null, note: s.note, finishedAt: s.finishedAt };
+    const report = reports.get(s.id)?.[0];
+    return {
+      id: s.id, key: task?.key ?? null, title: task?.title ?? null, note: s.note, finishedAt: s.finishedAt,
+      outcome: report?.outcome ?? null, questions: report?.questions.length ?? 0,
+    };
   });
   return Response.json({ version: `${boot}-${changes}`, waiting }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -79,17 +79,18 @@ export function dueInfo(due: string | null, now = new Date()): { text: string; t
 }
 
 /**
- * True when a session started a while ago but its agent never checked in over MCP.
- * Usually the agent is waiting for an answer in its terminal.
+ * True when a session started, or went back to work on requested changes, a while ago but its agent hasn't
+ * checked in over MCP since. Usually the agent is waiting for an answer in its terminal.
  */
 export function waitingInTerminal(
   s: { status: string; startedAt: string },
-  events: { kind: string }[],
+  events: { kind: string; at: string }[],
   now = new Date(),
 ): boolean {
   if (s.status !== "starting" && s.status !== "running") return false;
-  if (events.some((e) => e.kind === "picked_up")) return false;
-  return now.getTime() - parseLocal(s.startedAt).getTime() > 90_000;
+  const back = events.findLastIndex((e) => e.kind === "changes_requested");
+  if (events.slice(back + 1).some((e) => e.kind === "picked_up")) return false;
+  return now.getTime() - parseLocal(back >= 0 ? events[back].at : s.startedAt).getTime() > 90_000;
 }
 
 export const fmtDay = (s: string) => format(parseLocal(dateOnly(s)), "EEE, d MMM");

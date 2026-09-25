@@ -3,17 +3,10 @@ import { db } from "./db";
 import * as repo from "./repo";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
-import { agentOf, type Session, type Status, type Task } from "@/lib/types";
+import { agentOf, taskHref, type Session, type Status, type Task } from "@/lib/types";
 
 const EARLIER_LIMIT = 30;
 const active = (s: Session) => s.status === "starting" || s.status === "running";
-
-/** Where a task opens in the app: its project, else its area, else the inbox. */
-export function taskHref(t: Task): string {
-  if (t.projectId) return `/project/${t.projectId}?task=${t.key}`;
-  if (t.areaId) return `/area/${t.areaId}?task=${t.key}`;
-  return `/inbox?task=${t.key}`;
-}
 
 /** When each session was marked done: its latest "done" event. */
 function doneTimes(): Map<string, string> {
@@ -38,6 +31,21 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
     s.status === "done"
       ? done.get(s.id) ?? s.endedAt ?? s.finishedAt ?? tasks.get(s.taskId)?.completedAt ?? s.startedAt
       : s.endedAt ?? s.finishedAt ?? s.startedAt;
+
+  const finished = all.filter((s) => s.status === "finished")
+    .sort((a, b) => (b.finishedAt ?? b.startedAt).localeCompare(a.finishedAt ?? a.startedAt));
+  const running = all.filter(active).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  const ended = all.filter((s) => !active(s) && s.status !== "finished").sort((a, b) => endAt(b).localeCompare(endAt(a)));
+  const endedToday = ended.filter((s) => dateOnly(endAt(s)) >= today);
+  const earlier = ended.filter((s) => dateOnly(endAt(s)) < today);
+  const shownEarlier = earlier.slice(0, EARLIER_LIMIT);
+  // A link to an older session still opens it.
+  const linked = selected ? earlier.slice(EARLIER_LIMIT).find((s) => s.id === selected) : undefined;
+  if (linked) shownEarlier.push(linked);
+
+  const shownIds = [...finished, ...running, ...endedToday, ...shownEarlier].map((s) => s.id);
+  const reports = repo.reportsForSessions(shownIds);
+  const pending = repo.pendingImages(shownIds);
 
   const item = (s: Session): SessionItem => {
     const task = tasks.get(s.taskId);
@@ -68,12 +76,14 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
       cliSessionId: s.cliSessionId,
       origin: s.continuesSessionId
         ? "continued"
-        : events.some((e) => e.kind === "started" && e.text === "Started outside Organizer") ? "outside" : "organizer",
+        : events.some((e) => e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text)) ? "outside" : "organizer",
       continues: prev ? { id: prev.id, key: tasks.get(prev.taskId)?.key ?? "an earlier task" } : null,
       task: task ? { id: task.id, key: task.key, title: task.title } : null,
       project: project ? { id: project.id, name: project.name } : null,
       href: task ? taskHref(task) : null,
       events,
+      reports: reports.get(s.id) ?? [],
+      pending: pending.get(s.id) ?? [],
       next: next
         ? {
           id: next.id, key: next.key, title: next.title, href: taskHref(next),
@@ -82,17 +92,6 @@ export function sessionList(selected: string | null): { groups: SessionGroup[]; 
         : null,
     };
   };
-
-  const finished = all.filter((s) => s.status === "finished")
-    .sort((a, b) => (b.finishedAt ?? b.startedAt).localeCompare(a.finishedAt ?? a.startedAt));
-  const running = all.filter(active).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
-  const ended = all.filter((s) => !active(s) && s.status !== "finished").sort((a, b) => endAt(b).localeCompare(endAt(a)));
-  const endedToday = ended.filter((s) => dateOnly(endAt(s)) >= today);
-  const earlier = ended.filter((s) => dateOnly(endAt(s)) < today);
-  const shownEarlier = earlier.slice(0, EARLIER_LIMIT);
-  // A link to an older session still opens it.
-  const linked = selected ? earlier.slice(EARLIER_LIMIT).find((s) => s.id === selected) : undefined;
-  if (linked) shownEarlier.push(linked);
 
   const groups: SessionGroup[] = (
     [

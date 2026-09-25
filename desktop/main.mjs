@@ -350,8 +350,10 @@ function watchSessions() {
 
 function notify(s) {
   if (!Notification.isSupported()) return;
+  const who = s.key ?? "A session";
+  const asks = s.questions ? ` · ${s.questions === 1 ? "1 question" : `${s.questions} questions`} for you` : "";
   const n = new Notification({
-    title: `${s.key ?? "A session"} is finished`,
+    title: s.outcome === "blocked" ? `${who} is blocked${asks}` : s.outcome === "partial" ? `${who} is partly done${asks}` : `${who} is finished${asks}`,
     body: [s.title, s.note].filter(Boolean).join("\n"),
     icon: ICON_PNG,
   });

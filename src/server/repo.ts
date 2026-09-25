@@ -1,16 +1,28 @@
 import "server-only";
 import crypto from "node:crypto";
 import { addDays } from "date-fns";
+import { removeImageFiles, type StoredImage } from "./attachments";
 import { db, tx } from "./db";
 import { nowStamp, parseLocal, toDateStr } from "@/lib/dates";
-import type {
-  AgentId, AgentTools, Area, CalEvent, Device, Doer, EdgeMode, EventOccurrence, FlowEdge, Priority, Project, Session, SessionEvent,
-  SessionStatus, Settings, Status, Subtask, Surface, Task,
+import {
+  taskHref,
+  type AgentId, type AgentTools, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
+  type FlowEdge, type Priority, type Project, type Report, type ReportCriterion, type ReportOutcome, type Session, type SessionEvent,
+  type SessionStatus, type Settings, type Status, type Subtask, type Surface, type Task,
 } from "@/lib/types";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? null : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));
+/** A JSON column, or the fallback when it's empty or unreadable. */
+function json<T>(v: unknown, fallback: T): T {
+  try {
+    return v == null || v === "" ? fallback : (JSON.parse(String(v)) as T);
+  } catch {
+    return fallback;
+  }
+}
+const marks = (xs: unknown[]) => xs.map(() => "?").join(",");
 
 /* ---------- areas and projects ---------- */
 
@@ -139,8 +151,8 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: JSON.parse(String(r.labels || "[]")),
-  reminder: s(r.reminder), agent: s(r.agent) as Doer | null, runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id),
-  folder: s(r.folder), sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
+  doneWhen: json<string[]>(r.done_when, []), reminder: s(r.reminder), agent: s(r.agent) as Doer | null, runIn: s(r.run_in) as Surface | null,
+  deviceId: s(r.device_id), folder: s(r.folder), sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
 });
 
@@ -177,8 +189,13 @@ export interface TaskInput {
   plannedDate?: string | null;
   estimateMin?: number;
   labels?: string[];
+  doneWhen?: string[];
   agent?: Doer | null;
 }
+
+/** "Done when" items without blanks or repeats. */
+export const cleanDoneWhen = (items: string[]) =>
+  [...new Set(items.map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean))];
 
 export function createTask(input: TaskInput): Task {
   const project = input.projectId ? getProject(input.projectId) : null;
@@ -188,19 +205,20 @@ export function createTask(input: TaskInput): Task {
   const sort = Number((db().prepare("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?").get(input.projectId ?? null) as Row).n);
   const r = db().prepare(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     key, areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
-    input.agent ?? project?.agent ?? null, sort, stamp, stamp,
+    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), input.agent ?? project?.agent ?? null, sort, stamp, stamp,
   );
   return getTask(Number(r.lastInsertRowid))!;
 }
 
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
-  dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", labels: "labels", reminder: "reminder",
-  agent: "agent", runIn: "run_in", deviceId: "device_id", folder: "folder", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
+  dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
+  reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", folder: "folder", sortOrder: "sort_order",
+  flowX: "flow_x", flowY: "flow_y",
 };
 
 export type TaskPatch = Partial<TaskInput & {
@@ -214,7 +232,7 @@ export function updateTask(id: number, patch: TaskPatch) {
   for (const [k, v] of Object.entries(patch)) {
     if (!(k in TASK_COLS) || v === undefined) continue;
     sets.push(`${TASK_COLS[k]} = ?`);
-    vals.push(k === "labels" ? JSON.stringify(v) : (v as string | number | null));
+    vals.push(k === "labels" ? JSON.stringify(v) : k === "doneWhen" ? JSON.stringify(cleanDoneWhen(v as string[])) : (v as string | number | null));
   }
   if (patch.status) {
     sets.push("completed_at = ?");
@@ -226,8 +244,11 @@ export function updateTask(id: number, patch: TaskPatch) {
   db().prepare(`UPDATE tasks SET ${sets.join(", ")} WHERE id = ?`).run(...vals, id);
 }
 
+/** Deletes a task with its sub-tasks, sessions, reports and images. */
 export function deleteTask(id: number) {
+  const files = (db().prepare("SELECT file FROM attachments WHERE task_id = ?").all(id) as Row[]).map((r) => String(r.file));
   db().prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  removeImageFiles(files);
 }
 
 export function addSubtask(taskId: number, title: string) {
@@ -369,6 +390,141 @@ export function sessionEvents(sessionId: string): SessionEvent[] {
   return (db().prepare("SELECT * FROM session_events WHERE session_id = ? ORDER BY at, id").all(sessionId) as Row[]).map((r) => ({
     id: Number(r.id), sessionId: String(r.session_id), at: String(r.at), kind: String(r.kind), text: String(r.text),
   }));
+}
+
+/* ---------- reports (what agents hand back) and their images ---------- */
+
+const toAttachment = (r: Row): Attachment => ({
+  id: String(r.id), taskId: Number(r.task_id), sessionId: s(r.session_id), reportId: n(r.report_id), mime: String(r.mime),
+  bytes: Number(r.bytes), width: n(r.width), height: n(r.height), caption: String(r.caption ?? ""), createdAt: String(r.created_at),
+});
+
+export function listAttachments(where = "1 = 1", ...params: (string | number | null)[]): Attachment[] {
+  return (db().prepare(`SELECT * FROM attachments WHERE ${where} ORDER BY created_at, rowid`).all(...params) as Row[]).map(toAttachment);
+}
+
+/** Where an attachment's copy is stored and its type, for serving it. */
+export function attachmentFile(id: string): { file: string; mime: string } | null {
+  const r = db().prepare("SELECT file, mime FROM attachments WHERE id = ?").get(id) as Row | undefined;
+  return r ? { file: String(r.file), mime: String(r.mime) } : null;
+}
+
+export function addAttachment(img: StoredImage, to: { taskId: number; sessionId: string | null; reportId?: number | null; caption?: string }): Attachment {
+  db().prepare(
+    `INSERT INTO attachments (id, task_id, session_id, report_id, file, mime, bytes, width, height, caption, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(img.id, to.taskId, to.sessionId, to.reportId ?? null, img.file, img.mime, img.bytes, img.width, img.height,
+    (to.caption ?? "").trim(), nowStamp());
+  return listAttachments("id = ?", img.id)[0];
+}
+
+/** Images a session attached while it worked, not yet part of a report, per session id. */
+export function pendingImages(sessionIds: string[]): Map<string, Attachment[]> {
+  const map = new Map<string, Attachment[]>();
+  if (!sessionIds.length) return map;
+  for (const a of listAttachments(`report_id IS NULL AND session_id IN (${marks(sessionIds)})`, ...sessionIds)) {
+    map.set(a.sessionId!, [...(map.get(a.sessionId!) ?? []), a]);
+  }
+  return map;
+}
+
+export interface ReportInput {
+  sessionId: string;
+  taskId: number;
+  outcome: ReportOutcome;
+  summary: string;
+  details?: string;
+  criteria?: ReportCriterion[];
+  verify?: string[];
+  questions?: string[];
+  links?: { label: string; url: string }[];
+  followUps?: string[];
+  /** Defaults to now. */
+  createdAt?: string;
+}
+
+/** Records a hand-back. Images the session attached while it worked become part of it. */
+export function createReport(input: ReportInput): number {
+  const r = db().prepare(
+    `INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links, follow_ups, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.sessionId, input.taskId, input.outcome, input.summary.trim(), (input.details ?? "").trim(), JSON.stringify(input.criteria ?? []),
+    JSON.stringify(input.verify ?? []), JSON.stringify(input.questions ?? []), JSON.stringify(input.links ?? []),
+    JSON.stringify(input.followUps ?? []), input.createdAt ?? nowStamp(),
+  );
+  const id = Number(r.lastInsertRowid);
+  db().prepare("UPDATE attachments SET report_id = ? WHERE session_id = ? AND report_id IS NULL").run(id, input.sessionId);
+  return id;
+}
+
+/** Report rows with their images, agent and follow-up tasks filled in, in the order given. */
+function toReports(rows: Row[]): Report[] {
+  if (!rows.length) return [];
+  const ids = rows.map((r) => Number(r.id));
+  const images = listAttachments(`report_id IN (${marks(ids)})`, ...ids);
+  const keys = [...new Set(rows.flatMap((r) => json<string[]>(r.follow_ups, [])))];
+  const tasks = new Map(
+    keys.length
+      ? (db().prepare(`SELECT key, title, project_id, area_id FROM tasks WHERE key IN (${marks(keys)})`).all(...keys) as Row[])
+        .map((t) => [String(t.key), { title: String(t.title), href: taskHref({ key: String(t.key), projectId: s(t.project_id), areaId: s(t.area_id) }) }])
+      : [],
+  );
+  return rows.map((r) => ({
+    id: Number(r.id), sessionId: String(r.session_id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId,
+    outcome: String(r.outcome) as ReportOutcome, summary: String(r.summary), details: String(r.details ?? ""),
+    criteria: json<ReportCriterion[]>(r.criteria, []), verify: json<string[]>(r.verify, []), questions: json<string[]>(r.questions, []),
+    links: json<{ label: string; url: string }[]>(r.links, []),
+    followUps: json<string[]>(r.follow_ups, []).map((key) => ({ key, title: tasks.get(key)?.title ?? null, href: tasks.get(key)?.href ?? null })),
+    createdAt: String(r.created_at),
+    images: images.filter((a) => a.reportId === Number(r.id)),
+    changes: s(r.changes),
+    changesAt: s(r.changes_at),
+  }));
+}
+
+/** What the user asked to change after reading a report; null takes the request back. */
+export function setReportChanges(reportId: number, changes: string | null, at: string | null) {
+  db().prepare("UPDATE reports SET changes = ?, changes_at = ? WHERE id = ?").run(changes, at, reportId);
+}
+
+const REPORTS = "SELECT reports.*, sessions.agent AS agent FROM reports JOIN sessions ON sessions.id = reports.session_id";
+
+/** Each task's latest reports (at most `perTask`), newest first. */
+export function reportsForTasks(taskIds: number[], perTask = 5): Map<number, Report[]> {
+  const map = new Map<number, Report[]>();
+  if (!taskIds.length) return map;
+  const rows = db().prepare(
+    `SELECT * FROM (SELECT r.*, ROW_NUMBER() OVER (PARTITION BY r.task_id ORDER BY r.id DESC) AS nth FROM (${REPORTS}) r
+     WHERE r.task_id IN (${marks(taskIds)})) WHERE nth <= ? ORDER BY id DESC`,
+  ).all(...taskIds, perTask) as Row[];
+  for (const rep of toReports(rows)) map.set(rep.taskId, [...(map.get(rep.taskId) ?? []), rep]);
+  return map;
+}
+
+/** Each session's reports, newest first. */
+export function reportsForSessions(sessionIds: string[]): Map<string, Report[]> {
+  const map = new Map<string, Report[]>();
+  if (!sessionIds.length) return map;
+  const rows = db().prepare(`${REPORTS} WHERE reports.session_id IN (${marks(sessionIds)}) ORDER BY reports.id DESC`).all(...sessionIds) as Row[];
+  for (const rep of toReports(rows)) map.set(rep.sessionId, [...(map.get(rep.sessionId) ?? []), rep]);
+  return map;
+}
+
+export function latestReport(taskId: number): Report | null {
+  return toReports(db().prepare(`${REPORTS} WHERE reports.task_id = ? ORDER BY reports.id DESC LIMIT 1`).all(taskId) as Row[])[0] ?? null;
+}
+
+export function latestSessionReport(sessionId: string): Report | null {
+  return reportsForSessions([sessionId]).get(sessionId)?.[0] ?? null;
+}
+
+/** Tasks whose latest hand-back was partial or blocked. Flows don't go on after them until the user marks them done. */
+export function heldTaskIds(): Set<number> {
+  const rows = db().prepare(
+    "SELECT task_id FROM reports WHERE id IN (SELECT MAX(id) FROM reports GROUP BY task_id) AND outcome != 'done'",
+  ).all() as Row[];
+  return new Set(rows.map((r) => Number(r.task_id)));
 }
 
 /* ---------- flow edges ---------- */

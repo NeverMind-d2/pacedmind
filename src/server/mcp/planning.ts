@@ -26,8 +26,12 @@ const clearable = <T>(v: string | null | undefined, read: (s: string) => T): T |
 
 /* ---------- task input shared by create_task, create_tasks and update_task ---------- */
 
+const doneWhenSchema = z.array(z.string()).max(20)
+  .describe("What must be true when the task is finished: one checkable outcome per item, e.g. \"/reports has a Download CSV button\" or \"A screenshot of the new page\". Agents answer each item when they hand the task back");
+
 const newTaskFields = {
-  description: z.string().optional().describe("Details in plain text or Markdown: context, acceptance criteria, links"),
+  description: z.string().optional().describe("Details in plain text or Markdown: why it matters, context, constraints, links"),
+  done_when: doneWhenSchema.optional(),
   status: statusSchema.optional().describe("Defaults to todo"),
   priority: prioritySchema.optional(),
   due: dateTimeInput.optional().describe("Deadline, with an optional time"),
@@ -42,7 +46,7 @@ const newTaskFields = {
 const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim().replace(/^#/, "").toLowerCase()).filter(Boolean))];
 
 type NewTask = {
-  title: string; description?: string; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
+  title: string; description?: string; done_when?: string[]; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
   due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: Doer;
 };
 
@@ -52,6 +56,7 @@ function createOne(input: NewTask, place: { projectId: string | null; areaId: st
   const t = repo.createTask({
     title: input.title,
     description: input.description?.trim() ?? "",
+    doneWhen: input.done_when,
     projectId: place.projectId,
     areaId: place.areaId,
     status: input.status ? statusOf(input.status) : "todo",
@@ -426,7 +431,8 @@ export function registerPlanningTools(server: McpServer) {
   }, (args) => {
     const t = tx(() => createOne(args, placeFor(args.project, args.area)));
     const started = t.status === "done" ? launched(afterTaskDone(t.id)) : [];
-    return [`Created ${taskLine(t, names())}${t.subtasks.length ? ` · ${t.subtasks.length} sub-tasks` : ""}.`, ...started].join("\n");
+    const extra = [t.doneWhen.length ? plural(t.doneWhen.length, "Done when item") : null, t.subtasks.length ? plural(t.subtasks.length, "sub-task") : null];
+    return [`Created ${taskLine(t, names())}${extra.filter(Boolean).map((x) => ` · ${x}`).join("")}.`, ...started].join("\n");
   });
 
   tool(server, "create_tasks", {
@@ -454,12 +460,13 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "update_task", {
     title: "Update task",
     description:
-      "Change anything about a task: title, description (replace or append), status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run and their folder, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
+      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run and their folder, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
       description: z.string().optional().describe("Replaces the description"),
       append_to_description: z.string().optional().describe("Adds a paragraph at the end of the description"),
+      done_when: doneWhenSchema.optional().describe("Replaces the Done when list; [] clears it"),
       status: statusSchema.optional(),
       priority: prioritySchema.optional(),
       due: dateTimeInput.nullable().optional(),
@@ -508,6 +515,7 @@ export function registerPlanningTools(server: McpServer) {
       repo.updateTask(t.id, {
         title: args.title?.trim(),
         description,
+        doneWhen: args.done_when,
         status,
         priority: args.priority ? priorityOf(args.priority) : undefined,
         dueDate: clearable(args.due, (v) => when(v)),
@@ -528,7 +536,8 @@ export function registerPlanningTools(server: McpServer) {
     const leftFlow = args.agent === "human" && keepYoursOutOfFlow(t.id) ? [`${t.key} is the user's now, so it left the flow.`] : [];
     const started = status === "done" && t.status !== "done" ? launched(afterTaskDone(t.id)) : [];
     const after = repo.getTask(t.id)!;
-    const subs = after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "";
+    const subs = (args.done_when ? ` · ${plural(after.doneWhen.length, "Done when item")}` : "") +
+      (after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "");
     return [`Updated ${taskLine(after, names())}${subs}.`, ...leftFlow, ...started].join("\n");
   });
 

@@ -7,8 +7,8 @@ import { checkThisDevice, connectClaude, connectCodex, thisDeviceId } from "@/se
 import { folderProblem } from "@/server/folders";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
 import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
-import { afterTaskDone, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow } from "@/server/ops";
-import type { AgentId, EdgeMode, Project, Settings, Surface } from "@/lib/types";
+import { afterTaskDone, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges } from "@/server/ops";
+import { AGENT_LABEL, type AgentId, type EdgeMode, type Project, type Settings, type Surface } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
 
@@ -118,6 +118,12 @@ export async function finishSessionAction(sessionId: string): Promise<Result> {
 export async function closeSessionAction(sessionId: string): Promise<Result> {
   if (!closeSession(sessionId)) return { ok: false, error: "Session not found" };
   return done();
+}
+
+/** Sends a hand-back back to its agent with what should change. It reopens in a new terminal. */
+export async function requestChangesAction(sessionId: string, changes: string): Promise<Result> {
+  const r = requestChanges(sessionId, changes);
+  return done(r.ok && r.session ? { ok: true, message: `Sent to ${AGENT_LABEL[r.session.agent]} in a new terminal` } : { ok: false, error: r.error });
 }
 
 export async function markSessionDoneAction(sessionId: string): Promise<Result> {

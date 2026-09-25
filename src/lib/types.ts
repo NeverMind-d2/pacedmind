@@ -14,6 +14,10 @@ export type SessionStatus = "starting" | "running" | "finished" | "done" | "clos
 export type Surface = "terminal" | "desktop" | "cloud";
 /** Whether PacedMind's MCP server is set up for sessions it doesn't configure itself (desktop apps). */
 export type McpLink = "connected" | "elsewhere" | "missing";
+/** How an agent handed a task back: all of it ready, part of it, or stuck until the user decides something. */
+export type ReportOutcome = "done" | "partial" | "blocked";
+/** An agent's answer to one "Done when" item. */
+export type Verdict = "met" | "partly" | "not_met";
 
 export interface Area {
   id: string;
@@ -65,6 +69,8 @@ export interface Task {
   plannedDate: string | null;
   estimateMin: number;
   labels: string[];
+  /** What must be true when the task is finished, one checkable outcome per item. Agents answer each when they hand it back. */
+  doneWhen: string[];
   reminder: string | null;
   agent: Doer | null;
   /** Where its agent sessions run; null picks the terminal when the agent's CLI is installed, else its desktop app. */
@@ -129,6 +135,53 @@ export interface SessionEvent {
   text: string;
 }
 
+/** An image an agent attached to a task, such as a screenshot of the result. Served at /api/attachments/<id>. */
+export interface Attachment {
+  id: string;
+  taskId: number;
+  sessionId: string | null;
+  /** The report it belongs to; null while the session is still working. */
+  reportId: number | null;
+  mime: string;
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  caption: string;
+  createdAt: string;
+}
+
+/** A "Done when" item as the agent answered it. The text is kept as it was, so later edits don't change old reports. */
+export interface ReportCriterion {
+  text: string;
+  /** Null when the agent didn't answer this item. */
+  verdict: Verdict | null;
+  note: string;
+}
+
+/** What an agent handed back with finish_task: one per hand-back, so a session that is resumed can have several. */
+export interface Report {
+  id: number;
+  sessionId: string;
+  taskId: number;
+  agent: AgentId;
+  outcome: ReportOutcome;
+  summary: string;
+  /** Markdown. */
+  details: string;
+  criteria: ReportCriterion[];
+  /** Steps the user can follow to check the result. */
+  verify: string[];
+  questions: string[];
+  links: { label: string; url: string }[];
+  /** Tasks the agent created for work outside this one. Title and href are null when the task is gone. */
+  followUps: { key: string; title: string | null; href: string | null }[];
+  createdAt: string;
+  images: Attachment[];
+  /** What the user asked to change after reading this report; the agent gets it through start_task. */
+  changes: string | null;
+  changesAt: string | null;
+}
+
 export interface FlowEdge {
   id: number;
   fromTaskId: number;
@@ -182,6 +235,10 @@ export interface TaskContext {
   /** Latest session per task id. */
   sessions: Record<number, Session>;
   sessionEvents: Record<string, SessionEvent[]>;
+  /** What agents handed back, per task id, newest first. */
+  reports: Record<number, Report[]>;
+  /** Images a running session attached so far, before it hands the task back, per session id. */
+  pending: Record<string, Attachment[]>;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
@@ -245,6 +302,25 @@ export function agentOf(task: { agent: Doer | null }, projectAgent?: AgentId | n
   if (task.agent === "human") return null;
   return task.agent ?? projectAgent ?? "claude";
 }
+
+/** Where a task opens in the app: its project, else its area, else the inbox. */
+export function taskHref(t: { key: string; projectId: string | null; areaId: string | null }): string {
+  if (t.projectId) return `/project/${t.projectId}?task=${t.key}`;
+  if (t.areaId) return `/area/${t.areaId}?task=${t.key}`;
+  return `/inbox?task=${t.key}`;
+}
+
+export const OUTCOME_LABEL: Record<ReportOutcome, string> = {
+  done: "Done",
+  partial: "Partly done",
+  blocked: "Blocked",
+};
+
+export const VERDICT_LABEL: Record<Verdict, string> = {
+  met: "Met",
+  partly: "Partly met",
+  not_met: "Not met",
+};
 
 export const EDGE_LABEL: Record<EdgeMode, string> = {
   auto: "Auto",
