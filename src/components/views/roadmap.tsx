@@ -12,6 +12,7 @@ import { AGENT_LABEL, type AgentId, type Area, type Project, type Session, type 
 import type { ProjectStats, StateTone, TaskState } from "@/server/timeline";
 import { Diamond, Icon, StatusIcon } from "@/components/icons";
 import { TaskDetail } from "@/components/task-detail";
+import { useQuickAddProject } from "@/components/quick-add";
 import { openAdd } from "@/components/task-list";
 import { Button, Menu, Switch, cx, useAction } from "@/components/ui";
 import { dayPos, tint, useWidth } from "./timeline";
@@ -612,6 +613,7 @@ export function Roadmap(props: {
   const router = useRouter();
   const [sel, setSel] = useState<string | null>(props.initialKey);
   const project = projects.find((p) => p.id === props.selectedId) ?? null;
+  useQuickAddProject(project?.id ?? null);
   const colorOf = (p: Project) => projectColor(p, areas);
   const selected = sel ? items.find((it) => it.task.key === sel)?.task ?? null : null;
 

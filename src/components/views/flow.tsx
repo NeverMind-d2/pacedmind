@@ -18,6 +18,7 @@ import {
   connectAction, deleteEdgeAction, finishSessionAction, placeInFlowAction, removeFromFlowAction, setCodexEnvAction, setFlowOnAction,
   updateTaskAction,
 } from "@/app/actions";
+import { useQuickAddProject } from "@/components/quick-add";
 import { startSessionOrAsk } from "@/components/remote-start";
 import { RequestStatus } from "@/components/request-status";
 import { addToFlowAction, setAgentsAction, setRunAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
@@ -560,6 +561,7 @@ const edgeTypes: EdgeTypes = { mode: ModeEdgeView };
 
 function FlowEditor(props: FlowViewProps) {
   const { project, sessions, continuedFrom } = props;
+  useQuickAddProject(project.id);
   const rf = useReactFlow<TaskNode, ModeEdge>();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [, startTransition] = useTransition();
