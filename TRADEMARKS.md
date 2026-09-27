@@ -1,6 +1,6 @@
 # Trademarks
 
-PacedMind's code is free software under the GNU Affero General Public License ([LICENSE](LICENSE)). That license covers the code, not PacedMind's name and look: the name **PacedMind**, the **pd** emblem, the **pacedmind** wordmark, and the icons made from them (the files in `public/brand/`, `site/public/brand/` and `docs/public/brand/`, and the app, tray and web icons generated from them). These are trademarks of PacedMind's owner, who publishes it on GitHub as NeverMind-d2. This page says how you may use them.
+PacedMind's code is free software under the GNU Affero General Public License ([LICENSE](LICENSE)). That license covers the code, not PacedMind's name and look: the name **PacedMind**, the **pd** emblem, the **pacedmind** wordmark, and the icons made from them (the files in `public/brand/`, `site/public/brand/` and `docs/public/brand/`, and the app, tray and web icons generated from them). These are trademarks of NMD Mikołaj Bednarczyk, PacedMind's owner. This page says how you may use them.
 
 ## Without asking
 
