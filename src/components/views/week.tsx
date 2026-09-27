@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState, type MouseEvent, type ReactNode } from "react";
 import { format } from "date-fns";
-import { addDaysStr, dateOnly, fmtTime, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
+import { addDaysStr, dateOnly, fmtDay, fmtTime, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
 import type { PlannedBlock } from "@/lib/planner";
 import { AGENT_LABEL, type AgentId, type Area, type EventOccurrence, type Settings, type Task, type TaskContext } from "@/lib/types";
 import type { WeekPlan } from "@/server/calendar";
 import { Icon } from "../icons";
 import { TaskDetail } from "../task-detail";
 import { Button, Dot, Switch, cx } from "../ui";
-import { PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, useNow, useSelection } from "./calendar-parts";
+import { PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, useAddOnClick, useNow, useSelection } from "./calendar-parts";
 
 export interface SessionLane {
   id: string;
@@ -38,6 +38,12 @@ const hours = (min: number) => Math.round((min / 60) * 10) / 10;
 function minOn(stamp: string, day: string) {
   const d = dateOnly(stamp);
   return d < day ? 0 : d > day ? 24 * 60 : minutesOf(stamp.slice(11, 16));
+}
+
+/** The half hour a click in a day's column falls on, "HH:mm". */
+function slotAt(e: MouseEvent<HTMLElement>) {
+  const min = H0 * 60 + Math.floor(((e.clientY - e.currentTarget.getBoundingClientRect().top) / PX) * 2) * 30;
+  return hhmm(Math.min(Math.max(min, H0 * 60), H1 * 60 - 30));
 }
 
 type Block = {
@@ -99,6 +105,9 @@ export function WeekView({
   const params = useSearchParams();
   const [sel, setSel] = useSelection(initialKey);
   const [on, setOn] = useState(true);
+  const addOnClick = useAddOnClick();
+  // The day whose column is under the mouse: its header lights up with a "+", as a click there adds a task.
+  const [hovered, setHovered] = useState<string | null>(null);
   const selected = tasks.find((t) => t.key === sel) ?? null;
   const toggle = (key: string) => setSel((s) => (s === key ? null : key));
 
@@ -236,15 +245,18 @@ export function WeekView({
                 const isToday = day === today;
                 const past = day < today;
                 return (
-                  <div key={day} className="flex min-w-0 flex-1 basis-0 items-center gap-1.5 border-l border-line px-2">
+                  <div key={day} title={`New task on ${fmtDay(day)}`} {...addOnClick(() => ({ plannedDate: day }))}
+                    className={cx("flex min-w-0 flex-1 basis-0 items-center gap-1.5 border-l border-line px-2 hover:bg-hover", hovered === day && "bg-hover")}>
                     <span className={cx("text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
                     <span className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
                       isToday ? "bg-accent text-bg" : past ? "text-mut2" : "text-fg2")}>
                       {Number(day.slice(8))}
                     </span>
                     <span className="flex-1" />
-                    {dues.length > 0 && (
-                      <span title={dues.map((t) => `${t.key} ${t.title}`).join("\n")}
+                    {/* While the pointer is over the day's column, a "+" in place of its deadlines says a click there adds a task.
+                        A narrow day has no room for both. */}
+                    {hovered === day ? <Icon name="plus" size={12} strokeWidth={2.2} className="shrink-0 text-mut2" /> : dues.length > 0 && (
+                      <span data-item title={dues.map((t) => `${t.key} ${t.title}`).join("\n")}
                         className={cx("inline-flex shrink-0 items-center gap-[3px] text-[11px]", late ? "text-danger" : isToday ? "text-fg2" : "text-fg3")}>
                         <Icon name="flag" size={10} strokeWidth={2.4} />
                         {past ? `${dues.length} missed` : (single ?? dues.length)}
@@ -263,13 +275,17 @@ export function WeekView({
                   </span>
                 ))}
               </div>
+              {/* A click on a day's free space adds a task planned for it; as an activity, it would start at that half hour. */}
               {days.map((day, i) => (
                 <div key={day} className={cx("relative min-w-0 flex-1 basis-0 border-l border-line", day !== shown && "max-md:hidden")}
                   style={{
                     backgroundImage: "linear-gradient(to bottom, var(--color-line) 1px, transparent 1px)",
                     backgroundSize: `100% ${PX}px`,
                     backgroundColor: rules.workDays.includes(i + 1) ? undefined : "var(--color-nonwork)",
-                  }}>
+                  }}
+                  {...addOnClick((e) => ({ plannedDate: day, start: `${day}T${slotAt(e)}` }))}
+                  onPointerEnter={(e) => { if (e.pointerType === "mouse") setHovered(day); }}
+                  onPointerLeave={() => setHovered((d) => (d === day ? null : d))}>
                   {blocksOn(day).map((b) => (
                     <BlockView key={b.id} block={b} color={areaColor(ctx.areas, b.areaId)} past={b.end <= now}
                       selected={!!b.key && b.key === sel} onOpen={() => b.key && toggle(b.key)} />
@@ -361,7 +377,7 @@ function BlockView({ block: b, color, past, selected, onOpen }: {
   );
   return b.key
     ? <button type="button" title={label} onClick={onOpen} className={cls} style={style}>{body}</button>
-    : <div title={label} className={cls} style={style}>{body}</div>;
+    : <div data-item title={label} className={cls} style={style}>{body}</div>;
 }
 
 function workDaysText(days: number[]) {

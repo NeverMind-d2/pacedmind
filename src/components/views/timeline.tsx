@@ -14,8 +14,10 @@ import {
 import type { DayLoad, TaskState } from "@/server/timeline";
 import { Diamond, Icon, ProgressRing } from "@/components/icons";
 import { Popover, PopoverItem, PopoverLabel, type Anchor } from "@/components/popover";
+import type { QuickAddDefaults } from "@/components/quick-add";
 import { TaskDetail } from "@/components/task-detail";
 import { Dot, Segmented, cx, toast, useAction } from "@/components/ui";
+import { useAddOnClick } from "./calendar-parts";
 
 /* ---------- small helpers, also used by the roadmap ---------- */
 
@@ -603,6 +605,13 @@ function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
 
 /* ---------- the view ---------- */
 
+/** What a click on a row's day adds: a task planned for it, in the row's project or area ("Your time": in neither). */
+function addFor(r: Row, day: string): QuickAddDefaults | null {
+  if (r.kind === "proj") return { plannedDate: day, projectId: r.project.id };
+  if (r.kind === "area") return { plannedDate: day, areaId: r.areaId || null };
+  return r.kind === "cap" ? { plannedDate: day } : null;
+}
+
 function rangeLabel(from: string, days: number, short = false) {
   if (short) return `${fmtShort(from)} to ${fmtShort(addDaysStr(from, days - 1))}`;
   const a = parseLocal(from);
@@ -643,6 +652,9 @@ export function Timeline(props: {
   const [drag, setDrag] = useState<BarDrag | null>(null);
   const [link, setLink] = useState<LinkDrag | null>(null);
   const [depMenu, setDepMenu] = useState<{ edge: FlowEdge; from: string; to: string; anchor: Anchor } | null>(null);
+  // The day under the mouse in a row that a click adds a task to.
+  const [spot, setSpot] = useState<{ row: string; i: number } | null>(null);
+  const addOnClick = useAddOnClick();
   const [scrollRef, width] = useWidth<HTMLDivElement>(TREE + 924);
   const gridRef = useRef<HTMLDivElement>(null);
   const phone = usePhone();
@@ -667,6 +679,9 @@ export function Timeline(props: {
   const dayW = Math.max(minDay, (width - tree) / days);
   const X = (d: number) => Math.round(d * dayW);
   const sc: Scale = { from, days, dayW, gridW: X(days), X, now, nowPos: dayPos(from, now), today: dateOnly(now) };
+  /** Which day of the range the pointer is over in a row's lane. */
+  const dayAt = (e: { clientX: number; currentTarget: HTMLElement }) =>
+    Math.max(0, Math.min(days - 1, Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / dayW)));
 
   // On a phone the days scroll sideways: a range opens at its start, or at the day before today when today is out of view.
   const todayAt = dayDiff(from, sc.today);
@@ -900,8 +915,18 @@ export function Timeline(props: {
                 style={{ width: tree }}>
                 Areas, projects and tasks
               </div>
+              {/* A click on a day adds a task planned for it. The day a row's lane points at is lit here too. */}
               <div className="relative shrink-0 overflow-hidden" style={{ width: sc.gridW }}>
-                <DayHeader sc={sc} zoom={zoom} />
+                {Array.from({ length: days }, (_, i) => {
+                  const day = addDaysStr(from, i);
+                  return (
+                    <span key={day} title={`New task on ${fmtDay(day)}`} {...addOnClick(() => ({ plannedDate: day }))}
+                      className={cx("absolute inset-y-0 hover:bg-hover", spot?.i === i && "bg-hover")} style={{ left: X(i), width: X(i + 1) - X(i) }} />
+                  );
+                })}
+                <div className="pointer-events-none absolute inset-0">
+                  <DayHeader sc={sc} zoom={zoom} />
+                </div>
               </div>
             </div>
 
@@ -956,8 +981,17 @@ export function Timeline(props: {
                         </button>
                       )}
                     </div>
+                    {/* A task's lane opens the task. Any other row's adds a task planned for the day clicked, in its project or area. */}
                     <div className={cx("relative shrink-0 overflow-hidden", r.kind === "task" && "cursor-pointer select-none")} style={{ width: sc.gridW }}
-                      onClick={r.kind === "task" ? () => select(r.task) : undefined}>
+                      {...(r.kind === "task" ? { onClick: () => select(r.task) } : {
+                        ...addOnClick((e) => addFor(r, addDaysStr(from, dayAt(e)))),
+                        onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
+                          if (e.pointerType !== "mouse" || drag || link) return;
+                          const i = dayAt(e);
+                          setSpot((s) => (s?.row === r.id && s.i === i ? s : { row: r.id, i }));
+                        },
+                        onPointerLeave: () => setSpot(null),
+                      })}>
                       {r.kind === "cap" && layers.blocks && <CapLane loads={loads} dayMinutes={dayMinutes} sc={sc} />}
                       {r.kind === "proj" && <ProjectLane row={r} sc={sc} />}
                       {r.kind === "task" && (
@@ -966,6 +1000,13 @@ export function Timeline(props: {
                           linkTarget={!!link && link.target === r.task.id && !link.problem}
                           onGrab={!phone && isOpenTask(r.task) ? (e, part) => grabBar(e, r, part) : null}
                           onLink={!phone && isOpenTask(r.task) && layers.deps ? (e, side) => grabLink(e, r, side) : null} />
+                      )}
+                      {/* Where the new task would go, drawn like a task that's still to do. */}
+                      {spot?.row === r.id && (
+                        <span className="pointer-events-none absolute flex items-center justify-center rounded border border-dashed border-line-strong text-mut"
+                          style={{ top: (r.h - 1 - BAR_H) / 2, height: BAR_H, left: X(spot.i) + 1, width: Math.max(4, X(spot.i + 1) - X(spot.i) - 2) }}>
+                          {dayW >= 16 && <Icon name="plus" size={11} strokeWidth={2.4} />}
+                        </span>
                       )}
                     </div>
                   </div>

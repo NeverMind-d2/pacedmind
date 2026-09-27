@@ -10,9 +10,10 @@ Quick add is the dialog for new tasks and activities. It reads the details from 
 * Press <kbd>C</kbd> anywhere in the app, as long as the cursor isn't in a text field.
 * Select the pen button next to **Search** in the sidebar.
 * Select **New task** in a list's header, or the **+** on a group.
+* Click a day in the [calendar](/views/calendar) (month or [week](/views/calendar-week#add-a-task-on-a-day)) or on the [timeline](/views/timeline#add-a-task-on-a-day), or the **+** that appears on it.
 * Select **New task** in the command menu (<kbd>Ctrl</kbd>+<kbd>K</kbd>).
 
-Only **New task** in a list's header and a group's **+** fill in the list's place: a project list fills in the project, an area list the area, and **Today** or a day in **Upcoming** the planned day. <kbd>C</kbd>, the pen button and the command menu always start empty, so a task created that way goes to the Inbox unless an area, a project or `@project` is chosen, even when a project's page is open.
+Only **New task** in a list's header, a group's **+** and a click on a day fill in the place: a project list fills in the project, an area list the area, and **Today**, a day in **Upcoming**, and a day clicked in the calendar or on the timeline the planned day. A project's or an area's row on the timeline also fills in that project or area. <kbd>C</kbd>, the pen button and the command menu always start empty, so a task created that way goes to the Inbox unless an area, a project or `@project` is chosen, even when a project's page is open.
 
 ## Create a task
 
@@ -32,13 +33,15 @@ To add several tasks in a row, switch on **Create more** at the bottom. The dial
 
 | Write | Example | Sets |
 | --- | --- | --- |
-| A date, with or without a time | *friday 10:00*, *tomorrow*, *next monday*, *26 sep*, *in 2 weeks* | The **due date**. Only the first date counts, and dates always point forward: *friday* means the next Friday. |
+| A date, with or without a time | *friday 10:00*, *tomorrow*, *next monday*, *26 sep*, *in 2 weeks* | The **due date**. Only the first date counts, and dates always point forward: *friday* means the next Friday. A time alone, such as *15:00*, goes on the planned day when there is one. |
 | `!` and a priority | *!urgent*, *!high*, *!medium* (or *!med*), *!low*, or *!1* to *!4* | The priority. *!1* is urgent, *!4* is low. |
 | `#` and a word | *#finance*, *#car* | A label, in lowercase. Several labels are allowed. |
 | `@` and the start of a project | *@q4*, *@apartment* | The first project whose name or id starts with that text, and its area. |
 | *for* and a length | *for 30m*, *for 1.5h*, *for 90 minutes* | The estimate, in minutes. |
 
 A typed date always becomes the due date. To plan the task for a day instead, use the **Plan for a day** chip and leave the date out of the title.
+
+A time typed without a date goes on the planned day, when there is one: *15:00* or *at 5pm* then means that time on that day, not the next time it comes round. Quick add opened for a day (a day clicked in the calendar or on the timeline, **Today**, or a day in **Upcoming**) starts with that day planned.
 
 ## The chips
 
@@ -76,7 +79,7 @@ Switch to **Activity** to add a fixed calendar entry instead of a task. The titl
 
 *Climbing with Tomek friday 18:00 for 2h every week*
 
-The chips offer **When**, the length in minutes (15 to 180), and **Does not repeat** or **Every week**. A time typed in the title wins over **When**; with no time at all, the activity starts now. **Add to calendar** creates it: *Added Climbing with Tomek to the calendar*. See [Calendar activities](/concepts/activities).
+The chips offer **When**, the length in minutes (15 to 180), and **Does not repeat** or **Every week**. A time typed in the title wins over **When**. With no time at all, the activity starts now. Opened for a day, it starts on that day instead: at the half hour that was clicked in the [week view](/views/calendar-week#add-a-task-on-a-day), otherwise at the next full hour after the current time, such as 15:00 when it's 14:20. **Add to calendar** creates it: *Added Climbing with Tomek to the calendar*. See [Calendar activities](/concepts/activities).
 
 ## Messages
 

@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { toDateTimeStr } from "@/lib/dates";
 import { Icon, type IconName } from "../icons";
+import type { QuickAddDefaults } from "../quick-add";
+import { openAdd } from "../task-list";
 import { cx } from "../ui";
 
 /**
@@ -89,6 +91,42 @@ export function pressable(onPress: () => void) {
       }
     },
   };
+}
+
+/** A click on one of these is its own, not the day's under it: tasks, links, buttons, panels and marked items. */
+const OWN_CLICK = "a, button, input, [role=button], [role=dialog], [data-item]";
+
+/**
+ * Makes a day's empty space add a task: a click there opens quick add with what `at` gives for the click (the day
+ * to plan it for; in some views a project, an area or when an activity would start), or does nothing for null.
+ * A click on something of the day's own is left to it, and a press that closes a menu or a panel only closes it.
+ */
+export function useAddOnClick() {
+  const closing = useRef(false);
+  return (at: (e: MouseEvent<HTMLElement>) => QuickAddDefaults | null) => ({
+    onPointerDown: () => { closing.current = !!document.querySelector("[role=menu], [role=dialog], [data-popup]"); },
+    onClick: (e: MouseEvent<HTMLElement>) => {
+      const own = (e.target as Element).closest(OWN_CLICK);
+      // A press that selected text isn't a click on the day either.
+      if (closing.current || (own && e.currentTarget.contains(own)) || window.getSelection()?.isCollapsed === false) return;
+      const defaults = at(e);
+      if (defaults) openAdd(defaults);
+    },
+  });
+}
+
+/**
+ * A day's "+", for a new task on it: shown while the day (a `group/day`) is hovered, or while `shown`, and to the
+ * keyboard. A phone has no hover, so there a tap on the day does the same.
+ */
+export function AddButton({ label, shown, onAdd, className }: { label: string; shown?: boolean; onAdd: () => void; className?: string }) {
+  return (
+    <button type="button" aria-label={`New task on ${label}`} title={`New task on ${label}`} onClick={onAdd}
+      className={cx("flex h-5 w-5 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2 focus-visible:opacity-100",
+        shown ? "opacity-100" : "opacity-0 group-hover/day:opacity-100", className)}>
+      <Icon name="plus" size={12} strokeWidth={2.2} />
+    </button>
+  );
 }
 
 export const isOpenTask = (t: { status: string }) => t.status !== "done" && t.status !== "canceled";

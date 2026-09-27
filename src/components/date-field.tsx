@@ -48,8 +48,9 @@ export function DateField({
   return (
     <div ref={ref} className="relative">
       <div onClick={toggle}>{trigger}</div>
+      {/* data-popup: a press outside only closes it, so a calendar's day doesn't also take that press as a click. */}
       {open && (
-        <div ref={panel} style={fit ? { transform: `translateX(${fit.x}px)` } : undefined}
+        <div ref={panel} data-popup style={fit ? { transform: `translateX(${fit.x}px)` } : undefined}
           className={cx("absolute z-50 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
             fit?.up ? "bottom-full mb-1" : "top-full mt-1", align === "right" ? "right-0" : "left-0")}>
           {quick("Today", 0)}
