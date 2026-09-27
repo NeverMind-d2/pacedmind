@@ -69,6 +69,8 @@ What the **Session** field shows depends on the task:
 
 Starting confirms where the session went, such as *Started DEV-22 in a new terminal* or *Opened DEV-22 in the Claude app. Send the first message there to start.* See [Start, resume and close sessions](/agents/start-and-manage).
 
+When Claude Code on this computer doesn't trust the folder the session would start in yet, a line under the button says so: *Claude Code first asks whether you trust the folder: choose “Yes, I trust this folder” in its terminal.* The message after starting ends with the same sentence. See [Trusting the folder in Claude Code](/agents/start-and-manage#trusting-the-folder-in-claude-code).
+
 ## The session card
 
 Once a task has a session, a card under the **Done when** list shows its state:
@@ -77,6 +79,7 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | --- | --- |
 | Running | *Running in Claude Code since 14:05*, or with the place: *Running in the Claude app since 14:05*, *Running in Claude Code on the web since 14:05* |
 | Running again after **Request changes** | *Claude Code is working on your changes since 14:05* |
+| Running in a terminal, in a folder Claude Code doesn't trust yet, until the agent checks in | *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.* |
 | Running, no word from the agent after 90 seconds | *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.* After **Request changes**, the 90 seconds count from the request. |
 | Finished | *Claude Code finished at 14:40 · waiting for you* |
 | Finished, partly done | *Claude Code handed back part of it at 14:40 · waiting for you* |
@@ -85,7 +88,7 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | Closed | *Closed before the agent finished* |
 | Failed | *Couldn't start:* and the reason |
 
-The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. A task handed back partly done or blocked holds its flow until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
+The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. Under the buttons of a session that ended, the card repeats the line about trusting the folder when the next session would start in a folder Claude Code doesn't trust yet. A task handed back partly done or blocked holds its flow until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
 ### The agent's report
 

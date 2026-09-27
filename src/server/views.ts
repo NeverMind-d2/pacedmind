@@ -1,10 +1,12 @@
 import "server-only";
-import { thisDeviceId } from "./devices";
+import { trustCheck } from "./claude-trust";
+import { deviceIdFor, runsHere, thisDeviceId } from "./devices";
+import { plannedFolder, plannedSurface } from "./launcher";
 import { changesProblemIn, changesViaIn } from "./ops";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
-import { isLiveSession, type Area, type Project, type Session, type Task, type TaskContext, type Usage } from "@/lib/types";
+import { agentOf, isLiveSession, type Area, type Project, type Session, type Task, type TaskContext, type Usage } from "@/lib/types";
 
 export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const ids = new Set(tasks.map((t) => t.id));
@@ -30,7 +32,32 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   return {
     areas, projects, sessions, sessionEvents, reports: Object.fromEntries(reports), pending: Object.fromEntries(pending), changesOk, changesVia,
     desktop: MODE === "desktop", deviceId: MODE === "desktop" && (await usesCloud()) ? thisDeviceId() : null,
+    asksTrust: MODE === "desktop" ? asksTrust(tasks, sessions, projects) : undefined,
   };
+}
+
+/**
+ * Tasks whose Claude Code session on this computer opens in a folder Claude Code doesn't trust yet (claude-trust.ts):
+ * the running one's, in a terminal, else where the next one would start, unless that's the Claude app, which asks
+ * about the folder its own way.
+ */
+function asksTrust(tasks: Task[], sessions: Record<number, Session>, projects: Project[]): Record<number, boolean> {
+  const asks = trustCheck();
+  if (!asks) return {};
+  const projectOf = new Map(projects.map((p) => [p.id, p]));
+  const out: Record<number, boolean> = {};
+  for (const t of tasks) {
+    const s = sessions[t.id];
+    const project = t.projectId ? projectOf.get(t.projectId) : undefined;
+    let folder: string | null = null;
+    if (s && isLiveSession(s)) {
+      if (s.agent === "claude" && s.surface === "terminal" && runsHere(s.deviceId)) folder = s.folder;
+    } else if (agentOf(t, project?.agent) === "claude" && runsHere(deviceIdFor(t.deviceId, project?.deviceId)) && plannedSurface(t, "claude") !== "desktop") {
+      folder = plannedFolder(t);
+    }
+    if (folder && asks(folder)) out[t.id] = true;
+  }
+  return out;
 }
 
 export const isOpen = (t: Task) => t.status !== "done" && t.status !== "canceled";

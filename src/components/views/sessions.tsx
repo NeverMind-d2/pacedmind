@@ -10,9 +10,9 @@ import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, use
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { Gallery, RequestChangesForm, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
-import { parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
+import { checkedIn, parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, type AgentId, type Attachment, type Report, type SessionEvent, type SessionStatus, type Surface,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, TRUST_WAITING, type AgentId, type Attachment, type Report, type SessionEvent, type SessionStatus, type Surface,
 } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
@@ -56,6 +56,8 @@ export interface SessionItem {
   changesVia?: string | null;
   /** The computer it ran on (or that sent it to the cloud); null for this computer's own data without an account. */
   deviceId?: string | null;
+  /** Running in a terminal here in a folder Claude Code doesn't trust yet: until the agent checks in, it's asking you. */
+  asksTrust?: boolean;
   /** The next task in the flow after this one. */
   next: { id: number; key: string; title: string; href: string; canStart: boolean } | null;
 }
@@ -117,6 +119,8 @@ function duration(span: number): string {
 
 /** A session on a device whose agent hasn't checked in: waiting in its terminal, or for you to send it in the app. */
 const unheard = (s: SessionItem, now: number) => s.surface !== "cloud" && waitingInTerminal(s, s.events, new Date(now));
+/** Claude Code asking in its terminal whether you trust the folder, from the start. */
+const askingTrust = (s: SessionItem) => !!s.asksTrust && isActive(s) && s.surface === "terminal" && !checkedIn(s.events);
 
 /** "a terminal on mikolaj_pc", "the Claude app on mikolaj_pc" or "Claude Code on the web". */
 function place(s: SessionItem): string {
@@ -139,7 +143,7 @@ function meta(s: SessionItem, now: number): string {
     }
     case "starting":
     case "running": {
-      if (unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
+      if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
       if (asked) return `changes since ${clock(asked, now)}`;
       return `${s.surface === "cloud" ? "in the cloud " : ""}since ${clock(s.startedAt, now)}`;
@@ -155,6 +159,7 @@ function meta(s: SessionItem, now: number): string {
 
 function headline(s: SessionItem, now: number): string {
   const who = AGENT_LABEL[s.agent];
+  if (askingTrust(s)) return TRUST_WAITING;
   if (unheard(s, now)) {
     return s.surface === "desktop"
       ? `Opened in the ${APP_LABEL[s.agent]}. Send the first message there to start.`

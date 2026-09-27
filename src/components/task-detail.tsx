@@ -8,9 +8,9 @@ import {
 } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
 import { RequestStatus, useComputer } from "./request-status";
-import { dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
+import { checkedIn, dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, VERDICT_LABEL, agentOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf,
   type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
   type Task, type TaskContext,
 } from "@/lib/types";
@@ -41,12 +41,16 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 
 const pv = "flex h-7 max-w-full items-center gap-2 rounded-md px-2 text-left text-fg2 hover:bg-hover";
 
-/** The session's state in one line; `report` is its latest hand-back, if any. */
-function sessionHead(s: Session, events: SessionEvent[], report: Report | null): { dot: string; text: string } {
+/**
+ * The session's state in one line; `report` is its latest hand-back, if any. `asksTrust`: Claude Code doesn't trust
+ * the session's folder yet, so until the agent checks in, it's asking you about it.
+ */
+function sessionHead(s: Session, events: SessionEvent[], report: Report | null, asksTrust: boolean): { dot: string; text: string } {
   const who = AGENT_LABEL[s.agent];
   switch (s.status) {
     case "starting":
     case "running":
+      if (asksTrust && s.surface === "terminal" && !checkedIn(events)) return { dot: "var(--color-accent)", text: TRUST_WAITING };
       if (s.surface !== "cloud" && waitingInTerminal(s, events)) {
         return {
           dot: "var(--color-accent)",
@@ -103,7 +107,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const inCard = !!report && report.sessionId === session?.id;
   const soFar = session ? ctx.pending[session.id] ?? [] : [];
   const offList = report ? report.criteria.filter((c) => !task.doneWhen.some((d) => sameText(d, c.text))) : [];
-  const head = session ? sessionHead(session, events, latestOfSession) : null;
+  // Claude Code doesn't trust the folder of this task's session yet: the running one's, or where the next one starts.
+  const asksTrust = !!ctx.asksTrust?.[task.id];
+  const head = session ? sessionHead(session, events, latestOfSession, asksTrust) : null;
+  const trustHint = (className: string) => asksTrust && !active && <p className={cx("text-[11.5px] leading-snug text-mut2", className)}>{TRUST_FIRST}</p>;
   // Changes go back to an agent in a terminal on this computer once it handed the task back, also after the task was
   // marked done. Sessions in the apps or the cloud take them where they run (changesProblem on the server decides).
   const [asking, setAsking] = useState(false);
@@ -219,6 +226,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 )}
               </div>
             )}
+            {/* For a failed session, Start under Session says it. */}
+            {session.status !== "failed" && trustHint("")}
             {/* What became of a request to a computer for this task: waiting, started, refused… */}
             <RequestStatus match={forThisTask} />
           </div>
@@ -339,6 +348,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               </div>
             )}
           </Prop>
+          {/* A row of its own under Start, so Session stays level with the button. */}
+          {agent && (!session || session.status === "failed") && trustHint("col-start-2 px-2 pb-1")}
         </div>
 
         <div className="flex flex-col gap-1.5">

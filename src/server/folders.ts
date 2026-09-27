@@ -22,3 +22,11 @@ export function folderProblem(folder: string): string | null {
   }
   return null;
 }
+
+/** The root of the git repository a folder is in: the folder or the nearest one above it with a .git, or null. */
+export function repoRoot(folder: string, hasGit = (dir: string) => fs.existsSync(path.join(dir, ".git"))): string | null {
+  for (let dir = path.resolve(folder); ; dir = path.dirname(dir)) {
+    if (hasGit(dir)) return dir;
+    if (path.dirname(dir) === dir) return null;
+  }
+}
