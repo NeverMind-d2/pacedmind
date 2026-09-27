@@ -1,0 +1,42 @@
+---
+title: Agent sessions
+description: PacedMind starts Claude Code and Codex on tasks in a terminal, in their desktop apps or in their cloud, tracks each session until the agent hands the work back, and can chain sessions into flows.
+---
+
+An **agent session** is Claude Code or Codex working on one task. PacedMind starts the agent in a terminal or in the agent's desktop app on your computer, in the task's folder, or sends the task to the agent's cloud. The agent reads the task over PacedMind's MCP server, works, and reports back when the work is ready for review.
+
+## What PacedMind does, and what it doesn't
+
+PacedMind **tracks state**. It:
+
+* starts the session where the task runs, in the right folder, with the right agent and the connection to PacedMind;
+* records when the agent picks the task up and when it hands it back, with its report: a summary, its answer to each **Done when** item, screenshots, how to check the result and its questions;
+* shows running and finished sessions in every view, and notifies when one finishes;
+* starts the next session of a flow when the previous one is ready.
+
+PacedMind **doesn't** chat with the agent, show its output or review its code. The conversation happens in the agent's terminal or app, where you answer its questions, approve its actions and see what it changed.
+
+## Requirements
+
+* **Claude Code**, **Codex**, or both, installed and signed in: the command-line tool, the desktop app, or both. PacedMind runs the command-line tools with the commands `claude` and `codex`; other commands or full paths can be set in **Settings → Starting sessions**. **Settings → Devices** shows what PacedMind found on the computer.
+* On Windows, **Windows Terminal**, for sessions in tabs of one window. Without it, or with **Command Prompt** chosen in **Settings**, each session opens in its own Command Prompt window. On macOS, each session opens in its own window of the built-in Terminal, or of iTerm when it's chosen in **Settings**.
+* For code projects, a **folder** set on the project, or on the task. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-works).
+* For the cloud, a git repository in that folder, and cloud sessions set up with the agent's provider.
+
+Sessions PacedMind starts in a terminal are connected to its MCP server automatically. The desktop apps, and sessions you start yourself, need the connection once: select **Connect** for the agent in [Settings → Devices](/settings#devices), or see [MCP server](/mcp).
+
+## A session at a glance
+
+1. **Start**: select **Start with Claude Code** on a task, or let a flow start it. The agent starts where the task runs, and the task goes to **In progress**.
+2. **Pick up**: the agent calls `start_task` and reads the task, its description and sub-tasks.
+3. **Work**: the agent works in the task's folder. It ticks off sub-tasks and records follow-up tasks as it goes.
+4. **Hand back**: the agent calls `finish_task` with its report, or you select **Mark finished** for a session that can't. The session is **finished, waiting for you**, the task is **In review**, and PacedMind notifies.
+5. **Review**: read the report and check the result, then select **Mark done**, or **Request changes** to send the work back with what should change.
+6. **Next**: marking the task done can start the next sessions of the project's flow.
+
+## Pages in this section
+
+* **[How a session runs](/agents/lifecycle)**: every state, what the agent is told, and what PacedMind records.
+* **[Start, resume and close sessions](/agents/start-and-manage)**: where sessions start from, where they run, the folder and terminal, permissions, resuming, finishing and closing.
+* **[Review finished work](/agents/review)**: where finished sessions show up, the report, **Request changes**, partly done and blocked hand-backs, and what **Mark done** does.
+* **[Automate with flows](/agents/flows)**: connection modes, **Flow on**, same-session chains and projects in sequence.

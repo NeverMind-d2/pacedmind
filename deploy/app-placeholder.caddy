@@ -1,0 +1,2 @@
+# app.pacedmind.com before the web app launches (deploy.sh with APP_PLACEHOLDER=1): the site.
+redir https://pacedmind.com temporary

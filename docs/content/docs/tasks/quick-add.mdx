@@ -1,0 +1,83 @@
+---
+title: Quick add
+description: Create tasks and calendar activities in one line. Quick add reads dates, priorities, labels, projects and lengths from the title as you type.
+---
+
+Quick add is the dialog for new tasks and activities. It reads the details from the title as it's typed, highlights what it recognized, and shows the result in the chips below.
+
+## Open quick add
+
+* Press <kbd>C</kbd> anywhere in the app, as long as the cursor isn't in a text field.
+* Select the pen button next to **Search** in the sidebar.
+* Select **New task** in a list's header, or the **+** on a group.
+* Select **New task** in the command menu (<kbd>Ctrl</kbd>+<kbd>K</kbd>).
+
+Only **New task** in a list's header and a group's **+** fill in the list's place: a project list fills in the project, an area list the area, and **Today** or a day in **Upcoming** the planned day. <kbd>C</kbd>, the pen button and the command menu always start empty, so a task created that way goes to the Inbox unless an area, a project or `@project` is chosen, even when a project's page is open.
+
+## Create a task
+
+1. Type the title, with any details, for example:
+
+   *Send invoice to Acme friday 10:00 !high #finance*
+
+2. Optionally, add a description under the title (*Add description…*), and what must be true when the task is finished with the **Done when** chip ([below](#done-when)).
+3. Check the chips and the summary line. If a word was read wrongly, reword the title; changing a chip changes the value but doesn't put the word back into the title.
+4. Select **Create task**, or press <kbd>Enter</kbd> (or <kbd>Ctrl</kbd>+<kbd>Enter</kbd> from the description or the **Done when** field).
+
+PacedMind confirms with the new key, such as *Created WRK-13*. The recognized parts are removed from the title: the example creates the task *Send invoice to Acme*, due Friday at 10:00, with high priority and the label *finance*.
+
+To add several tasks in a row, switch on **Create more** at the bottom. The dialog then stays open and clears itself after each task. **Cancel**, <kbd>Esc</kbd> or a click outside the dialog closes it.
+
+## What the title can contain
+
+| Write | Example | Sets |
+| --- | --- | --- |
+| A date, with or without a time | *friday 10:00*, *tomorrow*, *next monday*, *26 sep*, *in 2 weeks* | The **due date**. Only the first date counts, and dates always point forward: *friday* means the next Friday. |
+| `!` and a priority | *!urgent*, *!high*, *!medium* (or *!med*), *!low*, or *!1* to *!4* | The priority. *!1* is urgent, *!4* is low. |
+| `#` and a word | *#finance*, *#car* | A label, in lowercase. Several labels are allowed. |
+| `@` and the start of a project | *@q4*, *@apartment* | The first project whose name or id starts with that text, and its area. |
+| *for* and a length | *for 30m*, *for 1.5h*, *for 90 minutes* | The estimate, in minutes. |
+
+A typed date always becomes the due date. To plan the task for a day instead, use the **Plan for a day** chip and leave the date out of the title.
+
+## The chips
+
+| Chip | Offers |
+| --- | --- |
+| Area (top left) | **Inbox, no area**, or one of the areas. Choosing an area removes a project from another area. **Inbox, no area** keeps a chosen project, and the task then goes to that project. |
+| **Task** / **Activity** (top right) | Switches between a new task and a new activity. |
+| Status | **Backlog**, **Todo** or **In progress**. New tasks are **Todo**. |
+| Priority | **Urgent**, **High**, **Medium**, **Low** or **No priority**. |
+| Due date | A date picker with **Today**, **Tomorrow**, **In a week**, a date and a time. |
+| **Plan for a day** | The planned date, without a time. Shows *Planned* and the day once set. |
+| Project | **No project**, or a project: those in the chosen area, or all of them when no area is chosen. Choosing a project also chooses its area. |
+| Labels | One chip per label typed with `#`. |
+| **Done when** | Shows the **Done when** field under the description, or hides it again while it's empty. Reads *Done when · 2* once the field has two items. |
+
+Chips filled from the title are highlighted. Changing a chip overrides what was typed; the recognized words stay out of the title. An `@word` that matches no project is removed from the title too, without setting a project.
+
+Once the task has a due date, a priority, a label, a project or an estimate, a line above the buttons summarizes them, for example *due Fri 2 Oct at 10:00, high priority, label finance, in Q4 planning, about 30 min*.
+
+## Done when
+
+The **Done when** chip (*What must be true when it's done*) adds the task's **Done when** list: one checkable outcome per item, which an agent answers when it hands the task back. See [Done when](/concepts/tasks#done-when).
+
+Select the chip to show the **Done when** field under the description, and write one item per line. The field's placeholder reads *One per line, e.g.*, followed by two examples: *The export downloads the rows for the current filters* and *A screenshot of the new button*.
+
+* <kbd>Enter</kbd> starts a new line, and so a new item. <kbd>Ctrl</kbd>+<kbd>Enter</kbd> creates the task.
+* A list marker at the start of a line is dropped, so a pasted list works: `-`, `*`, `•`, `1.` or `1)`, followed by a space.
+* Empty lines are left out, and an item that repeats another is kept once.
+
+The chip counts the items, such as *Done when · 2*. Selecting the chip again hides the field while it's empty; with text in it, the field stays. The chip is there for tasks only, not for activities. After the task is created, its details panel edits the list ([Done when](/tasks/task-details#done-when)).
+
+## Create an activity
+
+Switch to **Activity** to add a fixed calendar entry instead of a task. The title then reads a start time, a length with *for*, and *every week* (or *weekly*, *each week*) for a weekly activity:
+
+*Climbing with Tomek friday 18:00 for 2h every week*
+
+The chips offer **When**, the length in minutes (15 to 180), and **Does not repeat** or **Every week**. A time typed in the title wins over **When**; with no time at all, the activity starts now. **Add to calendar** creates it: *Added Climbing with Tomek to the calendar*. See [Calendar activities](/concepts/activities).
+
+## Messages
+
+* *Give it a title first*: the title is empty. A title made only of recognized parts, such as *friday !high*, is kept as typed.

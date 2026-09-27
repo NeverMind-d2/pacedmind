@@ -1,0 +1,46 @@
+---
+title: Concepts
+description: How PacedMind organizes work into areas, projects and tasks, and how activities, focus blocks, agent sessions and flows fit around them.
+---
+
+PacedMind organizes work in three levels: **areas** hold **projects**, and projects hold **tasks**. The calendar adds fixed **activities**, the auto-planner suggests **focus blocks**, and **agent sessions** and **flows** let Claude Code and Codex work on tasks.
+
+## The building blocks
+
+| Term | What it is |
+| --- | --- |
+| **Area** | A part of life or work, such as Work, Personal or Health. Each area has a color and a short key, like WRK, that task keys start with. |
+| **Project** | A body of work inside one area, with a target date. A project can have a working folder, a default agent and a flow. |
+| **Task** | One piece of work. It lives in a project, directly in an area, or in the **Inbox** when it has neither. Every task has a key, like WRK-12. |
+| **Sub-task** | A checklist item inside a task. |
+| **Activity** | A fixed entry in the calendar, such as a meeting or a workout, one-off or weekly. |
+| **Focus block** | Time the auto-planner suggests for one of your tasks, inside your work hours. Focus blocks are computed each time and never stored. |
+| **Agent session** | Claude Code or Codex working on one task, in a terminal that PacedMind opened. |
+| **Flow** | The order in which a project's agent sessions start: which task comes after which, and how. |
+
+## How tasks are placed
+
+* A task in a **project** also belongs to that project's area.
+* A task can sit **directly in an area**, without a project.
+* A task with **neither** is in the Inbox, ready to be sorted.
+
+Each task has two independent dates: the **due date** (its deadline) and the **planned date** (the day to work on it). See [Due and planned dates](/concepts/dates).
+
+Each task also has someone who does it: **you**, **Claude Code** or **Codex**. Tasks that are yours stay out of flows and fill your own focus time; tasks for an agent can run as sessions. See [Who does a task](/concepts/done-by).
+
+## Reading the colors
+
+PacedMind uses color for a small number of meanings:
+
+* **Area and project colors** show what something belongs to: a task's calendar dot, a project's bar on the timeline, its ring in the sidebar. A project uses its own color, or its area's when it has none.
+* **Shades of gray** show state: done work is faded, backlog outlines are dashed, running work is filled.
+* **Navy** marks today and now, the current selection, the one main button of a dialog, and finished agent sessions that wait for review.
+* **Red** marks what is overdue or behind schedule, errors, and actions that delete something.
+
+## Pages in this section
+
+* **[Areas and projects](/concepts/areas-and-projects)**: keys, colors, project settings, moving and deleting.
+* **[Tasks](/concepts/tasks)**: keys, statuses, priorities, labels, estimates and sub-tasks.
+* **[Due and planned dates](/concepts/dates)**: the difference, and how each view uses them.
+* **[Who does a task](/concepts/done-by)**: the **Done by** field and what it changes.
+* **[Calendar activities](/concepts/activities)**: fixed and weekly activities, and how to change them.

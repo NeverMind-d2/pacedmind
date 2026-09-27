@@ -1,0 +1,61 @@
+---
+title: Overview and settings
+description: "Reference for get_overview, get_settings and update_settings: the starting point for agents, and the work hours the auto-planner uses."
+---
+
+## `get_overview`
+
+**Read-only. Allowed without asking.**
+
+The starting point: today's date and time, the areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running. Agents call it first to learn the ids and the current date.
+
+No parameters.
+
+Returns sections:
+
+* `Now:` the weekday, date, time and ISO week, such as *Now: Thursday 2026-09-24 14:05, week 39*;
+* **Areas**: name, id, key, color, open tasks and projects;
+* **Projects**: name, id, area, open and total tasks, percentage done, target date, color, agent, folder, whether the flow is on, and which project it starts after;
+* **Inbox**: the number of open tasks without an area;
+* **Overdue**, **Due today** and **Planned for today**: one line per task;
+* **Calendar today**: the day's activities with their event ids;
+* **Sessions waiting for the user's review** and **Sessions running**.
+
+Each task line reads: key · status · priority · title · where it lives · due date · planned date · labels, such as `WRK-31 · In progress · Urgent · Prepare slides for Q4 planning · Q4 planning · due 2026-09-24 17:00 (Thu) · planned 2026-09-24 (Thu) · #presentation`.
+
+## `get_settings`
+
+**Read-only. Allowed without asking.**
+
+The work hours and days the auto-planner uses, how agent sessions start, and the MCP address.
+
+No parameters.
+
+Returns, for example:
+
+```text
+Work hours: 09:00–17:00 · Break: 12:30–13:30
+Work days: mon, tue, wed, thu, fri
+Sessions open in: Windows Terminal · Claude Code command: claude · Codex command: codex
+MCP address: http://127.0.0.1:4319/api/mcp
+```
+
+## `update_settings`
+
+**Changes data.**
+
+Changes the work hours, break and work days that the auto-planner fills with focus blocks. Parameters left out keep their value.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `work_start` | string | Start of the work hours, `HH:mm`. |
+| `work_end` | string | End of the work hours, `HH:mm`. |
+| `break_start` | string | Start of the daily break, `HH:mm`. |
+| `break_end` | string | End of the daily break, `HH:mm`. |
+| `work_days` | string list | Days such as `["mon", "tue", "wed", "thu", "fri"]`. |
+
+Returns the new values: *Work hours 09:00–17:00, break 12:30–13:30, work days mon, tue, wed, thu, fri.*
+
+Errors: *Work has to start before it ends.*, *The break has to start before it ends.*, *work_start needs a time like 09:00.*, and *Unknown day "…". Use mon, tue, wed, thu, fri, sat or sun.*
+
+The terminal and the agent commands can only be changed in **Settings → Starting sessions**. See [Work hours and days](/planning/work-hours).

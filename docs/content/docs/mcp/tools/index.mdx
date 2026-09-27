@@ -1,0 +1,111 @@
+---
+title: Tool reference
+description: Conventions shared by all 39 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
+---
+
+The pages in this section describe every tool of the `organizer` MCP server with its parameters and what it returns. Agents see the same descriptions and parameter schemas in their MCP client; this reference is for the people who use and configure them.
+
+## Conventions
+
+### Referring to things
+
+| Thing | Refer to it by | Example |
+| --- | --- | --- |
+| Task | Its key, in any letter case | `WRK-12`, `wrk-12` |
+| Project | Its id, or its name; a unique part of the name also works | `q4`, `Q4 planning` |
+| Area | Its id, name or key | `work`, `Work`, `WRK` |
+| The Inbox | `inbox`, `none` or `no area`, where an area is expected | `area: "inbox"` |
+| Calendar activity | Its event id, from `list_events` or `get_agenda` | `event: 7` |
+| Session | Its id, from `list_sessions` | `session: "3f2a9c1b"` |
+
+A name that matches several projects or areas returns an error listing them.
+
+### Dates
+
+Date parameters accept:
+
+* `YYYY-MM-DD`, such as `2026-09-26`;
+* `YYYY-MM-DDTHH:mm`, such as `2026-09-26T14:00`, where a time is allowed;
+* phrases such as *today*, *tomorrow 9:00*, *next friday*, *friday 10:00* or *in 2 weeks*. Phrases always point forward.
+
+Results repeat the date that was used, with its weekday, such as `2026-09-26 (Sat)`, so the agent can check it.
+
+### Values
+
+| Field | Values |
+| --- | --- |
+| Status | `backlog`, `todo`, `in_progress`, `in_review`, `done`, `canceled` |
+| Priority | `urgent`, `high`, `medium`, `low`, `none` |
+| Agent | `claude` (Claude Code) or `codex` (Codex) |
+| Who does a task | `claude`, `codex`, or `human` for a task only the user can do |
+| Color | A palette name (`Blue`, `Teal`, `Green`, `Olive`, `Sand`, `Clay`, `Rose`, `Violet`, `Mauve`, `Gray`) or a hex color such as `#7AA3AD` |
+
+Where a field can be cleared, `null` clears it: a date, a project, an area, an agent. Leaving a parameter out leaves the field as it is.
+
+### Results and errors
+
+Every tool returns plain text: one line per task, project or event, and a sentence for each change. A problem the agent can fix comes back as an error with the reason and, usually, the valid options, such as *No task WRK-99. Task keys look like WRK-12; list_tasks finds them.*
+
+### Kinds of tools
+
+Each tool is marked for the client as one of:
+
+* **read-only**: never changes anything;
+* **changes data**: creates or updates;
+* **deletes**: removes something;
+* **starts an agent**: `start_session`, which starts an agent on the user's computer or in its cloud, and `request_changes`, which reopens an agent's session in a new terminal on the user's computer.
+
+In Claude Code sessions that PacedMind starts, 17 tools run without asking; the rest ask for approval in the agent's terminal. They're marked **Allowed without asking** on the tool pages. Codex sessions follow Codex's own approval settings.
+
+## All tools
+
+| Tool | Purpose |
+| --- | --- |
+| [`get_overview`](/mcp/tools/overview-and-settings#get_overview) | Today's date, areas and projects with their ids, what's due, the calendar and sessions. Start here. |
+| [`get_settings`](/mcp/tools/overview-and-settings#get_settings) | Work hours, work days, how sessions start, and the MCP address. |
+| [`update_settings`](/mcp/tools/overview-and-settings#update_settings) | Change the work hours, break and work days. |
+| [`list_areas`](/mcp/tools/areas-and-projects#list_areas) | Areas with id, key, color and counts. |
+| [`create_area`](/mcp/tools/areas-and-projects#create_area) | Add an area. |
+| [`update_area`](/mcp/tools/areas-and-projects#update_area) | Rename or recolor an area. |
+| [`delete_area`](/mcp/tools/areas-and-projects#delete_area) | Delete an area and its projects; its tasks go to the Inbox. |
+| [`list_projects`](/mcp/tools/areas-and-projects#list_projects) | Projects with progress, dates and agent settings. |
+| [`get_project`](/mcp/tools/areas-and-projects#get_project) | A project's tasks in roadmap order and the next ready task. |
+| [`create_project`](/mcp/tools/areas-and-projects#create_project) | Add a project. |
+| [`update_project`](/mcp/tools/areas-and-projects#update_project) | Change a project, including moving it to another area. |
+| [`delete_project`](/mcp/tools/areas-and-projects#delete_project) | Delete a project; its tasks stay in the area. |
+| [`reorder_tasks`](/mcp/tools/areas-and-projects#reorder_tasks) | Set the roadmap order of a project's tasks. |
+| [`list_tasks`](/mcp/tools/tasks#list_tasks) | Find tasks with filters. |
+| [`get_task`](/mcp/tools/tasks#get_task) | Everything about one task. |
+| [`create_task`](/mcp/tools/tasks#create_task) | Add a task. |
+| [`create_tasks`](/mcp/tools/tasks#create_tasks) | Add up to 50 tasks at once. |
+| [`update_task`](/mcp/tools/tasks#update_task) | Change anything about a task, including its sub-tasks, its folder and where its sessions run. |
+| [`bulk_update_tasks`](/mcp/tools/tasks#bulk_update_tasks) | Apply one change to up to 100 tasks. |
+| [`delete_task`](/mcp/tools/tasks#delete_task) | Delete a task. |
+| [`list_events`](/mcp/tools/calendar#list_events) | Calendar activities in a date range, with ids. |
+| [`create_event`](/mcp/tools/calendar#create_event) | Add an activity, one-off or weekly. |
+| [`update_event`](/mcp/tools/calendar#update_event) | Rename, move or resize an activity. |
+| [`delete_event`](/mcp/tools/calendar#delete_event) | Remove an activity. |
+| [`get_agenda`](/mcp/tools/calendar#get_agenda) | The day-by-day plan with focus blocks. |
+| [`reschedule_day`](/mcp/tools/calendar#reschedule_day) | Move one day's plans to another day. |
+| [`get_flow`](/mcp/tools/flows#get_flow) | A project's flow. |
+| [`connect_tasks`](/mcp/tools/flows#connect_tasks) | Make one task's session start after another's. |
+| [`disconnect_tasks`](/mcp/tools/flows#disconnect_tasks) | Remove a connection. |
+| [`add_to_flow`](/mcp/tools/flows#add_to_flow) | Put a task on the flow canvas. |
+| [`remove_from_flow`](/mcp/tools/flows#remove_from_flow) | Take a task off the flow canvas. |
+| [`list_sessions`](/mcp/tools/sessions#list_sessions) | Agent sessions, newest first. |
+| [`start_session`](/mcp/tools/sessions#start_session) | Start an agent on a task: in a terminal, its desktop app or its cloud. |
+| [`close_session`](/mcp/tools/sessions#close_session) | Mark a stuck session closed. |
+| [`request_changes`](/mcp/tools/sessions#request_changes) | Send an agent's work back to it with the changes the user wants. |
+| [`get_next_task`](/mcp/tools/sessions#get_next_task) | The next ready task in a project. |
+| [`start_task`](/mcp/tools/sessions#start_task) | For agents: start work on a task. |
+| [`attach_image`](/mcp/tools/sessions#attach_image) | For agents: add a screenshot or another image to the task. |
+| [`finish_task`](/mcp/tools/sessions#finish_task) | For agents: hand a task back for review, with a report. |
+
+## Pages in this section
+
+* **[Overview and settings](/mcp/tools/overview-and-settings)**
+* **[Areas and projects](/mcp/tools/areas-and-projects)**
+* **[Tasks](/mcp/tools/tasks)**
+* **[Calendar and agenda](/mcp/tools/calendar)**
+* **[Flows](/mcp/tools/flows)**
+* **[Sessions](/mcp/tools/sessions)**

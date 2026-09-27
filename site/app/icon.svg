@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>PacedMind</title>
+  <defs><clipPath id="tile"><rect x="7.68" y="7.68" width="240.64" height="240.64" rx="56.32"/></clipPath>
+  <mask id="pd"><rect width="256" height="256" fill="black"/>
+    <circle cx="128" cy="128" r="56.4" fill="white"/>
+    <path d="M80 128V256" stroke="white" stroke-width="16.8" stroke-linecap="round"/>
+    <path d="M176 0V128" stroke="white" stroke-width="16.8" stroke-linecap="round"/>
+    <circle cx="128" cy="128" r="39.6" fill="black"/>
+  </mask></defs>
+  <rect x="7.68" y="7.68" width="240.64" height="240.64" rx="56.32" fill="#000000"/>
+  <rect width="256" height="256" fill="#ffffff" mask="url(#pd)" clip-path="url(#tile)"/>
+</svg>

@@ -1,0 +1,55 @@
+---
+title: Calendar activities
+description: Fixed calendar entries such as meetings, workouts and appointments, one-off or weekly; how to add them, where they show, and how to change them.
+---
+
+An **activity** is a fixed entry in the calendar: a meeting, a workout, an appointment. Unlike a task, it has a start and an end time and nothing to check off. Activities can belong to an area, which gives them its color.
+
+An activity happens once, or **every week** on the same weekday and at the same time, from its first day on. Activities are meant to fit within one day; agents can't create one that runs past midnight.
+
+## Add an activity
+
+1. Open quick add: press <kbd>C</kbd>. On **Today**, when the day already has activities, the **+** on the **Schedule** group opens it in activity mode directly.
+2. Switch to **Activity** at the top right of the dialog.
+3. Type the title with the day, time, length and repetition, for example *Climbing with Tomek friday 18:00 for 2h every week*.
+4. Check the chips below the title and adjust them if needed:
+   * **When**: the start day and time. A time typed in the title takes precedence over this chip. A day alone isn't enough: with no time anywhere, the activity starts now, and the summary line says *Starts now*; a day picked here without a time starts at 00:00.
+   * The length: 15, 30, 45, 60, 90, 120 or 180 minutes. The default is 60 minutes.
+   * **Does not repeat** or **Every week**.
+   * The area, in the chip at the top left.
+5. Select **Add to calendar**, or press <kbd>Enter</kbd>.
+
+Quick add reads *for 45m*, *for 1.5 hours* and *for 2h* as the length, and *every week*, *weekly* or *each week* as a weekly repetition. See [Quick add](/tasks/quick-add).
+
+## Where activities show
+
+| View | How |
+| --- | --- |
+| **Today** | The **Schedule** group, with the time range and the area. The activity in progress is marked **Now**, past ones are faded. |
+| **Upcoming** | Under each day of the next 14 days. **Deadlines only** hides them. |
+| **Calendar**, month | A line with the area's dot and the start time. The **Activities** filter hides them. |
+| **Calendar**, week | Blocks in the grid, shown as **Fixed** in the legend. |
+| Agents | `list_events` and `get_agenda` list them, with their event ids. |
+
+## Activities and the auto-planner
+
+The auto-planner treats activities as busy time. It keeps each activity, plus 10 minutes before and after it, free of focus blocks, and plans tasks only in the gaps that remain inside the work hours. See [The auto-planner](/planning/auto-planner).
+
+## Change or remove an activity
+
+The app adds activities but doesn't edit them yet. To rename, move or delete one, ask an agent connected over MCP, for example:
+
+* *Move the dentist appointment to Thursday at the same time.*
+* *Make the weekly gym on Monday start at 07:00.*
+* *Delete the Spanish class on Wednesday.*
+* *I'm sick today; move today's plans to tomorrow.*
+
+The agent uses these tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `update_event` | Rename, change the area, move the activity (to a new start, to another day at the same time, or by days or minutes), change its length, or turn weekly repetition on or off. |
+| `delete_event` | Remove the activity. For a weekly activity, this removes every occurrence. |
+| `reschedule_day` | Move one day's one-off activities (and planned tasks) to another day. Weekly activities stay where they are. |
+
+Moving a weekly activity moves the whole series. See [Calendar tools](/mcp/tools/calendar) and [Connect Claude Code](/mcp/connect-claude-code).

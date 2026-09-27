@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+@theme {
+  /* The page: ink on paper, like the approved wordmark. Navy only marks the one primary action. */
+  --color-paper: #ffffff;
+  --color-ink: #000000;
+  --color-text: #303038;
+  --color-mut: #61616e;
+  --color-line: #e3e3e8;
+  --color-accent-strong: #172f6f;
+  --color-deck-shadow: rgb(24 24 30 / 0.14);
+
+  /* The app in the screens, with the app's own light and dark tokens (src/app/globals.css). */
+  --color-app-bg: #f5f5f6;
+  --color-app-panel: #ffffff;
+  --color-app-raised: #fafafb;
+  --color-app-hover: #eeeef1;
+  --color-app-sel: #e6e6ec;
+  --color-app-line: #e3e3e8;
+  --color-app-line2: #d6d6de;
+  --color-app-ctl: #ccccd6;
+  --color-app-line-strong: #ababba;
+  --color-app-strong: #202026;
+  --color-app-fg: #303038;
+  --color-app-fg2: #41414c;
+  --color-app-fg3: #50505c;
+  --color-app-mut: #61616e;
+  --color-app-mut2: #6d6d7a;
+  --color-app-dim: #6f6f7d;
+  --color-app-accent: #172f6f;
+  --color-app-accent-fg: #172f6f;
+
+  /* Jost, geometric like the wordmark, for the page; the app's own Geist inside its screens. */
+  --font-sans: var(--font-jost), system-ui, sans-serif;
+  --font-app: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-paper: #000000;
+    --color-ink: #ededef;
+    --color-text: #d4d4d8;
+    --color-mut: #a1a1a8;
+    --color-line: #1b1b1e;
+    --color-accent-strong: #2e4b91;
+    --color-deck-shadow: rgb(0 0 0 / 0.7);
+
+    --color-app-bg: #010101;
+    --color-app-panel: #040405;
+    --color-app-raised: #08080a;
+    --color-app-hover: #0b0b0d;
+    --color-app-sel: #101012;
+    --color-app-line: #121214;
+    --color-app-line2: #17171a;
+    --color-app-ctl: #1b1b1e;
+    --color-app-line-strong: #3a3a3f;
+    --color-app-strong: #ededef;
+    --color-app-fg: #e4e4e7;
+    --color-app-fg2: #d4d4d8;
+    --color-app-fg3: #c4c4ca;
+    --color-app-mut: #a1a1a8;
+    --color-app-mut2: #85858c;
+    --color-app-dim: #78787e;
+    --color-app-accent: #95abd9;
+    --color-app-accent-fg: #bbcbeb;
+  }
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    background: var(--color-paper);
+    color: var(--color-text);
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent-strong) 22%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent-strong);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+}
+
+/*
+ * Download buttons. The one for the visitor's system (html[data-os], set before the first paint in
+ * layout.tsx) is the page's primary action and comes first; Windows when the system is unknown.
+ */
+.download {
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  color: var(--color-ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.download:hover {
+  border-color: var(--color-mut);
+}
+
+html:not([data-os="mac"]) .download[data-os="windows"],
+html[data-os="mac"] .download[data-os="mac"] {
+  order: -1;
+  border-color: transparent;
+  background: var(--color-accent-strong);
+  color: #ffffff;
+}
+
+html:not([data-os="mac"]) .download[data-os="windows"]:hover,
+html[data-os="mac"] .download[data-os="mac"]:hover {
+  filter: brightness(1.1);
+}
+
+/* In the pricing, only the visitor's download is shown. */
+html:not([data-os="mac"]) .for-mac,
+html[data-os="mac"] .for-windows {
+  display: none;
+}
+
+.country-select option {
+  background: var(--color-paper);
+  color: var(--color-text);
+}
+
+/*
+ * The hero wordmark opens from the pd emblem: the last d travels right and the letters appear as it
+ * passes them. Durations, delays and easing come from UNFOLD in lib/brand.ts, as inline styles.
+ */
+.unfold-tail {
+  animation: unfold-travel both;
+}
+
+.unfold-letter {
+  animation: unfold-appear ease-out both;
+}
+
+@keyframes unfold-travel {
+  from {
+    transform: translateX(var(--shift));
+  }
+}
+
+@keyframes unfold-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The screens in the deck (components/screen-deck.tsx). */
+.deck-card {
+  box-shadow: 0 40px 100px var(--color-deck-shadow);
+}
+
+/* With scripts on, the deck fades in once it's sized for the screen; without them it shows as it is. */
+.deck-stage {
+  transition: opacity 400ms ease;
+}
+
+html[data-js] .deck-stage:not(.is-sized) {
+  opacity: 0;
+}
+
+/* The line under the tab in front fills while that screen holds the front. */
+.pace {
+  transform-origin: left center;
+  animation-name: pace;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+
+@keyframes pace {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* A pulse travelling into the running session in the Flow screen. */
+.flowing {
+  animation: flowing 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+@keyframes flowing {
+  from {
+    stroke-dashoffset: 14;
+  }
+  to {
+    stroke-dashoffset: -300;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unfold-tail,
+  .unfold-letter,
+  .flowing {
+    animation: none;
+  }
+}

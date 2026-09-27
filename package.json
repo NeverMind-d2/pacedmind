@@ -1,0 +1,43 @@
+{
+  "name": "organizer",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "dev": "next dev -p 4320 -H 127.0.0.1",
+    "build": "next build",
+    "desktop": "node scripts/build-desktop.mjs",
+    "release": "node scripts/release.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "skills": "node scripts/install-skills.mjs",
+    "connect": "node scripts/connect-claude.mjs",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.1.0",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.1",
+    "@xyflow/react": "^12.11.6",
+    "chrono-node": "^2.10.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "mcp-handler": "^2.2.0",
+    "next": "16.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "electron": "^44.4.5",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
