@@ -257,7 +257,8 @@ export function DayStrip({ className = "" }: { className?: string }) {
     let last = performance.now();
     let frame = requestAnimationFrame(function tick(now) {
       const before = time.current;
-      time.current = Math.min(END, before + (Math.min(100, now - last) / 1000) * rate);
+      // The first frame's time can be a moment before `last`, and the day never runs backwards.
+      time.current = Math.min(END, before + (Math.min(100, Math.max(0, now - last)) / 1000) * rate);
       last = now;
       paint(before);
       follow();
