@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { AreaIconSvg } from "@/components/icons";
 import { TaskList } from "@/components/task-list";
 import * as repo from "@/server/repo";
 import { groupByStatus, taskContext } from "@/server/views";
@@ -13,6 +14,7 @@ export default async function AreaPage(props: PageProps<"/area/[id]">) {
   return (
     <TaskList
       icon="layers"
+      mark={area.icon ? <AreaIconSvg icon={area.icon} color={area.color} size={16} /> : undefined}
       title={area.name}
       subtitle={`${area.key} · ${tasks.filter((t) => t.status !== "done" && t.status !== "canceled").length} open`}
       groups={groupByStatus(tasks)}

@@ -15,10 +15,10 @@ import {
   type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
-import { AgentIcon, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
+import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
 import { InlineMarkdown } from "./markdown";
 import { Gallery, ReportBody, RequestChangesForm, SessionReport, sameText } from "./report";
-import { Button, Dot, IconButton, Menu, cx, useAction } from "./ui";
+import { Button, IconButton, Menu, cx, useAction } from "./ui";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
 const placeOf = (agent: AgentId, surface: Surface) =>
@@ -132,7 +132,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
     // On a phone the details cover the list, and the ✕ goes back to it.
     <aside aria-label="Task details" className="flex w-[420px] shrink-0 flex-col border-l border-line max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-l-0 max-md:bg-panel">
       <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line pl-6 pr-3 text-[12.5px] text-mut">
-        {area ? <Dot color={area.color} /> : <Icon name="inbox" size={13} />}
+        {area ? <AreaMark area={area} size={13} dot={8} /> : <Icon name="inbox" size={13} />}
         <span>{area?.name ?? "Inbox"}</span>
         <span className="text-faint">›</span>
         <span className="truncate">{project?.name ?? "No project"}</span>
@@ -263,8 +263,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               items={ESTIMATES.map((m) => ({ value: m, label: `${m} min` }))} onSelect={(v) => save({ estimateMin: v })} />
           </Prop>
           <Prop label="Area">
-            <Menu trigger={<button type="button" className={pv}>{area ? <Dot color={area.color} /> : <Icon name="inbox" size={14} />}{area?.name ?? "Inbox"}</button>}
-              items={[{ value: null as string | null, label: "Inbox, no area" }, ...ctx.areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <Dot color={a.color} /> }))]}
+            <Menu trigger={<button type="button" className={pv}>{area ? <AreaMark area={area} size={14} dot={8} /> : <Icon name="inbox" size={14} />}{area?.name ?? "Inbox"}</button>}
+              items={[{ value: null as string | null, label: "Inbox, no area" }, ...ctx.areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={14} dot={8} /> }))]}
               onSelect={(v) => save({ areaId: v, ...(project && project.areaId !== v ? { projectId: null } : {}) })} />
           </Prop>
           <Prop label="Project">

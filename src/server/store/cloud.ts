@@ -11,6 +11,7 @@ import {
   expandOccurrences, linksOf, loginOf, snapshotOf, strings,
   type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
+import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
@@ -92,7 +93,9 @@ function chunks<T>(xs: T[], size = 100): T[][] {
 
 /* ---------- areas and projects ---------- */
 
-const toArea = (r: Row): Area => ({ id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), sort: Number(r.sort) });
+const toArea = (r: Row): Area => ({
+  id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon), sort: Number(r.sort),
+});
 
 export async function listAreas(): Promise<Area[]> {
   const db = await accountDb();
@@ -100,22 +103,26 @@ export async function listAreas(): Promise<Area[]> {
 }
 
 
-export async function createArea(input: { name: string; color: string }): Promise<Area> {
+export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null }): Promise<Area> {
   const db = await accountDb();
   const areas = await listAreas();
+  const icon = areaIconOf(input.icon);
   const r = one(await db.from("areas").insert({
     name: input.name.trim(),
     key: deriveKey(input.name, new Set(areas.map((a) => a.key))),
     color: input.color,
+    ...(icon ? { icon } : {}),
     sort: areas.reduce((m, a) => Math.max(m, a.sort), 0) + 1,
   }).select().single());
   return toArea(r!);
 }
 
-export async function updateArea(id: string, patch: { name?: string; color?: string }) {
+/** `icon: null` puts the dot back. */
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null }) {
   const values: Row = {};
   if (patch.name?.trim()) values.name = patch.name.trim();
   if (patch.color) values.color = patch.color;
+  if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (!Object.keys(values).length || !isUuid(id)) return;
   const db = await accountDb();
   check(await db.from("areas").update(values).eq("id", id));

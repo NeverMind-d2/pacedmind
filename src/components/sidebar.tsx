@@ -8,7 +8,7 @@ import { FALLBACK_COLOR, nextColor, projectColor } from "@/lib/colors";
 import { fmtShort } from "@/lib/dates";
 import type { Area, Project, Usage } from "@/lib/types";
 import { AreaMenu, InlineName, MoreButton, ProjectMenu, type OpenMenu } from "./entity-menu";
-import { Icon, ProgressRing, type IconName } from "./icons";
+import { AreaIconSvg, AreaMark, Icon, ProgressRing, type IconName } from "./icons";
 import { Popover, PopoverItem, PopoverLabel, anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
 import { ThemeToggle } from "./theme";
@@ -34,10 +34,14 @@ export function openQuickAdd() {
 const item = "flex h-[30px] items-center gap-2.5 rounded-md px-2 text-fg3 hover:bg-hover";
 const editing = "flex h-[30px] items-center gap-2.5 rounded-md bg-hover px-2";
 
-function AreaDot({ color }: { color: string }) {
+/** The area's icon in its color, else its dot on a faint square, both as wide as the icons above. */
+function AreaDot({ area }: { area: Pick<Area, "color" | "icon"> }) {
+  if (area.icon) {
+    return <span className="flex h-4 w-4 shrink-0 items-center justify-center"><AreaIconSvg icon={area.icon} color={area.color} size={16} /></span>;
+  }
   return (
     <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded bg-ink/[0.06]">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: area.color }} />
     </span>
   );
 }
@@ -164,7 +168,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
           {areas.map((a) =>
             renaming === `area:${a.id}` ? (
               <div key={a.id} className={editing}>
-                <AreaDot color={a.color} />
+                <AreaDot area={a} />
                 <InlineName initial={a.name} placeholder="Area name" onCancel={() => setRenaming(null)}
                   onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
               </div>
@@ -173,14 +177,14 @@ export function Sidebar({ areas, projects, counts, usage }: {
                 open={menu?.kind === "area" && menu.id === a.id} onClose={closeMenu}
                 onMenu={(anchor) => setMenu({ kind: "area", id: a.id, anchor })}
                 trailing={<span className="font-mono text-[10.5px] text-mut2">{a.key}</span>}>
-                <AreaDot color={a.color} />
+                <AreaDot area={a} />
                 <span className="flex-1 truncate">{a.name}</span>
               </MenuRow>
             ),
           )}
           {draft?.kind === "area" ? (
             <div className={editing}>
-              <AreaDot color={nextColor(areas.map((a) => a.color))} />
+              <AreaDot area={{ color: nextColor(areas.map((a) => a.color)), icon: null }} />
               <InlineName initial="" placeholder="Area name" onSave={createArea} onCancel={() => setDraft(null)} />
             </div>
           ) : !areas.length && (
@@ -243,7 +247,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
           <Popover anchor={pickArea} onClose={() => setPickArea(null)} width={200}>
             <PopoverLabel>New project in</PopoverLabel>
             {areas.map((a) => (
-              <PopoverItem key={a.id} icon={<span className="h-2 w-2 rounded-full" style={{ background: a.color }} />}
+              <PopoverItem key={a.id} icon={<AreaMark area={a} dot={8} />}
                 onClick={() => { setPickArea(null); setDraft({ kind: "project", areaId: a.id }); }}>
                 {a.name}
               </PopoverItem>

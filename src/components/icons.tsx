@@ -1,4 +1,6 @@
-import type { AgentId, Priority, Status, Surface, Verdict } from "@/lib/types";
+import type { AgentId, Area, Priority, Status, Surface, Verdict } from "@/lib/types";
+import type { AreaIcon } from "@/lib/area-icons";
+import { AREA_ICON_PATHS } from "./area-icon-paths";
 
 type IconProps = { size?: number; className?: string; strokeWidth?: number };
 
@@ -178,4 +180,21 @@ export function Diamond({ color, size = 11, hollow = false }: { color: string; s
       <path d="M6 1l5 5-5 5-5-5z" fill={hollow ? "var(--color-panel)" : color} stroke={color} strokeWidth={hollow ? 1.6 : 0} />
     </svg>
   );
+}
+
+/* ---------- areas ---------- */
+
+export function AreaIconSvg({ icon, color, size = 14, strokeWidth = 1.8 }: { icon: AreaIcon; color?: string; size?: number; strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={strokeWidth}
+      strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden="true">
+      <path d={AREA_ICON_PATHS[icon]} />
+    </svg>
+  );
+}
+
+/** An area's icon in its color, or its dot when it has no icon. */
+export function AreaMark({ area, size = 14, dot = 7 }: { area: Pick<Area, "color" | "icon">; size?: number; dot?: number }) {
+  if (area.icon) return <AreaIconSvg icon={area.icon} color={area.color} size={size} />;
+  return <span className="inline-block shrink-0 rounded-full" style={{ width: dot, height: dot, background: area.color }} />;
 }
