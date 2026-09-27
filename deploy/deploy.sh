@@ -104,6 +104,9 @@ for part in site docs; do
   fi
 done
 
+# Caddy is restarted, never reloaded: after a reload, Caddy 2.6.2 keeps answering HTTP/3 (QUIC) connections without
+# serving them, so browsers that use HTTP/3 hang on every page while curl, on HTTP/1.1 and HTTP/2, sees nothing wrong
+# (2026-09-27). A restart drops the requests in flight for about a second, so it happens only when the config changed.
 echo "> Caddy"
 snippet=app.caddy
 if [ -n "$PLACEHOLDER" ]; then snippet=app-placeholder.caddy; fi
@@ -113,10 +116,14 @@ tar -C "$root/deploy" -czf - Caddyfile "$snippet" |
     cd /tmp/pacedmind-caddy
     if [ $snippet != app.caddy ]; then mv $snippet app.caddy; fi
     sudo caddy validate --config Caddyfile --adapter caddyfile >/dev/null
-    if [ -f /etc/caddy/Caddyfile ]; then sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.old; fi
-    sudo install -m 644 Caddyfile app.caddy /etc/caddy/
-    sudo systemctl enable caddy >/dev/null 2>&1
-    sudo systemctl reload-or-restart caddy"
+    if cmp -s Caddyfile /etc/caddy/Caddyfile && cmp -s app.caddy /etc/caddy/app.caddy && systemctl is-active --quiet caddy; then
+      echo 'Unchanged, left running'
+    else
+      if [ -f /etc/caddy/Caddyfile ]; then sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.old; fi
+      sudo install -m 644 Caddyfile app.caddy /etc/caddy/
+      sudo systemctl enable caddy >/dev/null 2>&1
+      sudo systemctl restart caddy
+    fi"
 
 # The site's GitHub star count, which the server copies every ten minutes (github-stars.mjs) and Caddy serves as
 # /github.json. Nothing else depends on it, so a failure here only warns: the page keeps the count from its build.

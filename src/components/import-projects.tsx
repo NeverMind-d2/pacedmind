@@ -46,6 +46,8 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
   const [found, setFound] = useState<FoundProject[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [names, setNames] = useState<Record<string, string>>({});
+  // Folders that could join a project you have but should become projects of their own.
+  const [apart, setApart] = useState<Set<string>>(new Set());
   const [areaId, setAreaId] = useState(() => defaultArea(areas));
   const [now] = useState(() => Date.now());
   const closeRef = useRef(onClose);
@@ -87,16 +89,20 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
   const available = found?.filter((p) => !p.projectId && !p.problem) ?? [];
   const both = available.filter((p) => p.used.claude !== undefined && p.used.codex !== undefined).length;
   const count = available.filter((p) => picked.has(p.folder)).length;
-  const toggle = (folder: string) =>
-    setPicked((s) => {
+  const joining = (p: FoundProject) => !!p.joins && !apart.has(p.folder);
+  const joins = available.filter(joining).length;
+  const flip = (set: typeof setPicked, folder: string) =>
+    set((s) => {
       const next = new Set(s);
       if (next.has(folder)) next.delete(folder);
       else next.add(folder);
       return next;
     });
+  const toggle = (folder: string) => flip(setPicked, folder);
   const submit = () => {
-    const items = available.filter((p) => picked.has(p.folder))
-      .map((p) => ({ folder: p.folder, name: (names[p.folder] ?? p.name).trim() || p.name, agent: lastAgent(p) }));
+    const items = available.filter((p) => picked.has(p.folder)).map((p) => ({
+      folder: p.folder, name: (names[p.folder] ?? p.name).trim() || p.name, agent: lastAgent(p), projectId: joining(p) ? p.joins!.id : null,
+    }));
     run(async () => {
       const r = await importProjectsAction(items, areaId);
       if (r.ok) onClose();
@@ -117,7 +123,10 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
           <p className="text-[12.5px] leading-relaxed text-mut">
             {found
               ? available.length
-                ? <>PacedMind found {available.length} folder{available.length > 1 ? "s" : ""} you work in with Claude Code and Codex on this computer{both ? `, ${both} of them with both` : ""}. Each one becomes a project whose tasks run their sessions in that folder.</>
+                ? <>
+                  PacedMind found {available.length} folder{available.length > 1 ? "s" : ""} you work in with Claude Code and Codex on this computer{both ? `, ${both} of them with both` : ""}. Each one becomes a project whose tasks run their sessions in that folder.
+                  {joins > 0 && ` ${joins === 1 ? "One is a copy of a project you already have" : `${joins} are copies of projects you already have`}, from its repository or its name: ${joins === 1 ? "it joins that project" : "they join those projects"}, so ${joins === 1 ? "its" : "their"} sessions can start on this computer too.`}
+                </>
                 : "Every folder you work in with Claude Code and Codex on this computer is already a project."
               : "Looking through Claude Code and Codex on this computer…"}
           </p>
@@ -139,13 +148,25 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
                   {on && <Icon name="check" size={11} strokeWidth={3} className="text-white" />}
                 </button>
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  {on ? (
-                    <input value={names[p.folder] ?? p.name} aria-label={`Name for ${p.folder}`}
-                      onChange={(e) => setNames((n) => ({ ...n, [p.folder]: e.target.value }))}
-                      className="-mx-1 h-[22px] min-w-0 rounded bg-transparent px-1 text-[13px] text-fg outline-none hover:bg-input focus:bg-input" />
-                  ) : (
-                    <span className={cx("truncate text-[13px]", off ? "text-mut2" : "text-fg2")}>{p.name}</span>
-                  )}
+                  <div className="flex min-w-0 items-center gap-2">
+                    {joining(p) ? (
+                      <span className={cx("truncate text-[13px]", on ? "text-fg" : "text-fg2")}>{p.joins!.name}</span>
+                    ) : on ? (
+                      <input value={names[p.folder] ?? p.name} aria-label={`Name for ${p.folder}`}
+                        onChange={(e) => setNames((n) => ({ ...n, [p.folder]: e.target.value }))}
+                        className="-mx-1 h-[22px] min-w-0 flex-1 rounded bg-transparent px-1 text-[13px] text-fg outline-none hover:bg-input focus:bg-input" />
+                    ) : (
+                      <span className={cx("truncate text-[13px]", off ? "text-mut2" : "text-fg2")}>{p.name}</span>
+                    )}
+                    {p.joins && !off && (
+                      <button type="button" onClick={() => flip(setApart, p.folder)}
+                        title={joining(p) ? `Your project ${p.joins.name} gets this folder here. Select to make a new project instead.` : `Select to give this folder to your project ${p.joins.name} instead.`}
+                        className={cx("flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 text-[11px]",
+                          joining(p) ? "border-accent/50 text-accent-fg" : "border-line2 text-mut2 hover:text-fg3")}>
+                        <Icon name={joining(p) ? "link" : "plus"} size={11} />{joining(p) ? "Existing project" : "New project"}
+                      </button>
+                    )}
+                  </div>
                   <span title={p.folder} className="truncate font-mono text-[11px] text-mut2">{p.folder}</span>
                 </div>
                 <span title={p.sources.map((s) => SOURCE_LABEL[s]).join(", ")} className="flex shrink-0 items-center gap-1.5 text-mut">

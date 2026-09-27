@@ -4,10 +4,11 @@ import { removeImageFiles, type StoredImage } from "../attachments";
 import {
   flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
+import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
-  linksOf, pictureHash, snapshotOf, strings,
+  linksOf, pictureHash, repoOf, snapshotOf, strings,
   type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -94,10 +95,11 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
  * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
  */
-export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null }) {
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
   const values: Record<string, Value> = {};
   if (patch.name?.trim()) values.name = patch.name.trim();
   if (patch.color) values.color = patch.color;
+  if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
   if (values.icon) values.picture = null;
@@ -130,7 +132,7 @@ export async function deleteProject(id: string) {
 
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
-  folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), agent: s(r.agent) as AgentId | null,
+  folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), repo: repoOf(r.repo), agent: s(r.agent) as AgentId | null,
   afterProjectId: s(r.after_project_id), flowOn: flowArmed(String(r.id)), sort: Number(r.sort),
 });
 
@@ -156,8 +158,9 @@ export async function createProject(input: {
   let id = base;
   for (let i = 2; get("SELECT 1 FROM projects WHERE id = ?", id); i++) id = `${base}-${i}`;
   const sort = Number(get("SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM projects")!.n);
-  run("INSERT INTO projects (id, area_id, name, start_date, target_date, agent, sort, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.agent ?? null, sort, input.color ?? null);
+  run("INSERT INTO projects (id, area_id, name, start_date, target_date, agent, sort, color, repo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.agent ?? null, sort, input.color ?? null,
+    input.folder ? repoIdentity(input.folder) : null);
   if (input.folder) setProjectFolder(id, input.folder);
   return projectNow(id)!;
 }
@@ -185,9 +188,40 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
     if (problem) throw new Error(problem);
     patch = { ...patch, codexEnv: env };
   }
-  update("projects", id, columns(patch, PROJECT_COLS));
+  const values = columns(patch, PROJECT_COLS);
+  // The repository of a folder set here; a folder outside one keeps what another computer saw.
+  const found = patch.folder ? repoIdentity(patch.folder) : null;
+  if (found) values.repo = found;
+  update("projects", id, values);
   // A project's tasks always live in the project's area.
   if (patch.areaId) run("UPDATE tasks SET area_id = ? WHERE project_id = ?", patch.areaId, id);
+}
+
+/** Records the repository a project's folder on this computer is in (project-links.ts). */
+export async function setProjectRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (value) run("UPDATE projects SET repo = ? WHERE id = ?", value, id);
+}
+
+/**
+ * Merges `fromId` into `intoId`: its tasks move there, after the project's own, into its area, and keep their keys;
+ * what `intoId` leaves empty (agent, Codex environment, repository) it takes from `fromId`; projects that started
+ * after `fromId` start after `intoId`; then `fromId` is deleted. This computer's folders are project-links.ts's.
+ */
+export async function mergeProject(fromId: string, intoId: string) {
+  const from = projectNow(fromId);
+  const into = projectNow(intoId);
+  if (!from || !into || fromId === intoId) return;
+  const last = Number(get("SELECT COALESCE(MAX(sort_order), 0) AS n FROM tasks WHERE project_id = ?", intoId)!.n);
+  tx(() => {
+    run("UPDATE tasks SET project_id = ?, area_id = ?, sort_order = sort_order + ?, updated_at = ? WHERE project_id = ?",
+      intoId, into.areaId, last, nowStamp(), fromId);
+    run("UPDATE projects SET after_project_id = NULL WHERE id = ? AND after_project_id = ?", intoId, fromId);
+    run("UPDATE projects SET after_project_id = ? WHERE after_project_id = ?", intoId, fromId);
+    run("UPDATE projects SET agent = COALESCE(agent, ?), codex_env = COALESCE(codex_env, ?), repo = COALESCE(repo, ?) WHERE id = ?",
+      from.agent, from.codexEnv, from.repo, intoId);
+    run("DELETE FROM projects WHERE id = ?", fromId);
+  });
 }
 
 /* ---------- tasks ---------- */

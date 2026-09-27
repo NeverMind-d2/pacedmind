@@ -4,7 +4,7 @@ import { legacySummary } from "@/server/account";
 import { thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
 import { deviceConfig, projectServers } from "@/server/device";
-import { folderHarness, serverChoices } from "@/server/harness";
+import { folderExtras, serverChoices } from "@/server/extras";
 import { encryptedAtRest } from "@/server/secure-file";
 import { MODE, authState } from "@/server/supabase";
 import type { DeviceSettings, ProjectAgentsView } from "@/lib/types";
@@ -17,11 +17,11 @@ export default async function SettingsPage() {
   const d = MODE === "desktop" ? deviceConfig() : null;
   const device: DeviceSettings | null = d && {
     name: d.name, terminal: d.terminal, claudeCommand: d.claudeCommand, codexCommand: d.codexCommand, remoteStart: d.remoteStart,
-    deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
+    trustFolders: d.trustFolders, deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
   };
   // What agents get in each project's folder here, and the MCP servers its sessions get: this computer's to decide.
   const agents: Record<string, ProjectAgentsView> | null = d && Object.fromEntries(projects.map((p) => [p.id, {
-    harness: p.folder ? folderHarness(p.folder) : null, choices: serverChoices(p.folder), servers: projectServers(p.id),
+    extras: p.folder ? folderExtras(p.folder) : null, choices: serverChoices(p.folder), servers: projectServers(p.id),
   }]));
   // This computer first, with what it found of the agents itself; then the other computers signed in. Without
   // an account, there is only this one (and it has no id in any account yet).

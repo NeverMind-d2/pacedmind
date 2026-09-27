@@ -81,7 +81,7 @@ Then close the stuck session with **Close session** and start a new one.
 
 After 90 seconds without word from the agent, a running session shows *… hasn't checked in yet. It may be waiting for you in its terminal.* When Claude Code doesn't trust the session's folder yet, it shows *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.* right away. Switch to its terminal:
 
-* The agent may be asking a question: to trust the folder, to sign in, or to approve a tool. Answer it. To Claude Code's question about the folder, **Yes, I trust this folder** lets the session go on; **No, exit** ends it. See [Trusting the folder in Claude Code](/agents/start-and-manage#trusting-the-folder-in-claude-code).
+* The agent may be asking a question: to trust the folder, to sign in, or to approve a tool. Answer it. To Claude Code's question about the folder, **Yes, I trust this folder** lets the session go on; **No, exit** ends it. With **Trust session folders** on, PacedMind answers it before the session starts. See [Trusting the folder](/agents/start-and-manage#trusting-the-folder).
 * The agent may not reach PacedMind's MCP server. Check that PacedMind is running; see [An agent can't reach PacedMind](#an-agent-cant-reach-pacedmind).
 * If the agent is working but never called `start_task`, ask it to follow its first message.
 

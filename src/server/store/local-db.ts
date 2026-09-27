@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS areas (
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
   start_date TEXT, target_date TEXT, folder TEXT, agent TEXT, after_project_id TEXT,
-  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT, device_id TEXT, codex_env TEXT
+  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT, device_id TEXT, codex_env TEXT, repo TEXT
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
@@ -133,7 +133,7 @@ function migrate(conn: DatabaseSync) {
   conn.exec(SCHEMA);
   const added: Record<string, [string, string][]> = {
     areas: [["icon", "TEXT"], ["picture", "TEXT"]],
-    projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"]],
+    projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"]],
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"]],

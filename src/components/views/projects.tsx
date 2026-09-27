@@ -191,7 +191,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
           onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => startProject(menuArea.id)} />
       )}
       {menuProject && menu && (
-        <ProjectMenu project={menuProject} areas={areas} anchor={menu.anchor} usage={usage} onClose={closeMenu}
+        <ProjectMenu project={menuProject} projects={projects} areas={areas} anchor={menu.anchor} usage={usage} onClose={closeMenu}
           onRename={() => setRenaming(`project:${menuProject.id}`)} />
       )}
     </section>

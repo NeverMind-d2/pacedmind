@@ -5,7 +5,7 @@ import path from "node:path";
 import pkg from "../../package.json";
 import * as repo from "./repo";
 import { agentCommandFor, deviceConfig, thisPlatform } from "./device";
-import { agentHarness } from "./harness";
+import { agentExtras } from "./extras";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
@@ -62,6 +62,8 @@ export async function thisDevice(): Promise<Device> {
     agents: localTools(), createdAt: row?.createdAt ?? "", lastSeenAt: row?.lastSeenAt ?? null,
     checkedAt: g.__pacedmindToolsAt ?? row?.checkedAt ?? null, revokedAt: row?.revokedAt ?? null,
     isDefault: row ? row.isDefault : !cloud, appVersion: APP_VERSION, flowsOn: flowsOnHere(cloud),
+    // The Sessions page looks for this computer's own itself (other-sessions.ts), more often than it reports them.
+    otherSessions: [],
   };
 }
 
@@ -279,8 +281,8 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
     const agents: Device["agents"] = {
-      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn, harness: agentHarness("claude") },
-      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn, harness: agentHarness("codex") },
+      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn, extras: agentExtras("claude") },
+      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn, extras: agentExtras("codex") },
     };
     g.__pacedmindTools = agents;
     g.__pacedmindToolsAt = new Date().toISOString();

@@ -353,7 +353,9 @@ function createWindow() {
 
   const wc = win.webContents;
   wc.setWindowOpenHandler(({ url }) => {
-    openOutside(url);
+    // Ctrl/⌘-click or a middle click on one of the app's own links: a browser has no window key, so it opens here.
+    if (sameOrigin(url)) win.loadURL(url);
+    else openOutside(url);
     return { action: "deny" };
   });
   wc.on("will-navigate", (e, url) => {

@@ -30,6 +30,22 @@ The number of screenshots, with an image icon (*3 images* on hover), counts thos
 
 Select a row to show its details. The selected session is part of the page's address, so a link to a session, such as from a notification or a task, opens it directly. Without one, the view selects the newest finished session, else the oldest running one, else the newest session.
 
+## Sessions not from PacedMind
+
+Below PacedMind's own groups, **Not from PacedMind, on this computer (…)** lists the Claude Code and Codex sessions you started yourself: in a terminal (Claude Code, Codex CLI) or in the Claude or Codex app. The view's subtitle then reads *Claude Code and Codex sessions on your computers*. PacedMind finds them in the records the tools keep on the computer, without changing them, and lists the ones active in the last three days, 30 at most, the latest first. It leaves out sessions it started itself, which are in the groups above, sessions you archived in the Claude app, and conversations that programs run through the tools, such as summaries and checks.
+
+When your data is on more than one computer (see [Accounts and Cloud](/accounts-and-cloud)), each computer's sessions have a group of their own, such as **Not from PacedMind, on Studio PC**, with *· offline* when that computer isn't running PacedMind. A computer sends its list once a minute while PacedMind runs there, with times to five minutes; this computer's group is looked at again every 30 seconds while the view is open.
+
+Each row shows a dot for the state, the session's title (its own, else its first message), its project, or its folder's name when no project has that folder, and where it runs:
+
+| State | Row text |
+| --- | --- |
+| At work in the last two minutes | *Working now* |
+| Its turn ended, or it stopped in the middle of one, such as for a permission | *Waiting for you · 22:26* |
+| Nothing for six hours | *Idle since 11:33* |
+
+A session's project is the one whose folder on that computer holds the session's folder, else the project of the same git repository, such as for a worktree kept elsewhere. These rows only show the sessions: open them in their own terminal or app.
+
 ## Start a session
 
 **Start session**, in the header, lists up to 20 tasks an agent could pick up now: tasks in progress, to do or in the backlog, handed to an agent (their own or the project's), and without a running session. Tasks in progress come first, then those to do, then the backlog; within each, by priority, then by project and task order. Choosing one starts that task's agent where the task runs.
@@ -43,7 +59,7 @@ The details panel shows the project and the key, **Open task**, the task's title
 * *Running in Claude Code since 09:40* (or *Starting*), and outside a terminal with the place: *Running in the Claude app on DESKTOP-1 since 09:40* or *Running in Claude Code on the web since 09:40*;
 * *Claude Code is working on your changes since 14:05*, after **Request changes**;
 * *Sending to Codex cloud since 09:40*, while Codex takes the task on;
-* *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.*, for a terminal session in a folder Claude Code doesn't trust yet, until the agent checks in. See [Trusting the folder in Claude Code](/agents/start-and-manage#trusting-the-folder-in-claude-code);
+* *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.*, for a terminal session in a folder Claude Code doesn't trust yet, until the agent checks in. With **Trust session folders** on, only when PacedMind couldn't answer that question itself. See [Trusting the folder](/agents/start-and-manage#trusting-the-folder);
 * *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.*;
 * *Claude Code finished at 12:22 · waiting for you*;
 * *Claude Code handed back part of it at 12:22 · waiting for you*, for a hand-back that is partly done;

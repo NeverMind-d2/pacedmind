@@ -15,6 +15,7 @@ import { commandProblem, deviceConfig, rotateOwnerToken, setProjectServers, upda
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
+import { mergeProjects } from "@/server/project-links";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
@@ -514,6 +515,49 @@ export async function deleteAreaAction(id: string) {
   return done({ ok: true, message: kept ? `Deleted ${a.name}. Its tasks moved to the Inbox.` : `Deleted ${a.name}` });
 }
 
+const isIdList = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === "string");
+
+/**
+ * `items` in the order of `ids`. Ids that are gone are skipped, and items the list leaves out (made elsewhere
+ * meanwhile) keep their order after it.
+ */
+function inOrder<T extends { id: string }>(items: T[], ids: string[]): T[] {
+  const byId = new Map(items.map((x) => [x.id, x]));
+  const first = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
+  return [...first, ...items.filter((x) => !first.includes(x))];
+}
+
+/** Puts the areas in this order, as dragged in the sidebar. */
+export async function reorderAreasAction(ids: string[]): Promise<Result> {
+  await guard();
+  if (!isIdList(ids)) return { ok: false, error: "That isn't a list of areas." };
+  const areas = inOrder(await repo.listAreas(), ids);
+  await Promise.all(areas.map((a, i) => (a.sort !== i + 1 ? repo.updateArea(a.id, { sort: i + 1 }) : null)));
+  return done();
+}
+
+/**
+ * Merges projects into one, such as the copies two computers made of the same project: their tasks move into
+ * `intoId` and keep their keys, and they're deleted (project-links.ts).
+ */
+export async function mergeProjectsAction(fromIds: string[], intoId: string): Promise<Result> {
+  await guard();
+  if (!isIdList(fromIds) || typeof intoId !== "string") return { ok: false, error: "That isn't a list of projects." };
+  const r = await mergeProjects(fromIds, intoId);
+  if ("error" in r) return { ok: false, error: r.error };
+  const what = r.merged.length === 1 ? r.merged[0].name : `${r.merged.length} projects`;
+  return done({ ok: true, message: `Merged ${what} into ${r.into.name}` });
+}
+
+/** Puts the projects in this order, as dragged in the sidebar. */
+export async function reorderProjectsAction(ids: string[]): Promise<Result> {
+  await guard();
+  if (!isIdList(ids)) return { ok: false, error: "That isn't a list of projects." };
+  const projects = inOrder(await repo.listProjects(), ids);
+  await Promise.all(projects.map((p, i) => (p.sort !== i + 1 ? repo.updateProject(p.id, { sort: i + 1 }) : null)));
+  return done();
+}
+
 /** Saves a project. Switching its flow on (desktop app only) starts the sessions it would have started while it was off. */
 export async function updateProjectAction(id: string, patch: Partial<Omit<Project, "id">>): Promise<Result> {
   await guard();
@@ -562,7 +606,7 @@ const TERMINAL_IDS = new Set<TerminalId>(["wt", "cmd", "terminal", "iterm"]);
 
 /** How sessions start on this computer; only its own window changes it. */
 export async function updateDeviceSettingsAction(patch: {
-  name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart;
+  name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart; trustFolders?: boolean;
 }): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "These are set in the PacedMind desktop app." };
@@ -579,6 +623,7 @@ export async function updateDeviceSettingsAction(patch: {
     ...(patch.claudeCommand ? { claudeCommand: patch.claudeCommand.trim() } : {}),
     ...(patch.codexCommand ? { codexCommand: patch.codexCommand.trim() } : {}),
     ...(patch.remoteStart ? { remoteStart: patch.remoteStart } : {}),
+    ...(typeof patch.trustFolders === "boolean" ? { trustFolders: patch.trustFolders } : {}),
   });
   const id = deviceConfig().deviceId;
   // The account's copy, for Settings elsewhere. What counts is saved above already: if the copy doesn't go through now
@@ -667,11 +712,17 @@ export async function findProjectsAction(): Promise<FoundProject[]> {
 export async function importProjectsAction(items: ImportItem[], areaId: string): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Import from the desktop app on the computer with the folders." };
-  if (!(await repo.listAreas()).some((a) => a.id === areaId)) return { ok: false, error: "Pick an area for the projects" };
-  const { created, skipped } = await importProjects(items.filter((i) => i && typeof i.folder === "string" && typeof i.name === "string"), areaId);
+  const valid = items.filter((i) => i && typeof i.folder === "string" && typeof i.name === "string" && (i.projectId == null || typeof i.projectId === "string"));
+  // Every folder that joins a project needs no area; a new project does.
+  if (valid.some((i) => !i.projectId) && !(await repo.listAreas()).some((a) => a.id === areaId)) return { ok: false, error: "Pick an area for the projects" };
+  const { created, linked, skipped } = await importProjects(valid, areaId);
   updateDevice({ importOffered: true });
-  const made = created.length === 1 ? `Added ${created[0].name}` : `Added ${created.length} projects`;
-  return done(created.length
+  const names = (ps: Project[]) => (ps.length === 1 ? ps[0].name : `${ps.length} projects`);
+  const made = [
+    created.length ? `Added ${names(created)}` : "",
+    linked.length ? `${created.length ? "linked" : "Linked"} ${names(linked)} to ${linked.length === 1 ? "its" : "their"} folder${linked.length === 1 ? "" : "s"} here` : "",
+  ].filter(Boolean).join(" and ");
+  return done(made
     ? { ok: true, message: skipped.length ? `${made}. Skipped ${skipped.join(", ")}.` : made }
     : { ok: false, error: skipped.length ? `Couldn't add ${skipped.join(", ")}` : "Pick a project to add" });
 }

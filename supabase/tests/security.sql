@@ -284,6 +284,25 @@ begin
     out := out || '18b FAIL shell characters in a Codex environment accepted' || E'\n';
     reset role;
   exception when others then out := out || '18b Codex environment rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  -- A project's repository is host/path only: never a URL that could carry a token, a computer's path or markup.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, repo) values (area_a, 'Repo', 'github.com/owner/repo#packages/web');
+    select count(*) into n from public.projects where repo = 'github.com/owner/repo#packages/web'; out := out || '18g repository saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18g ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, repo) values (area_a, 'Repo', 'https://ghp_secret@github.com/owner/repo.git');
+    out := out || '18h FAIL a repository URL with a token accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18h repository URL rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, repo) values (area_a, 'Repo', 'C:/Users/me/code/app');
+    out := out || '18i FAIL a folder as a repository accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18i folder as a repository rejected: ' || left(sqlerrm, 70) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     update public.tasks set run_in = 'shell' where id = tid;
@@ -378,8 +397,27 @@ begin
     reset role;
   exception when others then out := out || '21e another sign-in''s setting refused: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set other_sessions = '[{"harness": "claude-cli", "ref": "x", "title": "Not yours"}]' where id = dev;
+    out := out || '21k FAIL another sign-in changed the computer''s sessions' || E'\n';
+    reset role;
+  exception when others then out := out || '21k another sign-in''s sessions refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    update public.devices set app_version = '0.2.0', flows_on = array[gen_random_uuid()], last_seen_at = now(), remote_start = 'ask', checked_at = now()
+    update public.devices set other_sessions = '{"not": "a list"}' where id = dev;
+    out := out || '21l FAIL sessions that aren''t a list accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '21l sessions that aren''t a list rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set other_sessions = (select jsonb_agg(jsonb_build_object('ref', i)) from generate_series(1, 31) i) where id = dev;
+    out := out || '21m FAIL more than 30 sessions accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '21m more than 30 sessions rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set app_version = '0.2.0', flows_on = array[gen_random_uuid()], last_seen_at = now(), remote_start = 'ask', checked_at = now(),
+      other_sessions = '[{"harness": "codex-cli", "ref": "abc", "title": "Mine", "state": "idle"}]'
       where id = dev;
     get diagnostics n = row_count; out := out || '21f the computer reported on itself=' || n || ' (want 1)' || E'\n';
     reset role;

@@ -4,8 +4,9 @@
 # Caddy 2.6.2, the version Ubuntu 26.04 ships.
 #
 # deploy.sh installs it as /etc/caddy/Caddyfile next to app.caddy (this folder's app.caddy, or
-# app-placeholder.caddy before the web app launches), after `caddy validate` has passed, and reloads
-# Caddy. Caddy gets and renews the HTTPS certificates itself and redirects http:// to https://.
+# app-placeholder.caddy before the web app launches), after `caddy validate` has passed, and restarts
+# Caddy when either file changed (never a reload: after one, 2.6.2's HTTP/3 connections hang). Caddy
+# gets and renews the HTTPS certificates itself and redirects http:// to https://.
 
 # The web app, or a redirect to the site before it launches.
 app.pacedmind.com {

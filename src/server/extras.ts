@@ -3,12 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { claudeConfig, claudeFolderEntry } from "./claude-trust";
-import type { AgentHarness, AgentId, FolderHarness } from "@/lib/types";
+import type { AgentExtras, AgentId, FolderExtras } from "@/lib/types";
 
 /*
  * What Claude Code and Codex give their sessions besides PacedMind, read from their own config files on this computer:
- * the MCP servers, plugins, skills and hooks they have everywhere (agentHarness, part of what this computer found of
- * the agents in devices.ts) and what a project's folder adds (folderHarness, Settings). It never runs them: `claude
+ * the MCP servers, plugins, skills and hooks they have everywhere (agentExtras, part of what this computer found of
+ * the agents in devices.ts) and what a project's folder adds (folderExtras, Settings). It never runs them: `claude
  * mcp list` starts every server it checks, and a folder's servers run code from that folder. Only names leave here,
  * since a server's command, address, headers and environment can hold keys; a name that doesn't look like one is left
  * out. PacedMind's own server (organizer) isn't listed: every session has it.
@@ -87,7 +87,7 @@ function codexHooks(toml: string | null, json: Json | null): string[] {
 }
 
 /** What an agent's sessions get everywhere on this computer besides PacedMind. */
-export function agentHarness(agent: AgentId): AgentHarness {
+export function agentExtras(agent: AgentId): AgentExtras {
   if (agent === "claude") {
     const settings = readJson(path.join(claudeHome(), "settings.json"));
     return {
@@ -107,7 +107,7 @@ export function agentHarness(agent: AgentId): AgentHarness {
 }
 
 /** What the agents get in `folder` on top of what they have everywhere. */
-export function folderHarness(folder: string): FolderHarness {
+export function folderExtras(folder: string): FolderExtras {
   const config = claudeConfig();
   const entry = claudeFolderEntry(config, folder);
   const shared = readJson(path.join(folder, ".claude", "settings.json"));
@@ -145,12 +145,12 @@ function projectServerApproval(entry: Json | null, settings: (Json | null)[]): (
 
 /** The MCP servers a session in `folder` could have besides PacedMind, by agent: what a project's list picks from. */
 export function serverChoices(folder: string | null): Record<AgentId, string[]> {
-  const f = folder ? folderHarness(folder) : null;
+  const f = folder ? folderExtras(folder) : null;
   return {
     claude: names([
-      ...agentHarness("claude").mcp, ...(f?.claudeLocal ?? []), ...(f?.claudeMcp.filter((s) => s.approved).map((s) => s.name) ?? []),
+      ...agentExtras("claude").mcp, ...(f?.claudeLocal ?? []), ...(f?.claudeMcp.filter((s) => s.approved).map((s) => s.name) ?? []),
     ], 40),
-    codex: names([...agentHarness("codex").mcp, ...(f?.codexMcp ?? [])], 40),
+    codex: names([...agentExtras("codex").mcp, ...(f?.codexMcp ?? [])], 40),
   };
 }
 

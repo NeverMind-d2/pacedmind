@@ -510,16 +510,16 @@ function Agents({ d, here, pending, now, onConnect }: {
           </div>
         ))}
       </div>
-      <Harness d={d} />
+      <Extras d={d} />
     </div>
   );
 }
 
-/** What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (harness.ts). */
-function Harness({ d }: { d: Device }) {
+/** What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (extras.ts). */
+function Extras({ d }: { d: Device }) {
   const lines = AGENTS.flatMap((a) => {
     const t = d.agents[a];
-    const h = t.harness;
+    const h = t.extras;
     if (!h || (!t.cli && !t.app)) return [];
     const parts = [
       h.mcp.length ? `MCP servers ${h.mcp.join(", ")}` : "no other MCP servers",

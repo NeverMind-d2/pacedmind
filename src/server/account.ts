@@ -9,7 +9,7 @@ import {
   commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, projectServers, setFlowArmed, setProjectFolder, setProjectServers, setTaskFolder,
   taskFolder, updateDevice,
 } from "./device";
-import { CODEX_ENV, cleanDoneWhen, flowSnapshot } from "./repo";
+import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
 import { localDbPath } from "./store/local-db";
 import { areaPictureOf, deriveKey } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
@@ -292,7 +292,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       const r = check(await db.from("projects").insert({
         area_id: area, name: clip(p.name, 120) || "Project", color: renewOptional(match(p.color, COLOR)), start_date: match(p.start_date, DAY),
         target_date: match(p.target_date, DAY), agent: oneOf(p.agent, ["claude", "codex"]), sort: int(p.sort, -1e6, 1e6, 0),
-        codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null,
+        codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null, ...(repoOf(p.repo) ? { repo: repoOf(p.repo) } : {}),
       }).select("id").single()) as Row;
       projectId.set(String(p.id), String(r.id));
       // The folder and the flow switch belonged to this computer all along; they stay here, not in the cloud. An

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { addMinutes, format } from "date-fns";
 import { createEventAction, createTaskAction } from "@/app/actions";
 import { parseQuickAdd } from "@/lib/parse";
@@ -42,10 +43,17 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   }>({});
   const input = useRef<HTMLInputElement>(null);
   const { pending, run } = useAction();
+  const path = usePathname();
 
   useEffect(() => {
+    // Opened without a place (C, the pen button, the command menu) on a project's or an area's page, a task goes there.
+    const [, page, id] = path.split("/");
+    const here: QuickAddDefaults =
+      page === "project" && projects.some((p) => p.id === id) ? { projectId: id }
+      : page === "area" && areas.some((a) => a.id === id) ? { areaId: id }
+      : {};
     const show = (e: Event) => {
-      const d = ((e as CustomEvent).detail ?? {}) as QuickAddDefaults;
+      const d = ((e as CustomEvent).detail as QuickAddDefaults | null) ?? here;
       setDefaults(d);
       setMode(d.mode ?? "task");
       setOpen(true);
@@ -55,7 +63,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
       const typing = el.closest("input, textarea, select, [contenteditable=true]");
       if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
-        setDefaults({});
+        setDefaults(here);
         setMode("task");
         setOpen(true);
       }
@@ -63,7 +71,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     window.addEventListener("organizer:new", show);
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("organizer:new", show); window.removeEventListener("keydown", onKey); };
-  }, []);
+  }, [path, projects, areas]);
 
   useEffect(() => {
     if (open) setTimeout(() => input.current?.focus(), 0);

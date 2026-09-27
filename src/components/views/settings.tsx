@@ -14,7 +14,7 @@ import { projectColor } from "@/lib/colors";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, deviceOnline,
-  type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type FolderHarness, type Project, type ProjectAgentsView,
+  type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type FolderExtras, type Project, type ProjectAgentsView,
   type RemoteStart, type Settings,
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon } from "../icons";
@@ -38,7 +38,7 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const APPROVAL: Record<string, string> = { true: "allowed", false: "refused", null: "asks first" };
 
 /** What agents get in a project's folder besides what they have everywhere, in a few words each; empty for nothing. */
-function folderLines(h: FolderHarness): string[] {
+function folderLines(h: FolderExtras): string[] {
   return [
     h.claudeMcp.length ? `Claude Code MCP servers from .mcp.json: ${h.claudeMcp.map((s) => `${s.name} (${APPROVAL[String(s.approved)]})`).join(", ")}` : null,
     h.claudeLocal.length ? `Claude Code MCP servers for this folder: ${h.claudeLocal.join(", ")}` : null,
@@ -51,13 +51,13 @@ function folderLines(h: FolderHarness): string[] {
 }
 
 /**
- * A project's agents on this computer: what they get in its folder (harness.ts), and which MCP servers besides
+ * A project's agents on this computer: what they get in its folder (extras.ts), and which MCP servers besides
  * PacedMind its sessions get. "Only these" gives Claude Code just the ones picked (--strict-mcp-config, so none from
  * plugins either) and switches the others off for Codex; PacedMind's own server always stays.
  */
 function ProjectAgents({ name, view, onServers }: { name: string; view: ProjectAgentsView; onServers: (names: string[] | null) => void }) {
   const [open, setOpen] = useState(false);
-  const lines = view.harness ? folderLines(view.harness) : [];
+  const lines = view.extras ? folderLines(view.extras) : [];
   const all = [...new Set([...view.choices.claude, ...view.choices.codex, ...(view.servers ?? [])])].sort();
   const chosen = view.servers;
   const whose = (n: string) => [view.choices.claude.includes(n) ? "Claude Code" : null, view.choices.codex.includes(n) ? "Codex" : null].filter(Boolean).join(", ");
@@ -367,6 +367,13 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   <input className={input} defaultValue={device.codexCommand} aria-label="Codex command"
                     onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.codexCommand && saveDevice({ codexCommand: e.target.value })} />
                 </Row>
+                <Row label="Trust session folders">
+                  <span className="flex-1 text-[12.5px] text-fg3">{device.trustFolders ? "Answered for you" : "You answer in the terminal"}</span>
+                  <Switch on={device.trustFolders} label="Trust session folders" onChange={(v) => saveDevice({ trustFolders: v })} />
+                </Row>
+                <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">
+                  Claude Code and Codex ask whether you trust a folder the first time they start there. When this is on, PacedMind says yes for the folder a session starts in, just before it starts, so the session doesn&apos;t wait for you. A yes also lets the agent use that folder&apos;s own settings, hooks and MCP servers.
+                </div>
               </Section>
             </>}
 

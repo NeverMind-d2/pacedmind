@@ -1,5 +1,6 @@
 import "server-only";
 import { trustCheck } from "./claude-trust";
+import { deviceConfig } from "./device";
 import { deviceIdFor, runsHere, thisDeviceId } from "./devices";
 import { plannedFolder, plannedSurface } from "./launcher";
 import { changesProblemIn, changesViaIn } from "./ops";
@@ -39,11 +40,13 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
 /**
  * Tasks whose Claude Code session on this computer opens in a folder Claude Code doesn't trust yet (claude-trust.ts):
  * the running one's, in a terminal, else where the next one would start, unless that's the Claude app, which asks
- * about the folder its own way.
+ * about the folder its own way. With "Trust session folders" on, the next one's folder gets its answer as it starts,
+ * so only a running session can still be asked (when giving the answer failed).
  */
 function asksTrust(tasks: Task[], sessions: Record<number, Session>, projects: Project[]): Record<number, boolean> {
   const asks = trustCheck();
   if (!asks) return {};
+  const answered = deviceConfig().trustFolders;
   const projectOf = new Map(projects.map((p) => [p.id, p]));
   const out: Record<number, boolean> = {};
   for (const t of tasks) {
@@ -52,7 +55,7 @@ function asksTrust(tasks: Task[], sessions: Record<number, Session>, projects: P
     let folder: string | null = null;
     if (s && isLiveSession(s)) {
       if (s.agent === "claude" && s.surface === "terminal" && runsHere(s.deviceId)) folder = s.folder;
-    } else if (agentOf(t, project?.agent) === "claude" && runsHere(deviceIdFor(t.deviceId, project?.deviceId)) && plannedSurface(t, "claude") !== "desktop") {
+    } else if (!answered && agentOf(t, project?.agent) === "claude" && runsHere(deviceIdFor(t.deviceId, project?.deviceId)) && plannedSurface(t, "claude") !== "desktop") {
       folder = plannedFolder(t);
     }
     if (folder && asks(folder)) out[t.id] = true;

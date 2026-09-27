@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { trustCheck } from "./claude-trust";
+import { trustCheck, trustForClaude } from "./claude-trust";
+import { trustForCodex } from "./codex-trust";
 import { cliCommand, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
 import { folderProblem, repoRoot } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
@@ -11,7 +12,7 @@ import * as repo from "./repo";
 import { MODE } from "./supabase";
 import { activeDevice } from "./scope";
 import { dataDir, deviceConfig, issueSessionToken, projectFolder, projectServers } from "./device";
-import { claudeServers, codexServersOff } from "./harness";
+import { claudeServers, codexServersOff } from "./extras";
 import { HOST_SESSION_VARS, agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
 import { terminalFor } from "@/lib/terminals";
@@ -325,6 +326,20 @@ function openMacTerminal(dir: string, folder: string, title: string, token: stri
  */
 const asksTrust = (agent: AgentId, folder: string) => agent === "claude" && !!trustCheck()?.(folder);
 
+/**
+ * Answers the agent's question whether you trust the folder before it starts there, when this computer's setting says
+ * so (device.ts `trustFolders`), so the session never waits for it in its terminal.
+ */
+function trustAhead(agent: AgentId, folder: string) {
+  if (!deviceConfig().trustFolders) return;
+  try {
+    if (agent === "claude") trustForClaude(folder);
+    else trustForCodex(folder);
+  } catch (e) {
+    console.error("[organizer] couldn't answer the folder question ahead", e);
+  }
+}
+
 /** A message about a terminal that just opened, and what to answer in it first when Claude Code asks about the folder. */
 const withTrust = (message: string, asks: boolean) => (asks ? `${message.replace(/\.?$/, ".")} ${TRUST_FIRST}` : message);
 
@@ -474,6 +489,8 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   const dir = sessionDir(session.id);
   const where = place(session.surface, agent);
   const title = safe(`${task.key} · ${session.surface === "cloud" ? CLOUD_LABEL[agent] : AGENT_LABEL[agent]}`, 60);
+  // Codex cloud runs out of sight and asks nothing; everything else starts the agent in the folder here.
+  if (!(session.surface === "cloud" && agent === "codex")) trustAhead(agent, folder);
   const trust = session.surface !== "desktop" && asksTrust(agent, folder);
   let failed: string | null = null;
   if (session.surface === "desktop") {
@@ -553,6 +570,7 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     const dir = sessionDir(session.id);
     const title = safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60);
     const surface = to ?? session.surface;
+    trustAhead(session.agent, folder);
     const trust = surface !== "desktop" && asksTrust(session.agent, folder);
     let failed: string | null;
     let text: string;
@@ -633,6 +651,7 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     const { command, conversation } = agentCommand(dir, session, task, "changes", token, folder);
     // The new conversation counts before its terminal opens, so a terminal still open on the old one can't end the session.
     if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: conversation });
+    trustAhead(session.agent, folder);
     const trust = asksTrust(session.agent, folder);
     const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), command, token, device.terminal);
     if (failed) {

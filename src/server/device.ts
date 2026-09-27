@@ -48,6 +48,11 @@ export interface DeviceConfig {
    */
   confirmed: Record<string, { edges: string[]; after: string | null }>;
   remoteStart: RemoteStart;
+  /**
+   * Whether the launcher answers Claude Code's and Codex's question whether you trust a session's folder before the
+   * session starts there (claude-trust.ts, codex-trust.ts), so a session never waits for it in its terminal.
+   */
+  trustFolders: boolean;
   /** For Claude Code and Codex that you start yourself (Settings shows it). */
   ownerToken: string;
   /**
@@ -87,6 +92,7 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     servers: {},
     confirmed: {},
     remoteStart: "ask",
+    trustFolders: keep?.trustFolders ?? true,
     ownerToken: newOwnerToken(),
     sessionTokens: {},
     importOffered: false,

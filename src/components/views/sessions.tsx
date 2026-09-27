@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
@@ -10,9 +10,10 @@ import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, use
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
-import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, TRUST_WAITING, type AgentId, type Attachment, type Report, type SessionEvent, type SessionStatus, type Surface,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
+  type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type Surface,
 } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
@@ -73,6 +74,18 @@ export interface StartableTask {
   key: string;
   title: string;
   agent: AgentId;
+}
+
+/** A session PacedMind didn't start, with its project's name. */
+export type OtherItem = OtherSession & { project: string | null };
+
+/** The sessions PacedMind didn't start on one computer: this one's as found now, another's as it last said. */
+export interface OtherGroup {
+  id: string;
+  computer: string;
+  here: boolean;
+  online: boolean;
+  sessions: OtherItem[];
 }
 
 /* ---------- helpers ---------- */
@@ -220,14 +233,23 @@ function useNow(initial: string): number {
 
 /* ---------- the view ---------- */
 
-export function SessionsView({ groups, initialId, startable, now: serverNow }: {
+export function SessionsView({ groups, others, initialId, startable, now: serverNow }: {
   groups: SessionGroup[];
+  others: OtherGroup[];
   initialId: string | null;
   startable: StartableTask[];
   now: string;
 }) {
   const now = useNow(serverNow);
+  const router = useRouter();
   const params = useSearchParams();
+  // This computer's other sessions change without anything in PacedMind changing: look again now and then.
+  const watching = others.length > 0;
+  useEffect(() => {
+    if (!watching) return;
+    const id = window.setInterval(() => router.refresh(), 30_000);
+    return () => window.clearInterval(id);
+  }, [watching, router]);
   const { run, pending } = useAction();
   const all = groups.flatMap((g) => g.items);
   // The selection lives in the URL (?s=), so links from tasks open the right session and refreshes keep it.
@@ -249,7 +271,9 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="terminal" className="shrink-0 text-mut" />
           <h1 className="text-[14px] font-semibold text-strong">Sessions</h1>
-          <span className="min-w-0 truncate text-mut2">Claude Code and Codex sessions started from PacedMind</span>
+          <span className="min-w-0 truncate text-mut2">
+            {others.length ? "Claude Code and Codex sessions on your computers" : "Claude Code and Codex sessions started from PacedMind"}
+          </span>
           <span className="flex-1" />
           {startable.length > 0 && (
             <Menu align="right" width={340}
@@ -274,7 +298,17 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
               ))}
             </div>
           ))}
-          {!all.length && (
+          {others.map((g) => {
+            const key = `other:${g.id}`;
+            return (
+              <div key={key}>
+                <GroupHeader name={`Not from PacedMind, on ${g.here ? `this computer (${g.computer})` : g.computer}${g.online ? "" : " · offline"}`}
+                  count={g.sessions.length} collapsed={!!collapsed[key]} onToggle={() => setCollapsed((c) => ({ ...c, [key]: !c[key] }))} />
+                {!collapsed[key] && g.sessions.map((s) => <OtherRow key={`${s.harness}:${s.ref}`} s={s} now={now} />)}
+              </div>
+            );
+          })}
+          {!all.length && !others.length && (
             <div className="flex flex-col items-center gap-3 px-8 py-24 text-center">
               <div className="text-[14px] text-fg2">No sessions yet</div>
               <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">
@@ -337,6 +371,45 @@ function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] 
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const OTHER_DOT: Record<OtherSessionState, { fill: string; ring: string }> = {
+  working: DOT.running,
+  waiting: DOT.finished,
+  idle: DOT.closed,
+};
+
+/** When a session PacedMind didn't start last did something, and what it's doing. */
+function otherMeta(s: OtherItem, now: number): string {
+  if (s.state === "working") return "Working now";
+  const at = clock(toDateTimeStr(new Date(s.activeAt)), now);
+  return s.state === "waiting" ? `Waiting for you · ${at}` : `Idle since ${at}`;
+}
+
+/**
+ * A session PacedMind didn't start, as its computer found it: nothing to open or manage here, it lives in its own
+ * terminal or app. Its title, its project (or folder's name), where it runs and what it's doing.
+ */
+function OtherRow({ s, now }: { s: OtherItem; now: number }) {
+  const d = OTHER_DOT[s.state];
+  const where = `${HARNESS_LABEL[s.harness]}${s.project ? ` · ${s.project}` : ""} · ${s.place}`;
+  return (
+    <div title={`${s.title || "Untitled session"}\n${where}`} className="flex h-[42px] w-full items-center gap-3 border-b border-hover px-5">
+      <span className="flex w-3.5 shrink-0 justify-center">
+        <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full border" style={{ background: d.fill, borderColor: d.ring }} />
+      </span>
+      <span className="w-[50px] shrink-0 @max-md:hidden" />
+      <span className={cx("min-w-0 flex-1 truncate", s.state === "idle" ? "text-mut2" : "text-fg")}>{s.title || "Untitled session"}</span>
+      <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project ?? s.place}</span>
+      <span className="hidden w-[110px] shrink-0 items-center gap-1.5 truncate text-[12px] text-mut2 @2xl:flex">
+        <AgentIcon agent={harnessAgent(s.harness)} size={12} className="text-mut" />{HARNESS_LABEL[s.harness]}
+      </span>
+      <span className="w-9 shrink-0 @max-md:w-auto" />
+      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.state === "waiting" ? "text-fg2" : "text-mut2")}>
+        {otherMeta(s, now)}
+      </span>
     </div>
   );
 }

@@ -13,7 +13,7 @@ import * as local from "./store/local";
  */
 
 export {
-  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature,
+  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature, repoOf,
   type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./store/shared";
 
@@ -42,6 +42,8 @@ export const getProject = via("getProject");
 export const createProject = via("createProject");
 export const updateProject = via("updateProject");
 export const deleteProject = via("deleteProject");
+export const setProjectRepo = via("setProjectRepo");
+export const mergeProject = via("mergeProject");
 
 /* ---------- tasks ---------- */
 export const listTasks = via("listTasks");
