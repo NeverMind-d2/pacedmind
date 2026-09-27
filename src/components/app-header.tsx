@@ -62,7 +62,15 @@ export function AppHeader({ email }: { email: string | null }) {
         <Link href="/today" aria-label="PacedMind — Today" className="app-titlebar__home">
           <BrandWordmark className="w-[112px]" />
         </Link>
-        {email && <AccountMenu email={email} />}
+        {email ? <AccountMenu email={email} /> : (
+          // No account (the desktop app with this computer's own data): the way to PacedMind Cloud.
+          <div className="app-titlebar__account">
+            <Link href="/login" title="Your tasks are on this computer only. Sign in to PacedMind Cloud to use them on your other computers too."
+              className="flex h-7 items-center rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
+              Sign in
+            </Link>
+          </div>
+        )}
       </div>
     </header>
   );

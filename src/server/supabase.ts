@@ -4,7 +4,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type Factor, type SupabaseClient, type User } from "@supabase/supabase-js";
-import { dataDir, revokeAllSessionTokens } from "./device";
+import { dataDir, deviceConfig, revokeAllSessionTokens, updateDevice } from "./device";
 import { clearApprovals } from "./approval-store";
 import { readSecureJson, removeFile, writeSecureJson } from "./secure-file";
 import { COOKIE_OPTIONS, supabaseConfig } from "./supabase-config";
@@ -57,6 +57,9 @@ function desktopClient(): SupabaseClient {
         revokeAllSessionTokens();
         clearApprovals();
       }
+      // However it starts (a password, an email link), "without an account" stops being this computer's
+      // choice, so the app asks again once the sign-in ends.
+      if (event === "SIGNED_IN" && deviceConfig().withoutAccount) updateDevice({ withoutAccount: false });
     });
   }
   return g.__pacedmindDesktop;
