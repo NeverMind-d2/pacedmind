@@ -1,5 +1,6 @@
 import "server-only";
 import * as repo from "./repo";
+import { answeredInTerminal, holdsPermission } from "./asks";
 import { knownAttention, noteSessionEvent } from "./attention";
 import { attentionOf, type AttentionKind } from "@/lib/dates";
 import { AGENT_LABEL, isLiveSession, type Session } from "@/lib/types";
@@ -84,20 +85,35 @@ function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind
  * a terminal still open on an older conversation of the session says nothing about it.
  */
 export async function recordSignal(o: { sessionId: string; hookedId: string; kind: HookKind; cli: string | null; payload: Record<string, unknown> }) {
+  const idle = o.kind === "notify" && o.payload.notification_type === "idle_prompt";
+  if (holdsPermission(o.sessionId) && (o.kind === "tool" || o.kind === "prompt" || o.kind === "stop" || idle)
+    && await hookSession(o.sessionId, o.hookedId, o.cli)) {
+    await answeredInTerminal(o.sessionId, o.kind === "tool" ? { name: o.payload.tool_name, input: o.payload.tool_input } : undefined);
+  }
   if (o.kind === "tool" || o.kind === "prompt") {
     const now = await attentionNow(o.sessionId);
     if (!now || (o.kind === "tool" && now !== "permission")) return;
   }
-  const s = await repo.getSession(o.sessionId);
-  if (!s || !isLiveSession(s)) return;
-  if (o.cli && s.cliSessionId && o.cli !== s.cliSessionId) return;
-  if (!(await sameTerminal(s, o.hookedId))) return;
+  const s = await hookSession(o.sessionId, o.hookedId, o.cli);
+  if (!s) return;
   const e = eventFor(o.kind, o.payload, await attentionNow(s.id), AGENT_LABEL[s.agent]);
   if (!e) return;
   const n = counts().get(s.id) ?? 0;
   if (n >= LIMIT) return;
   counts().set(s.id, n + 1);
   await repo.addSessionEvent(s.id, e.kind, e.text.slice(0, 2000));
+}
+
+/**
+ * The session a hook speaks for: the one its token works for now (`sessionId`), while it runs, when the hook was
+ * written for it or one it continues in the same terminal (`hookedId`) and runs in its current conversation (`cli`).
+ * Null for a terminal still open on an older conversation, or a session that ended.
+ */
+export async function hookSession(sessionId: string, hookedId: string, cli: string | null): Promise<Session | null> {
+  const s = await repo.getSession(sessionId);
+  if (!s || !isLiveSession(s)) return null;
+  if (cli && s.cliSessionId && cli !== s.cliSessionId) return null;
+  return (await sameTerminal(s, hookedId)) ? s : null;
 }
 
 /** How MCP clients name themselves, as people know them. */

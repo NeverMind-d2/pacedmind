@@ -102,7 +102,7 @@ const SETTING_TITLE: Record<Setting, string> = {
   ask: "Asks you at that computer first",
   auto: "Acts right away; anything in the agent's cloud still asks",
 };
-const MCP_TEXT = { connected: "Reports to PacedMind", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
+const MCP_TEXT = { connected: "Reports to PacedMind", old: "Reports to PacedMind", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
 
 function seen(iso: string | null, now: number): string {
   if (!iso) return "Never online";
@@ -557,7 +557,7 @@ function Tools({ agent, tools }: { agent: AgentId; tools: AgentTools | undefined
   const parts: [boolean, string][] = [
     [!!tools.cli, tools.cli ? `CLI ${tools.cli.version}` : "No CLI"],
     [!!tools.app, tools.app ? APP_LABEL[agent] : `No ${APP_LABEL[agent]}`],
-    ...(tools.app ? [[tools.mcp === "connected", MCP_TEXT[tools.mcp]] as [boolean, string]] : []),
+    ...(tools.app ? [[tools.mcp === "connected" || tools.mcp === "old", MCP_TEXT[tools.mcp]] as [boolean, string]] : []),
     ...(login ? [[tools.login.state === "in", login] as [boolean, string]] : []),
   ];
   return (

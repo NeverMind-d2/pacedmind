@@ -34,7 +34,7 @@ When a session starts, from a task, from **Sessions**, from a flow or at an agen
 The agent's first message names the task and the session:
 
 ```text
-PacedMind task DEV-22, session 3f2a9c1b: Start sessions from the app. Call the organizer MCP tool start_task with task DEV-22 and session 3f2a9c1b, then follow the instructions it returns.
+PacedMind task DEV-22, session 3f2a9c1b. Call the pacedmind MCP tool start_task with task DEV-22 and session 3f2a9c1b, then follow the instructions it returns.
 ```
 
 A cloud session can't call PacedMind's tools, so its first message carries the whole task instead: the key and title, the description, the **Done when** list, the sub-tasks as a checklist, and the instruction to work on a new branch named after the key, such as `agent/dev-22`, and to open a pull request when the work is ready for review.
@@ -57,8 +57,9 @@ The agent works in the task's folder as it normally does, in conversation with y
 It keeps you posted with `report_progress`, only when it matters:
 
 * its plan, once it has one, sent again as steps get done. While the session runs, the latest plan shows as **Plan** in the task's details and in **Sessions**, with the done steps ticked off and a count such as *2 of 5 done · 14:05*;
-* a problem that changes the scope or the risk (*Claude Code ran into a problem: …*);
-* a decision it needs from you (*Claude Code asks you: …*), which it also asks in its terminal. The session then waits for you, as [below](#when-the-agent-waits-for-you).
+* a problem that changes the scope or the risk (*Claude Code ran into a problem: …*).
+
+When it needs a decision from you before it can go on, it asks with `ask_user` and waits for your answer (*Claude Code asks you: …*). The session then waits for you, as [below](#when-the-agent-waits-for-you), and you answer in PacedMind. See [Answer while it works](#answer-while-it-works).
 
 It can attach screenshots as it goes, with `attach_image`. They show under **Images so far** in the task's details and in **Sessions**, and join its report when it hands the task back. PacedMind shows all these changes as they happen.
 
@@ -99,17 +100,25 @@ While a session runs, PacedMind hears when its agent stops to wait for you in it
 | Ended its turn and waits for your next message | *Claude Code is waiting for you in its terminal: “…”*, with its last message, shortened | *Waiting for you* | *waiting for you* | *DEV-22 is waiting for you* |
 | Asks for your permission, such as to run a command | *Claude Code asks for your permission in its terminal: …* | *Asks your permission* | *asks your permission* | *DEV-22 asks for your permission* |
 | Asks you something in its terminal | *Claude Code asks you something in its terminal: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
-| Asked you a question with `report_progress` | *Claude Code asks you: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
+| Asked you a question with `ask_user` or `report_progress` | *Claude Code asks you: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
 
 In the task list, hover over the words to read the whole line; on a phone, only the dot shows. In **Sessions**, the session stays under **Running**, with a navy dot like a finished one. The desktop app notifies once each time the agent starts waiting, with the task's title and the line above, and a click opens the session; the tray icon's tooltip counts these sessions with the finished ones. See [Notifications](/desktop-app#notifications).
 
-The session is back at work as soon as the agent is: when you answer in its terminal (*You answered in its terminal, and Claude Code went on*), when you allow what it asked (*You allowed it in its terminal, and Claude Code went on*), or when it calls PacedMind again (*Claude Code went on*).
+The session is back at work as soon as the agent is: when you answer in its terminal (*You answered in its terminal, and Claude Code went on*), when you answer its question in PacedMind (*You answered in PacedMind, and Claude Code went on: …*), when you allow what it asked (*You allowed it in its terminal, and Claude Code went on*), or when it calls PacedMind again (*Claude Code went on*).
 
 How PacedMind hears it depends on the agent:
 
 * **Claude Code in a terminal**: the hooks PacedMind installs for the session report when its turn ends, when it shows a permission prompt or a question, or a reminder that it's still waiting, when you send it a message, and, while it waits for your permission, when it runs the tool.
 * **Codex in a terminal**: the session's `notify` program reports when a turn ends. Codex doesn't report your messages or its permission prompts, so PacedMind hears it went on when it next calls PacedMind.
-* **Desktop apps and the cloud** have no such hooks. Only a question the agent sends with `report_progress` shows there.
+* **Desktop apps** have no such hooks: only the questions the agent asks with `ask_user` or `report_progress` show there. Sessions in **the cloud** can't reach PacedMind.
+
+## Answer while it works
+
+A question the agent asks with `ask_user` shows under the session's state line, in the task's details and in **Sessions**: *Claude Code asks you*, the question, and *waits until 14:35*, when PacedMind stops waiting for the answer, 30 minutes after the agent asked. Write your answer in the field marked *Your answer* and select **Send answer**, or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> or <kbd>⌘</kbd>+<kbd>Enter</kbd>.
+
+The agent gets the answer at once, or with its next call when it's between two: it waits in calls of 45 seconds and calls again until you answer. PacedMind records *You answered in PacedMind, and Claude Code went on:* and the start of your answer, and the session is back at work.
+
+Without an answer in time, the question goes away and the agent is told to hand the task back as blocked, with the question among its questions. Answer it then with **Answer its questions**. See [Answer the agent's questions](/agents/review#answer-the-agents-questions).
 
 ## When the terminal closes
 
@@ -139,12 +148,13 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Plan: 2 of 5 steps done* | The agent sent its plan with `report_progress`. |
 | *Claude Code:* and a message | The agent sent an update with `report_progress`. |
 | *Claude Code ran into a problem:* and a message | The agent reported a problem with `report_progress`. |
-| *Claude Code asks you:* and a question | The agent asked you something with `report_progress`. |
+| *Claude Code asks you:* and a question | The agent asked you something with `ask_user` or `report_progress`. |
 | *Claude Code is waiting for you in its terminal*, with its last message | The agent's turn ended in its terminal. |
 | *Claude Code asks for your permission in its terminal:* and what it asks | Claude Code showed a permission prompt. |
 | *Claude Code asks you something in its terminal:* and what it asks | Claude Code asked you a question in its terminal. |
 | *You answered in its terminal, and Claude Code went on* | You sent Claude Code a message while it waited for you. |
 | *You allowed it in its terminal, and Claude Code went on* | Claude Code ran what it asked your permission for. |
+| *You answered in PacedMind, and Claude Code went on:* and the start of your answer | You answered a question the agent asked with `ask_user`. |
 | *Claude Code went on* | The agent called PacedMind while it waited for you. |
 | *Claude marked it finished* (the task's details show the report's summary instead) | The agent called `finish_task`. |
 | *You marked it finished* | You selected **Mark finished**. |

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { claudeConfig, claudeFolderEntry } from "./claude-trust";
-import type { AgentExtras, AgentId, FolderExtras } from "@/lib/types";
+import { MCP_NAME, OLD_MCP_NAME, type AgentExtras, type AgentId, type FolderExtras } from "@/lib/types";
 
 /*
  * What Claude Code and Codex give their sessions besides PacedMind, read from their own config files on this computer:
@@ -11,7 +11,7 @@ import type { AgentExtras, AgentId, FolderExtras } from "@/lib/types";
  * the agents in devices.ts) and what a project's folder adds (folderExtras, Settings). It never runs them: `claude
  * mcp list` starts every server it checks, and a folder's servers run code from that folder. Only names leave here,
  * since a server's command, address, headers and environment can hold keys; a name that doesn't look like one is left
- * out. PacedMind's own server (organizer) isn't listed: every session has it.
+ * out. PacedMind's own server (pacedmind, before that organizer) isn't listed: every session has it.
  *
  * Also where the launcher gets the definitions of the servers a project lets its sessions have (serversFor), read
  * from the same files when a session starts.
@@ -27,7 +27,7 @@ const codexHome = () => process.env.CODEX_HOME || path.join(home, ".codex");
 
 /** A name as the config files have it, and as the cloud keeps it: plain characters, and short. */
 const NAME = /^[\w.@:+-]{1,48}$/;
-export const isServerName = (name: string) => NAME.test(name) && name !== "organizer";
+export const isServerName = (name: string) => NAME.test(name) && name !== MCP_NAME && name !== OLD_MCP_NAME;
 
 const names = (xs: Iterable<string>, max = 12) => [...new Set([...xs].filter(isServerName))].sort().slice(0, max);
 
@@ -184,5 +184,5 @@ export function claudeServers(folder: string, wanted: string[]): Json {
 export function codexServersOff(folder: string, wanted: string[]): string[] {
   const keep = new Set(wanted);
   const all = [...tomlServers(readText(path.join(codexHome(), "config.toml"))), ...tomlServers(readText(path.join(folder, ".codex", "config.toml")))];
-  return [...new Set(all)].filter((n) => /^[A-Za-z0-9_-]{1,48}$/.test(n) && n !== "organizer" && !keep.has(n));
+  return [...new Set(all)].filter((n) => /^[A-Za-z0-9_-]{1,48}$/.test(n) && n !== MCP_NAME && n !== OLD_MCP_NAME && !keep.has(n));
 }

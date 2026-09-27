@@ -5,7 +5,7 @@ description: Review and tidy the user's PacedMind planner - triage the Inbox, de
 
 # Reviews in PacedMind
 
-A review is about decisions, not just lists. Show items in small batches, each with a suggested decision. Apply what the user confirms, then report what changed. The tools come from the PacedMind MCP server, `organizer` (in Claude Code: `mcp__organizer__<tool>`).
+A review is about decisions, not just lists. Show items in small batches, each with a suggested decision. Apply what the user confirms, then report what changed. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
 
 ## Triage the Inbox
 

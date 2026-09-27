@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS attachments (
   file TEXT NOT NULL, mime TEXT NOT NULL, bytes INTEGER NOT NULL, width INTEGER, height INTEGER,
   caption TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS session_asks (
+  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, kind TEXT NOT NULL, tool TEXT,
+  text TEXT NOT NULL, asked_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', answer TEXT,
+  answered_at TEXT
+);
+CREATE INDEX IF NOT EXISTS session_asks_session ON session_asks(session_id);
 CREATE INDEX IF NOT EXISTS reports_task ON reports(task_id);
 CREATE INDEX IF NOT EXISTS attachments_task ON attachments(task_id);
 CREATE TABLE IF NOT EXISTS edges (
@@ -241,7 +247,7 @@ export function resetLocal(mode: "sample" | "empty") {
   const projects = (conn.prepare("SELECT id FROM projects").all() as Row[]).map((r) => String(r.id));
   conn.exec("BEGIN");
   try {
-    for (const t of ["attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
+    for (const t of ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
       conn.exec(`DELETE FROM ${t}`);
     }
     conn.exec("DELETE FROM sqlite_sequence");

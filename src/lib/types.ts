@@ -15,7 +15,16 @@ export type SessionStatus = "starting" | "running" | "finished" | "done" | "clos
  */
 export type Surface = "terminal" | "desktop" | "cloud";
 /** Whether PacedMind's MCP server is set up for sessions it doesn't configure itself (desktop apps). */
-export type McpLink = "connected" | "elsewhere" | "missing";
+/**
+ * Whether an agent's own config reaches this PacedMind: `connected` as "pacedmind"; `old` under its old name,
+ * "organizer" (it works, and Connect renames it); `elsewhere` for another PacedMind; `missing`.
+ */
+export type McpLink = "connected" | "old" | "elsewhere" | "missing";
+
+/** The MCP server's name in the agents' configs: its tools are mcp__pacedmind__<tool>. */
+export const MCP_NAME = "pacedmind";
+/** Its name before, which configs set up earlier still have (Connect replaces it). */
+export const OLD_MCP_NAME = "organizer";
 /** How an agent handed a task back: all of it ready, part of it, or stuck until the user decides something. */
 export type ReportOutcome = "done" | "partial" | "blocked";
 /** An agent's answer to one "Done when" item. */
@@ -240,6 +249,8 @@ export interface DeviceSettings {
   remoteStart: RemoteStart;
   /** Whether PacedMind answers Claude Code's and Codex's question whether you trust a session's folder, before it starts. */
   trustFolders: boolean;
+  /** Whether this computer's sessions wait for answers from PacedMind on your other devices too (asks.ts). */
+  remoteAnswers: boolean;
   /** This computer's id in the account's list, once registered. */
   deviceId: string | null;
   /** Whether the app's secrets on disk are encrypted with a key from the OS keychain. */
@@ -416,6 +427,59 @@ export interface LaunchRequest {
   /** The session it started, resumed or sent back, once it did. */
   sessionId: string | null;
   note: string | null;
+}
+
+/** What a running session's agent waits for you to answer: a permission for a tool, or a question (asks.ts). */
+export type AskKind = "permission" | "question";
+export type AskStatus = "pending" | "answered" | "expired" | "withdrawn";
+
+/**
+ * Something a running session's agent waits for your answer to, held for a few minutes by the computer it runs on:
+ * a tool it wants permission for (Claude Code's PermissionRequest hook) or a question (the ask_user tool). Answered
+ * once, from that computer, or from elsewhere when that computer takes answers from elsewhere (`remoteOk`).
+ */
+export interface SessionAsk {
+  id: string;
+  sessionId: string;
+  /** The computer it runs on; null for this computer's own data without an account. */
+  deviceId: string | null;
+  kind: AskKind;
+  /** The tool it wants to use, as the agent names it (Bash, Edit…); null for a question. */
+  tool: string | null;
+  /** The question, or what the tool would do (the command, the file). */
+  text: string;
+  /** Whether its computer takes answers from elsewhere, as that computer's setting said when it asked. */
+  remoteOk: boolean;
+  askedAt: string;
+  expiresAt: string;
+  status: AskStatus;
+  /** "allow" or "deny" for a permission; the answer for a question. */
+  answer: string | null;
+  answeredAt: string | null;
+  /** Whether the answer came from the session's own computer or from elsewhere (the web app, another computer). */
+  answeredVia: "computer" | "elsewhere" | null;
+}
+
+/** A pending ask as `/api/state` reports it, for the answer card. `here`: this page runs on the session's computer. */
+export interface AskView {
+  id: string;
+  sessionId: string;
+  kind: AskKind;
+  tool: string | null;
+  text: string;
+  remoteOk: boolean;
+  here: boolean;
+  /** When the agent stops waiting (ms since the epoch). */
+  expiresAt: number;
+}
+
+/** A browser's push subscription (PushSubscription.toJSON), as the account keeps it for notifications (push.ts). */
+export interface PushSubscriptionInput {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  /** Which browser or phone it is, in a few words, for Settings. */
+  label: string;
 }
 
 /** A request of the last half hour as `/api/state` reports it, for "Waiting for X", "Started on X", "Refused by X". */

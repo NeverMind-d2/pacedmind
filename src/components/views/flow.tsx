@@ -1514,7 +1514,7 @@ function Inspector({
   const { surface, device } = run;
   const mcp: McpLink | null = device?.checked ? device.agents[task.agent].mcp : null;
   // Sessions that can't tell PacedMind they're done: cloud ones, and the desktop app until it has PacedMind's MCP server.
-  const silent = (s: Surface) => s === "cloud" || (s === "desktop" && mcp !== null && mcp !== "connected");
+  const silent = (s: Surface) => s === "cloud" || (s === "desktop" && mcp !== null && mcp !== "connected" && mcp !== "old");
   const canFinish = !!session && active && silent(session.surface);
   // Another computer's task (any, in the web app) starts there, through the "Run on a computer" sheet.
   const away = !desktop || (!!device && !device.here && devices.some((d) => d.here));

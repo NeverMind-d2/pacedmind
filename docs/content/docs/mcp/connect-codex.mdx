@@ -7,7 +7,7 @@ Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`,
 
 ## With Connect in Settings
 
-In **Settings → Devices**, select **Connect** next to **Codex** and confirm. PacedMind adds the section below to `config.toml`, in place of an earlier `organizer` section, and keeps the previous file as `config.toml.pacedmind-backup`. The Codex row then says *Reports to PacedMind*.
+In **Settings → Connect your agents**, select **Connect** next to **Codex** and confirm. PacedMind adds the section below to `config.toml`, in place of an earlier `pacedmind` section or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup` (*Connected Codex, its app included. New Codex sessions can use PacedMind.*). **Computers** then shows Codex as *Connected*.
 
 ## By hand
 
@@ -15,27 +15,27 @@ In **Settings → Devices**, select **Connect** next to **Codex** and confirm. P
 
    ```toml
    # ~/.codex/config.toml
-   [mcp_servers.organizer]
+   [mcp_servers.pacedmind]
    url = "http://127.0.0.1:4319/api/mcp"
    http_headers = { Authorization = "Bearer org_..." }
    ```
 
-2. Open `config.toml` in the `.codex` folder of your user profile, such as `C:\Users\Anna\.codex\config.toml` on Windows or `/Users/anna/.codex/config.toml` on macOS, and paste the section at its end, in place of an earlier `[mcp_servers.organizer]` section. Create the file if it doesn't exist.
+2. Open `config.toml` in the `.codex` folder of your user profile, such as `C:\Users\Anna\.codex\config.toml` on Windows or `/Users/anna/.codex/config.toml` on macOS, and paste the section at its end, in place of an earlier `[mcp_servers.pacedmind]` or `[mcp_servers.organizer]` section. Create the file if it doesn't exist.
 
-Keep the name `organizer`: PacedMind's skills and first messages refer to the server by that name.
+Keep the name `pacedmind`: PacedMind's skills and first messages refer to the server by that name. A section under the earlier name, `organizer`, still works, and **Computers** shows it as *Old name*; **Connect** replaces it.
 
 The section holds the token itself, because the Codex app has no environment variable to read it from. Keep `config.toml` private. An older section with `bearer_token_env_var = "ORGANIZER_TOKEN"` works only where that variable is set, which isn't the case in the Codex app: replace it with the one above.
 
 ## Check the connection
 
-Start Codex, in the app or a terminal, and ask something that needs the planner, such as *List my overdue tasks in PacedMind.* Codex should call the `organizer` tools, such as `get_overview` or `list_tasks`. If it can't, see [Troubleshooting](/troubleshooting#an-agent-cant-reach-pacedmind).
+Start Codex, in the app or a terminal, and ask something that needs the planner, such as *List my overdue tasks in PacedMind.* Codex should call the `pacedmind` tools, such as `get_overview` or `list_tasks`. If it can't, see [Troubleshooting](/troubleshooting#an-agent-cant-reach-pacedmind).
 
 With the [agent skills](/skills) installed in `~/.codex/skills`, Codex also knows how to plan, triage and run project work with the tools.
 
 ## After regenerating the token
 
-A new token in **Settings → MCP server** disconnects Codex until its configuration has the new one: select **Connect** in **Settings → Devices** again, or copy and paste the section again. Sessions PacedMind starts in a terminal pick up the new token on their own.
+A new token in **Settings → MCP server** disconnects Codex until its configuration has the new one: select **Connect** in **Settings → Connect your agents** again, or copy and paste the section again. Sessions PacedMind starts in a terminal pick up the new token on their own.
 
 ## Remove the connection
 
-Delete the `[mcp_servers.organizer]` section from `config.toml`. An `ORGANIZER_TOKEN` variable set up for the older section isn't needed either: remove it from your user's environment variables on Windows, or its line in `~/.zshrc` on macOS.
+Delete the `[mcp_servers.pacedmind]` section, or `[mcp_servers.organizer]` under the earlier name, from `config.toml`. An `ORGANIZER_TOKEN` variable set up for the older section isn't needed either: remove it from your user's environment variables on Windows, or its line in `~/.zshrc` on macOS.

@@ -7,6 +7,7 @@ import {
   toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
+import { AskCard } from "./ask-card";
 import { RequestStatus, useComputer } from "./request-status";
 import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
@@ -183,6 +184,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               <span className="min-w-0 flex-1">{head.text}</span>
               {inCard && pager}
             </div>
+            {active && <AskCard sessionId={session.id} agent={session.agent} />}
             {inCard ? <SessionReport key={report.id} report={report} criteria={offList} working={!!active} />
               : session.note && session.status !== "failed" && <p className="text-[12.5px] leading-relaxed text-mut">“{session.note}”</p>}
             {plan && <SessionPlan plan={plan} />}

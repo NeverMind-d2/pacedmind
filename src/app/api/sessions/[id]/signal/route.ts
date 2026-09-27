@@ -1,9 +1,13 @@
 import { authorizeHook } from "@/server/auth";
+import { holdsPermission } from "@/server/asks";
 import { HOOK_KINDS, recordSignal, type HookKind } from "@/server/signals";
 
 const SESSION_ID = /^[0-9a-f]{16}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-/** What these hooks send is small; a longer body is left unread, and so is what comes after each message and tool call. */
+/**
+ * What these hooks send is small; a longer body is left unread, and so is what comes after each message and tool call,
+ * except a tool call while PacedMind holds a permission for the session: it may be the one you allowed in the terminal.
+ */
 const MAX_BODY = 64 * 1024;
 
 /**
@@ -22,7 +26,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const who = await authorizeHook(req);
   if (!who || who.kind !== "session") return new Response(null, { status: 204 });
   let payload: Record<string, unknown> = {};
-  if (kind === "stop" || kind === "notify" || kind === "turn") {
+  if (kind === "stop" || kind === "notify" || kind === "turn" || (kind === "tool" && holdsPermission(who.sessionId))) {
     const text = await req.text().catch(() => "");
     if (text.length <= MAX_BODY) {
       try {

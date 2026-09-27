@@ -5,9 +5,9 @@ description: How to work on a task that PacedMind (Organizer) handed to you as a
 
 # Working on a PacedMind task
 
-PacedMind started this session so that you do one task and then hand it back for the user's review. The user reviews it from your report in PacedMind, often without opening your terminal, so the report has to stand on its own. The tools come from the PacedMind MCP server, `organizer` (in Claude Code: `mcp__organizer__<tool>`).
+PacedMind started this session so that you do one task and then hand it back for the user's review. The user reviews it from your report in PacedMind, often without opening your terminal, so the report has to stand on its own. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
 
-1. **Pick it up.** Call `start_task` with the task key and the session id from your first message, and with `environment`: the model you run as and the MCP servers you have tools from besides `organizer` (the part between `mcp__` and the next `__` in their names), so the user sees what this session runs with. It returns:
+1. **Pick it up.** Call `start_task` with the task key and the session id from your first message, and with `environment`: the model you run as and the MCP servers you have tools from besides `pacedmind` (the part between `mcp__` and the next `__` in their names), so the user sees what this session runs with. It returns:
    - what the user wrote back after your last hand-back, if they sent it back: the changes they asked for, or their answers to your questions. It comes first;
    - the task: its description, **Done when** list, sub-tasks and folder;
    - the last report, if the task was handed back before;
@@ -22,7 +22,7 @@ PacedMind started this session so that you do one task and then hand it back for
 3. **Keep the user posted** with `report_progress`, only at the moments that matter. PacedMind shows these on the task and in **Sessions**, and notifies the user about questions:
    - **Your plan**, once you have one: `plan` with every step as a short outcome, in order. Send the whole plan again when a step is done (`done: true`) or the plan changes. The plan is yours; the task's sub-tasks stay the user's.
    - **A problem that changes the scope or the risk**, such as a failing dependency, a design that won't work or a much bigger change than expected: `kind: "issue"` with a sentence on what and why.
-   - **A decision you need**: `kind: "question"` with the question. Ask it in the conversation too, then wait for the answer there.
+   - **A decision you need** before you can go on: ask with `ask_user`, not `report_progress`. PacedMind shows the question on the task and notifies the user on their devices, and they answer in PacedMind. A call waits up to 45 seconds; when it says there's no answer yet, call `ask_user` again with the `ask` it returned (not the question again), as long as it takes, up to 30 minutes. Meanwhile you can go on with anything that doesn't depend on the answer.
 
    Don't report routine steps ("reading files", "running tests"). A handful of updates per session is plenty.
 4. **Capture what can be seen.** When your work changes something visible, such as a page, a screen, a document or a chart, take screenshots of the result and attach them. See [Screenshots](#screenshots).
@@ -59,4 +59,4 @@ Show the result the way the user will see it: the page or screen that changed, a
 
 - **Don't mark your own task done.** The user does that after reviewing it, and it may start the next agent in the flow.
 - **Don't change other tasks.** Leave their dates, priorities and projects alone, and don't delete anything in PacedMind. Those decisions belong to the user.
-- **Still hand back when you're stuck.** For a decision you can wait for, ask with `report_progress` (`kind: "question"`) and wait. If you can't go on at all, such as without access you don't have, call `finish_task` with outcome `blocked`, a summary of what's blocking, and the decision you need in `questions`. That way the user sees it instead of a session that looks busy forever.
+- **Still hand back when you're stuck.** For a decision you can wait for, ask with `ask_user` and wait. If you can't go on at all, such as without access you don't have, call `finish_task` with outcome `blocked`, a summary of what's blocking, and the decision you need in `questions`. That way the user sees it instead of a session that looks busy forever.

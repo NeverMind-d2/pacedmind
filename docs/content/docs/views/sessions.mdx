@@ -70,6 +70,8 @@ The details panel shows the project and the key, **Open task**, the task's title
 * *Closed before the agent finished*;
 * *Couldn't start:* and the reason.
 
+A question the agent asks with `ask_user` shows under that line, with a field for your answer and **Send answer**. See [Answer while it works](/agents/lifecycle#answer-while-it-works).
+
 Under it comes the agent's report, with the same parts as in the [task's details](/tasks/task-details#the-agents-report): the summary, the **Done when** answers with a count such as *2 of 3 met*, screenshots, questions, **How to check it**, **Details**, links and follow-ups, and what you asked to change. Here the **Done when** part lists every item of the report with the agent's answer and note. Click a screenshot to open the [image viewer](/tasks/task-details#screenshots). A session without a report shows the agent's note in quotes, and screenshots the agent attaches while it works show under **Images so far**. While the session runs, **Plan** shows the latest plan the agent sent with `report_progress`: its steps in order, the done ones ticked off, with a count and the time, such as *2 of 5 done · 14:05*.
 
 A session handed back more than once, after **Request changes** or after it was resumed, has a report for each hand-back, newest first. The arrows next to the state line (**Older report**, **Newer report**) page through them, with the position between them, such as *Report 2 of 2*.

@@ -110,7 +110,8 @@ The cloud can't reach PacedMind on your computer. Follow a Claude Code on the we
 * **The token changed.** After **Regenerate**, select **Connect** for Claude Code and Codex in **Settings → Devices** again. See [MCP server](/mcp#the-access-token).
 * **Wrong port.** The desktop app uses 4319; a development copy started with `npm run dev` uses 4320. **Settings → Devices** says *Reports to another PacedMind* when an agent is set up for another copy: select **Connect** in the copy it should report to.
 * **Claude Code: the tools are missing in one project.** The server was registered for another project folder. Register it with `--scope user`. See [Connect Claude Code](/mcp/connect-claude-code).
-* **Codex app: the tools don't start.** The `organizer` section in `~/.codex/config.toml` reads the token from `ORGANIZER_TOKEN`, which the app doesn't have. Select **Connect** in **Settings → Devices** to write the token into the section. See [Connect Codex](/mcp/connect-codex).
+* **The tools are named `mcp__organizer__…`, or the skills mention the old name.** The agent is connected under PacedMind's earlier name, which still works. Select **Connect** in **Settings → Connect your agents** to rename the entry to `pacedmind`.
+* **Codex app: the tools don't start.** An older `organizer` section in `~/.codex/config.toml` reads the token from `ORGANIZER_TOKEN`, which the app doesn't have. Select **Connect** in **Settings → Devices** to write the token into the section. See [Connect Codex](/mcp/connect-codex).
 
 Requests without the right token get `401 Unauthorized`.
 

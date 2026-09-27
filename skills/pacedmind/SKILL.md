@@ -5,7 +5,7 @@ description: Manage the user's PacedMind planner (also called Organizer) through
 
 # PacedMind
 
-PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `organizer`; in Claude Code its tools appear as `mcp__organizer__<tool>`. If those tools aren't available in this session, tell the user and point them to PacedMind → Settings → Connect your agents, which shows how to connect Claude Code and Codex. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
+PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `pacedmind`; in Claude Code its tools appear as `mcp__pacedmind__<tool>`. A setup from before names it `organizer` (`mcp__organizer__<tool>`): the same tools, until the user connects again in PacedMind. If neither is available in this session, tell the user and point them to PacedMind → Settings → Connect your agents, which shows how to connect Claude Code and Codex. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
 
 ## How the planner is organized
 

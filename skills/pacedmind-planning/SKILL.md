@@ -5,7 +5,7 @@ description: Plan the user's day or week in PacedMind - review the agenda, fit t
 
 # Planning with PacedMind
 
-Planning works best as a short conversation. Look at the real schedule, propose a plan, and change PacedMind only for what the user agrees to or clearly asked for. The tools come from the PacedMind MCP server, `organizer` (in Claude Code: `mcp__organizer__<tool>`).
+Planning works best as a short conversation. Look at the real schedule, propose a plan, and change PacedMind only for what the user agrees to or clearly asked for. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
 
 ## Plan a day
 

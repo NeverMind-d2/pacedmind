@@ -53,9 +53,10 @@ const REMOTE_HINT: Record<RemoteStart, string> = {
   auto: "Sessions asked for from the web app or another computer start there right away (asking takes a fresh two-factor code).",
 };
 
-const MCP_TEXT = { connected: "Connected", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
+const MCP_TEXT = { connected: "Connected", old: "Old name", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
 const MCP_HINT = {
   connected: "Sessions in the agent's desktop app, and those you start yourself, report back to PacedMind.",
+  old: "Set up under PacedMind's old MCP name, organizer: it works, and Connect sets it up as pacedmind.",
   elsewhere: "Set up for another PacedMind (a different address or token), so its desktop app's sessions report there.",
   missing: "Sessions in the agent's desktop app can't report back until it's connected, in the PacedMind desktop app on that computer.",
 } as const;
@@ -88,7 +89,7 @@ function facts(agent: AgentId, t: AgentTools): Record<"cli" | "app" | "cloud" | 
         ? { main: "CLI signed out", sub: cloud, on: false, title: `Sign the ${AGENT_LABEL[agent]} CLI in there to send sessions to ${cloud}` }
         : { main: t.login.state === "in" ? "Ready" : "Available", sub: cloud, on: true,
           title: t.login.state === "in" ? undefined : `Starts from the ${AGENT_LABEL[agent]} CLI; it didn't say whether it's signed in` },
-    mcp: { main: MCP_TEXT[t.mcp], on: t.mcp === "connected", title: MCP_HINT[t.mcp] },
+    mcp: { main: MCP_TEXT[t.mcp], on: t.mcp === "connected" || t.mcp === "old", title: MCP_HINT[t.mcp] },
     login: t.login.state === "in"
       ? { main: "Signed in", sub: [methodName(t.login.method), planName(t.login.plan)].filter(Boolean).join(" · ") || null, on: true }
       : t.login.state === "out"

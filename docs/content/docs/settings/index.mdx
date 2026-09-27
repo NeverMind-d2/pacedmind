@@ -25,8 +25,8 @@ One block per computer: its name and system, such as *Windows · this computer*,
 
 **Connect** appears for an agent that isn't connected to this PacedMind. It asks first, then:
 
-* for **Claude Code**, adds PacedMind's MCP server to Claude Code for all projects, where the Claude app's Code sessions find it too: the same as running the command under **Connect your agents**;
-* for **Codex**, adds the `[mcp_servers.organizer]` section to `~/.codex/config.toml`, which the Codex app and the Codex command-line tool share, and keeps the previous file as `config.toml.pacedmind-backup`.
+* for **Claude Code**, adds PacedMind's MCP server to Claude Code for all projects as `pacedmind`, in place of an earlier one or one under PacedMind's earlier name, `organizer`, where the Claude app's Code sessions find it too: the same as running the command under **Connect your agents**;
+* for **Codex**, adds the `[mcp_servers.pacedmind]` section to `~/.codex/config.toml`, which the Codex app and the Codex command-line tool share, in place of an earlier one or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup`.
 
 The message *Claude Code reports to PacedMind now* confirms it. Use **Connect** from the copy of PacedMind the agents should report to, normally the installed app.
 

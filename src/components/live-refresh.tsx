@@ -24,7 +24,7 @@ export function LiveRefresh({ every = 4000 }: { every?: number }) {
       busy = true;
       try {
         const r = await fetch("/api/state", { cache: "no-store" });
-        const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown };
+        const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown; asks?: unknown };
         publishLaunchState(state);
         if (last !== null && state.version !== last) router.refresh();
         last = state.version;

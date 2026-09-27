@@ -10,16 +10,17 @@ import {
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
   deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, repoOf, snapshotOf, strings,
-  type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
+  type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
-  type AgentId, type AgentTools, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
+  type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
   type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
-  type Subtask, type Surface, type Task,
+  type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
 
 /*
@@ -841,7 +842,7 @@ function toolsOf(v: unknown): AgentTools {
   const t = v as Row;
   const cli = t.cli && typeof t.cli === "object" && typeof (t.cli as Row).version === "string" ? { version: String((t.cli as Row).version) } : null;
   const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
-  const mcp = t.mcp === "connected" || t.mcp === "elsewhere" ? t.mcp : "missing";
+  const mcp = t.mcp === "connected" || t.mcp === "old" || t.mcp === "elsewhere" ? t.mcp : "missing";
   const extras = extrasOf(t.extras);
   return { cli, app, mcp, login: loginOf(t.login), ...(extras ? { extras } : {}) };
 }
@@ -999,6 +1000,98 @@ export async function settleLaunchRequest(
   check(await db.from("launch_requests").update({
     status, decided_at: new Date().toISOString(), session_id: extra.sessionId ?? null, note: extra.note?.slice(0, 500) ?? null,
   }).eq("id", id).eq("status", "pending"));
+}
+
+/* ---------- what a running session waits for you to answer (asks.ts) ---------- */
+
+const ASK_COLS = "id, session_id, device_id, kind, tool, text, remote_ok, asked_at, expires_at, status, answer, answered_at, answered_via";
+
+const toAsk = (r: Row): SessionAsk => ({
+  id: String(r.id), sessionId: String(r.session_id), deviceId: s(r.device_id), kind: r.kind === "permission" ? "permission" : "question",
+  tool: s(r.tool), text: String(r.text), remoteOk: r.remote_ok === true, askedAt: String(r.asked_at), expiresAt: String(r.expires_at),
+  status: String(r.status) as AskStatus, answer: s(r.answer), answeredAt: s(r.answered_at),
+  answeredVia: r.answered_via === "computer" || r.answered_via === "elsewhere" ? r.answered_via : null,
+});
+
+/** Asks for this computer's own session (the database takes it only from the session's computer). */
+export async function createAsk(input: AskInput): Promise<SessionAsk> {
+  const db = await accountDb();
+  const r = one(await db.from("session_asks").insert({
+    session_id: input.sessionId, device_id: input.deviceId, kind: input.kind, tool: input.tool, text: input.text,
+    remote_ok: input.remoteOk, expires_at: input.expiresAt,
+  }).select(ASK_COLS).single());
+  return toAsk(r!);
+}
+
+export async function getAsk(id: string): Promise<SessionAsk | null> {
+  if (!isUuid(id)) return null;
+  const db = await accountDb();
+  const r = one(await db.from("session_asks").select(ASK_COLS).eq("id", id).maybeSingle());
+  return r ? toAsk(r) : null;
+}
+
+export async function listAsks(filter: { sessionIds?: string[]; status?: AskStatus[] } = {}): Promise<SessionAsk[]> {
+  const db = await accountDb();
+  if (filter.sessionIds && !filter.sessionIds.length) return [];
+  const out: SessionAsk[] = [];
+  for (const ids of filter.sessionIds ? chunks(filter.sessionIds) : [null]) {
+    let q = db.from("session_asks").select(ASK_COLS).order("asked_at", { ascending: false }).limit(200);
+    if (ids) q = q.in("session_id", ids);
+    if (filter.status) q = q.in("status", filter.status);
+    out.push(...many(await q).map(toAsk));
+  }
+  return out;
+}
+
+/**
+ * Answers an ask. The database takes it once, before the agent stops waiting: from the session's computer, or from
+ * elsewhere with a two-factor code from the last five minutes.
+ */
+export async function answerAsk(id: string, answer: string): Promise<SessionAsk> {
+  const db = await accountDb();
+  const r = one(await db.from("session_asks").update({ status: "answered", answer }).eq("id", id).select(ASK_COLS).single());
+  return toAsk(r!);
+}
+
+/** The computer stopped waiting for an answer, or took the question back. Only a pending one changes. */
+export async function settleAsk(id: string, status: "expired" | "withdrawn") {
+  const db = await accountDb();
+  check(await db.from("session_asks").update({ status }).eq("id", id).eq("status", "pending"));
+}
+
+/* ---------- web push (push.ts) ---------- */
+
+/** The account's VAPID key pair, or null before a browser first asked for notifications. */
+export async function pushKeys(): Promise<{ publicKey: string; privateKey: string } | null> {
+  const db = await accountDb();
+  const r = one(await db.from("push_keys").select("public_key, private_key").maybeSingle());
+  return r ? { publicKey: String(r.public_key), privateKey: String(r.private_key) } : null;
+}
+
+/** Keeps the account's key pair, unless another device made one first (then that one counts). */
+export async function savePushKeys(keys: { publicKey: string; privateKey: string }) {
+  const db = await accountDb();
+  const { error } = await db.from("push_keys").insert({ public_key: keys.publicKey, private_key: keys.privateKey });
+  if (error && error.code !== "23505") throw new Error(error.message);
+}
+
+export async function listPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+  const db = await accountDb();
+  return many(await db.from("push_subscriptions").select("endpoint, p256dh, auth, label, created_at").order("created_at")).map((r) => ({
+    endpoint: String(r.endpoint), p256dh: String(r.p256dh), auth: String(r.auth), label: String(r.label), createdAt: String(r.created_at),
+  }));
+}
+
+/** Adds a browser; one that's there already is replaced (its keys change when it subscribes again). */
+export async function addPushSubscription(sub: PushSubscriptionInput) {
+  const db = await accountDb();
+  check(await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint));
+  check(await db.from("push_subscriptions").insert({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth, label: sub.label }));
+}
+
+export async function removePushSubscription(endpoint: string) {
+  const db = await accountDb();
+  check(await db.from("push_subscriptions").delete().eq("endpoint", endpoint));
 }
 
 /* ---------- live refresh ---------- */

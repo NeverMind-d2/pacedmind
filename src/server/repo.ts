@@ -1,5 +1,6 @@
 import "server-only";
 import { noteSessionEvent } from "./attention";
+import { isAttention } from "@/lib/dates";
 import { confirmedFlow, flowArmed, reconfirmFlow } from "./device";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
@@ -14,7 +15,7 @@ import * as local from "./store/local";
 
 export {
   CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature, repoOf,
-  type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./store/shared";
 
 type Store = typeof cloud;
@@ -75,6 +76,8 @@ const addEvent = via("addSessionEvent");
 export async function addSessionEvent(sessionId: string, kind: string, text = "") {
   await addEvent(sessionId, kind, text);
   noteSessionEvent(sessionId, kind);
+  // The moments a session needs you reach your other devices too (push.ts, which uses this module: loaded when needed).
+  if (isAttention(kind) || kind === "finished") void import("./push").then((m) => m.pushEvent(sessionId, kind, text)).catch(() => {});
 }
 export const sessionEvents = via("sessionEvents");
 export const sessionEventsFor = via("sessionEventsFor");
@@ -139,6 +142,18 @@ export const updateDeviceRow = via("updateDeviceRow");
 export const listLaunchRequests = via("listLaunchRequests");
 export const createLaunchRequest = via("createLaunchRequest");
 export const settleLaunchRequest = via("settleLaunchRequest");
+
+/* ---------- what a running session waits for you to answer (asks.ts), and web push (push.ts) ---------- */
+export const createAsk = via("createAsk");
+export const getAsk = via("getAsk");
+export const listAsks = via("listAsks");
+export const answerAsk = via("answerAsk");
+export const settleAsk = via("settleAsk");
+export const pushKeys = via("pushKeys");
+export const savePushKeys = via("savePushKeys");
+export const listPushSubscriptions = via("listPushSubscriptions");
+export const addPushSubscription = via("addPushSubscription");
+export const removePushSubscription = via("removePushSubscription");
 
 /* ---------- live refresh ---------- */
 export const stateVersion = via("stateVersion");

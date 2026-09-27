@@ -12,6 +12,7 @@ const DESKTOP_OPEN = [
   /^\/api\/mcp\/?$/, // agents, with an MCP token (src/server/auth.ts)
   /^\/api\/sessions\/[0-9a-f]{16}\/ended$/, // a session's SessionEnd hook, with that session's token
   /^\/api\/sessions\/[0-9a-f]{16}\/signal$/, // the hooks that say it waits for you or went on, with that session's token
+  /^\/api\/sessions\/[0-9a-f]{16}\/permission$/, // Claude Code's PermissionRequest hook, with that session's token
   /^\/api\/health$/, // "is the server up", for the desktop app starting it; no data
   /^\/auth\/callback$/, // email links, which open in any browser; only this server can finish them (PKCE)
   /^\/auth\/done$/,
@@ -130,6 +131,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything but build output and static files.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/).*)"],
+  // Everything but build output and static files (the service worker and the manifest hold nothing private, and a
+  // browser fetches the manifest without cookies).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/|sw\\.js$|manifest\\.webmanifest$).*)"],
 };

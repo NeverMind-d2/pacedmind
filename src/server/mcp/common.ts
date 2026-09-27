@@ -57,8 +57,9 @@ export function tool<S extends z.ZodObject>(
         if (ownerOnly && who.kind === "session") {
           fail(`Sessions that PacedMind started can't use ${name}. Ask the user to do it in PacedMind.`);
         }
-        // A session's agent calling PacedMind is at work, whatever it waited for before.
-        if (who.kind === "session") await noteAgentActivity(who.sessionId).catch(() => {});
+        // A session's agent calling PacedMind is at work, whatever it waited for before; except while it waits for your
+        // answer to what it asked (ask_user, which it calls again to keep waiting).
+        if (who.kind === "session" && name !== "ask_user") await noteAgentActivity(who.sessionId).catch(() => {});
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
         const text = e instanceof ToolError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;

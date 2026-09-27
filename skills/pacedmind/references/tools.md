@@ -1,8 +1,8 @@
 # PacedMind MCP tools
 
-Every tool the `organizer` MCP server offers, grouped by purpose. The tool descriptions and parameter schemas the client shows you have the details. Tools marked (read) never change anything.
+Every tool the `pacedmind` MCP server offers, grouped by purpose. The tool descriptions and parameter schemas the client shows you have the details. Tools marked (read) never change anything.
 
-A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run), `start_task`, `attach_image`, `report_progress` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
+A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
 
 ## Orientation
 
@@ -75,6 +75,7 @@ A session that PacedMind started gets a smaller set: the read tools, `create_tas
 - `start_task`: "I'm working on this task." Returns the changes the user asked for (if they sent the last hand-back back), the task with its Done when list, the last report if there is one, and hand-back instructions.
 - `attach_image`: adds a screenshot or other image (a PNG, JPEG, GIF or WebP file path, up to 20 MB) to the task while the agent works. It becomes part of the next report; after a hand-back, it joins the last one.
 - `report_progress`: keeps the user posted while the agent works, only when it matters: its `plan` (every step as a short outcome, with `done` for finished ones; sent again as steps get done), a `message` of `kind` `issue` (something that changes the scope or the risk) or `question` (a decision it needs: the user is notified, and the agent asks in its conversation too and waits), or `progress`. Not for routine steps.
+- `ask_user`: asks the user a `question` the agent needs answered before it can go on, and waits for the answer: PacedMind shows it on the task and notifies the user on their devices, and they answer in PacedMind. A call waits up to 45 seconds; with no answer yet, call again with the `ask` it returned, not the question again (up to 30 minutes in all).
 - `finish_task`: "Ready for review," with a report:
   - `summary` (required): what changed and what to look at first;
   - `criteria`: a verdict (`met`, `partly`, `not_met`) and note for each Done when item. Required when the task has Done when items, unless the outcome is blocked;

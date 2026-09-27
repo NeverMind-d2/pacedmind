@@ -82,7 +82,7 @@ When the agent's latest report has questions for you, **Answer its question** (o
 
 The line under the fields says *Claude Code starts again in a new terminal, with its last report and your answers.* PacedMind sends your answers as one message, which starts with *My answers to your questions:* and lists each question you answered with your answer. From there it goes as with **Request changes**: the report shows your answers under **You answered its questions**, the session's history records *You answered its questions:* and the start of your answers, and the session runs again with *Claude Code is working with your answers since 14:05*. The agent reads your answers first when it calls `start_task`, goes on with the task using them, and hands it back with a new report.
 
-While a session runs, the agent can also ask you something in its terminal, or with `report_progress`: answer it there. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
+While a session runs, the agent can also ask you something in its terminal, or with `report_progress`: answer it there. A question it asks with `ask_user` waits for your answer in PacedMind, on the task and in **Sessions**: see [Answer while it works](/agents/lifecycle#answer-while-it-works). See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
 
 ## Partly done or blocked
 

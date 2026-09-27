@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { deviceConfig } from "./device";
 import { mcpUrl } from "./launcher";
+import { MCP_NAME, OLD_MCP_NAME } from "@/lib/types";
 
 /*
  * Connects your own Claude Code to this computer's PacedMind (user scope, all projects) with the owner token,
@@ -13,7 +14,9 @@ import { mcpUrl } from "./launcher";
  * argument is checked for characters cmd.exe would act on.
  */
 
-const NAME = "organizer"; // The MCP server id the skills and launched sessions use (mcp__organizer__*).
+// The MCP server's name the skills and launched sessions use (mcp__pacedmind__*); connecting also removes the one it had
+// before (organizer), so an agent never has PacedMind twice.
+const NAME = MCP_NAME;
 
 function claude(args: string[]): string {
   const env = { ...process.env };
@@ -30,10 +33,12 @@ export function connectClaudeCode(): { ok: boolean; error?: string; message?: st
   } catch {
     return { ok: false, error: "Claude Code isn't installed, or `claude` isn't on your PATH." };
   }
-  try {
-    claude(["mcp", "remove", NAME, "--scope", "user"]);
-  } catch {
-    // It wasn't configured.
+  for (const name of [NAME, OLD_MCP_NAME]) {
+    try {
+      claude(["mcp", "remove", name, "--scope", "user"]);
+    } catch {
+      // It wasn't configured.
+    }
   }
   try {
     claude(["mcp", "add", "--transport", "http", "--scope", "user", NAME, mcpUrl(), "--header", `Authorization: Bearer ${deviceConfig().ownerToken}`]);
@@ -54,8 +59,8 @@ export function connectCodex(): { ok: boolean; error?: string; message?: string 
   try {
     const before = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     const eol = before.includes("\r\n") ? "\r\n" : "\n";
-    // The old [mcp_servers.organizer] table and its sub-tables, up to the next table.
-    const rest = before.replace(/^\[mcp_servers\.organizer(?:\.[^\]\r\n]*)?\][^\n]*(?:\n(?!\[)[^\n]*)*\n?/gm, "").trimEnd();
+    // The earlier [mcp_servers.pacedmind] table, or the one under the old name, with their sub-tables, up to the next table.
+    const rest = before.replace(/^\[mcp_servers\.(?:pacedmind|organizer)(?:\.[^\]\r\n]*)?\][^\n]*(?:\n(?!\[)[^\n]*)*\n?/gm, "").trimEnd();
     const table = [`[mcp_servers.${NAME}]`, `url = "${mcpUrl()}"`, `http_headers = { Authorization = "Bearer ${token}" }`].join(eol);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     if (before) fs.writeFileSync(`${file}.pacedmind-backup`, before);

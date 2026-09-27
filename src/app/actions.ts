@@ -19,6 +19,8 @@ import { mergeProjects } from "@/server/project-links";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
+import { answerHere, askedHere, withdrawHere } from "@/server/asks";
+import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
@@ -359,6 +361,96 @@ export async function requestChangesRemoteAction(sessionId: string, text: string
   }, device, code, device.remoteStart !== "auto");
 }
 
+/**
+ * Answers what a running session's agent waits for (asks.ts): "allow" or "deny" for a permission, the text for a
+ * question. On the session's own computer it goes at once; from anywhere else only when that computer takes answers
+ * from elsewhere, and with a two-factor code from the last five minutes (`code`, or "" to use one entered in the last
+ * four), which the database checks again.
+ */
+export async function answerAskAction(askId: string, answer: string, code = ""): Promise<Requested> {
+  await guard();
+  const ask = typeof askId === "string" ? await repo.getAsk(askId) : null;
+  if (!ask || ask.status !== "pending" || Date.parse(ask.expiresAt) <= Date.now()) {
+    return done({ ok: false, error: "The agent isn't waiting for this answer any more." });
+  }
+  const value = ask.kind === "permission"
+    ? (answer === "allow" || answer === "deny" ? answer : null)
+    : (typeof answer === "string" ? answer.trim().slice(0, 20000) : "") || null;
+  if (!value) return { ok: false, error: ask.kind === "permission" ? "Allow it or refuse it." : "Write your answer." };
+  const session = await repo.getSession(ask.sessionId);
+  if (!session || !isLiveSession(session)) return done({ ok: false, error: "That session isn't running any more." });
+  if (await askedHere(ask)) {
+    try {
+      await answerHere(ask.id, value);
+    } catch (e) {
+      return done({ ok: false, error: errorOf(e) });
+    }
+    return done({ ok: true });
+  }
+  if (!ask.remoteOk) {
+    return { ok: false, error: "Its computer takes answers only there. Answer it there, or turn on Answer from elsewhere in that computer's Settings." };
+  }
+  const stale = await stepUp(code);
+  if (stale) return stale;
+  try {
+    await repo.answerAsk(ask.id, value);
+  } catch (e) {
+    const message = errorOf(e);
+    if (!refusedStepUp(message)) return done({ ok: false, error: message });
+    return { ok: false, needCode: true, error: (code ?? "").trim() ? STEP_UP_REFUSED : "Enter a current two-factor code." };
+  }
+  return done({ ok: true, message: "Sent. The agent gets it within a few seconds." });
+}
+
+/* ---------- notifications on your phone and in the browser (push.ts) ---------- */
+
+const NO_PUSH = "Notifications on your phone and in the browser come with PacedMind Cloud.";
+
+/** The account's public key for web push, which a browser subscribes with: made the first time one asks. */
+export async function pushKeyAction(): Promise<Result & { publicKey?: string }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: NO_PUSH };
+  try {
+    return { ok: true, publicKey: await ensurePushKeys() };
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+/** Keeps a browser that turned notifications on (its PushSubscription), for the account's computers to send to. */
+export async function savePushSubscriptionAction(sub: { endpoint: string; p256dh: string; auth: string; label: string }): Promise<Result> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: NO_PUSH };
+  if (!sub || typeof sub.endpoint !== "string" || !PUSH_ENDPOINT.test(sub.endpoint) || typeof sub.p256dh !== "string" || typeof sub.auth !== "string") {
+    return { ok: false, error: "This browser's push service isn't one PacedMind sends to." };
+  }
+  const label = typeof sub.label === "string" ? sub.label.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 100) : "";
+  try {
+    await repo.addPushSubscription({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth, label });
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  return done({ ok: true, message: "Notifications are on in this browser." });
+}
+
+/** Stops notifications to a browser (this one, or one listed in Settings). */
+export async function removePushSubscriptionAction(endpoint: string): Promise<Result> {
+  await guard();
+  if (typeof endpoint !== "string" || !(await usesCloud())) return { ok: false, error: NO_PUSH };
+  await repo.removePushSubscription(endpoint);
+  return done({ ok: true, message: "Notifications are off there." });
+}
+
+/** "Answer in the terminal": the session's computer stops holding a permission, so the agent's own prompt asks there. */
+export async function withdrawAskAction(askId: string): Promise<Result> {
+  await guard();
+  const ask = typeof askId === "string" ? await repo.getAsk(askId) : null;
+  if (!ask || ask.status !== "pending") return done();
+  if (!(await askedHere(ask))) return { ok: false, error: "Only the computer the session runs on can hand this to its terminal." };
+  await withdrawHere(ask.id);
+  return done({ ok: true, message: "Answer it in the agent's terminal." });
+}
+
 export async function markSessionDoneAction(sessionId: string): Promise<Result> {
   await guard();
   const s = await repo.getSession(sessionId);
@@ -607,6 +699,7 @@ const TERMINAL_IDS = new Set<TerminalId>(["wt", "cmd", "terminal", "iterm"]);
 /** How sessions start on this computer; only its own window changes it. */
 export async function updateDeviceSettingsAction(patch: {
   name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart; trustFolders?: boolean;
+  remoteAnswers?: boolean;
 }): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "These are set in the PacedMind desktop app." };
@@ -624,6 +717,7 @@ export async function updateDeviceSettingsAction(patch: {
     ...(patch.codexCommand ? { codexCommand: patch.codexCommand.trim() } : {}),
     ...(patch.remoteStart ? { remoteStart: patch.remoteStart } : {}),
     ...(typeof patch.trustFolders === "boolean" ? { trustFolders: patch.trustFolders } : {}),
+    ...(typeof patch.remoteAnswers === "boolean" ? { remoteAnswers: patch.remoteAnswers } : {}),
   });
   const id = deviceConfig().deviceId;
   // The account's copy, for Settings elsewhere. What counts is saved above already: if the copy doesn't go through now

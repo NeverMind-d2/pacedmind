@@ -89,6 +89,8 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | Closed | *Closed before the agent finished* |
 | Failed | *Couldn't start:* and the reason |
 
+A question the agent asks with `ask_user` shows under the state line, with a field for your answer and **Send answer**. See [Answer while it works](/agents/lifecycle#answer-while-it-works).
+
 The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. While the session runs, **Plan** follows, with the latest plan the agent sent with `report_progress`: its steps in order, the done ones ticked off, with a count and the time, such as *2 of 5 done · 14:05*. Under the buttons of a session that ended, the card repeats the line about trusting the folder when the next session would start in a folder Claude Code doesn't trust yet. A task handed back partly done or blocked holds its flow until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
 ### The agent's report

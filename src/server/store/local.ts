@@ -9,15 +9,16 @@ import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
   linksOf, pictureHash, repoOf, snapshotOf, strings,
-  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   taskHref,
-  type AgentId, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
+  type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
   type LaunchRequest, type Priority, type Project, type Report, type ReportOutcome, type Session,
-  type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface, type Task,
+  type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
+  type Task,
 } from "@/lib/types";
 
 /*
@@ -754,6 +755,85 @@ export async function createLaunchRequest(): Promise<LaunchRequest> {
 }
 
 export async function settleLaunchRequest() {}
+
+/* ---------- what a running session waits for you to answer (asks.ts) ---------- */
+
+// Without an account there's only this computer, so every answer comes from it and nothing comes from elsewhere.
+
+const toAsk = (r: Row): SessionAsk => ({
+  id: String(r.id), sessionId: String(r.session_id), deviceId: null, kind: r.kind === "permission" ? "permission" : "question",
+  tool: r.tool == null ? null : String(r.tool), text: String(r.text), remoteOk: false, askedAt: String(r.asked_at),
+  expiresAt: String(r.expires_at), status: String(r.status) as AskStatus, answer: r.answer == null ? null : String(r.answer),
+  answeredAt: r.answered_at == null ? null : String(r.answered_at), answeredVia: r.status === "answered" ? "computer" : null,
+});
+
+export async function createAsk(input: AskInput): Promise<SessionAsk> {
+  const id = crypto.randomUUID();
+  run(
+    "INSERT INTO session_asks (id, session_id, kind, tool, text, asked_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    id, input.sessionId, input.kind, input.tool, input.text, new Date().toISOString(), input.expiresAt,
+  );
+  return (await getAsk(id))!;
+}
+
+export async function getAsk(id: string): Promise<SessionAsk | null> {
+  const r = get("SELECT * FROM session_asks WHERE id = ?", id);
+  return r ? toAsk(r) : null;
+}
+
+export async function listAsks(filter: { sessionIds?: string[]; status?: AskStatus[] } = {}): Promise<SessionAsk[]> {
+  if (filter.sessionIds && !filter.sessionIds.length) return [];
+  const where: string[] = [];
+  const args: string[] = [];
+  if (filter.sessionIds) {
+    where.push(`session_id IN (${marks(filter.sessionIds)})`);
+    args.push(...filter.sessionIds);
+  }
+  if (filter.status) {
+    where.push(`status IN (${marks(filter.status)})`);
+    args.push(...filter.status);
+  }
+  return all(`SELECT * FROM session_asks${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY asked_at DESC LIMIT 200`, ...args).map(toAsk);
+}
+
+/** Answers an ask once, before the agent stops waiting. */
+export async function answerAsk(id: string, answer: string): Promise<SessionAsk> {
+  const now = new Date().toISOString();
+  const r = run(
+    "UPDATE session_asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ? AND status = 'pending' AND expires_at > ?",
+    answer, now, id, now,
+  );
+  if (!Number(r.changes)) throw new Error("This was answered already, or the agent stopped waiting for it.");
+  return (await getAsk(id))!;
+}
+
+export async function settleAsk(id: string, status: "expired" | "withdrawn") {
+  run("UPDATE session_asks SET status = ? WHERE id = ? AND status = 'pending'", status, id);
+}
+
+/* ---------- web push: only with an account, whose web app gets the notifications ---------- */
+
+export async function pushKeys(): Promise<{ publicKey: string; privateKey: string } | null> {
+  return null;
+}
+
+export async function savePushKeys(keys: { publicKey: string; privateKey: string }): Promise<void> {
+  void keys;
+  throw new Error("Notifications on your phone and in the browser come with PacedMind Cloud.");
+}
+
+export async function listPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+  return [];
+}
+
+export async function addPushSubscription(sub: PushSubscriptionInput): Promise<void> {
+  void sub;
+  throw new Error("Notifications on your phone and in the browser come with PacedMind Cloud.");
+}
+
+export async function removePushSubscription(endpoint: string) {
+  void endpoint;
+}
 
 /* ---------- live refresh ---------- */
 

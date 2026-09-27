@@ -53,6 +53,12 @@ export interface DeviceConfig {
    * session starts there (claude-trust.ts, codex-trust.ts), so a session never waits for it in its terminal.
    */
   trustFolders: boolean;
+  /**
+   * Whether this computer's sessions wait for your answers in PacedMind on your other devices too (asks.ts): a
+   * permission Claude Code asks for waits there a few minutes before it asks in the terminal, and answers from the web
+   * app or another computer count. Off, only this computer's window and terminal answer.
+   */
+  remoteAnswers: boolean;
   /** For Claude Code and Codex that you start yourself (Settings shows it). */
   ownerToken: string;
   /**
@@ -93,6 +99,7 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     confirmed: {},
     remoteStart: "ask",
     trustFolders: keep?.trustFolders ?? true,
+    remoteAnswers: keep?.remoteAnswers ?? false,
     ownerToken: newOwnerToken(),
     sessionTokens: {},
     importOffered: false,

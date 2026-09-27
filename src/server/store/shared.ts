@@ -4,7 +4,7 @@ import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AgentExtras, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
+  AskKind, PushSubscriptionInput, AgentExtras, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
   OtherSessionState, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
 } from "@/lib/types";
 
@@ -70,6 +70,24 @@ export interface LaunchRequestInput {
   surface?: Surface | null;
   targetSessionId?: string | null;
   changes?: string | null;
+}
+
+/** Something a running session's agent waits for you to answer, as its computer asks it (asks.ts). */
+export interface AskInput {
+  sessionId: string;
+  /** The computer the session runs on; null without an account. */
+  deviceId: string | null;
+  kind: AskKind;
+  tool: string | null;
+  text: string;
+  remoteOk: boolean;
+  /** When the agent stops waiting (ISO time). */
+  expiresAt: string;
+}
+
+/** A browser that asked for notifications, as the account keeps it. */
+export interface PushSubscriptionRow extends PushSubscriptionInput {
+  createdAt: string;
 }
 
 export interface ReportInput {

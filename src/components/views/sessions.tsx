@@ -6,6 +6,7 @@ import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "@/components/remote-start";
+import { AskCard } from "@/components/ask-card";
 import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, useClock, useLaunchState } from "@/components/request-status";
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
@@ -528,6 +529,8 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
           </div>
           {!report && s.note && s.status !== "failed" && <p className="text-[13px] leading-[1.6] text-mut">“{s.note}”</p>}
         </div>
+
+        {active && <AskCard sessionId={s.id} agent={s.agent} />}
 
         {report && <SessionReport key={report.id} report={report} criteria={report.criteria} working={active} />}
 

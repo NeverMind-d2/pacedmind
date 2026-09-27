@@ -19,6 +19,7 @@ import {
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon } from "../icons";
 import { ImportProjects } from "../import-projects";
+import { PushSettings, type PushDevice } from "../push-settings";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
 
@@ -30,7 +31,7 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "delete_task"]],
   ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
   ["Flows", ["get_flow", "connect_tasks", "disconnect_tasks", "add_to_flow", "remove_from_flow"]],
-  ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "finish_task"]],
+  ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "ask_user", "finish_task"]],
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -147,7 +148,7 @@ export interface AccountView {
   backupCodes: boolean;
 }
 
-export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform, agents }: {
+export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform, agents, push }: {
   settings: Settings; projects: Project[]; areas: Area[];
   /** The signed-in account; null without one, when the desktop app keeps this computer's own data. */
   account: AccountView | null;
@@ -166,6 +167,8 @@ export function SettingsView({ settings, projects, areas, account, devices, this
   platform: NodeJS.Platform;
   /** By project: what agents get in its folder here and which MCP servers its sessions get; null in the web app. */
   agents: Record<string, ProjectAgentsView> | null;
+  /** The browsers where notifications are on, with an account; `web`: this page can turn them on for its own browser. */
+  push: { web: boolean; devices: PushDevice[] } | null;
 }) {
   const { run, pending } = useAction();
   const router = useRouter();
@@ -179,9 +182,9 @@ export function SettingsView({ settings, projects, areas, account, devices, this
   const save = (patch: Partial<Settings>) => run(() => updateSettingsAction(patch), "Saved");
   const saveDevice = (patch: Parameters<typeof updateDeviceSettingsAction>[0]) => run(() => updateDeviceSettingsAction(patch));
   const token = mcp?.token ?? "";
-  const claudeCmd = mcp ? `claude mcp add --transport http --scope user organizer ${mcp.url} --header "Authorization: Bearer ${token}"` : "";
+  const claudeCmd = mcp ? `claude mcp add --transport http --scope user pacedmind ${mcp.url} --header "Authorization: Bearer ${token}"` : "";
   // A header rather than bearer_token_env_var: the Codex app has no ORGANIZER_TOKEN to read.
-  const codexToml = mcp ? `# ~/.codex/config.toml\n[mcp_servers.organizer]\nurl = "${mcp.url}"\nhttp_headers = { Authorization = "Bearer ${token}" }` : "";
+  const codexToml = mcp ? `# ~/.codex/config.toml\n[mcp_servers.pacedmind]\nurl = "${mcp.url}"\nhttp_headers = { Authorization = "Bearer ${token}" }` : "";
   const connect = (agent: AgentId) => {
     const what = agent === "claude" ? "Claude Code, for all projects" : "Codex's config.toml";
     if (confirm(`Add PacedMind (${mcp?.url ?? "this computer"}) to ${what}, with your token? Sessions you start yourself, and those in the ${APP_LABEL[agent]}, will report to this PacedMind.`)) {
@@ -309,6 +312,13 @@ export function SettingsView({ settings, projects, areas, account, devices, this
               <Row label="Theme"><ThemeSelector /></Row>
             </Section>
 
+            {push && (
+              <Section title="Notifications"
+                note="When a session needs you (it asks you something, asks for permission, waits in its terminal or hands its task back), the computer it runs on tells every browser here, also on your phone. The desktop app shows its own notifications.">
+                <PushSettings web={push.web} devices={push.devices} />
+              </Section>
+            )}
+
             {account && (
             <Section title="Delete account" note="Deletes your account and everything in it: areas, projects, tasks, calendar, sessions and computers. It can't be undone.">
               <Row label="Your email">
@@ -374,6 +384,17 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                 <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">
                   Claude Code and Codex ask whether you trust a folder the first time they start there. When this is on, PacedMind says yes for the folder a session starts in, just before it starts, so the session doesn&apos;t wait for you. A yes also lets the agent use that folder&apos;s own settings, hooks and MCP servers.
                 </div>
+                {account && <>
+                  <Row label="Answer from elsewhere">
+                    <span className="flex-1 text-[12.5px] text-fg3">{device.remoteAnswers ? "From any of your devices" : "Only on this computer"}</span>
+                    <Switch on={device.remoteAnswers} label="Answer agents from elsewhere" onChange={(v) => saveDevice({ remoteAnswers: v })} />
+                  </Row>
+                  <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">
+                    {device.remoteAnswers
+                      ? "When Claude Code in a session started here wants your permission for a tool, PacedMind asks you on all your devices too, for up to 10 minutes, while the terminal asks as well: the first answer counts. Questions agents ask with ask_user can be answered from the web app or another computer too, with a two-factor code from the last few minutes. Applies to sessions started from now on."
+                      : "Agents' questions and permission requests are answered here: in this window, or in the agent's terminal. Turn this on to answer them from your phone or another computer too."}
+                  </div>
+                </>}
               </Section>
             </>}
 

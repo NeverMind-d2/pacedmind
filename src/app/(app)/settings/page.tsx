@@ -17,12 +17,14 @@ export default async function SettingsPage() {
   const d = MODE === "desktop" ? deviceConfig() : null;
   const device: DeviceSettings | null = d && {
     name: d.name, terminal: d.terminal, claudeCommand: d.claudeCommand, codexCommand: d.codexCommand, remoteStart: d.remoteStart,
-    trustFolders: d.trustFolders, deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
+    trustFolders: d.trustFolders, remoteAnswers: !!d.remoteAnswers, deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
   };
   // What agents get in each project's folder here, and the MCP servers its sessions get: this computer's to decide.
   const agents: Record<string, ProjectAgentsView> | null = d && Object.fromEntries(projects.map((p) => [p.id, {
     extras: p.folder ? folderExtras(p.folder) : null, choices: serverChoices(p.folder), servers: projectServers(p.id),
   }]));
+  // The browsers where notifications are on (web push), with an account; the web app can turn them on for itself.
+  const pushDevices = state ? await repo.listPushSubscriptions().catch(() => []) : null;
   // This computer first, with what it found of the agents itself; then the other computers signed in. Without
   // an account, there is only this one (and it has no id in any account yet).
   const signedIn = devices.filter((x) => !x.revokedAt);
@@ -47,6 +49,7 @@ export default async function SettingsPage() {
       sessionsCount={sessions.length}
       platform={process.platform}
       agents={agents}
+      push={pushDevices && { web: MODE === "web", devices: pushDevices.map((p) => ({ endpoint: p.endpoint, label: p.label, createdAt: p.createdAt })) }}
     />
   );
 }

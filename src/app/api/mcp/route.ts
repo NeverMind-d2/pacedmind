@@ -8,7 +8,7 @@ import { noteClient } from "@/server/signals";
 // work hours) and agents.ts (flows, sessions and the start_task / finish_task protocol). A new server is
 // made for every request, inside runAs, so a session's token only ever sees that session's tools.
 const handler = createMcpHandler(registerTools, {
-  serverInfo: { name: "organizer", version: "0.3.0" },
+  serverInfo: { name: "pacedmind", version: "0.4.0" },
   instructions: SERVER_INSTRUCTIONS,
 });
 

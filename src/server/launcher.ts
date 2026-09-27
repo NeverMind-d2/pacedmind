@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { trustCheck, trustForClaude } from "./claude-trust";
 import { trustForCodex } from "./codex-trust";
-import { cliCommand, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
+import { claudeMcpEntry, cliCommand, codexMcpTable, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
 import { folderProblem, repoRoot } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
@@ -17,7 +17,7 @@ import { HOST_SESSION_VARS, agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
 import { terminalFor } from "@/lib/terminals";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, TRUST_FIRST, agentOf, canRun, surfaceOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, TRUST_FIRST, agentOf, canRun, surfaceOf,
   type AgentId, type Session, type Surface, type Task, type TerminalId,
 } from "@/lib/types";
 
@@ -69,7 +69,7 @@ const safe = (s: string, max = 400) => s.replace(/\s+/g, " ").replace(/[^\p{L}\p
 
 export function kickoffPrompt(task: Task, sessionId: string): string {
   return safe(
-    `PacedMind task ${task.key}, session ${sessionId}. Call the organizer MCP tool start_task with task ${task.key} and session ${sessionId}, then follow the instructions it returns.`,
+    `PacedMind task ${task.key}, session ${sessionId}. Call the ${MCP_NAME} MCP tool start_task with task ${task.key} and session ${sessionId}, then follow the instructions it returns.`,
   );
 }
 
@@ -79,7 +79,7 @@ export function kickoffPrompt(task: Task, sessionId: string): string {
  */
 export function changesPrompt(task: Task, sessionId: string): string {
   return safe(
-    `PacedMind task ${task.key}, session ${sessionId}: the user reviewed your work and wrote back. Call the organizer MCP tool start_task with task ${task.key} and session ${sessionId} to read it, then follow the instructions it returns.`,
+    `PacedMind task ${task.key}, session ${sessionId}: the user reviewed your work and wrote back. Call the ${MCP_NAME} MCP tool start_task with task ${task.key} and session ${sessionId} to read it, then follow the instructions it returns.`,
   );
 }
 
@@ -142,8 +142,8 @@ function httpHooks(): boolean {
  * itself, or from curl for an older one (with `body`, curl passes on the JSON the agent gives the hook). Nothing it
  * gets back reaches the agent: the routes answer without a body, and curl's goes nowhere.
  */
-function claudeHook(url: string, token: string, body: boolean) {
-  if (httpHooks()) return { type: "http", url, headers: { Authorization: `Bearer ${token}` }, timeout: 10 };
+function claudeHook(url: string, token: string, body: boolean, timeout = 10) {
+  if (httpHooks()) return { type: "http", url, headers: { Authorization: `Bearer ${token}` }, timeout };
   const data = body ? ` -H "Content-Type: application/json" --data-binary @-` : "";
   return { type: "command", command: `curl -s -m 5 -o ${DEV_NULL} -X POST -H "Authorization: Bearer ${token}"${data} "${url}"`, timeout: 10 };
 }
@@ -157,7 +157,15 @@ function claudeHook(url: string, token: string, body: boolean) {
  * Like the token, their definitions stay in files only you can read, deleted when the session ends.
  */
 function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: string, servers: Record<string, unknown> | null) {
-  const mcp = { mcpServers: { ...(servers ?? {}), organizer: { type: "http", url: mcpUrl(), headers: { Authorization: `Bearer ${token}` } } } };
+  const mcp = {
+    mcpServers: {
+      ...(servers ?? {}),
+      // Your own config may still name PacedMind by its old name, with the owner token: a session gets its own token only,
+      // so that entry is replaced here by one that reaches nothing (port 9 discards), until Connect renames yours.
+      ...(!servers && claudeMcpEntry(OLD_MCP_NAME) ? { [OLD_MCP_NAME]: { type: "http", url: "http://127.0.0.1:9/renamed" } } : {}),
+      [MCP_NAME]: { type: "http", url: mcpUrl(), headers: { Authorization: `Bearer ${token}` } },
+    },
+  };
   const route = `${baseUrl()}/api/sessions/${sessionId}`;
   const signal = (kind: string, body: boolean, matcher?: string) => [{
     ...(matcher ? { matcher } : {}), hooks: [claudeHook(`${route}/signal?kind=${kind}&cli=${cli}`, token, body)],
@@ -169,6 +177,11 @@ function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: s
       Notification: signal("notify", true, "permission_prompt|idle_prompt|elicitation_dialog|agent_needs_input"),
       UserPromptSubmit: signal("prompt", false),
       PostToolUse: signal("tool", false),
+      // With "Answer from elsewhere" on, a permission also waits for you in PacedMind, while the terminal asks too
+      // (asks.ts); only as an http hook, which can wait that long.
+      ...(deviceConfig().remoteAnswers && httpHooks()
+        ? { PermissionRequest: [{ hooks: [claudeHook(`${route}/permission?cli=${cli}`, token, true, 11 * 60)] }] }
+        : {}),
     },
   };
   const mcpFile = path.join(dir, "mcp.json");
@@ -213,16 +226,20 @@ function agentCommand(dir: string, session: Session, task: Task, kind: "start" |
     // which the terminal script sets. Settings → Connect puts the owner token in the same table as a header, so
     // the headers are cleared: the session must only ever send its own token.
     const mcp = [
-      `-c mcp_servers.organizer.url="${mcpUrl()}"`, `-c mcp_servers.organizer.bearer_token_env_var="ORGANIZER_TOKEN"`,
-      "-c mcp_servers.organizer.http_headers={}", "-c mcp_servers.organizer.env_http_headers={}", "-c mcp_servers.organizer.enabled=true",
+      `-c mcp_servers.${MCP_NAME}.url="${mcpUrl()}"`, `-c mcp_servers.${MCP_NAME}.bearer_token_env_var="ORGANIZER_TOKEN"`,
+      `-c mcp_servers.${MCP_NAME}.http_headers={}`, `-c mcp_servers.${MCP_NAME}.env_http_headers={}`, `-c mcp_servers.${MCP_NAME}.enabled=true`,
+      // The old name in your config.toml, with the owner token, stays off in a session (Connect renames it).
+      ...(codexMcpTable(OLD_MCP_NAME) ? [`-c mcp_servers.${OLD_MCP_NAME}.enabled=false`] : []),
       ...(servers ? codexServersOff(folder, servers).map((name) => `-c mcp_servers.${name}.enabled=false`) : []),
     ].join(" ") + codexNotify(dir, session.id, token);
     return { command: kind === "resume" ? `${exe} ${mcp} resume --last` : `${exe} ${mcp} "${prompt}"`, conversation: null };
   }
   const last = session.cliSessionId && UUID.test(session.cliSessionId) ? session.cliSessionId : null;
-  const conversation = last && kind === "resume" ? last : crypto.randomUUID();
+  // A start and a resume run the conversation the session names (a start's was made with the session); changes get
+  // a new one.
+  const conversation = last && kind !== "changes" ? last : crypto.randomUUID();
   const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, token, servers && claudeServers(folder, servers));
-  const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__organizer__${t}`).join(",");
+  const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__${MCP_NAME}__${t}`).join(",");
   const base = `${exe} --mcp-config "${mcpFile}"${servers ? " --strict-mcp-config" : ""} --settings "${settingsFile}" --allowedTools ${allowed}`;
   if (last && kind === "resume") return { command: `${base} --resume ${last}`, conversation };
   return { command: `${base} --session-id ${conversation} -n "${safe(`${task.key} ${task.title}`, 80)}" "${prompt}"`, conversation };

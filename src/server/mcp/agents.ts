@@ -11,9 +11,10 @@ import {
 } from "../ops";
 import * as repo from "../repo";
 import { callerSession } from "./principal";
+import { QUESTION_CALL_MS, QUESTION_OPEN_MS, answeredText, openAsk, waitForAnswer } from "../asks";
 import { planText } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, STATUS_LABEL, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, STATUS_LABEL, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
   type AgentId, type EdgeMode, type Report, type ReportCriterion, type Session, type Surface, type Task,
 } from "@/lib/types";
 import {
@@ -172,7 +173,7 @@ const taskMap = async () => new Map((await repo.listTasks()).map((t) => [t.id, t
 /** What an agent says it runs with (start_task's environment), as its session shows it: plain names only. */
 function environmentText(who: string, env: { model?: string; mcp_servers?: string[] }): string {
   const model = (env.model ?? "").replace(/[^\w .:()/+-]/g, "").trim().slice(0, 80);
-  const servers = [...new Set((env.mcp_servers ?? []).map((n) => n.trim()).filter((n) => /^[\w.@:+-]{1,48}$/.test(n) && n !== "organizer"))].slice(0, 30);
+  const servers = [...new Set((env.mcp_servers ?? []).map((n) => n.trim()).filter((n) => /^[\w.@:+-]{1,48}$/.test(n) && n !== MCP_NAME && n !== OLD_MCP_NAME))].slice(0, 30);
   return `${who} says it runs${model ? ` as ${model}` : ""}, with ${servers.length ? `the MCP servers ${servers.join(", ")}` : "no other MCP servers"}`;
 }
 
@@ -403,7 +404,7 @@ export function registerAgentTools(server: McpServer) {
       environment: z.object({
         model: z.string().max(80).optional().describe("The model you run as"),
         mcp_servers: z.array(z.string().max(60)).max(30).optional()
-          .describe("The MCP servers you have tools from besides organizer: the part between mcp__ and the next __ in those tools' names"),
+          .describe("The MCP servers you have tools from besides pacedmind: the part between mcp__ and the next __ in those tools' names"),
       }).optional().describe("What you run with. PacedMind shows it on the session as you report it"),
     }),
     kind: "write",
@@ -426,8 +427,8 @@ export function registerAgentTools(server: McpServer) {
       await describeTask(after),
       `\nPacedMind session: ${s.id}`,
       "Work on this task here. Keep the user posted with report_progress, but only when it matters: your plan once you have one (send it " +
-        "again as steps get done), anything that changes the scope or the risk (kind issue), and a decision you need from the user (kind " +
-        "question, which you then also ask here and wait for). Skip routine updates.",
+        "again as steps get done) and anything that changes the scope or the risk (kind issue). Skip routine updates. When you need the " +
+        "user to decide something before you can go on, ask with ask_user: it waits for their answer, which they can give on any device.",
       `When it is ready for the user to check, call finish_task with task ${t.key}, session ${s.id} and a report:`,
       "- summary: one or two sentences on what changed and what the user should look at first;",
       after.doneWhen.length ? "- criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);" : null,
@@ -465,7 +466,8 @@ export function registerAgentTools(server: McpServer) {
     title: "Report progress",
     description:
       "For agents: keep the user posted while you work on a task, only when it matters: your plan once you have one (send it again as steps get done or it changes), " +
-      "a problem that changes the scope or the risk (kind issue), or a decision you need from the user (kind question: PacedMind notifies them). " +
+      "a problem that changes the scope or the risk (kind issue), or a decision you need from the user (kind question: PacedMind notifies them; " +
+      "to wait for their answer in PacedMind, use ask_user instead). " +
       "Not for routine steps; finish_task hands the work back.",
     input: z.object({
       task: taskRef,
@@ -503,6 +505,54 @@ export function registerAgentTools(server: McpServer) {
         : `Noted on ${t.key}.`);
     }
     return out.join(" ");
+  });
+
+  tool(server, "ask_user", {
+    title: "Ask the user",
+    description:
+      "For agents: ask the user a question you need answered before you can go on, and wait for the answer. PacedMind shows it " +
+      "on the task, notifies the user on their devices, and they answer in PacedMind. A call waits up to 45 seconds; with no " +
+      "answer yet, call again with the ask it returned to keep waiting (up to 30 minutes in all). Don't ask the question again.",
+    input: z.object({
+      task: taskRef,
+      session: z.string().optional().describe("Your session id"),
+      question: z.string().max(4000).optional().describe("Your question, with the options when there are some"),
+      ask: z.string().max(60).optional().describe("The ask a previous call returned, to keep waiting for its answer"),
+    }),
+    kind: "write",
+  }, async ({ task, session, question, ask: askId }) => {
+    const t = await findTask(task);
+    const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session));
+    if (!s || !isLiveSession(s)) fail(`${t.key} has no running session. Call start_task with task ${t.key} first.`);
+    let ask;
+    if (askId) {
+      ask = await repo.getAsk(askId.trim());
+      if (!ask || ask.sessionId !== s.id || ask.kind !== "question") fail("This session has no such question. Ask it again with question.");
+      // Answered between two calls: nobody was waiting to pass it on yet.
+      if (ask.status === "answered" && ask.answer) {
+        await repo.addSessionEvent(s.id, "working", answeredText(s, "question", ask.answer));
+        return `The user answered:\n${ask.answer}`;
+      }
+      if (ask.status !== "pending") fail("The user didn't answer in time. Ask again, ask in this conversation, or hand the task back as blocked.");
+    } else {
+      const q = (question ?? "").trim();
+      if (!q) fail("Pass your question, or the ask a previous call returned.");
+      ask = await openAsk(s, "question", q, null, QUESTION_OPEN_MS);
+    }
+    const answer = await waitForAnswer(ask, QUESTION_CALL_MS);
+    if (answer !== null) {
+      await repo.addSessionEvent(s.id, "working", answeredText(s, "question", answer));
+      return `The user answered:\n${answer}`;
+    }
+    const now = await repo.getAsk(ask.id);
+    if (now?.status === "answered") {
+      return "An answer came from another device, but this computer takes answers only here. Ask in this conversation instead.";
+    }
+    if (now?.status === "pending" && Date.parse(now.expiresAt) > Date.now()) {
+      return `No answer yet. To keep waiting, call ask_user again with ask ${ask.id} (not the question again), or go on with what you can do meanwhile.`;
+    }
+    if (now?.status === "pending") await repo.settleAsk(ask.id, "expired");
+    return "The user didn't answer within 30 minutes. Hand the task back with finish_task, outcome blocked, and the question in questions.";
   });
 
   const listItem = z.string().max(2000);

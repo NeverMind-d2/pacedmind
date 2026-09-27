@@ -9,7 +9,7 @@ import { agentExtras } from "./extras";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
-import { NO_AGENT_TOOLS, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink } from "@/lib/types";
+import { MCP_NAME, NO_AGENT_TOOLS, OLD_MCP_NAME, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink } from "@/lib/types";
 
 /*
  * This computer and the others signed in to the account. Each desktop app registers itself in the account's
@@ -238,34 +238,51 @@ async function desktopApps(): Promise<Record<AgentId, AgentTools["app"]>> {
   return found;
 }
 
-/** Whether Claude Code (and so the Claude app's Code sessions) has PacedMind's MCP server for all projects, with the owner token. */
-function claudeMcp(url: string, token: string): McpLink {
+/** Claude Code's user-scope entry for PacedMind's MCP server under `name`, or undefined. */
+export function claudeMcpEntry(name: string): { url?: unknown; headers?: { Authorization?: unknown } } | undefined {
   try {
     const config = JSON.parse(fs.readFileSync(path.join(claudeDir(), ".claude.json"), "utf8"));
-    const entry = config?.mcpServers?.organizer;
-    if (!entry) return "missing";
-    return entry.url === url && entry.headers?.Authorization === `Bearer ${token}` ? "connected" : "elsewhere";
+    const entry = config?.mcpServers?.[name];
+    return entry && typeof entry === "object" ? entry : undefined;
   } catch {
-    return "missing";
+    return undefined;
   }
 }
 
-/** The [mcp_servers.organizer] table of Codex's config.toml with its sub-tables, or null. */
-export function codexOrganizerTable(): string | null {
+/**
+ * Whether Claude Code (and so the Claude app's Code sessions) has PacedMind's MCP server for all projects, with the owner
+ * token: as "pacedmind", or still as "organizer", its old name.
+ */
+function claudeMcp(url: string, token: string): McpLink {
+  const ours = (e: ReturnType<typeof claudeMcpEntry>) => e?.url === url && e?.headers?.Authorization === `Bearer ${token}`;
+  const now = claudeMcpEntry(MCP_NAME);
+  if (now) return ours(now) ? "connected" : "elsewhere";
+  const old = claudeMcpEntry(OLD_MCP_NAME);
+  if (old) return ours(old) ? "old" : "elsewhere";
+  return "missing";
+}
+
+/** The [mcp_servers.<name>] table of Codex's config.toml with its sub-tables, or null. */
+export function codexMcpTable(name: string): string | null {
   try {
     const toml = fs.readFileSync(path.join(/*turbopackIgnore: true*/ codexHome(), "config.toml"), "utf8");
-    return toml.match(/^\[mcp_servers\.organizer\][^\n]*(?:\n(?!\[(?!mcp_servers\.organizer\.))[^\n]*)*/m)?.[0] ?? null;
+    return toml.match(new RegExp(`^\\[mcp_servers\\.${name}\\][^\\n]*(?:\\n(?!\\[(?!mcp_servers\\.${name}\\.))[^\\n]*)*`, "m"))?.[0] ?? null;
   } catch {
     return null;
   }
 }
 
-/** Whether Codex (and so the Codex app) has PacedMind's MCP server with the owner token, so it works without PacedMind's terminal. */
+/**
+ * Whether Codex (and so the Codex app) has PacedMind's MCP server with the owner token, so it works without PacedMind's
+ * terminal: as "pacedmind", or still as "organizer".
+ */
 function codexMcp(url: string, token: string): McpLink {
-  const table = codexOrganizerTable();
-  if (!table) return "missing";
-  const at = table.match(/^\s*url\s*=\s*["']([^"']+)["']/m)?.[1];
-  return at === url && table.includes(token) ? "connected" : "elsewhere";
+  const ours = (table: string) => table.match(/^\s*url\s*=\s*["']([^"']+)["']/m)?.[1] === url && table.includes(token);
+  const now = codexMcpTable(MCP_NAME);
+  if (now) return ours(now) ? "connected" : "elsewhere";
+  const old = codexMcpTable(OLD_MCP_NAME);
+  if (old) return ours(old) ? "old" : "elsewhere";
+  return "missing";
 }
 
 /**

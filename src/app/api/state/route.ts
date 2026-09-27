@@ -4,8 +4,9 @@ import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
 import { codeFreshUntil } from "@/server/step-up";
+import { askedHere } from "@/server/asks";
 import { attentionOf } from "@/lib/dates";
-import { LIVE_STATUSES, type LaunchRequestView } from "@/lib/types";
+import { LIVE_STATUSES, type AskView, type LaunchRequestView } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,7 @@ export async function GET() {
   // Without an account, the desktop app shows this computer's own data; signing in counts as a change.
   const step = state || MODE === "web" ? nextStep(state) : null;
   if (step) {
-    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false }, noStore);
+    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false }, noStore);
   }
   const [version, finished, live, tasks, recent] = await Promise.all([
     repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listTasks(),
@@ -55,6 +56,16 @@ export async function GET() {
     const task = byId.get(s.taskId);
     return e ? [{ id: s.id, eventId: e.id, kind: e.kind, text: e.text, at: e.at, agent: s.agent, key: task?.key ?? null, title: task?.title ?? null }] : [];
   });
+  // What running sessions' agents wait for you to answer, with whether this page runs on their computer.
+  const pending = live.length ? await repo.listAsks({ sessionIds: live.map((s) => s.id), status: ["pending"] }) : [];
+  const asks: AskView[] = [];
+  for (const a of pending) {
+    if (Date.parse(a.expiresAt) <= Date.now()) continue;
+    asks.push({
+      id: a.id, sessionId: a.sessionId, kind: a.kind, tool: a.tool, text: a.text, remoteOk: a.remoteOk, here: await askedHere(a),
+      expiresAt: Date.parse(a.expiresAt),
+    });
+  }
   const names = recent.length ? new Map((await repo.listDevices()).map((d) => [d.id, d.name])) : new Map<string, string>();
   const now = Date.now();
   const requests: LaunchRequestView[] = recent.map((r) => ({
@@ -71,6 +82,7 @@ export async function GET() {
       version: `${boot}-${state ? state.user.id.slice(0, 8) : "local"}-${version}-${crypto.createHash("sha1").update(approvalKey).digest("hex").slice(0, 8)}`,
       waiting,
       attention,
+      asks,
       approvals: approvals.map((a) => ({ id: a.id, kind: a.kind, key: a.key, title: a.title, agent: a.agent, from: a.from })),
       requests,
       codeFreshUntil: state ? codeFreshUntil(state) : null,
