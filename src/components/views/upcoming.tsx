@@ -78,7 +78,7 @@ export function UpcomingView({ today, tasks, events, targets, ctx, initialKey }:
             <>
               <GroupHeader title="Project targets" count={targets.length} collapsed={collapsed.targets} onToggle={() => flip("targets")}>
                 <span className="flex-1" />
-                <span aria-hidden className="relative mr-[254px] hidden h-full w-[320px] shrink-0 text-[11px] font-normal text-mut2 @5xl:block">
+                <span aria-hidden className="relative mr-[254px] hidden h-full w-[320px] shrink-0 text-[11px] font-normal text-mut2 @6xl:block">
                   {ticks.map((k) => (
                     <span key={k.label} className="absolute top-2.5 -translate-x-1/2" style={{ left: `${k.pos}%` }}>{k.label}</span>
                   ))}
@@ -174,10 +174,11 @@ function TargetRow({ target: p, ctx }: { target: ProjectTarget; ctx: TaskContext
   const pos = Math.min(100, Math.max(0, (p.daysLeft / WINDOW) * 100));
   const health = HEALTH[p.health];
   return (
-    // In a narrow column (a phone) the name keeps its room: no progress bar, and the date without "in N days".
+    // In a narrow column (a phone) the name keeps its room: no progress bar, and the date without "in N days". The
+    // timeline takes about 1,100px with the other columns, so it and the header's months wait for @6xl (72rem).
     <Link href={`/project/${p.id}`} className="flex h-[46px] items-center gap-4 border-b border-hover pl-5 pr-4 hover:bg-hover @max-md:gap-3">
       <Diamond color={color} size={12} />
-      <span className="min-w-0 flex-1 truncate font-medium text-fg @5xl:w-[150px] @5xl:flex-none">{p.name}</span>
+      <span className="min-w-0 flex-1 truncate font-medium text-fg @6xl:w-[150px] @6xl:flex-none">{p.name}</span>
       <span className="hidden w-20 shrink-0 items-center gap-[7px] text-[12px] text-mut @3xl:flex">
         <Dot color={color} size={7} />
         <span className="truncate">{area?.name}</span>
@@ -188,8 +189,8 @@ function TargetRow({ target: p, ctx }: { target: ProjectTarget; ctx: TaskContext
         </span>
         <span className="text-[12px] text-mut">{p.total ? `${p.done}/${p.total}` : "No tasks"}</span>
       </span>
-      <span className="hidden flex-1 @5xl:block" />
-      <span aria-hidden className="relative hidden h-[22px] w-[320px] shrink-0 @5xl:block">
+      <span className="hidden flex-1 @6xl:block" />
+      <span aria-hidden className="relative hidden h-[22px] w-[320px] shrink-0 @6xl:block">
         <span className="absolute inset-x-0 top-2.5 h-0.5 rounded-[1px] bg-line" />
         <span className="absolute left-0 top-2.5 h-0.5 rounded-[1px] opacity-35" style={{ width: `${pos}%`, background: color }} />
         <span className="absolute left-0 top-1.5 h-2.5 w-0.5 rounded-[1px] bg-accent" />
