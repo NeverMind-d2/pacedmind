@@ -32,12 +32,16 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 
 - [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today, Timeline and Flow views.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
-- [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys and where your plan is stored.
+- [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys, where your plan is stored, and the source code.
 
 ## Download
 
 - [${NAME} for Windows](${SITE.downloads.windows})
 - [${NAME} for macOS](${SITE.downloads.mac})
+
+## Source code
+
+- [${NAME} on GitHub](${SITE.source}): The source code, under the GNU AGPL.
 
 ## Optional
 

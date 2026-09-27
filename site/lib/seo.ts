@@ -85,6 +85,8 @@ export function softwareApplication(): Node {
     downloadUrl: [...new Set(Object.values(SITE.downloads))],
     featureList: ONE_DEVICE,
     offers: { "@type": "Offer", name: "One device", price: "0", priceCurrency: "USD", url: absoluteUrl("/#pricing") },
+    license: "https://www.gnu.org/licenses/agpl-3.0.html",
+    sameAs: [SITE.source],
     publisher: { "@id": IDS.organization },
   };
 }

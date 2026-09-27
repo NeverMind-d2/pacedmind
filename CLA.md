@@ -14,7 +14,7 @@ This agreement is adapted from the Apache Software Foundation's Individual Contr
 
 ---
 
-"We", "us" and "PacedMind" mean NMD Mikołaj Bednarczyk, the sole proprietorship in Poland that owns the PacedMind project and publishes it on GitHub as NeverMind-d2, and anyone to whom the project and its copyrights are transferred.
+"We", "us" and "PacedMind" mean NMD Mikołaj Bednarczyk (mbednarczyk@preseed.tech), the sole proprietorship in Poland that owns the PacedMind project and publishes it on GitHub as NeverMind-d2, and anyone to whom the project and its copyrights are transferred.
 
 You accept and agree to the following terms and conditions for Your present and future Contributions submitted to us. Except for the licenses granted herein to us and to recipients of software distributed by us, You reserve all right, title, and interest in and to Your Contributions.
 
