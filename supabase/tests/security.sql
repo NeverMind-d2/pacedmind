@@ -14,6 +14,7 @@ declare
   fa uuid := gen_random_uuid(); fa_new uuid := gen_random_uuid(); fb uuid := gen_random_uuid();
   area_a uuid; area_b uuid; dev uuid; dev2 uuid; dev_b uuid; tid bigint; tid2 bigint; tkey text; req uuid; rid bigint;
   ask_id uuid; ask2 uuid; ask3 uuid;
+  area_del uuid; t_del bigint; t_moved bigint; code text;
   sid text := '0123456789abcdef';
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
@@ -747,6 +748,130 @@ begin
     out := out || '27f FAIL push keys changed in place' || E'\n';
     reset role;
   exception when others then out := out || '27f changing push keys refused: ' || left(sqlerrm, 40) || E'\n'; end;
+
+  -- 28. billing: the account reads its own plan and nobody writes it; once Cloud has ended (the switch on, the trial
+  --     over, no subscription) reads and deletes work and inserts and updates are refused with PT402; comped and paid
+  --     accounts write; an account whose subscription would renew can't be deleted.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    select count(*) into n from public.billing; out := out || '28 own billing rows=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.billing where user_id = b; out := out || '28a other account''s billing=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '28 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    select count(*) into n from public.billing; out := out || '28b password-only session sees billing=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '28b ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    select count(*) into n from public.billing;
+    out := out || '28c FAIL anon read billing=' || n || E'\n';
+    reset role;
+  exception when others then out := out || '28c anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.billing set comped = true;
+    out := out || '28d FAIL an account comped itself' || E'\n';
+    reset role;
+  exception when others then out := out || '28d changing own billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.billing (user_id, trial_ends_at, comped) values (a, now() + interval '1 year', true);
+    out := out || '28e FAIL an account wrote its own billing row' || E'\n';
+    reset role;
+  exception when others then out := out || '28e inserting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    delete from public.billing;
+    out := out || '28f FAIL an account deleted its billing row' || E'\n';
+    reset role;
+  exception when others then out := out || '28f deleting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+
+  -- Staged as the owner, with no claims (auth.uid() null, as for the service role): Cloud ends for a.
+  perform set_config('request.jwt.claims', '', true);
+  insert into public.areas (user_id, name, key, color) values (a, 'Billing test', 'BIL', '#68AAB9') returning id into area_del;
+  insert into public.tasks (user_id, key, area_id, title, created_at, updated_at)
+    values (a, '', area_del, 'Moves out of its area', '2026-09-28T10:00:00', '2026-09-28T10:00:00') returning id into t_moved;
+  insert into public.tasks (user_id, key, area_id, title, created_at, updated_at)
+    values (a, '', area_a, 'Deleted while read-only', '2026-09-28T10:00:00', '2026-09-28T10:00:00') returning id into t_del;
+  update private.billing_switch set enforce = true;
+  update public.billing set trial_ends_at = now() - interval '1 minute', status = 'canceled' where user_id = a;
+  out := out || '[setup] staged writes without a session while Cloud ended' || E'\n';
+
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    select count(*) into n from public.tasks; out := out || '28g read-only account still reads tasks=' || (n > 0) || ' (want true)' || E'\n';
+    reset role;
+  exception when others then out := out || '28g ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.tasks (key, area_id, title, created_at, updated_at) values ('', area_a, 'Blocked', '2026-09-28T10:00:00', '2026-09-28T10:00:00');
+    out := out || '28h FAIL a read-only account added a task' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28h adding a task refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set title = 'Changed' where id = tid;
+    out := out || '28i FAIL a read-only account changed a task' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28i changing a task refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    delete from public.tasks where id = t_del; get diagnostics n = row_count;
+    out := out || '28j read-only account deleted tasks=' || n || ' (want 1)' || E'\n';
+    -- Deleting an area sets its tasks' area to null: an update nested in the delete, which goes through.
+    delete from public.areas where id = area_del; get diagnostics n = row_count;
+    out := out || '28k read-only account deleted areas=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.tasks where id = t_moved and area_id is null; out := out || '28k task left without its area=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28j ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set last_seen_at = now() where id = dev; get diagnostics n = row_count;
+    out := out || '28l read-only account''s computer still reports in=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28l ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '28m FAIL a read-only account asked a computer to start a session' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28m starting a session refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    update public.areas set name = name where user_id = b; get diagnostics n = row_count;
+    out := out || '28n another account in its trial still writes=' || (n > 0) || ' (want true)' || E'\n';
+    reset role;
+  exception when others then out := out || '28n ERROR ' || sqlerrm || E'\n'; end;
+
+  perform set_config('request.jwt.claims', '', true);
+  update public.billing set comped = true where user_id = a;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set title = 'Comped' where id = tid; get diagnostics n = row_count;
+    out := out || '28o comped account writes=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28o ERROR ' || sqlerrm || E'\n'; end;
+  perform set_config('request.jwt.claims', '', true);
+  update public.billing set comped = false, status = 'past_due', subscription_id = 'sub_test' where user_id = a;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set title = 'Paid' where id = tid; get diagnostics n = row_count;
+    out := out || '28p account whose card is being retried writes=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28p ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_fresh, true); set local role authenticated;
+    perform public.delete_account();
+    out := out || '28q FAIL an account deleted itself while its subscription would renew' || E'\n';
+    reset role;
+  exception when others then out := out || '28q deleting while renewing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+
+  -- Back as it was for the tests below.
+  perform set_config('request.jwt.claims', '', true);
+  update private.billing_switch set enforce = false;
+  update public.billing set status = 'none', subscription_id = null, trial_ends_at = now() + interval '7 days' where user_id = a;
 
   -- 25. a computer that signs out stops being the default, can't become it again, and takes no requests
   begin

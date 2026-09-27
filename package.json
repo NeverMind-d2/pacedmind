@@ -11,6 +11,7 @@
     "icons": "node scripts/make-icons.mjs",
     "skills": "node scripts/install-skills.mjs",
     "connect": "node scripts/connect-claude.mjs",
+    "stripe:prices": "node scripts/stripe-prices.mjs",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit"
   },

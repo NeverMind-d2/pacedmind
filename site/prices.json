@@ -1,6 +1,7 @@
 {
   "checkedOn": "2026-09-24",
   "fallback": "US",
+  "yearlyMonths": 10,
   "markets": {
     "US": {"name":"United States","spotify":"us","currency":"USD","locale":"en-US","amount":12.99},
     "CA": {"name":"Canada","spotify":"ca-en","currency":"CAD","locale":"en-CA","amount":13.99},

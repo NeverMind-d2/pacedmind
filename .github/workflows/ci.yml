@@ -1,5 +1,5 @@
 # Checks every pull request and every push to master the way a fresh clone builds: the app, the site and
-# the docs are three projects with their own dependencies.
+# the docs are three projects with their own dependencies, and the billing functions run on Deno.
 name: CI
 
 on:
@@ -59,3 +59,17 @@ jobs:
           cache-dependency-path: docs/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  functions:
+    name: Billing functions
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: supabase/functions
+    steps:
+      - uses: actions/checkout@v7
+      # They run on Deno in Supabase, not on Node: deno.json here keeps Deno away from the app's node_modules.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check billing-checkout/index.ts billing-portal/index.ts stripe-webhook/index.ts
