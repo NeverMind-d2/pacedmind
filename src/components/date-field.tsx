@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { addDays } from "date-fns";
-import { dateOnly, timeOf, toDateStr } from "@/lib/dates";
+import { dateOnly, timeOf } from "@/lib/dates";
+import { MiniCalendar } from "./mini-calendar";
 import { cx } from "./ui";
 
 /** A small popover to pick a date and (optionally) a time. Value is "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm". */
@@ -41,32 +41,27 @@ export function DateField({
   }, [open]);
   const toggle = () => { setFit(null); setOpen((o) => !o); };
   const set = (d: string, t: string) => onChange(d ? (t ? `${d}T${t}` : d) : null);
-  const quick = (label: string, offset: number) => (
-    <button type="button" onClick={() => { set(toDateStr(addDays(new Date(), offset)), time); setOpen(false); }}
-      className="h-7 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel">{label}</button>
-  );
   return (
     <div ref={ref} className="relative">
       <div onClick={toggle}>{trigger}</div>
       {/* data-popup: a press outside only closes it, so a calendar's day doesn't also take that press as a click. */}
       {open && (
         <div ref={panel} data-popup style={fit ? { transform: `translateX(${fit.x}px)` } : undefined}
-          className={cx("absolute z-50 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
+          className={cx("absolute z-50 flex w-60 flex-col rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
             fit?.up ? "bottom-full mb-1" : "top-full mt-1", align === "right" ? "right-0" : "left-0")}>
-          {quick("Today", 0)}
-          {quick("Tomorrow", 1)}
-          {quick("In a week", 7)}
-          <div className="my-1 flex gap-1.5">
-            <input type="date" aria-label="Date" value={date} onChange={(e) => set(e.target.value, time)}
-              className="h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
-            {withTime && (
-              <input type="time" aria-label="Time" value={time} disabled={!date} onChange={(e) => set(date, e.target.value)}
-                className="h-7 w-[84px] rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
-            )}
-          </div>
-          {value && (
-            <button type="button" onClick={() => { onChange(null); setOpen(false); }}
-              className="h-7 rounded-md px-2 text-left text-[12.5px] text-mut2 hover:bg-sel">Clear</button>
+          {/* With a time to add, the panel stays open after the day. */}
+          <MiniCalendar value={date} onPick={(d) => { set(d, time); if (!withTime) setOpen(false); }} />
+          {(withTime || value) && (
+            <div className="mt-1 flex items-center gap-1.5 border-t border-line2 pt-2">
+              {withTime && (
+                <input type="time" aria-label="Time" value={time} disabled={!date} onChange={(e) => set(date, e.target.value)}
+                  className="h-7 w-[84px] rounded-md border border-line2 bg-input px-1.5 text-[12px] disabled:opacity-50" />
+              )}
+              {value && (
+                <button type="button" onClick={() => { onChange(null); setOpen(false); }}
+                  className="ml-auto h-7 rounded-md px-2 text-[12.5px] text-mut2 hover:bg-sel">Clear</button>
+              )}
+            </div>
           )}
         </div>
       )}

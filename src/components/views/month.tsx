@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useOptimistic, useRef, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { addDays, format } from "date-fns";
+import { format } from "date-fns";
 import { deleteTaskAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
-import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf, toDateStr } from "@/lib/dates";
+import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf } from "@/lib/dates";
 import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
 import { openActivity } from "../activity-editor";
 import { Diamond, Icon, StatusIcon } from "../icons";
+import { MiniCalendar } from "../mini-calendar";
 import { Popover, PopoverItem, PopoverSeparator, anchorOf, type Anchor } from "../popover";
 import { TaskDetail } from "../task-detail";
 import { openAdd } from "../task-list";
@@ -483,14 +484,9 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
   const value = kind === "due" ? t.dueDate : kind === "plan" ? t.plannedDate : null;
   const withTime = kind === "due";
   const [picking, setPicking] = useState(false);
-  const [date, setDate] = useState(value ? dateOnly(value) : "");
   const [time, setTime] = useState(timeOf(value) ?? "");
   const [confirming, setConfirming] = useState(false);
   const pick = (d: string) => { if (d) onDate(withTime && time ? `${d}T${time}` : d); };
-  const quick = (label: string, offset: number) => (
-    <button type="button" onClick={() => pick(toDateStr(addDays(new Date(), offset)))}
-      className="h-7 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel">{label}</button>
-  );
   return (
     <Popover anchor={anchor} onClose={onClose} width={264}>
       <div className="flex min-w-0 items-baseline gap-2 px-2 pb-1.5 pt-1">
@@ -504,20 +500,15 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
         </PopoverItem>
       )}
       {picking && (
-        <div className="mx-1 mb-1 flex flex-col gap-0.5 rounded-md border border-line2 bg-panel p-1.5">
-          {quick("Today", 0)}
-          {quick("Tomorrow", 1)}
-          {quick("In a week", 7)}
-          <form className="mt-1 flex gap-1.5" onSubmit={(e) => { e.preventDefault(); pick(date); }}>
-            <input type="date" aria-label="Date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
-            {withTime && (
-              <input type="time" aria-label="Time" value={time} onChange={(e) => setTime(e.target.value)}
-                className="h-7 w-[76px] rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
-            )}
-            <button type="submit" disabled={!date}
-              className="h-7 rounded-md border border-line2 px-2 text-[12px] text-fg2 hover:bg-sel disabled:opacity-50">Set</button>
-          </form>
+        <div className="mx-1 mb-1 flex flex-col gap-1.5 rounded-md border border-line2 bg-panel p-1.5">
+          {/* The time first: a day moves the task at once. */}
+          {withTime && (
+            <label className="flex items-center justify-between gap-2 pl-1.5 text-[12px] text-mut2">Time
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+                className="h-7 w-[84px] rounded-md border border-line2 bg-input px-1.5 text-[12px] text-fg2" />
+            </label>
+          )}
+          <MiniCalendar value={value ? dateOnly(value) : ""} onPick={pick} />
         </div>
       )}
       {(kind === "due" || kind === "plan") && (
