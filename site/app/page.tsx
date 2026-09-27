@@ -2,7 +2,7 @@ import Link from "next/link";
 import prices from "@/prices.json";
 import { SITE, downloadEvent, signInEvent, sourceEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
-import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, OPEN_SOURCE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
+import { CLOUD, DAY, DOWNLOAD_NOTE, FAQ, FLOW, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, TRY, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication, softwareSourceCode } from "@/lib/seo";
 import { starsAtBuild } from "@/lib/github";
 import { JsonLd } from "@/components/json-ld";
@@ -14,7 +14,11 @@ import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
 import { TodayScreen } from "@/components/screens/today";
 import { TimelineScreen } from "@/components/screens/timeline";
 import { FlowScreen } from "@/components/screens/flow";
-import { Icon } from "@/components/screens/parts";
+import { FLOW_LINE, Icon } from "@/components/screens/parts";
+import { SessionFlow } from "@/components/session-flow";
+import { DeparturesBoard } from "@/components/departures-board";
+import { DayStrip } from "@/components/day-strip";
+import { CommandPalette } from "@/components/command-palette";
 import { CountryPicker, PlanPrice } from "@/components/plan-price";
 
 export const metadata = pageMetadata("/");
@@ -56,6 +60,7 @@ export default async function Home() {
       <header className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="PacedMind" className="rounded-[7px]"><Emblem size={30} /></Link>
         <nav className="flex items-center gap-[18px] text-[16px] text-mut sm:gap-[30px]">
+          <a href="#agents" className="hover:text-ink max-sm:hidden">Agents</a>
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
           {/* On phones the mark stands for the word, and the narrowest have room for the mark alone. */}
@@ -93,6 +98,68 @@ export default async function Home() {
             </p>
           </div>
           <ScreenDeck items={VIEWS} className={{ stage: `min-w-0 ${DECK_WIDTH}`, controls: `lg:col-start-2 ${DECK_WIDTH}` }} />
+        </section>
+
+        {/*
+          Between the hero and the pricing, one day three ways: your day beside the agents' (the day strip), where each
+          session runs (the board) and how the next one starts (the flow). Their widgets share the day's tasks and times.
+        */}
+        <section id="day" className="mt-24 scroll-mt-8 sm:mt-[150px]">
+          <Heading title={DAY.title} subtitle={DAY.subtitle} intro={DAY.intro} />
+          <DayStrip className="mt-12 sm:mt-16" />
+        </section>
+
+        {/* The day's sessions on a board, then the places they run in, and a place kept for the agents still to come. */}
+        <section id="agents" className="mt-24 scroll-mt-8 sm:mt-[150px]">
+          <Heading title={PLACES.title} subtitle={PLACES.subtitle} intro={PLACES.intro} />
+          <DeparturesBoard className="mt-12 sm:mt-16" />
+          <ul className="mt-16 grid gap-x-14 gap-y-10 border-t border-line pt-12 sm:mt-20 md:grid-cols-3 md:pt-14">
+            {PLACES.items.map(({ icon, name, body }) => (
+              <li key={name}>
+                <Icon name={icon} size={22} strokeWidth={1.6} className="text-mut" />
+                <p className="mt-4 text-[17px] text-ink sm:text-[18px]">{name}</p>
+                <p className="mt-1.5 text-[16px] leading-[1.6] text-mut">{body}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-10 max-w-[720px] text-[16px] leading-[1.6] text-text">{PLACES.note}</p>
+          <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-4 border-t border-line pt-10">
+            <div aria-hidden="true" className="flex items-center gap-2 text-[15px]">
+              {["Claude Code", "Codex"].map((agent) => (
+                <span key={agent} className="flex h-9 items-center gap-2 rounded-[9px] border border-line px-3 text-ink">
+                  <Icon name="terminal" size={15} className="text-mut" />{agent}
+                </span>
+              ))}
+              <span className="flex h-9 w-12 items-center justify-center rounded-[9px] border border-dashed border-mut/60 text-mut">
+                <Icon name="plus" size={15} />
+              </span>
+            </div>
+            <p className="text-[16px] text-text sm:text-[18px]">{PLACES.harnesses}</p>
+          </div>
+        </section>
+
+        {/* A project's flow playing through the day, then the four ways the next session starts, drawn as the flow draws them. */}
+        <section id="flow" className="mt-24 scroll-mt-8 sm:mt-[150px]">
+          <Heading title={FLOW.title} subtitle={FLOW.subtitle} intro={FLOW.intro} />
+          <SessionFlow className="mt-12 sm:mt-16" />
+          <ul className="mt-16 grid gap-x-14 gap-y-10 border-t border-line pt-12 sm:mt-20 sm:grid-cols-2 md:pt-14 xl:grid-cols-4">
+            {FLOW.modes.map(({ mode, name, body }) => (
+              <li key={name}>
+                <svg width="34" height="22" viewBox="0 0 34 22" aria-hidden="true" className="text-mut">
+                  <path d="M 1.5 11 L 32.5 11" stroke="currentColor" strokeWidth={FLOW_LINE[mode].width * 1.3}
+                    strokeDasharray={FLOW_LINE[mode].dash} strokeLinecap="round" />
+                </svg>
+                <p className="mt-4 text-[17px] text-ink sm:text-[18px]">{name}</p>
+                <p className="mt-1.5 text-[16px] leading-[1.6] text-mut">{body}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-10 max-w-[720px] text-[16px] leading-[1.6] text-text">{FLOW.note}</p>
+        </section>
+
+        <section id="try" className="mt-24 scroll-mt-8 sm:mt-[150px]">
+          <Heading title={TRY.title} subtitle={TRY.subtitle} />
+          <CommandPalette className="mt-12 sm:mt-16" />
         </section>
 
         {/* The repository with the commands that build it, then what anyone can do with the code. */}

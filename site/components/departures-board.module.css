@@ -1,0 +1,341 @@
+/*
+ * The departures board (departures-board.tsx). It's black in both themes, like a real board, so its colors are the
+ * app's dark surfaces written out here rather than the page's tokens, which turn light in a light theme. Its letters
+ * are sized from its own width (container units), in three layouts: a line per session on a wide board, the agent
+ * and place under the title on a narrower one, and four short lines on a phone.
+ */
+.wrap {
+  container-type: inline-size;
+}
+
+.board {
+  --fs: clamp(14px, calc((100cqi - 380px) / 51), 18px);
+  --cw: calc(var(--fs) * 0.6 + 4px);
+  --ch: calc(var(--fs) * 1.58);
+  --g: 2px;
+  --c-time: calc(5 * (var(--cw) + var(--g)) - var(--g));
+  --c-key: calc(6 * (var(--cw) + var(--g)) - var(--g));
+  --c-title: calc(29 * 0.61 * var(--fs) + 18px);
+  --c-short: calc(11 * 0.61 * var(--fs) + 18px);
+  --board-ink: #ededef;
+  --board-dim: #85858c;
+  --board-mut: #a1a1a8;
+  --board-wait: #95abd9;
+  --board-edge: #1b1b1e;
+  border-radius: 16px;
+  background: #000000;
+  color: var(--board-ink);
+  padding: 22px 28px 28px;
+}
+
+/* On a black page, a hairline keeps the board's edge. */
+@media (prefers-color-scheme: dark) {
+  .board {
+    box-shadow: 0 0 0 1px var(--board-edge);
+  }
+}
+
+/* As tall as the Pause button, which only appears once the script runs, so nothing moves when it does. */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 50px;
+  padding-bottom: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.wordmark {
+  display: block;
+  flex: none;
+  width: clamp(92px, 9cqi, 124px);
+}
+
+.name {
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.today {
+  margin-left: auto;
+  font-size: 15px;
+  color: var(--board-mut);
+}
+
+.pause {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--board-edge);
+  border-radius: 8px;
+  font-size: 15px;
+  color: var(--board-mut);
+  cursor: pointer;
+}
+
+.pause:hover {
+  border-color: #3a3a3f;
+  color: var(--board-ink);
+}
+
+/* The page's navy outline wouldn't show on black. */
+.pause:focus-visible {
+  outline: 2px solid var(--board-wait);
+  outline-offset: 3px;
+}
+
+.rows {
+  display: grid;
+  row-gap: 10px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: var(--c-time) var(--c-key) var(--c-title) var(--c-short) var(--c-short) minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: center;
+}
+
+.labels {
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--board-edge);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--board-mut);
+}
+
+.task {
+  grid-column: span 2;
+}
+
+.run {
+  display: flex;
+  gap: var(--g);
+}
+
+.meta {
+  display: contents;
+}
+
+.status {
+  position: relative;
+}
+
+/* The lamp beside a session that's waiting for you, like the app's dot. */
+.lamp {
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 50%;
+  background: var(--board-wait);
+  opacity: 0;
+  transition: opacity 0.5s;
+}
+
+.wait .lamp {
+  opacity: 1;
+}
+
+/*
+ * One flap. Its halves are its ::before (the top of data-t) and ::after (the bottom of data-b), split by a black
+ * hinge; during a change, two leaves the script adds fall over them.
+ */
+.flap {
+  --h: var(--ch);
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--cw);
+  height: var(--h);
+  color: var(--board-ink);
+  font: 500 var(--fs) / var(--h) var(--font-mono);
+  transition: color 0.6s;
+}
+
+.wide {
+  width: calc(var(--n) * 0.61 * var(--fs) + 18px);
+}
+
+.flap::before,
+.flap::after,
+.leafTop,
+.leafBottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+  white-space: pre;
+  text-align: center;
+}
+
+.wide::before,
+.wide::after,
+.wide .leafTop,
+.wide .leafBottom {
+  padding-left: 9px;
+  text-align: left;
+}
+
+/* A line as tall as the flap shows a letter's top half; a line of no height, its bottom half. */
+.flap::before,
+.leafTop {
+  top: 0;
+  line-height: var(--h);
+  background: #1d1d20;
+  border-radius: 3px 3px 0 0;
+}
+
+.flap::after,
+.leafBottom {
+  bottom: 0;
+  line-height: 0;
+  background: #17171a;
+  border-radius: 0 0 3px 3px;
+  box-shadow: inset 0 1px #000000;
+}
+
+.flap::before {
+  content: attr(data-t);
+}
+
+.flap::after {
+  content: attr(data-b);
+}
+
+.leafTop,
+.leafBottom {
+  z-index: 1;
+  visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.leafTop {
+  transform-origin: 50% 100%;
+}
+
+.leafBottom {
+  transform-origin: 50% 0;
+}
+
+.done .flap {
+  color: var(--board-dim);
+}
+
+.wait .status .flap {
+  color: var(--board-wait);
+}
+
+/* Narrower: the agent and the place go under the title. */
+@container (max-width: 1089px) {
+  .board {
+    --fs: clamp(12px, calc((100cqi - 316px) / 37.6), 18px);
+  }
+
+  .rows {
+    row-gap: 16px;
+  }
+
+  .row {
+    grid-template-columns: var(--c-time) var(--c-key) var(--c-title) minmax(0, 1fr);
+    row-gap: 6px;
+  }
+
+  .meta {
+    display: flex;
+    gap: 6px;
+    grid-column: 3;
+    grid-row: 2;
+  }
+
+  .status {
+    grid-column: 4;
+    grid-row: 1 / span 2;
+    align-self: start;
+  }
+
+  .labels .agent,
+  .labels .where {
+    display: none;
+  }
+
+  .small {
+    --sfs: calc(var(--fs) * 0.8);
+    --h: calc(var(--ch) * 0.82);
+    width: calc(var(--n) * 0.61 * var(--sfs) + 16px);
+    font-size: var(--sfs);
+  }
+}
+
+/* A phone: time and task, title, agent and place, status. */
+@container (max-width: 759px) {
+  .board {
+    --fs: clamp(11px, calc(((100cqi - 26px) / 22 - 6px) / 0.6), 18px);
+    border-radius: 14px;
+    padding: 16px 14px 20px;
+  }
+
+  .rows {
+    row-gap: 22px;
+  }
+
+  .row {
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+  }
+
+  .titleCell,
+  .meta,
+  .status {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  /* The first session is long done; the phone shows the five that move. */
+  .labels,
+  .lamp,
+  .row[data-row="0"] {
+    display: none;
+  }
+
+  .small {
+    --sfs: calc(var(--fs) * 0.9);
+  }
+
+  .head {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    min-height: 48px;
+    padding-bottom: 16px;
+  }
+
+  .name {
+    font-size: 17px;
+  }
+
+  .today {
+    display: none;
+  }
+
+  .pause {
+    margin-left: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flap,
+  .lamp {
+    transition: none;
+  }
+}

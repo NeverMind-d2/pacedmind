@@ -39,6 +39,64 @@ export const VIEWS = [
   },
 ] as const;
 
+/*
+ * The sections between the hero and the pricing tell one day three ways: your day beside the agents' (DAY), where
+ * each session runs (PLACES) and how the next one starts (FLOW). The places and the ways to start are the app's own
+ * (Runs in, and the ways to start in the Flow editor). Their widgets (day-strip, departures-board, session-flow and
+ * the command palette) share this day, so change it in all of them together:
+ * - You: 08:30 standup, 09:00–11:00 focus on the pricing page, checks at 11:00 (WEB-10), 11:15 (WEB-12) and 11:30
+ *   (APP-31), 12:30 lunch with Ana, 13:30 check (WEB-14), 14:00 PER-8 Book the dentist, 15:00–16:30 WRK-31 (due 17:00).
+ * - WEB-10 Draft the home page: Claude Code in the Claude app, 09:10–09:52. WEB-12 Write the pricing page: Claude Code
+ *   in a terminal, on its own at 09:52, finished 10:42, marked done 11:20. APP-31 Fix calendar sync after sleep: Codex
+ *   in a terminal, 09:40–11:10. WEB-14 Compress the hero images: Codex cloud, after WEB-12 is marked done, 11:20–13:20.
+ *   WEB-16 Draft the launch announcement: Claude Code in a terminal at 18:00, back 18:47; WEB-17 Proofread the
+ *   announcement carries on in the same session until 19:30.
+ */
+
+/** Your day and the agents' sessions on one timeline, with the checks PacedMind books when a session finishes. */
+export const DAY = {
+  title: "Your day, and your agents'.",
+  subtitle: "When one finishes, a check lands in your day.",
+  intro:
+    "Tasks, time blocks, deadlines and events share your line. Claude Code and Codex each get one of their own. Press play to watch a day go by, at the pace you choose.",
+};
+
+/** Where each session runs. */
+export const PLACES = {
+  title: "Every session in its place.",
+  subtitle: "In a terminal, the agent's app or the cloud.",
+  intro:
+    "Each task says where its session runs. PacedMind finds Claude Code and Codex on your computer by itself, starts every session in its place and keeps track of all of them.",
+  items: [
+    { icon: "terminal", name: "In a terminal", body: "Claude Code or Codex opens in a new terminal, in the task's folder, with the task as its first message." },
+    { icon: "appWindow", name: "In the agent's app", body: "The Claude or Codex app opens a new session in the task's folder, with the first message written for you to send." },
+    { icon: "cloud", name: "In the agent's cloud", body: "Claude Code on the web and Codex cloud work on a copy of your repository, on a new branch named after the task." },
+  ],
+  note: "Until you choose, a task runs in a terminal, or in the agent's app when its command-line tool isn't there. With Cloud, when it arrives, a task can also run on another of your computers.",
+  harnesses: "Claude Code and Codex today. Support for more agent harnesses is coming soon.",
+} as const;
+
+/** How a flow starts the next session. */
+export const FLOW = {
+  title: "Sessions that start on their own.",
+  subtitle: "One after another, in the order you choose.",
+  intro:
+    "Connect a project's tasks into a flow. When a task's turn comes, PacedMind starts its session with Claude Code or Codex, where the task runs, and tells you when one needs you.",
+  modes: [
+    { mode: "auto", name: "Automatically", body: "As soon as the session before it is finished." },
+    { mode: "manual", name: "After you mark it done", body: "You check the work first, then the next session starts." },
+    { mode: "session", name: "In the same session", body: "The agent carries on without stopping, with everything it learned." },
+    { mode: "time", name: "At a set time", body: "At 18:00 or tomorrow at 9:00, once the task before it is finished." },
+  ],
+  note: "A task waits for every task connected to it. Work handed back partly done or blocked waits for you.",
+} as const;
+
+/** The command palette, to try on the page. It shows what PacedMind does, not the app's own Ctrl K. */
+export const TRY = {
+  title: "Try it here.",
+  subtitle: "Pick something to do and see what happens.",
+};
+
 /**
  * The source code: why it's public, the commands that build it (the repository's README), and what anyone can do
  * with it. The FAQ's last answer says the same in short.
@@ -110,7 +168,11 @@ export const FAQ = [
   },
   {
     question: "How does PacedMind work with Claude Code and Codex?",
-    answer: "Start a session from a task, and PacedMind opens Claude Code or Codex in its own terminal, where you talk to the agent as usual. Connect tasks into a flow, and the next session starts when the last one finishes, after you sign off, or at a time you choose. When an agent finishes, PacedMind tells you and books a short check in your day.",
+    answer: "Start a session from a task, and PacedMind opens Claude Code or Codex in a terminal or in the agent's desktop app, where you talk to the agent as usual, or sends the task to the agent's cloud. Connect tasks into a flow, and the next session starts when the last one finishes, after you mark it done, in the same session, or at a time you choose. When an agent finishes, PacedMind tells you and books a short check in your day.",
+  },
+  {
+    question: "Which coding agents does PacedMind work with?",
+    answer: "Claude Code and Codex, in a terminal, in their desktop apps or in their cloud. Support for more agent harnesses is coming soon.",
   },
   {
     question: "Do I need Claude Code or Codex to use PacedMind?",

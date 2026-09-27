@@ -51,6 +51,11 @@ export function downloadEvent(os: "windows" | "mac", place: "hero" | "pricing") 
   return { "data-umami-event": "Download", "data-umami-event-os": os, "data-umami-event-place": place };
 }
 
+/** Counts a download started from a script, not a link, as the same "Download" event (the command palette's). */
+export function trackDownload(os: "windows" | "mac", place: "palette") {
+  (window as { umami?: { track: (event: string, data: Record<string, string>) => void } }).umami?.track("Download", { os, place });
+}
+
 /** Makes Umami count a click on a link to the web app as a "Sign in" event, with where the link is. */
 export function signInEvent(place: "header" | "footer") {
   return { "data-umami-event": "Sign in", "data-umami-event-place": place };
