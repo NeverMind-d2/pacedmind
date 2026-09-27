@@ -510,6 +510,36 @@ function Agents({ d, here, pending, now, onConnect }: {
           </div>
         ))}
       </div>
+      <Harness d={d} />
+    </div>
+  );
+}
+
+/** What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (harness.ts). */
+function Harness({ d }: { d: Device }) {
+  const lines = AGENTS.flatMap((a) => {
+    const t = d.agents[a];
+    const h = t.harness;
+    if (!h || (!t.cli && !t.app)) return [];
+    const parts = [
+      h.mcp.length ? `MCP servers ${h.mcp.join(", ")}` : "no other MCP servers",
+      h.plugins.length ? `plugins ${h.plugins.join(", ")}` : null,
+      h.skills ? `${h.skills} ${h.skills === 1 ? "skill" : "skills"}` : null,
+      h.hooks.length ? `hooks on ${h.hooks.join(", ")}` : null,
+    ].filter(Boolean);
+    return [{ a, text: parts.join(" · ") }];
+  });
+  if (!lines.length) return null;
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-line px-4 py-2.5 text-[12.5px] max-md:px-3.5"
+      title="Read from Claude Code's and Codex's own settings on that computer. A project's folder can add more: see Settings.">
+      <span className="text-[12px] text-mut2">Besides PacedMind, their sessions also get</span>
+      {lines.map(({ a, text }) => (
+        <div key={a} className="flex items-start gap-2">
+          <AgentIcon agent={a} size={13} className="mt-[3px] shrink-0 text-fg3" />
+          <span className="min-w-0 break-words text-fg2">{text}</span>
+        </div>
+      ))}
     </div>
   );
 }

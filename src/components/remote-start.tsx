@@ -47,8 +47,8 @@ export type RunAsk =
     to: Surface | null;
     /** The computer it ran on (or that sent it to the cloud): it goes on only there. */
     deviceId: string | null;
-    /** Claude Code goes on with its conversation; otherwise the agent starts again with its last report. */
-    resumes: boolean;
+    /** changes: what the sheet starts with, such as your answers to the agent's questions (AnswerForm). */
+    text?: string;
   };
 
 const open = (ask: RunAsk) => window.dispatchEvent(new CustomEvent<RunAsk>(EVENT, { detail: ask }));
@@ -69,7 +69,6 @@ export async function startSessionOrAsk(taskId: number, agent?: Doer | null, sur
 /** What the sheet needs of a session to resume it or send it back. */
 type SessionRef = { id: string; taskId: number; agent: AgentId; surface: Surface; cliSessionId: string | null };
 
-const resumes = (s: SessionRef) => s.agent === "claude" && !!s.cliSessionId;
 
 /**
  * Picks a session up again here (`to` "desktop": in the Claude app). In the web app, and for a session that ran on
@@ -78,13 +77,16 @@ const resumes = (s: SessionRef) => s.agent === "claude" && !!s.cliSessionId;
 export async function resumeSessionOrAsk(s: SessionRef, to?: Surface) {
   const r = await resumeSessionAction(s.id, to);
   if (!r.remote) return r;
-  open({ kind: "resume", taskId: s.taskId, sessionId: s.id, agent: s.agent, from: s.surface, to: to ?? null, deviceId: r.deviceId ?? null, resumes: resumes(s) });
+  open({ kind: "resume", taskId: s.taskId, sessionId: s.id, agent: s.agent, from: s.surface, to: to ?? null, deviceId: r.deviceId ?? null });
   return { ok: true };
 }
 
-/** Sends a session back with changes through the computer it ran on (TaskContext.changesVia): the sheet takes the text. */
-export function askForChangesOn(s: SessionRef, deviceId: string) {
-  open({ kind: "changes", taskId: s.taskId, sessionId: s.id, agent: s.agent, from: s.surface, to: null, deviceId, resumes: resumes(s) });
+/**
+ * Sends a session back with changes through the computer it ran on (TaskContext.changesVia): the sheet takes the text,
+ * starting with `text` when given (your answers to its questions).
+ */
+export function askForChangesOn(s: SessionRef, deviceId: string, text?: string) {
+  open({ kind: "changes", taskId: s.taskId, sessionId: s.id, agent: s.agent, from: s.surface, to: null, deviceId, text });
 }
 
 /* ---------- words ---------- */
@@ -196,7 +198,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   const [picked, setPicked] = useState<Surface | null>(ask.kind === "start" ? ask.surface ?? null : null);
   const [code, setCode] = useState("");
   const [needCode, setNeedCode] = useState(false);
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => (ask.kind === "changes" ? ask.text ?? "" : ""));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // With a mouse and keyboard the field to type in takes the focus; on a phone its keyboard would cover the choices.
@@ -307,8 +309,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
     if (ask.kind === "changes") {
       hints.push({
         icon: "pen",
-        text: ask.resumes ? `${AGENT_LABEL[ask.agent]} goes on with its conversation in a new terminal, and reads your note as you wrote it.`
-          : `${AGENT_LABEL[ask.agent]} starts again in a new terminal with its last report, and reads your note as you wrote it.`,
+        text: `${AGENT_LABEL[ask.agent]} starts again in a new terminal with its last report, and reads your note as you wrote it.`,
       });
     } else if (ask.kind === "resume" && ask.from === "cloud") {
       hints.push({ icon: "terminal", text: `A terminal on ${device.name} pulls the cloud session and its branch in (claude --teleport).` });

@@ -263,6 +263,52 @@ export interface AgentTools {
   mcp: McpLink;
   /** Whether the CLI is signed in (Claude Code on the web and Codex cloud start from it). */
   login: AgentLogin;
+  /** What its sessions get besides PacedMind in every folder, as its config files name it (harness.ts); missing until it looked. */
+  harness?: AgentHarness;
+}
+
+/**
+ * What an agent gets on a computer besides PacedMind, by name only (harness.ts): the MCP servers and plugins its config
+ * turns on everywhere, how many skills it has, and which of its hooks run. Never a server's command, address or keys.
+ */
+export interface AgentHarness {
+  mcp: string[];
+  plugins: string[];
+  skills: number;
+  hooks: string[];
+}
+
+/** An MCP server a project's folder names for Claude Code (.mcp.json): whether Claude Code may use it there, or asks you first (null). */
+export interface FolderServer {
+  name: string;
+  approved: boolean | null;
+}
+
+/**
+ * What an agent gets in a project's folder on this computer on top of what it has everywhere (harness.ts), by name only:
+ * MCP servers from the folder's own files and Claude Code's servers for this folder alone, skills, hooks and plugins
+ * the folder's settings add, and the instruction files the agents read there.
+ */
+export interface FolderHarness {
+  claudeMcp: FolderServer[];
+  /** Claude Code's servers for this folder only (local scope, kept in ~/.claude.json). */
+  claudeLocal: string[];
+  codexMcp: string[];
+  skills: number;
+  hooks: string[];
+  plugins: string[];
+  /** CLAUDE.md, AGENTS.md: what the agents read there before they start. */
+  instructions: string[];
+}
+
+/**
+ * A project on this computer as Settings shows it for agents: what they get in its folder (null without one), the MCP
+ * servers besides PacedMind its sessions could have, by agent, and the ones they get (null: all of them).
+ */
+export interface ProjectAgentsView {
+  harness: FolderHarness | null;
+  choices: Record<AgentId, string[]>;
+  servers: string[] | null;
 }
 
 export const NO_AGENT_TOOLS: AgentTools = { cli: null, app: null, mcp: "missing", login: { state: "unknown" } };
@@ -418,6 +464,13 @@ export const SURFACE_LABEL: Record<Surface, string> = { terminal: "Terminal", de
 /** The agent's desktop app and its cloud, by name. */
 export const APP_LABEL: Record<AgentId, string> = { claude: "Claude app", codex: "Codex app" };
 export const CLOUD_LABEL: Record<AgentId, string> = { claude: "Claude Code on the web", codex: "Codex cloud" };
+
+/**
+ * How your answers to an agent's questions start when they go back to it, like changes (AnswerForm in report.tsx):
+ * requestChanges tells them apart by it, also when they come from another computer.
+ */
+export const ANSWERS_HEADING = "My answers to your questions:";
+export const isAnswers = (text: string) => text.startsWith(ANSWERS_HEADING);
 
 /** The answer Claude Code needs the first time it starts in a folder, before it reads its first message (claude-trust.ts). */
 export const TRUST_ANSWER = "Yes, I trust this folder";

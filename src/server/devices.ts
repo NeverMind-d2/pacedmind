@@ -5,6 +5,7 @@ import path from "node:path";
 import pkg from "../../package.json";
 import * as repo from "./repo";
 import { agentCommandFor, deviceConfig, thisPlatform } from "./device";
+import { agentHarness } from "./harness";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
@@ -278,8 +279,8 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
     const agents: Device["agents"] = {
-      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn },
-      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn },
+      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn, harness: agentHarness("claude") },
+      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn, harness: agentHarness("codex") },
     };
     g.__pacedmindTools = agents;
     g.__pacedmindToolsAt = new Date().toISOString();

@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as repo from "../repo";
+import { noteAgentActivity } from "../signals";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
@@ -52,9 +53,12 @@ export function tool<S extends z.ZodObject>(
     },
     (async (args: z.infer<S>) => {
       try {
-        if (ownerOnly && caller().kind === "session") {
+        const who = caller();
+        if (ownerOnly && who.kind === "session") {
           fail(`Sessions that PacedMind started can't use ${name}. Ask the user to do it in PacedMind.`);
         }
+        // A session's agent calling PacedMind is at work, whatever it waited for before.
+        if (who.kind === "session") await noteAgentActivity(who.sessionId).catch(() => {});
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
         const text = e instanceof ToolError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;

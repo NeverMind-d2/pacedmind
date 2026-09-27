@@ -11,7 +11,7 @@ import {
   afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
 } from "@/server/ops";
 import { approve, deny } from "@/server/requests";
-import { commandProblem, deviceConfig, rotateOwnerToken, updateDevice } from "@/server/device";
+import { commandProblem, deviceConfig, rotateOwnerToken, setProjectServers, updateDevice } from "@/server/device";
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
@@ -535,6 +535,19 @@ export async function setCodexEnvAction(projectId: string, env: string | null): 
   if (problem) return { ok: false, error: problem };
   if (!(await repo.getProject(projectId))) return { ok: false, error: "Project not found" };
   await repo.updateProject(projectId, { codexEnv: value });
+  return done();
+}
+
+/**
+ * Which MCP servers besides PacedMind a project's sessions get on this computer, by name; null for all of them. This
+ * computer's own setting, like the project's folder.
+ */
+export async function setProjectServersAction(projectId: string, names: string[] | null): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "A project's MCP servers are set in the desktop app, on the computer where its sessions run." };
+  if (names && (!Array.isArray(names) || names.some((n) => typeof n !== "string"))) return { ok: false, error: "Pick servers by name" };
+  if (!(await repo.getProject(projectId))) return { ok: false, error: "Project not found" };
+  setProjectServers(projectId, names);
   return done();
 }
 

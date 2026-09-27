@@ -3,10 +3,11 @@ import * as repo from "@/server/repo";
 import { legacySummary } from "@/server/account";
 import { thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
-import { deviceConfig } from "@/server/device";
+import { deviceConfig, projectServers } from "@/server/device";
+import { folderHarness, serverChoices } from "@/server/harness";
 import { encryptedAtRest } from "@/server/secure-file";
 import { MODE, authState } from "@/server/supabase";
-import type { DeviceSettings } from "@/lib/types";
+import type { DeviceSettings, ProjectAgentsView } from "@/lib/types";
 
 export default async function SettingsPage() {
   const [settings, projects, areas, sessions, state, devices, legacy, me] = await Promise.all([
@@ -18,6 +19,10 @@ export default async function SettingsPage() {
     name: d.name, terminal: d.terminal, claudeCommand: d.claudeCommand, codexCommand: d.codexCommand, remoteStart: d.remoteStart,
     deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
   };
+  // What agents get in each project's folder here, and the MCP servers its sessions get: this computer's to decide.
+  const agents: Record<string, ProjectAgentsView> | null = d && Object.fromEntries(projects.map((p) => [p.id, {
+    harness: p.folder ? folderHarness(p.folder) : null, choices: serverChoices(p.folder), servers: projectServers(p.id),
+  }]));
   // This computer first, with what it found of the agents itself; then the other computers signed in. Without
   // an account, there is only this one (and it has no id in any account yet).
   const signedIn = devices.filter((x) => !x.revokedAt);
@@ -41,6 +46,7 @@ export default async function SettingsPage() {
       legacy={state ? legacy : null}
       sessionsCount={sessions.length}
       platform={process.platform}
+      agents={agents}
     />
   );
 }

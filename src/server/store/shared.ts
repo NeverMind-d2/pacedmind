@@ -4,7 +4,7 @@ import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequestKind, LaunchRequestStatus, Priority, ReportCriterion,
+  AgentHarness, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequestKind, LaunchRequestStatus, Priority, ReportCriterion,
   ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
 } from "@/lib/types";
 
@@ -220,6 +220,20 @@ export function loginOf(v: unknown): AgentLogin {
   const method = loginWord(l.method);
   const plan = loginWord(l.plan);
   return { state, ...(method ? { method } : {}), ...(plan ? { plan } : {}) };
+}
+
+/**
+ * What a computer says its agent has besides PacedMind (harness.ts), checked the way it's read back from the cloud:
+ * lists of plain names, and a count. Undefined when there's nothing usable.
+ */
+export function harnessOf(v: unknown, max = 12): AgentHarness | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const h = v as Record<string, unknown>;
+  const list = (x: unknown, shape: RegExp) => strings(x).filter((n) => shape.test(n)).slice(0, max);
+  const skills = typeof h.skills === "number" && Number.isInteger(h.skills) && h.skills >= 0 ? Math.min(h.skills, 9999) : 0;
+  return {
+    mcp: list(h.mcp, /^[\w.@:+-]{1,48}$/), plugins: list(h.plugins, /^[\w.@:+-]{1,48}$/), skills, hooks: list(h.hooks, /^[A-Za-z]{1,40}$/),
+  };
 }
 
 /* ---------- settings ---------- */

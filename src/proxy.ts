@@ -11,6 +11,7 @@ const LOCAL = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const DESKTOP_OPEN = [
   /^\/api\/mcp\/?$/, // agents, with an MCP token (src/server/auth.ts)
   /^\/api\/sessions\/[0-9a-f]{16}\/ended$/, // a session's SessionEnd hook, with that session's token
+  /^\/api\/sessions\/[0-9a-f]{16}\/signal$/, // the hooks that say it waits for you or went on, with that session's token
   /^\/api\/health$/, // "is the server up", for the desktop app starting it; no data
   /^\/auth\/callback$/, // email links, which open in any browser; only this server can finish them (PKCE)
   /^\/auth\/done$/,

@@ -1,4 +1,5 @@
 import "server-only";
+import { noteSessionEvent } from "./attention";
 import { confirmedFlow, flowArmed, reconfirmFlow } from "./device";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
@@ -67,7 +68,12 @@ export const getSession = via("getSession");
 export const latestSession = via("latestSession");
 export const createSession = via("createSession");
 export const updateSession = via("updateSession");
-export const addSessionEvent = via("addSessionEvent");
+const addEvent = via("addSessionEvent");
+/** Adds to a session's history. Every event goes through here, so what the session waits for you about stays current (attention.ts). */
+export async function addSessionEvent(sessionId: string, kind: string, text = "") {
+  await addEvent(sessionId, kind, text);
+  noteSessionEvent(sessionId, kind);
+}
 export const sessionEvents = via("sessionEvents");
 export const sessionEventsFor = via("sessionEventsFor");
 export const doneTimes = via("doneTimes");

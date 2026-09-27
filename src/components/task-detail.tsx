@@ -8,7 +8,7 @@ import {
 } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
 import { RequestStatus, useComputer } from "./request-status";
-import { checkedIn, dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf,
   type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
@@ -17,7 +17,7 @@ import {
 import { DateField } from "./date-field";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
 import { InlineMarkdown } from "./markdown";
-import { Gallery, ReportBody, RequestChangesForm, SessionReport, sameText } from "./report";
+import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
@@ -49,7 +49,10 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
   const who = AGENT_LABEL[s.agent];
   switch (s.status) {
     case "starting":
-    case "running":
+    case "running": {
+      // Its terminal's hooks, or the agent itself, said it waits for you.
+      const waits = attentionOf(events);
+      if (waits) return { dot: "var(--color-accent)", text: waits.text };
       if (asksTrust && s.surface === "terminal" && !checkedIn(events)) return { dot: "var(--color-accent)", text: TRUST_WAITING };
       if (s.surface !== "cloud" && waitingInTerminal(s, events)) {
         return {
@@ -61,6 +64,7 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
       }
       if (report?.changes && report.changesAt) return { dot: "var(--color-fg3)", text: `${who} is working on your changes since ${fmtTime(report.changesAt)}` };
       return { dot: "var(--color-fg3)", text: `Running ${s.surface === "terminal" ? `in ${who}` : placeOf(s.agent, s.surface)} since ${fmtTime(s.startedAt)}` };
+    }
     case "finished": {
       const at = fmtTime(s.finishedAt ?? s.startedAt);
       if (report?.outcome === "blocked") return { dot: "var(--color-accent)", text: `${who} got stuck at ${at} · needs you` };
@@ -98,6 +102,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const due = dueInfo(task.dueDate);
   const subsDone = task.subtasks.filter((s) => s.done).length;
   const active = session && (session.status === "running" || session.status === "starting");
+  // What the agent plans to do, while it works (report_progress).
+  const plan = active ? planOf(events) : null;
 
   // What agents handed back, newest first. The one on view answers the Done when list; the arrows page through older ones.
   const reports = ctx.reports[task.id] ?? [];
@@ -120,6 +126,9 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const elsewhere = !!session && (!ctx.desktop || (!!session.deviceId && !!ctx.deviceId && session.deviceId !== ctx.deviceId));
   const ranOn = useComputer(session?.deviceId)?.name ?? "its computer";
   const changesVia = session ? ctx.changesVia?.[session.id] ?? null : null;
+  // The questions of the agent's latest hand-back: answering them sends the session back with the answers, like changes.
+  const [answering, setAnswering] = useState(false);
+  const questions = session && (session.status === "finished" || session.status === "done") ? latestOfSession?.questions ?? [] : [];
   const forThisTask = (r: { taskId: number }) => r.taskId === task.id;
   const pager = reports.length > 1 && (
     <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
@@ -174,6 +183,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             </div>
             {inCard ? <SessionReport key={report.id} report={report} criteria={offList} working={!!active} />
               : session.note && session.status !== "failed" && <p className="text-[12.5px] leading-relaxed text-mut">“{session.note}”</p>}
+            {plan && <SessionPlan plan={plan} />}
             {soFar.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <div className="text-[12px] font-medium text-fg3">Images so far</div>
@@ -181,8 +191,19 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               </div>
             )}
             <div className="truncate font-mono text-[11px] text-mut2">{[session.folder, session.branch].filter(Boolean).join(" · ")}</div>
-            {asking && canAsk ? (
-              <RequestChangesForm agent={session.agent} resumes={session.agent === "claude" && !!session.cliSessionId} pending={pending}
+            {answering && questions.length > 0 && (canAsk || changesVia) ? (
+              <AnswerForm agent={session.agent} questions={questions} pending={pending}
+                onCancel={() => setAnswering(false)}
+                onSend={(text) => {
+                  if (!canAsk) { askForChangesOn(session, changesVia!, text); setAnswering(false); return; }
+                  run(async () => {
+                    const r = await requestChangesAction(session.id, text);
+                    if (r.ok) setAnswering(false);
+                    return r;
+                  });
+                }} />
+            ) : asking && canAsk ? (
+              <RequestChangesForm agent={session.agent} pending={pending}
                 onCancel={() => setAsking(false)}
                 onSend={(changes) => run(async () => {
                   const r = await requestChangesAction(session.id, changes);
@@ -206,6 +227,9 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                     className="inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
                     <Icon name="cloud" size={13} />Open in the cloud
                   </a>
+                )}
+                {questions.length > 0 && (canAsk || changesVia) && (
+                  <Button onClick={() => setAnswering(true)}><Icon name="help" size={13} />{questions.length === 1 ? "Answer its question" : "Answer its questions"}</Button>
                 )}
                 {(canAsk || changesVia) && (
                   <Button onClick={() => (canAsk ? setAsking(true) : askForChangesOn(session, changesVia!))}><Icon name="pen" size={13} />Request changes</Button>
@@ -382,7 +406,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
 
         <div className="flex flex-col gap-2.5 border-t border-line pt-3.5 text-[12px] text-mut2">
           <Activity at={task.createdAt} text="Created" />
-          {events.map((e) => <Activity key={e.id} at={e.at} text={e.text || e.kind} />)}
+          {events.map((e) => <Activity key={e.id} at={e.at} text={eventLine(e)} />)}
           {task.completedAt && <Activity at={task.completedAt} text="Marked done" />}
         </div>
       </div>

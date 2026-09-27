@@ -99,6 +99,57 @@ export function waitingInTerminal(
   return now.getTime() - parseLocal(back >= 0 ? events[back].at : s.startedAt).getTime() > 90_000;
 }
 
+/**
+ * Session events that mean the agent waits for you: its turn ended in its terminal (`waiting`), it asks for your
+ * permission there (`permission`) or asks you something there (`input`), all from the hooks in its terminal
+ * (signals.ts); or it asked you a question over MCP (`question`, report_progress).
+ */
+export const ATTENTION_KINDS = ["waiting", "permission", "input", "question"] as const;
+export type AttentionKind = (typeof ATTENTION_KINDS)[number];
+
+export const isAttention = (kind: string): kind is AttentionKind => (ATTENTION_KINDS as readonly string[]).includes(kind);
+
+/** Events that say what a session runs with, not what it does: they don't end a wait. */
+export const isNeutralEvent = (kind: string) => kind === "connected" || kind === "environment";
+
+/**
+ * What a session waits for you about: its latest event, when that's one of ATTENTION_KINDS. Anything after it (the
+ * agent went back to work, called PacedMind, or you resumed it) means it went on. Only counts while it runs.
+ */
+export function attentionOf<E extends { kind: string }>(events: E[]): (E & { kind: AttentionKind }) | null {
+  const last = events.findLast((e) => !isNeutralEvent(e.kind));
+  return last && isAttention(last.kind) ? (last as E & { kind: AttentionKind }) : null;
+}
+
+/** A step of the plan an agent reports while it works (report_progress). */
+export interface PlanStep {
+  text: string;
+  done: boolean;
+}
+
+/** A plan as a `plan` event keeps it: a line per step, "[x] " for done ones and "[ ] " for the rest. */
+export const planText = (steps: PlanStep[]) => steps.map((s) => `[${s.done ? "x" : " "}] ${s.text}`).join("\n");
+
+/** An event as a session's history shows it: a plan as how far along it is, the rest as its text. */
+export function eventLine(e: { kind: string; text: string }): string {
+  if (e.kind === "plan") {
+    const steps = e.text.split("\n").filter((l) => /^\[[ x]\] /.test(l));
+    return `Plan: ${steps.filter((l) => l.startsWith("[x]")).length} of ${steps.length} steps done`;
+  }
+  return e.text || e.kind;
+}
+
+/** The latest plan a session's agent reported, or null. */
+export function planOf(events: { kind: string; text: string; at: string }[]): { steps: PlanStep[]; at: string } | null {
+  const e = events.findLast((x) => x.kind === "plan");
+  if (!e) return null;
+  const steps = e.text.split("\n").flatMap((line) => {
+    const m = line.match(/^\[([ x])\] (.+)$/);
+    return m ? [{ text: m[2], done: m[1] === "x" }] : [];
+  });
+  return steps.length ? { steps, at: e.at } : null;
+}
+
 export const fmtDay = (s: string) => format(parseLocal(dateOnly(s)), "EEE, d MMM");
 export const fmtShort = (s: string) => format(parseLocal(dateOnly(s)), "d MMM");
 export const fmtTime = (s: string) => format(parseLocal(s), "HH:mm");

@@ -31,6 +31,24 @@ const fold = (name: string) => (process.platform === "win32" ? name.toLowerCase(
  */
 const nameOf = (folder: string) => fold(process.platform === "win32" ? folder.replace(/\\/g, "/") : folder);
 
+/** Claude Code's config (~/.claude.json), or null when there's none to read. */
+export function claudeConfig(): Json | null {
+  try {
+    const config: unknown = JSON.parse(fs.readFileSync(configFile(), "utf8"));
+    return isObject(config) ? config : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Claude Code's own entry for exactly this folder in its config (projects[folder]), matched the way it names folders. */
+export function claudeFolderEntry(config: Json | null, folder: string): Json | null {
+  const projects = config && isObject(config.projects) ? config.projects : {};
+  const want = nameOf(path.resolve(folder));
+  const hit = Object.entries(projects).find(([name]) => fold(name) === want)?.[1];
+  return isObject(hit) ? hit : null;
+}
+
 /**
  * Reads Claude Code's config once and returns whether it will ask about each folder given, as many as needed (a page's
  * tasks, say). Null when there's no config to read: Claude Code then sets itself up the first time it runs.

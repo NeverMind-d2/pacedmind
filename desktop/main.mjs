@@ -444,23 +444,28 @@ function appMenu() {
 }
 
 /**
- * Watches for sessions that finished and for sessions waiting to be allowed, tells you with a
- * notification and keeps the tray tooltip current.
+ * Watches for sessions that finished, sessions whose agent waits for you in its terminal and sessions waiting to be
+ * allowed, tells you with a notification and keeps the tray tooltip current.
  */
 function watchSessions() {
   let known = null;
+  let heard = null;
   let asked = new Set();
   const check = async () => {
     if (!serverReady) return;
     const state = await getJson("/api/state");
     if (!state) return;
     const waiting = state.waiting ?? [];
+    const attention = state.attention ?? [];
     const approvals = state.approvals ?? [];
     if (known) for (const s of waiting) if (!known.has(s.id)) notify(s);
+    // Once per event: a session that waits again later tells you again.
+    if (heard) for (const s of attention) if (!heard.has(`${s.id}:${s.eventId}`)) notifyAttention(s);
     for (const a of approvals) if (!asked.has(a.id)) notifyApproval(a);
     known = new Set(waiting.map((s) => s.id));
+    heard = new Set(attention.map((s) => `${s.id}:${s.eventId}`));
     asked = new Set(approvals.map((a) => a.id));
-    const count = waiting.length + approvals.length;
+    const count = waiting.length + attention.length + approvals.length;
     tray?.setToolTip(count ? `PacedMind · ${count} waiting for you` : "PacedMind");
   };
   check();
@@ -488,6 +493,19 @@ function notifyApproval(a) {
   });
   notifications.add(n);
   n.on("click", () => showWindow());
+  n.on("close", () => notifications.delete(n));
+  n.show();
+}
+
+/** A running session whose agent waits for you: its turn ended in its terminal, it asks for your permission, or it asked you something. */
+function notifyAttention(s) {
+  if (!Notification.isSupported()) return;
+  const who = s.key ?? "A session";
+  const title = s.kind === "permission" ? `${who} asks for your permission`
+    : s.kind === "question" || s.kind === "input" ? `${who} has a question for you` : `${who} is waiting for you`;
+  const n = new Notification({ title, body: [s.title, s.text].filter(Boolean).join("\n"), icon: ICON_PNG });
+  notifications.add(n);
+  n.on("click", () => showWindow(`${ORIGIN}/sessions?s=${encodeURIComponent(s.id)}`));
   n.on("close", () => notifications.delete(n));
   n.show();
 }

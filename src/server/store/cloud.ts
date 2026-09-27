@@ -8,7 +8,7 @@ import {
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, expandOccurrences, linksOf, loginOf, pictureHash, snapshotOf, strings,
+  deriveKey, expandOccurrences, harnessOf, linksOf, loginOf, pictureHash, snapshotOf, strings,
   type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -800,7 +800,8 @@ function toolsOf(v: unknown): AgentTools {
   const cli = t.cli && typeof t.cli === "object" && typeof (t.cli as Row).version === "string" ? { version: String((t.cli as Row).version) } : null;
   const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
   const mcp = t.mcp === "connected" || t.mcp === "elsewhere" ? t.mcp : "missing";
-  return { cli, app, mcp, login: loginOf(t.login) };
+  const harness = harnessOf(t.harness);
+  return { cli, app, mcp, login: loginOf(t.login), ...(harness ? { harness } : {}) };
 }
 
 const isUuidValue = (v: unknown): v is string => typeof v === "string" && isUuid(v);
@@ -818,14 +819,18 @@ const toDevice = (r: Row): Device => {
 
 /**
  * Records what this computer found of the agents, for Settings on every computer: versions, whether the apps reach
- * PacedMind, and whether each CLI is signed in (the state, and the method and plan as single words). Never where the
- * tools are, and never an email, an organization or a key.
+ * PacedMind, whether each CLI is signed in (the state, and the method and plan as single words), and the names of
+ * what else its sessions get (MCP servers, plugins, hooks, how many skills). Never where the tools are, what a server
+ * runs or where it points, and never an email, an organization or a key. The database keeps it under 4000 bytes, so
+ * long lists get shorter.
  */
 export async function saveDeviceTools(id: string, agents: Device["agents"]) {
   if (!isUuid(id)) return;
-  const plain = Object.fromEntries(Object.entries(agents).map(([agent, t]) => [agent, {
-    cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login),
-  }]));
+  const shape = (max: number) => Object.fromEntries(Object.entries(agents).map(([agent, t]) => {
+    const harness = max > 0 ? harnessOf(t.harness, max) : undefined;
+    return [agent, { cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login), ...(harness ? { harness } : {}) }];
+  }));
+  const plain = [12, 6, 3, 0].map(shape).find((p) => JSON.stringify(p).length <= 3800) ?? shape(0);
   const db = await accountDb();
   check(await db.from("devices").update({ agents: plain, checked_at: new Date().toISOString() }).eq("id", id));
 }

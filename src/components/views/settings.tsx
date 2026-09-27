@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
   connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
-  updateProjectAction, updateSettingsAction,
+  setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
@@ -14,7 +14,8 @@ import { projectColor } from "@/lib/colors";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, deviceOnline,
-  type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings,
+  type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type FolderHarness, type Project, type ProjectAgentsView,
+  type RemoteStart, type Settings,
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon } from "../icons";
 import { ImportProjects } from "../import-projects";
@@ -29,10 +30,73 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "delete_task"]],
   ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
   ["Flows", ["get_flow", "connect_tasks", "disconnect_tasks", "add_to_flow", "remove_from_flow"]],
-  ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "finish_task"]],
+  ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "finish_task"]],
 ];
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const APPROVAL: Record<string, string> = { true: "allowed", false: "refused", null: "asks first" };
+
+/** What agents get in a project's folder besides what they have everywhere, in a few words each; empty for nothing. */
+function folderLines(h: FolderHarness): string[] {
+  return [
+    h.claudeMcp.length ? `Claude Code MCP servers from .mcp.json: ${h.claudeMcp.map((s) => `${s.name} (${APPROVAL[String(s.approved)]})`).join(", ")}` : null,
+    h.claudeLocal.length ? `Claude Code MCP servers for this folder: ${h.claudeLocal.join(", ")}` : null,
+    h.codexMcp.length ? `Codex MCP servers: ${h.codexMcp.join(", ")}` : null,
+    h.plugins.length ? `Plugins: ${h.plugins.join(", ")}` : null,
+    h.skills ? `${h.skills} ${h.skills === 1 ? "skill" : "skills"} in .claude/skills` : null,
+    h.hooks.length ? `Hooks on ${h.hooks.join(", ")}` : null,
+    h.instructions.length ? `Reads ${h.instructions.join(" and ")}` : null,
+  ].filter((l): l is string => !!l);
+}
+
+/**
+ * A project's agents on this computer: what they get in its folder (harness.ts), and which MCP servers besides
+ * PacedMind its sessions get. "Only these" gives Claude Code just the ones picked (--strict-mcp-config, so none from
+ * plugins either) and switches the others off for Codex; PacedMind's own server always stays.
+ */
+function ProjectAgents({ name, view, onServers }: { name: string; view: ProjectAgentsView; onServers: (names: string[] | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const lines = view.harness ? folderLines(view.harness) : [];
+  const all = [...new Set([...view.choices.claude, ...view.choices.codex, ...(view.servers ?? [])])].sort();
+  const chosen = view.servers;
+  const whose = (n: string) => [view.choices.claude.includes(n) ? "Claude Code" : null, view.choices.codex.includes(n) ? "Codex" : null].filter(Boolean).join(", ");
+  const summary = chosen === null ? "all they have here" : chosen.length ? `only ${chosen.join(", ")}` : "none besides PacedMind";
+  return (
+    <div className="flex flex-col gap-1.5 text-[12px] leading-snug text-mut2">
+      {lines.length > 0 && (
+        <div className="flex flex-col gap-0.5" title="Read from the folder's own files and Claude Code's settings for it, on this computer">
+          {lines.map((l) => <span key={l} className="break-words">{l}</span>)}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>MCP servers for its sessions: <span className="text-fg3">{summary}</span></span>
+        <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="rounded px-1 text-fg3 hover:bg-hover hover:text-fg2">
+          {open ? "Done" : "Change"}
+        </button>
+      </div>
+      {open && (
+        <div className="flex flex-col gap-2 rounded-md border border-line2 bg-raised p-2.5">
+          <Segmented value={chosen === null ? "all" : "some"}
+            options={[{ value: "all", label: "All of them" }, { value: "some", label: "Only these" }]}
+            onChange={(v) => onServers(v === "all" ? null : chosen ?? [])} />
+          {chosen !== null && (all.length ? all.map((n) => (
+            <div key={n} className="flex items-center gap-2.5">
+              <Switch on={chosen.includes(n)} label={`${n} for ${name}`} onChange={(on) => onServers(on ? [...chosen, n] : chosen.filter((x) => x !== n))} />
+              <span className="font-mono text-[11.5px] text-fg2">{n}</span>
+              <span className="text-[11.5px] text-mut2">{whose(n)}</span>
+            </div>
+          )) : <span>Claude Code and Codex have no other MCP servers here.</span>)}
+          <span className="text-[11.5px]">
+            {chosen === null
+              ? "Sessions get every MCP server Claude Code and Codex have in this folder, as when you start them yourself."
+              : "Claude Code gets only these, and none from plugins; Codex has the others switched off. PacedMind's own server always stays."}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const REMOTE_TEXT: Record<RemoteStart, string> = {
   off: "Sessions asked for from the web app or another computer are refused.",
@@ -83,7 +147,7 @@ export interface AccountView {
   backupCodes: boolean;
 }
 
-export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform }: {
+export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform, agents }: {
   settings: Settings; projects: Project[]; areas: Area[];
   /** The signed-in account; null without one, when the desktop app keeps this computer's own data. */
   account: AccountView | null;
@@ -100,6 +164,8 @@ export function SettingsView({ settings, projects, areas, account, devices, this
   sessionsCount: number;
   /** The server's system, which decides the terminals sessions can open in. */
   platform: NodeJS.Platform;
+  /** By project: what agents get in its folder here and which MCP servers its sessions get; null in the web app. */
+  agents: Record<string, ProjectAgentsView> | null;
 }) {
   const { run, pending } = useAction();
   const router = useRouter();
@@ -373,6 +439,9 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   {device && (
                     <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder={platform === "win32" ? "C:\\path\\to\\repo" : "/path/to/repo"} aria-label={`Folder for ${p.name}`}
                       onBlur={(e) => (e.target.value.trim() || null) !== p.folder && run(() => updateProjectAction(p.id, { folder: e.target.value.trim() || null }), "Folder saved")} />
+                  )}
+                  {device && agents?.[p.id] && (
+                    <ProjectAgents name={p.name} view={agents[p.id]} onServers={(names) => run(() => setProjectServersAction(p.id, names), "Saved")} />
                   )}
                 </div>
               ))}

@@ -8,9 +8,9 @@ import { closeSessionAction, finishSessionAction, markSessionDoneAction, request
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "@/components/remote-start";
 import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, useClock, useLaunchState } from "@/components/request-status";
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
-import { Gallery, RequestChangesForm, SessionReport } from "@/components/report";
+import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
-import { checkedIn, parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, waitingInTerminal } from "@/lib/dates";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, TRUST_WAITING, type AgentId, type Attachment, type Report, type SessionEvent, type SessionStatus, type Surface,
 } from "@/lib/types";
@@ -119,6 +119,8 @@ function duration(span: number): string {
 
 /** A session on a device whose agent hasn't checked in: waiting in its terminal, or for you to send it in the app. */
 const unheard = (s: SessionItem, now: number) => s.surface !== "cloud" && waitingInTerminal(s, s.events, new Date(now));
+/** What a running session's agent waits for you about, as its terminal's hooks or the agent said (attentionOf). */
+const waitsFor = (s: SessionItem) => (isActive(s) ? attentionOf(s.events) : null);
 /** Claude Code asking in its terminal whether you trust the folder, from the start. */
 const askingTrust = (s: SessionItem) => !!s.asksTrust && isActive(s) && s.surface === "terminal" && !checkedIn(s.events);
 
@@ -143,6 +145,8 @@ function meta(s: SessionItem, now: number): string {
     }
     case "starting":
     case "running": {
+      const waits = waitsFor(s);
+      if (waits) return waits.kind === "permission" ? "asks your permission" : waits.kind === "waiting" ? "waiting for you" : "has a question";
       if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
       if (asked) return `changes since ${clock(asked, now)}`;
@@ -159,6 +163,8 @@ function meta(s: SessionItem, now: number): string {
 
 function headline(s: SessionItem, now: number): string {
   const who = AGENT_LABEL[s.agent];
+  const waits = waitsFor(s);
+  if (waits) return waits.text;
   if (askingTrust(s)) return TRUST_WAITING;
   if (unheard(s, now)) {
     return s.surface === "desktop"
@@ -199,7 +205,7 @@ function workedFor(s: SessionItem, now: number): string | null {
 
 function eventText(e: SessionEvent, agent: AgentId): string {
   if (e.kind === "finished") return `${agentShort(agent)} marked it finished`;
-  return e.text || e.kind;
+  return eventLine(e);
 }
 
 /** Current time, starting from the server's clock (no hydration mismatch) and ticking every 30 s. */
@@ -335,18 +341,20 @@ function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] 
   );
 }
 
-function StateDot({ status }: { status: SessionStatus }) {
-  const d = DOT[status];
+/** A session's state; `waits` when its agent waits for you while it runs, which counts like a finished one. */
+function StateDot({ status, waits }: { status: SessionStatus; waits?: boolean }) {
+  const d = DOT[waits ? "finished" : status];
   return <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full border" style={{ background: d.fill, borderColor: d.ring }} />;
 }
 
 function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; selected: boolean; onSelect: () => void }) {
   const live = s.status === "finished" || isActive(s);
+  const waits = !!waitsFor(s);
   const images = (s.reports[0]?.images.length ?? 0) + s.pending.length;
   return (
     <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined}
       className={cx("flex h-[42px] w-full items-center gap-3 border-b border-hover px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
-      <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} /></span>
+      <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} waits={waits} /></span>
       <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2 @max-md:hidden">{s.task?.key ?? "—"}</span>
       <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? "Deleted task"}</span>
       <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project?.name ?? "No project"}</span>
@@ -357,7 +365,7 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
       <span title={images ? `${images} image${images === 1 ? "" : "s"}` : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2 @max-md:w-auto">
         {images > 0 && <><Icon name="image" size={13} />{images}</>}
       </span>
-      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.status === "finished" ? "text-fg2" : "text-mut2")}>
+      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.status === "finished" || waits ? "text-fg2" : "text-mut2")}>
         {meta(s, now)}
       </span>
     </button>
@@ -374,6 +382,9 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   const [viewing, setViewing] = useState(0);
   const report = s.reports[Math.min(viewing, s.reports.length - 1)] ?? null;
   const [asking, setAsking] = useState(false);
+  // The questions of the agent's latest hand-back: answering them sends the session back with the answers, like changes.
+  const [answering, setAnswering] = useState(false);
+  const questions = s.status === "finished" || s.status === "done" ? s.reports[0]?.questions ?? [] : [];
   // Only where the server would take them: a terminal on this computer, the task's latest report, not your own task.
   const canAsk = s.canRequestChanges;
   // A session goes on where it ran. The frame lists the account's computers other than this one (the web app has
@@ -383,6 +394,8 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   const on = s.device ?? "its computer";
   const ref = { id: s.id, taskId: s.task?.id ?? 0, agent: s.agent, surface: s.surface, cliSessionId: s.cliSessionId };
   const worked = workedFor(s, now);
+  // What the agent plans to do, while it works (report_progress).
+  const plan = active ? planOf(s.events) : null;
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
     s.origin === "outside" ? "outside PacedMind" : s.origin === "continued" ? "in the same session" : "from PacedMind"
@@ -395,6 +408,11 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
     ["Started", started, false],
   ];
   if (worked) props.push(["Duration", worked, false]);
+  // What it runs in, as its MCP client said when it connected, and what the agent says it runs with (start_task).
+  const client = s.events.findLast((e) => e.kind === "connected");
+  if (client) props.push(["Client", client.text.replace(/^Connected from /, ""), false]);
+  const env = s.events.findLast((e) => e.kind === "environment");
+  if (env) props.push(["Agent says", env.text.replace(/^.+? says it /, ""), false]);
   props.push(["Session", s.id, true]);
   if (s.cliSessionId) props.push(["Claude session", s.cliSessionId, true]);
 
@@ -419,7 +437,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
         <div className="flex flex-col gap-2.5">
           <h2 className="text-[20px] font-semibold leading-snug tracking-[-0.01em] text-strong">{s.task?.title ?? "Deleted task"}</h2>
           <div className="flex items-center gap-2 text-[12.5px] text-fg2">
-            <StateDot status={s.status} />
+            <StateDot status={s.status} waits={!!waitsFor(s)} />
             <span className="min-w-0 flex-1">{headline(s, now)}</span>
             {s.reports.length > 1 && (
               <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
@@ -439,6 +457,8 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
         </div>
 
         {report && <SessionReport key={report.id} report={report} criteria={report.criteria} working={active} />}
+
+        {plan && <SessionPlan plan={plan} />}
 
         {s.pending.length > 0 && (
           <div className="flex flex-col gap-1.5">
@@ -481,8 +501,20 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
       </div>
 
       <div className="flex shrink-0 flex-col gap-3 border-t border-line pb-4 pl-6 pr-4 pt-3.5">
-        {asking && canAsk && (
-          <RequestChangesForm agent={s.agent} resumes={s.agent === "claude" && !!s.cliSessionId} pending={pending}
+        {answering && questions.length > 0 && (canAsk || s.changesVia) && (
+          <AnswerForm agent={s.agent} questions={questions} pending={pending}
+            onCancel={() => setAnswering(false)}
+            onSend={(text) => {
+              if (!canAsk) { askForChangesOn(ref, s.changesVia!, text); setAnswering(false); return; }
+              run(async () => {
+                const r = await requestChangesAction(s.id, text);
+                if (r.ok) setAnswering(false);
+                return r;
+              });
+            }} />
+        )}
+        {asking && canAsk && !answering && (
+          <RequestChangesForm agent={s.agent} pending={pending}
             onCancel={() => setAsking(false)}
             onSend={(changes) => run(async () => {
               const r = await requestChangesAction(s.id, changes);
@@ -490,7 +522,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
               return r;
             })} />
         )}
-        <div className={cx("flex flex-wrap items-center gap-2", asking && canAsk && "hidden")}>
+        <div className={cx("flex flex-wrap items-center gap-2", ((asking && canAsk) || answering) && "hidden")}>
           {!active && s.status !== "failed" && s.surface === "terminal" && (
             <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))} className="min-w-0 max-w-full">
               <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" />
@@ -526,6 +558,11 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
             <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check, and what comes next may start."
               onClick={() => run(() => finishSessionAction(s.id))}>
               <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
+            </Button>
+          )}
+          {questions.length > 0 && (canAsk || s.changesVia) && (
+            <Button disabled={pending} onClick={() => setAnswering(true)}>
+              <Icon name="help" size={13} strokeWidth={2} />{questions.length === 1 ? "Answer its question" : "Answer its questions"}
             </Button>
           )}
           {(canAsk || s.changesVia) && (

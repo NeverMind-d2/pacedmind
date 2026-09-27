@@ -1,6 +1,6 @@
 ---
 name: pacedmind-agent-session
-description: How to work on a task that PacedMind (Organizer) handed to you as a coding or writing agent - pick it up with start_task, keep its sub-tasks current, record follow-up work, attach screenshots of the result, and hand it back with a report through finish_task. Use this skill whenever your first message mentions an Organizer or PacedMind task key and session id, or the user asks you to work on, pick up or continue a PacedMind task.
+description: How to work on a task that PacedMind (Organizer) handed to you as a coding or writing agent - pick it up with start_task, keep the user posted with report_progress, keep its sub-tasks current, record follow-up work, attach screenshots of the result, and hand it back with a report through finish_task. Use this skill whenever your first message mentions an Organizer or PacedMind task key and session id, or the user asks you to work on, pick up or continue a PacedMind task.
 ---
 
 # Working on a PacedMind task
@@ -19,9 +19,15 @@ PacedMind started this session so that you do one task and then hand it back for
 2. **Work** in the project folder as you normally would. Your session's PacedMind access covers your own task only: you can read, update your task's details and sub-tasks, attach images, and add new open tasks for follow-up work. Changing statuses (other than through `finish_task`), where your task runs, other tasks, flows or settings, and starting sessions, are left to the user.
    - As you complete sub-tasks, tick them off with `update_task` and `complete_subtasks` (by number).
    - When you find steps that are needed, add them with `add_subtasks`.
-3. **Capture what can be seen.** When your work changes something visible, such as a page, a screen, a document or a chart, take screenshots of the result and attach them. See [Screenshots](#screenshots).
-4. **Record follow-ups.** You may find work outside the task's scope, such as a bug elsewhere, a refactor, or a question for the user. Don't do it silently. Create a task for it with `create_task` in the same project, with a clear description and `done_when`, and list its key in your report.
-5. **Hand it back.** When the work is ready for the user to check, call `finish_task` with the task key, the session id and a report:
+3. **Keep the user posted** with `report_progress`, only at the moments that matter. PacedMind shows these on the task and in **Sessions**, and notifies the user about questions:
+   - **Your plan**, once you have one: `plan` with every step as a short outcome, in order. Send the whole plan again when a step is done (`done: true`) or the plan changes. The plan is yours; the task's sub-tasks stay the user's.
+   - **A problem that changes the scope or the risk**, such as a failing dependency, a design that won't work or a much bigger change than expected: `kind: "issue"` with a sentence on what and why.
+   - **A decision you need**: `kind: "question"` with the question. Ask it in the conversation too, then wait for the answer there.
+
+   Don't report routine steps ("reading files", "running tests"). A handful of updates per session is plenty.
+4. **Capture what can be seen.** When your work changes something visible, such as a page, a screen, a document or a chart, take screenshots of the result and attach them. See [Screenshots](#screenshots).
+5. **Record follow-ups.** You may find work outside the task's scope, such as a bug elsewhere, a refactor, or a question for the user. Don't do it silently. Create a task for it with `create_task` in the same project, with a clear description and `done_when`, and list its key in your report.
+6. **Hand it back.** When the work is ready for the user to check, call `finish_task` with the task key, the session id and a report:
    - `summary`: one or two sentences on what changed and what the user should look at first. Notifications show it.
    - `criteria`: an answer to each Done when item: its number as `item`, a `verdict` (`met`, `partly` or `not_met`) and a `note` on how you checked it or what's missing. Be honest. A `partly` with a clear note is worth more than a `met` the user disproves in a minute.
    - `images`: screenshots of the result, each with a caption.
@@ -53,4 +59,4 @@ Show the result the way the user will see it: the page or screen that changed, a
 
 - **Don't mark your own task done.** The user does that after reviewing it, and it may start the next agent in the flow.
 - **Don't change other tasks.** Leave their dates, priorities and projects alone, and don't delete anything in PacedMind. Those decisions belong to the user.
-- **Still hand back when you're stuck.** If you can't finish because you're blocked or need a decision, call `finish_task` with outcome `blocked`, a summary of what's blocking, and the decision you need in `questions`. That way the user sees it instead of a session that looks busy forever.
+- **Still hand back when you're stuck.** For a decision you can wait for, ask with `report_progress` (`kind: "question"`) and wait. If you can't go on at all, such as without access you don't have, call `finish_task` with outcome `blocked`, a summary of what's blocking, and the decision you need in `questions`. That way the user sees it instead of a session that looks busy forever.

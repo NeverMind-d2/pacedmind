@@ -8,7 +8,7 @@ import { MODE } from "./supabase";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
 import {
-  AGENT_LABEL, LIVE_STATUSES, isLiveSession,
+  AGENT_LABEL, ANSWERS_HEADING, LIVE_STATUSES, isAnswers, isLiveSession,
   type AgentId, type Project, type Report, type ReportCriterion, type ReportOutcome, type Session, type Task,
 } from "@/lib/types";
 
@@ -203,7 +203,9 @@ export async function requestChanges(sessionId: string, changes: string): Promis
     else await repo.deleteReport(reportId);
     return r;
   }
-  await repo.addSessionEvent(s.id, "changes_requested", `You asked for changes: ${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}`);
+  const said = isAnswers(text) ? text.slice(ANSWERS_HEADING.length).trim() : text;
+  const short = said.length > 140 ? `${said.slice(0, 140).trimEnd()}…` : said;
+  await repo.addSessionEvent(s.id, "changes_requested", isAnswers(text) ? `You answered its questions: ${short}` : `You asked for changes: ${short}`);
   await repo.updateTask(s.taskId, { status: "progress" });
   return { ok: true, session: (await repo.getSession(s.id))!, message: r.message };
 }

@@ -6,7 +6,8 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { requireAal2, supabase } from "./supabase";
 import { removeImageFiles } from "./attachments";
 import {
-  commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder, updateDevice,
+  commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, projectServers, setFlowArmed, setProjectFolder, setProjectServers, setTaskFolder,
+  taskFolder, updateDevice,
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot } from "./repo";
 import { localDbPath } from "./store/local-db";
@@ -298,6 +299,8 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       // earlier version kept them in its database, this one in this computer's settings.
       const folder = (typeof p.folder === "string" && p.folder.trim()) || projectFolder(String(p.id));
       const placed = folder ? !setProjectFolder(String(r.id), folder) : true;
+      const servers = projectServers(String(p.id));
+      if (servers) setProjectServers(String(r.id), servers);
       if (placed && (Number(p.flow_on) === 1 || flowArmed(String(p.id)))) flowsOn.push(String(r.id));
     }
     for (const p of projects.filter((x) => x.after_project_id != null)) {
