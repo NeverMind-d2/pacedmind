@@ -1,7 +1,7 @@
 // Builds PacedMind for the system it runs on and puts it on pacedmind.com, where the site's download
 // buttons point (/download/windows and /download/mac, deploy/Caddyfile):
 //
-//   npm run release -- ubuntu@57.131.192.185   build, package and upload
+//   npm run release -- ubuntu@<server>         build, package and upload
 //   npm run release -- --no-upload             build and package only, into dist/release
 //
 // Windows: PacedMind-Windows.exe, an installer that electron-builder makes from the app that
@@ -9,7 +9,7 @@
 // like `npm run desktop`, closes a running PacedMind first and never touches the data. It isn't signed,
 // so Windows SmartScreen asks once before running it.
 // macOS: PacedMind-macOS.dmg, one app for Apple silicon and Intel, signed with your Developer ID and
-// notarized, and the disk image too. The one-time keychain setup is in README.md.
+// notarized, and the disk image too. The one-time keychain setup is in deploy/README.md.
 //
 // The upload goes to /srv/pacedmind/download on the server, with the SSH key deploy/deploy.sh uses
 // (PACEDMIND_KEY, by default ~/Desktop/keys/pacedmind_vps). The previous file stays as <name>.old.
@@ -47,7 +47,7 @@ function signingIdentity() {
   if (process.env.PACEDMIND_SIGN_IDENTITY) return process.env.PACEDMIND_SIGN_IDENTITY;
   const found = [...new Set(execFileSync("security", ["find-identity", "-v", "-p", "codesigning"], { encoding: "utf8" })
     .split("\n").map((line) => line.match(/"(Developer ID Application: [^"]+)"/)?.[1]).filter(Boolean))];
-  if (found.length === 0) throw new Error("Your keychain has no Developer ID Application certificate. See README.md.");
+  if (found.length === 0) throw new Error("Your keychain has no Developer ID Application certificate. See deploy/README.md.");
   if (found.length > 1) throw new Error(`Your keychain has several Developer ID certificates; pick one with PACEDMIND_SIGN_IDENTITY:\n  ${found.join("\n  ")}`);
   return found[0];
 }

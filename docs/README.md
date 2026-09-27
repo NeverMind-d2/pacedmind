@@ -2,7 +2,7 @@
 
 The end-user documentation for PacedMind, served at **https://pacedmind.com/docs**. It's a standalone [Fumadocs](https://fumadocs.dev) project on Next.js 16, like the home page in `../site`, with its own dependencies. `npm run build` writes plain files to `out/`, so the docs need no server of their own.
 
-It follows the structure of the Persate docs: `source.config.ts`, MDX pages in `content/docs` ordered by `meta.json`, `[lang]` routes with `defineI18n`, `llms.txt` routes for AI tools, a link-preview image per page, and a sitemap dated from git.
+It has the usual Fumadocs structure: `source.config.ts`, MDX pages in `content/docs` ordered by `meta.json`, `[lang]` routes with `defineI18n`, `llms.txt` routes for AI tools, a link-preview image per page, and a sitemap dated from git.
 
 ```bash
 cd docs

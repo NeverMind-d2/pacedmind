@@ -1,0 +1,35 @@
+# Asks everyone in a pull request to accept CLA.md once (.github/scripts/cla.cjs). These events get a token
+# that can write, also for pull requests from forks, so nothing here may check out or run a pull request's
+# code: the script comes from the default branch, and it reads pull requests only through the API.
+name: CLA
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write # signatures.json on the cla-signatures branch
+  pull-requests: write # the comment on the pull request
+  statuses: write # the CLA status on the pull request's last commit
+
+jobs:
+  cla:
+    # Comments count only on pull requests, and only the sign phrase or "recheck" (both compared without case).
+    if: >-
+      github.event_name == 'pull_request_target' ||
+      (github.event.issue.pull_request && (github.event.comment.body == 'recheck' ||
+      contains(github.event.comment.body, 'hereby sign the CLA')))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const cla = require("./.github/scripts/cla.cjs");
+            await cla({ github, context, core });

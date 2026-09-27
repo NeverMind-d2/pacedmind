@@ -2,6 +2,7 @@ import type { AgentId, Priority, Status, Surface, Verdict } from "@/lib/types";
 
 type IconProps = { size?: number; className?: string; strokeWidth?: number };
 
+/** Many of these shapes are adapted from Feather (MIT) and Lucide (ISC): see THIRD_PARTY_NOTICES.md. */
 const P = {
   inbox: "M22 12h-6l-2 3h-4l-2-3H2 M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z",
   sun: "M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
@@ -62,7 +63,8 @@ export function Icon({ name, size = 16, className, strokeWidth = 1.8 }: IconProp
 
 /*
  * The agents' marks, drawn in the current text color like the other icons: Claude's from Simple Icons (CC0),
- * Codex's from LobeHub Icons (MIT). The names are their owners' trademarks and only say which agent runs a session.
+ * Codex's from LobeHub Icons (MIT, notice in THIRD_PARTY_NOTICES.md). The names are their owners' trademarks and
+ * only say which agent runs a session.
  */
 const AGENT_MARK: Record<AgentId, string> = {
   claude:
