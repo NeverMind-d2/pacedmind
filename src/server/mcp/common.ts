@@ -6,6 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import * as repo from "../repo";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
+import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
@@ -191,11 +192,24 @@ export function colorFrom(input: string): string {
     const h = hex[1].length === 3 ? hex[1].split("").map((c) => c + c).join("") : hex[1];
     return `#${h.toUpperCase()}`;
   }
-  return fail(`Unknown color "${input}". Use one of ${PALETTE.map((c) => c.name).join(", ")}, or a hex color like #7AA3AD.`);
+  return fail(`Unknown color "${input}". Use one of ${PALETTE.map((c) => c.name).join(", ")}, or a hex color like #68AAB9.`);
 }
 
 export const colorName = (hex: string) => PALETTE.find((c) => c.value.toUpperCase() === hex.toUpperCase())?.name ?? hex;
 export const PALETTE_NAMES = PALETTE.map((c) => c.name).join(", ");
+
+/* ---------- area icons ---------- */
+
+/** A few of the icons, for descriptions: there are hundreds (src/lib/area-icons.ts). */
+export const AREA_ICON_EXAMPLES = "briefcase, house, graduation-cap, code, heart-pulse, plane, wallet or music";
+
+/** A known icon name, else an error with the icons whose names or meanings match. */
+export function iconFrom(input: string): AreaIcon {
+  const s = input.trim().toLowerCase();
+  if (isAreaIcon(s)) return s;
+  const close = findAreaIcons(s.replace(/-/g, " ")).slice(0, 15);
+  return fail(`Unknown icon "${input}". ${close.length ? `Matching icons: ${close.join(", ")}.` : `Use a Lucide icon name from the area menu, such as ${AREA_ICON_EXAMPLES}.`}`);
+}
 
 /* ---------- describing things ---------- */
 

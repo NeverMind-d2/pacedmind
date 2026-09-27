@@ -12,9 +12,9 @@ A session that PacedMind started gets a smaller set: the read tools, `create_tas
 
 ## Areas
 
-- `list_areas` (read): id, key, color and counts.
-- `create_area`: a name and an optional color (palette name or hex). The key is made from the name.
-- `update_area`: rename or recolor. The key doesn't change.
+- `list_areas` (read): id, key, color, icon (when set) and counts.
+- `create_area`: a name, an optional color (palette name or hex) and an optional icon (one of the names the tool lists). The key is made from the name.
+- `update_area`: rename, recolor, or change the icon (`none` shows the dot again). The key doesn't change.
 - `delete_area`: deletes the area and its projects; their tasks go to the Inbox. Ask first.
 
 ## Projects

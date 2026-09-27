@@ -1,3 +1,5 @@
+import type { AreaIcon } from "./area-icons";
+
 export type Status = "backlog" | "todo" | "progress" | "review" | "done" | "canceled";
 /** Linear-style priority: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
 export type Priority = 0 | 1 | 2 | 3 | 4;
@@ -34,6 +36,8 @@ export interface Area {
   name: string;
   key: string;
   color: string;
+  /** Shown in the area's color instead of its dot; null shows the dot. */
+  icon: AreaIcon | null;
   sort: number;
 }
 

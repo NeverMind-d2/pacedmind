@@ -1,18 +1,30 @@
 import type { Area, Project } from "./types";
 
-/** Muted colors for areas and projects. They carry identity only, never state. */
+/** Muted colors for areas and projects, clear enough to tell apart. They carry identity only, never state. */
 export const PALETTE: { name: string; value: string }[] = [
-  { name: "Blue", value: "#7D93B5" },
-  { name: "Teal", value: "#7AA3AD" },
-  { name: "Green", value: "#7FA894" },
-  { name: "Olive", value: "#9AA37A" },
-  { name: "Sand", value: "#B8A27A" },
-  { name: "Clay", value: "#B88F7A" },
-  { name: "Rose", value: "#B08A9B" },
-  { name: "Violet", value: "#9C93B8" },
-  { name: "Mauve", value: "#A08FB0" },
+  { name: "Blue", value: "#6A8DC3" },
+  { name: "Teal", value: "#68AAB9" },
+  { name: "Green", value: "#70B192" },
+  { name: "Olive", value: "#9EAC6B" },
+  { name: "Sand", value: "#C8A565" },
+  { name: "Clay", value: "#C88765" },
+  { name: "Rose", value: "#B97C97" },
+  { name: "Violet", value: "#9485C0" },
+  { name: "Mauve", value: "#9E83B7" },
   { name: "Gray", value: "#8E8E95" },
 ];
+
+/**
+ * The palette's earlier, paler values, each with the color it became. The data moved over once (local-db.ts
+ * and supabase/migrations); an older file brought into an account moves over as it's imported (account.ts).
+ */
+export const EARLIER_PALETTE: Record<string, string> = {
+  "#7D93B5": "#6A8DC3", "#7AA3AD": "#68AAB9", "#7FA894": "#70B192", "#9AA37A": "#9EAC6B", "#B8A27A": "#C8A565",
+  "#B88F7A": "#C88765", "#B08A9B": "#B97C97", "#9C93B8": "#9485C0", "#A08FB0": "#9E83B7",
+};
+
+/** A saved color in today's palette: an earlier palette color becomes the one it turned into, any other stays. */
+export const renewColor = (hex: string) => EARLIER_PALETTE[hex.toUpperCase()] ?? hex;
 
 export const FALLBACK_COLOR = "#85858C";
 

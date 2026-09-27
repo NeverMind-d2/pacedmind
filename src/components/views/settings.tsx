@@ -16,7 +16,7 @@ import {
   AGENT_LABEL, APP_LABEL, deviceOnline,
   type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type Project, type RemoteStart, type Settings,
 } from "@/lib/types";
-import { AgentIcon, Icon } from "../icons";
+import { AgentIcon, AreaMark, Icon } from "../icons";
 import { ImportProjects } from "../import-projects";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -382,7 +382,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   <input className={input} placeholder="Name" value={newProject.name} onChange={(e) => setNewProject((n) => ({ ...n, name: e.target.value }))} aria-label="Project name" />
                   <Menu width={160}
                     trigger={<button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2"><Dot color={areas.find((a) => a.id === newProject.areaId)?.color ?? "var(--color-mut2)"} size={7} />{areas.find((a) => a.id === newProject.areaId)?.name}</button>}
-                    items={areas.map((a) => ({ value: a.id, label: a.name, icon: <Dot color={a.color} size={7} /> }))}
+                    items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} /> }))}
                     onSelect={(v) => setNewProject((n) => ({ ...n, areaId: v }))} />
                 </div>
                 <div className="flex gap-2">

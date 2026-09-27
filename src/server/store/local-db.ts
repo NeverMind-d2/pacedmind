@@ -9,6 +9,7 @@ import {
   commandProblem, dataDir, deviceConfig, forgetAll, setFlowArmed, setProjectFolder, setTaskFolder, updateDevice,
 } from "../device";
 import { SETTING_KEYS, snapshotOf } from "./shared";
+import { EARLIER_PALETTE } from "@/lib/colors";
 import { toDateStr, toStamp } from "@/lib/dates";
 import type { EdgeMode, TerminalId } from "@/lib/types";
 
@@ -22,7 +23,7 @@ import type { EdgeMode, TerminalId } from "@/lib/types";
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS areas (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, color TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, color TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0, icon TEXT
 );
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
@@ -130,6 +131,7 @@ function migrate(conn: DatabaseSync) {
   // Again here, because in development a code reload keeps the open connection, which ran an older schema.
   conn.exec(SCHEMA);
   const added: Record<string, [string, string][]> = {
+    areas: [["icon", "TEXT"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"]],
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],
@@ -138,6 +140,16 @@ function migrate(conn: DatabaseSync) {
   for (const [table, columns] of Object.entries(added)) {
     const have = (conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
     for (const [name, type] of columns) if (!have.includes(name)) conn.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  }
+  // Colors saved from the palette's earlier, paler values move to the ones they became (colors.ts), once.
+  if (!conn.prepare("SELECT 1 FROM meta WHERE key = 'stronger-colors'").get()) {
+    const areas = conn.prepare("UPDATE areas SET color = ? WHERE upper(color) = ?");
+    const projects = conn.prepare("UPDATE projects SET color = ? WHERE upper(color) = ?");
+    for (const [earlier, now] of Object.entries(EARLIER_PALETTE)) {
+      areas.run(now, earlier);
+      projects.run(now, earlier);
+    }
+    conn.prepare("INSERT INTO meta (key, value) VALUES ('stronger-colors', ?)").run(toStamp(new Date()));
   }
   adopt(conn);
 }
@@ -244,11 +256,11 @@ export function resetLocal(mode: "sample" | "empty") {
 }
 
 export const DEFAULT_AREAS = [
-  { id: "work", name: "Work", key: "WRK", color: "#7D93B5" },
-  { id: "personal", name: "Personal", key: "PER", color: "#7FA894" },
-  { id: "health", name: "Health", key: "HLT", color: "#B08A9B" },
-  { id: "learning", name: "Learning", key: "LRN", color: "#9C93B8" },
-  { id: "dev", name: "Dev", key: "DEV", color: "#7AA3AD" },
+  { id: "work", name: "Work", key: "WRK", color: "#6A8DC3" },
+  { id: "personal", name: "Personal", key: "PER", color: "#70B192" },
+  { id: "health", name: "Health", key: "HLT", color: "#B97C97" },
+  { id: "learning", name: "Learning", key: "LRN", color: "#9485C0" },
+  { id: "dev", name: "Dev", key: "DEV", color: "#68AAB9" },
 ];
 
 function seed(conn: DatabaseSync, mode: "sample" | "empty") {

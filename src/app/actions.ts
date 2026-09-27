@@ -18,6 +18,7 @@ import { findProjects, importProjects, type FoundProject, type ImportItem } from
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
+import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import {
   LIVE_STATUSES, deviceOnline, isLiveSession,
   type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
@@ -452,9 +453,11 @@ export async function createAreaAction(input: { name: string; color: string }): 
   return { ok: true, id: a.id, message: `Created ${a.name} (${a.key})` };
 }
 
-export async function updateAreaAction(id: string, patch: { name?: string; color?: string }) {
+/** `icon: null` puts the area's dot back. */
+export async function updateAreaAction(id: string, patch: { name?: string; color?: string; icon?: string | null }) {
   await guard();
-  await repo.updateArea(id, patch);
+  if (patch.icon != null && !isAreaIcon(patch.icon)) return { ok: false, error: "Pick one of the icons" };
+  await repo.updateArea(id, { name: patch.name, color: patch.color, icon: patch.icon === undefined ? undefined : areaIconOf(patch.icon) });
   return done();
 }
 

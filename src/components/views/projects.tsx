@@ -6,7 +6,7 @@ import { useState, type MouseEvent } from "react";
 import { createAreaAction, createProjectAction, updateAreaAction, updateProjectAction } from "@/app/actions";
 import { DateField } from "@/components/date-field";
 import { AreaMenu, InlineName, MoreButton, ProjectMenu, type OpenMenu } from "@/components/entity-menu";
-import { Icon, ProgressRing } from "@/components/icons";
+import { AreaMark, Icon, ProgressRing } from "@/components/icons";
 import type { Anchor } from "@/components/popover";
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { nextColor, projectColor } from "@/lib/colors";
@@ -64,7 +64,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
         {areas.length > 0 && (
           <Menu align="right" width={200} onSelect={startProject}
             trigger={<Button><Icon name="plus" size={13} />New project</Button>}
-            items={areas.map((a) => ({ value: a.id, label: a.name, icon: <span className="h-2 w-2 rounded-full" style={{ background: a.color }} /> }))} />
+            items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} dot={8} /> }))} />
         )}
       </ViewHeader>
 
@@ -94,7 +94,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
                     className="-ml-1 flex h-5 w-5 items-center justify-center rounded text-mut2 hover:bg-hover">
                     <Icon name={shut ? "chevronRight" : "chevronDown"} size={12} strokeWidth={2.4} />
                   </button>
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: a.color }} />
+                  <AreaMark area={a} dot={8} />
                   {renaming === `area:${a.id}` ? (
                     <InlineName initial={a.name} placeholder="Area name" className="max-w-60 flex-none" onCancel={() => setRenaming(null)}
                       onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
