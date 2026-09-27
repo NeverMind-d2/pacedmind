@@ -188,6 +188,6 @@ export const FAQ = [
   },
   {
     question: "Is PacedMind open source?",
-    answer: "Yes. The desktop app, the web app and Cloud's database rules are on GitHub at github.com/NeverMind-d2/pacedmind, under the GNU AGPL. You can read the code, build PacedMind yourself and send changes.",
+    answer: "Yes. The desktop app, the web app and Cloud's database rules are on GitHub at github.com/Pacedmind/pacedmind, under the GNU AGPL. You can read the code, build PacedMind yourself and send changes.",
   },
 ];

@@ -4,7 +4,7 @@
 // deploy.sh installs it as /usr/local/lib/pacedmind/github-stars.mjs. On any failure the last count stays.
 import { renameSync, writeFileSync } from "node:fs";
 
-const REPO = "NeverMind-d2/pacedmind"; // SITE.repo in site/lib/site.ts
+const REPO = "Pacedmind/pacedmind"; // SITE.repo in site/lib/site.ts
 const file = process.argv[2];
 if (!file) throw new Error("usage: node github-stars.mjs <file>");
 

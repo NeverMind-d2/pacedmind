@@ -3,7 +3,7 @@
 const url = "https://pacedmind.com";
 // The source code's repository on GitHub, public under the GNU AGPL (repoUrl in docs/src/lib/shared.ts
 // and REPO in deploy/github-stars.mjs; keep the three in step).
-const repo = "NeverMind-d2/pacedmind";
+const repo = "Pacedmind/pacedmind";
 
 /** Public addresses: the site, its docs, the web app, the source code and the downloads. */
 export const SITE = {
