@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { addDays } from "date-fns";
-import { dateOnly, timeOf, toDateStr } from "@/lib/dates";
+import { DatePicker } from "./date-picker";
 import { cx } from "./ui";
 
 /** A small popover to pick a date and (optionally) a time. Value is "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm". */
@@ -20,8 +19,6 @@ export function DateField({
   const [fit, setFit] = useState<{ x: number; up: boolean } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const date = value ? dateOnly(value) : "";
-  const time = timeOf(value) ?? "";
   useEffect(() => {
     if (!open) return;
     // Pointer, not mouse: Safari on a phone sends no mouse events for a tap on something that isn't clickable.
@@ -40,34 +37,27 @@ export function DateField({
     if (x || up) setFit({ x, up });
   }, [open]);
   const toggle = () => { setFit(null); setOpen((o) => !o); };
-  const set = (d: string, t: string) => onChange(d ? (t ? `${d}T${t}` : d) : null);
-  const quick = (label: string, offset: number) => (
-    <button type="button" onClick={() => { set(toDateStr(addDays(new Date(), offset)), time); setOpen(false); }}
-      className="h-7 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel">{label}</button>
-  );
+  // Focus goes back to the trigger, or it would be lost with the panel (and the keys of the dialog around it).
+  const close = () => {
+    const inside = panel.current?.contains(document.activeElement);
+    setOpen(false);
+    if (inside) ref.current?.querySelector<HTMLElement>("button, [tabindex]")?.focus();
+  };
   return (
     <div ref={ref} className="relative">
       <div onClick={toggle}>{trigger}</div>
       {/* data-popup: a press outside only closes it, so a calendar's day doesn't also take that press as a click. */}
       {open && (
         <div ref={panel} data-popup style={fit ? { transform: `translateX(${fit.x}px)` } : undefined}
-          className={cx("absolute z-50 flex w-60 flex-col gap-1 rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
+          onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}
+          className={cx("absolute z-50 w-[272px] max-w-[calc(100vw-16px)] rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
             fit?.up ? "bottom-full mb-1" : "top-full mt-1", align === "right" ? "right-0" : "left-0")}>
-          {quick("Today", 0)}
-          {quick("Tomorrow", 1)}
-          {quick("In a week", 7)}
-          <div className="my-1 flex gap-1.5">
-            <input type="date" aria-label="Date" value={date} onChange={(e) => set(e.target.value, time)}
-              className="h-7 min-w-0 flex-1 rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
-            {withTime && (
-              <input type="time" aria-label="Time" value={time} disabled={!date} onChange={(e) => set(date, e.target.value)}
-                className="h-7 w-[84px] rounded-md border border-line2 bg-input px-1.5 text-[12px]" />
+          <DatePicker value={value} withTime={withTime} onChange={(v, done) => { onChange(v); if (done) close(); }}>
+            {value && (
+              <button type="button" onClick={() => { onChange(null); close(); }}
+                className="ml-auto h-7 rounded-md px-2 text-[12.5px] text-mut2 hover:bg-sel">Clear</button>
             )}
-          </div>
-          {value && (
-            <button type="button" onClick={() => { onChange(null); setOpen(false); }}
-              className="h-7 rounded-md px-2 text-left text-[12.5px] text-mut2 hover:bg-sel">Clear</button>
-          )}
+          </DatePicker>
         </div>
       )}
     </div>

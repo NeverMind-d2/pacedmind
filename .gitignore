@@ -46,3 +46,6 @@ next-env.d.ts
 
 # desktop app build output
 /dist
+
+# worktrees the Claude app makes for its sessions
+/.claude/worktrees/
