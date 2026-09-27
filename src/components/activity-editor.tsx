@@ -7,8 +7,8 @@ import { dateOnly, hhmm, minutesOf, parseLocal, timeOf } from "@/lib/dates";
 import type { Area, EventOccurrence } from "@/lib/types";
 import { ConfirmDialog } from "./dialog";
 import { DateField } from "./date-field";
-import { Icon } from "./icons";
-import { Button, Dot, Menu, cx, toast, useAction } from "./ui";
+import { AreaMark, Icon } from "./icons";
+import { Button, Menu, cx, toast, useAction } from "./ui";
 
 /** The lengths quick add offers; an activity's own length is added when it's another one. */
 const LENGTHS = [15, 30, 45, 60, 90, 120, 180];
@@ -109,9 +109,9 @@ export function ActivityEditor({ areas }: { areas: Area[] }) {
         }}>
         <div className="flex h-12 items-center gap-2 pl-4 pr-3">
           <Menu
-            trigger={<button type="button" className={chip}>{area ? <Dot color={area.color} size={7} /> : <Icon name="calendar" size={13} />}{area?.name ?? "No area"}<Icon name="chevronDown" size={12} /></button>}
+            trigger={<button type="button" className={chip}>{area ? <AreaMark area={area} size={13} /> : <Icon name="calendar" size={13} />}{area?.name ?? "No area"}<Icon name="chevronDown" size={12} /></button>}
             items={[{ value: null as string | null, label: "No area", icon: <Icon name="calendar" size={13} /> },
-              ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <Dot color={a.color} size={7} /> }))]}
+              ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={13} /> }))]}
             onSelect={setAreaId}
           />
           <span className="text-faint">›</span>
