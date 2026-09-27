@@ -21,12 +21,13 @@ export const dynamic = "force-dynamic";
 
 /**
  * The app's frame. Signed in to PacedMind Cloud, every page needs the account's second factor (the database
- * insists on it too); the web app needs an account. Without one, the desktop app shows this computer's own data.
+ * insists on it too); the web app needs an account. Without one, the desktop app shows this computer's own
+ * data once "Continue without an account" was chosen on the sign-in screen, and until then the screen itself.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   await connection();
   const state = await authState();
-  const step = state || MODE === "web" ? nextStep(state) : null;
+  const step = state || MODE === "web" ? nextStep(state) : deviceConfig().withoutAccount ? null : "/login";
   if (step) redirect(step);
   const user = state?.user ?? null;
   const [areas, projects, tasks, waiting, all] = await Promise.all([
