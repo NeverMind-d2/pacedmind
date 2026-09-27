@@ -19,4 +19,4 @@ If you distribute a modified version of PacedMind, or run one for other people (
 
 ## Anything else
 
-Open an issue in this repository to ask.
+Ask at mbednarczyk@preseed.tech.

@@ -124,6 +124,6 @@ PacedMind starts agents that work on your computer, so it's built to make that h
 
 Copyright (C) 2026 NMD Mikołaj Bednarczyk and PacedMind's contributors.
 
-PacedMind is free software: you can redistribute it and modify it under the terms of the [GNU Affero General Public License, version 3](LICENSE), as published by the Free Software Foundation. It's distributed in the hope that it will be useful, but without any warranty, without even the implied warranty of merchantability or fitness for a particular purpose. If you run a modified version for other people over a network, the license requires you to offer them its source code.
+PacedMind is free software: you can redistribute it and modify it under the terms of the [GNU Affero General Public License, version 3](LICENSE), as published by the Free Software Foundation. It's distributed in the hope that it will be useful, but without any warranty, without even the implied warranty of merchantability or fitness for a particular purpose. If you run a modified version for other people over a network, the license requires you to offer them its source code. To ask about other terms, write to mbednarczyk@preseed.tech.
 
 Contributions need the [Contributor License Agreement](CLA.md) ([CONTRIBUTING.md](CONTRIBUTING.md)). The PacedMind name and logo aren't covered by the license: see [TRADEMARKS.md](TRADEMARKS.md). The icons and fonts from other projects are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -6,7 +6,7 @@ Without an account (the free One device plan), the desktop app keeps its data in
 
 ## Reporting a vulnerability
 
-Report security problems privately, not in a public issue: select **Report a vulnerability** on this repository's **Security** tab, which opens an advisory only the maintainer can see. Say what's affected, how to reproduce it, and what an attacker could do with it, and give us time to release a fix before you tell anyone else.
+Report security problems privately, not in a public issue: select **Report a vulnerability** on this repository's **Security** tab, which opens an advisory only the maintainer can see, or email mbednarczyk@preseed.tech. Say what's affected, how to reproduce it, and what an attacker could do with it, and give us time to release a fix before you tell anyone else.
 
 This covers the desktop app, the MCP server, the web app at app.pacedmind.com, and the database rules in `supabase/`. Test only with your own accounts, computers and data: your own PacedMind Cloud account, or a local Supabase stack (`npx supabase start`). Denial of service and spam are out of scope.
 

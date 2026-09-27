@@ -1,6 +1,6 @@
 import Link from "next/link";
 import prices from "@/prices.json";
-import { SITE, downloadEvent, signInEvent } from "@/lib/site";
+import { SITE, downloadEvent, signInEvent, sourceEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
 import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
@@ -38,6 +38,8 @@ export default function Home() {
         <nav className="flex items-center gap-[30px] text-[16px] text-mut">
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
+          {/* Phones have room for three items here; the footer has the link too. */}
+          <a href={SITE.source} className="hidden hover:text-ink sm:inline" {...sourceEvent("header")}>GitHub</a>
           <a href={SITE.app} className="rounded-[10px] border border-line px-4 py-2 font-medium text-ink hover:border-mut" {...signInEvent("header")}>
             Sign in
           </a>
@@ -114,8 +116,9 @@ export default function Home() {
       <footer className="mx-auto mt-24 max-w-[1440px] px-5 sm:mt-32 sm:px-8">
         <div className="flex items-center justify-between border-t border-line py-8 text-[15px] text-mut">
           <span className="flex items-center gap-3 text-text"><Emblem size={20} />PacedMind</span>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap justify-end gap-x-6 gap-y-2">
             <a href={SITE.docs} className="hover:text-ink">Docs</a>
+            <a href={SITE.source} className="hover:text-ink" {...sourceEvent("footer")}>GitHub</a>
             <a href={SITE.app} className="hover:text-ink" {...signInEvent("footer")}>Sign in</a>
             <span>© 2026</span>
           </div>
