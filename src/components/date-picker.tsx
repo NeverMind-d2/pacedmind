@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { addDays, addMonths, format, isSameMonth, startOfMonth } from "date-fns";
 import { addDaysStr, dateOnly, hhmm, minutesOf, mondayOf, parseLocal, parseTime, timeOf, toDateStr, todayStr } from "@/lib/dates";
 import { parseWhen } from "@/lib/parse";
@@ -9,12 +9,16 @@ import { cx } from "./ui";
 
 /**
  * Picks a day, typed ("fri 10:00", "in 2 weeks"), suggested or from a month, and with `withTime` a time.
- * `onChange` gets "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm"; `done` says a day was chosen, so the picker can close.
+ * `onChange` gets "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm"; `done` says the picker can close. Without a time, a day closes
+ * it. With one, a day leaves it open and moves to the time field, like Spectrum's and MUI's desktop date-time
+ * pickers: a time picked there (or Enter on it, for none) closes it, and so does **Done** (`onDone`). A typed date
+ * with Enter always closes it.
  */
-export function DatePicker({ value, withTime, onChange, children }: {
+export function DatePicker({ value, withTime, onChange, onDone, children }: {
   value: string | null;
   withTime: boolean;
   onChange: (value: string, done: boolean) => void;
+  onDone?: () => void;
   /** At the bottom, after the time (Clear). */
   children?: ReactNode;
 }) {
@@ -25,6 +29,11 @@ export function DatePicker({ value, withTime, onChange, children }: {
   const at = (day: string, t: string) => (withTime && t ? `${day}T${t}` : day);
   const [text, setText] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const timeInput = useRef<HTMLInputElement>(null);
+  const pickDay = (day: string) => {
+    onChange(at(day, time), !withTime);
+    timeInput.current?.focus();
+  };
   // Typing is quicker from a keyboard; on a phone the keyboard would cover the calendar.
   useEffect(() => { if (window.matchMedia("(pointer: fine)").matches) input.current?.focus(); }, []);
   const typed = text.trim() ? parseWhen(text) : null;
@@ -60,7 +69,7 @@ export function DatePicker({ value, withTime, onChange, children }: {
             const d = addDays(now, n);
             const day = toDateStr(d);
             return (
-              <button key={label} type="button" title={format(d, "EEEE d MMMM")} onClick={() => onChange(at(day, time), true)}
+              <button key={label} type="button" title={format(d, "EEEE d MMMM")} onClick={() => pickDay(day)}
                 className={cx(row, "hover:bg-sel", day === date ? "text-strong" : "text-fg2")}>
                 {label}<span className="text-[11px] text-dim">{format(d, n < 2 ? "EEE" : "EEE d")}</span>
               </button>
@@ -69,12 +78,23 @@ export function DatePicker({ value, withTime, onChange, children }: {
         </div>
       )}
       <div className="my-1.5 border-t border-line2" />
-      <MiniCalendar value={date} onPick={(d) => onChange(at(d, time), true)} />
+      <MiniCalendar value={date} onPick={pickDay} />
       {(withTime || children) && (
         <div className="mt-1.5 flex items-center gap-1 border-t border-line2 pt-2">
-          {/* A time without a day is for today; the day picked next keeps it. */}
-          {withTime && <TimeField value={time} onChange={(t) => { if (date || t) { setOwnTime(t); onChange(at(date || todayStr(), t), false); } }} />}
+          {/* A time without a day is for today, and the picker stays open for the day, which keeps the time. */}
+          {withTime && (
+            <TimeField value={time} inputRef={timeInput} onChange={(t, final) => {
+              if (!date && !t) return;
+              setOwnTime(t);
+              onChange(at(date || todayStr(), t), final && !!date);
+            }} />
+          )}
           {children}
+          {withTime && onDone && (
+            <button type="button" onClick={onDone} className={cx("h-7 rounded-md border border-line2 bg-hover px-3 text-[12.5px] text-fg hover:bg-sel", !children && "ml-auto")}>
+              Done
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -83,8 +103,15 @@ export function DatePicker({ value, withTime, onChange, children }: {
 
 const SLOTS = Array.from({ length: 48 }, (_, i) => hhmm(i * 30));
 
-/** A time to type ("9", "14:30", "2pm") or pick from the half hours; "" for none. */
-function TimeField({ value, onChange }: { value: string; onChange: (time: string) => void }) {
+/**
+ * A time to type ("9", "1300", "14:30", "2pm") or pick from the half hours; "" for none. `final` is a choice made
+ * (a pick, Enter), not a field left or a time removed.
+ */
+function TimeField({ value, onChange, inputRef }: {
+  value: string;
+  onChange: (time: string, final: boolean) => void;
+  inputRef?: RefObject<HTMLInputElement | null>;
+}) {
   // What's typed, until it's taken (Enter, a pick, leaving the field).
   const [draft, setDraft] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
@@ -98,11 +125,11 @@ function TimeField({ value, onChange }: { value: string; onChange: (time: string
     const el = box?.querySelector<HTMLElement>(`[data-t="${near}"]`);
     if (box && el) box.scrollTop = el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2;
   }, [open, near]);
-  const take = (t: string) => { onChange(t); setDraft(null); setOpen(false); };
+  const take = (t: string) => { onChange(t, true); setDraft(null); setOpen(false); };
   const leave = () => {
     if (draft !== null) {
-      if (typed) onChange(typed);
-      else if (!draft.trim()) onChange("");
+      if (typed) onChange(typed, false);
+      else if (!draft.trim()) onChange("", false);
     }
     setDraft(null);
     setOpen(false);
@@ -115,8 +142,9 @@ function TimeField({ value, onChange }: { value: string; onChange: (time: string
       setOpen(true);
     } else if (e.key === "Enter") {
       e.preventDefault();
+      // Nothing typed: the time stays as it is (none, too), and that's the choice.
       if (typed) take(typed);
-      else if (draft !== null && !draft.trim()) take("");
+      else if (draft === null || !draft.trim()) take(draft === null ? value : "");
     } else if (e.key === "Escape" && (open || draft !== null)) {
       e.stopPropagation();
       setDraft(null);
@@ -126,14 +154,15 @@ function TimeField({ value, onChange }: { value: string; onChange: (time: string
   return (
     <div className="relative flex items-center">
       <span className="pointer-events-none absolute left-2 text-mut"><Icon name="clock" size={13} /></span>
-      <input value={draft ?? value} placeholder="Add time" aria-label="Time" inputMode="text" autoComplete="off"
+      {/* The list opens on a click, typing or the arrow keys, not on focus: a day picked moves focus here. */}
+      <input ref={inputRef} value={draft ?? value} placeholder="Add time" aria-label="Time" inputMode="text" autoComplete="off"
         role="combobox" aria-expanded={open} aria-controls={listId}
-        onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onBlur={leave} onKeyDown={key}
+        onClick={() => setOpen(true)} onBlur={leave} onKeyDown={key}
         onChange={(e) => { setDraft(e.target.value); setOpen(true); }}
         className={cx("h-7 w-[108px] rounded-md border bg-input pl-7 pr-2 text-[12px] tabular-nums placeholder:text-dim",
           draft !== null && draft.trim() && !typed ? "border-danger-line" : "border-line2")} />
       {value && draft === null && (
-        <button type="button" aria-label="Remove time" onClick={() => onChange("")}
+        <button type="button" aria-label="Remove time" onClick={() => onChange("", false)}
           className="ml-0.5 grid h-6 w-6 place-items-center rounded-md text-mut hover:bg-sel hover:text-fg2"><Icon name="x" size={12} /></button>
       )}
       {open && (
