@@ -5,7 +5,7 @@ description: Fixed calendar entries such as meetings, workouts and appointments,
 
 An **activity** is a fixed entry in the calendar: a meeting, a workout, an appointment. Unlike a task, it has a start and an end time and nothing to check off. Activities can belong to an area, which gives them its color.
 
-An activity happens once, or **every week** on the same weekday and at the same time, from its first day on. Activities are meant to fit within one day; agents can't create one that runs past midnight.
+An activity happens once, or **every week** on the same weekday and at the same time, from its first day on. Activities are meant to fit within one day: agents can't create one that runs past midnight, and a change can't move one past it.
 
 ## Add an activity
 
@@ -31,13 +31,33 @@ Quick add reads *for 45m*, *for 1.5 hours* and *for 2h* as the length, and *ever
 | **Calendar**, week | Blocks in the grid, shown as **Fixed** in the legend. |
 | Agents | `list_events` and `get_agenda` list them, with their event ids. |
 
+A click on an activity in any of these views opens it: see [Change or remove an activity](#change-or-remove-an-activity).
+
 ## Activities and the auto-planner
 
 The auto-planner treats activities as busy time. It keeps each activity, plus 10 minutes before and after it, free of focus blocks, and plans tasks only in the gaps that remain inside the work hours. See [The auto-planner](/planning/auto-planner).
 
 ## Change or remove an activity
 
-The app adds activities but doesn't edit them yet. To rename, move or delete one, ask an agent connected over MCP, for example:
+1. Click the activity in **Today**, **Upcoming** or the **Calendar**. A dialog opens with the day that was clicked.
+2. Change what's needed:
+   * the title;
+   * the area, in the chip at the top left;
+   * the day and start time, in the chip with the date;
+   * the length: 15, 30, 45, 60, 90, 120 or 180 minutes, or the activity's own length when it's another one;
+   * **Every week** or **Does not repeat**.
+3. Select **Save**, or press <kbd>Enter</kbd> in the title.
+
+The line above the buttons sums up the result. A weekly activity changes every week, and the line adds *Changes apply to every week*:
+
+* moved to another day, the whole series moves to that weekday, by as many days;
+* switched to **Does not repeat**, it stays only on the day in the date chip, and the line warns *The other weeks will be removed*.
+
+An activity starts and ends on the same day. A start and length that run past midnight aren't saved: *That runs past midnight. An activity starts and ends on the same day.*
+
+**Delete** removes the activity after a confirmation. For a weekly activity, every week's occurrence goes.
+
+Agents connected over MCP can change activities too, for example:
 
 * *Move the dentist appointment to Thursday at the same time.*
 * *Make the weekly gym on Monday start at 07:00.*

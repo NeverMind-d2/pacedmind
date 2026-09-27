@@ -8,6 +8,7 @@ import { addDaysStr, dateOnly, fmtDay, fmtTime, hhmm, minutesOf, parseLocal, tim
 import type { PlannedBlock } from "@/lib/planner";
 import { AGENT_LABEL, type AgentId, type Area, type EventOccurrence, type Settings, type Task, type TaskContext } from "@/lib/types";
 import type { WeekPlan } from "@/server/calendar";
+import { openActivity } from "../activity-editor";
 import { Icon } from "../icons";
 import { TaskDetail } from "../task-detail";
 import { Button, Dot, Switch, cx } from "../ui";
@@ -49,6 +50,8 @@ function slotAt(e: MouseEvent<HTMLElement>) {
 type Block = {
   id: string; s: number; e: number; kind: "fixed" | PlannedBlock["kind"]; title: string; areaId: string | null;
   key: string | null; start: string; end: string;
+  /** A fixed block's activity, which a click opens. */
+  event?: EventOccurrence;
 };
 
 /** Puts overlapping blocks side by side: each cluster of overlaps gets as many columns as it needs. */
@@ -132,7 +135,7 @@ export function WeekView({
   const blocksOn = (day: string) => {
     const list: Block[] = events.filter((e) => dateOnly(e.start) === day).map((e) => ({
       id: `e${e.eventId}-${e.start}`, s: minOn(e.start, day), e: minOn(e.end, day), kind: "fixed", title: e.title,
-      areaId: e.areaId, key: null, start: e.start, end: e.end,
+      areaId: e.areaId, key: null, start: e.start, end: e.end, event: e,
     }));
     if (plan && on) {
       for (const b of plan.blocks) {
@@ -288,7 +291,7 @@ export function WeekView({
                   onPointerLeave={() => setHovered((d) => (d === day ? null : d))}>
                   {blocksOn(day).map((b) => (
                     <BlockView key={b.id} block={b} color={areaColor(ctx.areas, b.areaId)} past={b.end <= now}
-                      selected={!!b.key && b.key === sel} onOpen={() => b.key && toggle(b.key)} />
+                      selected={!!b.key && b.key === sel} onOpen={() => { if (b.key) toggle(b.key); else if (b.event) openActivity(b.event); }} />
                   ))}
                   {lanesOn(day).map((l) => {
                     const label = `${AGENT_LABEL[l.agent]}: ${l.key} · ${fmtTime(l.start)}–${l.end ? fmtTime(l.end) : "now, running"}`;
@@ -347,7 +350,7 @@ function BlockView({ block: b, color, past, selected, onOpen }: {
     left: `calc(3px + (100% - 23px) * ${b.col / b.cols})`,
     width: `calc((100% - 23px) / ${b.cols} - ${b.cols > 1 ? 2 : 0}px)`,
   };
-  const tone = b.kind === "fixed" ? cx("border-ctl", past ? "text-mut2" : "text-fg3")
+  const tone = b.kind === "fixed" ? cx("border-ctl hover:bg-hover", past ? "text-mut2" : "text-fg3")
     : past ? "border-sel bg-hover text-mut2 hover:bg-hover"
     : b.kind === "check" ? "border-accent/55 bg-line text-strong hover:bg-sel"
     : "border-ctl bg-line text-strong hover:bg-sel";
@@ -375,9 +378,8 @@ function BlockView({ block: b, color, past, selected, onOpen }: {
       )}
     </>
   );
-  return b.key
-    ? <button type="button" title={label} onClick={onOpen} className={cls} style={style}>{body}</button>
-    : <div data-item title={label} className={cls} style={style}>{body}</div>;
+  // A task's block opens the task; a fixed one, its activity.
+  return <button type="button" title={label} onClick={onOpen} className={cls} style={style}>{body}</button>;
 }
 
 function workDaysText(days: number[]) {

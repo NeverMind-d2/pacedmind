@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { fmtTime, toDateTimeStr } from "@/lib/dates";
 import type { EventOccurrence, Task, TaskContext } from "@/lib/types";
+import { openActivity } from "./activity-editor";
 import { Icon, type IconName } from "./icons";
 import type { QuickAddDefaults } from "./quick-add";
 import { TaskDetail } from "./task-detail";
@@ -86,13 +87,14 @@ export function TaskList({
                 const current = e.start <= now && now < e.end;
                 const area = ctx.areas.find((a) => a.id === e.areaId);
                 return (
-                  <div key={`${e.eventId}-${e.start}`} className={cx("flex h-[38px] items-center gap-3 border-b border-hover pl-5 pr-4", past ? "text-mut2" : "text-fg")}>
+                  <button key={`${e.eventId}-${e.start}`} type="button" onClick={() => openActivity(e)}
+                    className={cx("flex h-[38px] w-full items-center gap-3 border-b border-hover pl-5 pr-4 text-left hover:bg-hover", past ? "text-mut2" : "text-fg")}>
                     <span className={cx("w-[96px] shrink-0 font-mono text-[11.5px]", past ? "text-dim" : "text-mut")}>{fmtTime(e.start)}–{fmtTime(e.end)}</span>
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "var(--color-mut2)" }} />
                     <span className="min-w-0 flex-1 truncate">{e.title}</span>
                     {current && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium text-accent-fg">Now</span>}
                     <span className="w-16 shrink-0 text-right text-[11.5px] text-mut2">{area?.name}</span>
-                  </div>
+                  </button>
                 );
               })}
             </>
