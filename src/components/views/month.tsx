@@ -9,7 +9,7 @@ import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf } from "@/lib/dates";
 import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
 import { openActivity } from "../activity-editor";
 import { Diamond, Icon, StatusIcon } from "../icons";
-import { MiniCalendar } from "../mini-calendar";
+import { DatePicker } from "../date-picker";
 import { Popover, PopoverItem, PopoverSeparator, anchorOf, type Anchor } from "../popover";
 import { TaskDetail } from "../task-detail";
 import { openAdd } from "../task-list";
@@ -484,11 +484,9 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
   const value = kind === "due" ? t.dueDate : kind === "plan" ? t.plannedDate : null;
   const withTime = kind === "due";
   const [picking, setPicking] = useState(false);
-  const [time, setTime] = useState(timeOf(value) ?? "");
   const [confirming, setConfirming] = useState(false);
-  const pick = (d: string) => { if (d) onDate(withTime && time ? `${d}T${time}` : d); };
   return (
-    <Popover anchor={anchor} onClose={onClose} width={264}>
+    <Popover anchor={anchor} onClose={onClose} width={288}>
       <div className="flex min-w-0 items-baseline gap-2 px-2 pb-1.5 pt-1">
         <span className="shrink-0 font-mono text-[11px] text-mut2">{t.key}</span>
         <span className="truncate text-[12px] text-fg2">{t.title}</span>
@@ -500,15 +498,9 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
         </PopoverItem>
       )}
       {picking && (
-        <div className="mx-1 mb-1 flex flex-col gap-1.5 rounded-md border border-line2 bg-panel p-1.5">
-          {/* The time first: a day moves the task at once. */}
-          {withTime && (
-            <label className="flex items-center justify-between gap-2 pl-1.5 text-[12px] text-mut2">Time
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
-                className="h-7 w-[84px] rounded-md border border-line2 bg-input px-1.5 text-[12px] text-fg2" />
-            </label>
-          )}
-          <MiniCalendar value={value ? dateOnly(value) : ""} onPick={pick} />
+        <div className="mx-1 mb-1 rounded-md border border-line2 bg-panel p-1.5">
+          {/* Every choice moves the task at once, a new time too. */}
+          <DatePicker value={value} withTime={withTime} onChange={(v) => onDate(v)} />
         </div>
       )}
       {(kind === "due" || kind === "plan") && (

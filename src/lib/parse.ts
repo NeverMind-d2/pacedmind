@@ -91,3 +91,16 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
 
   return { title, date, hasTime, timeOnly, priority, labels, projectQuery, durationMin, weekly, tokens };
 }
+
+/** A date typed on its own, like "fri", "tomorrow 15:00", "in 2 weeks" or "2pm": its day, its time if one was typed,
+ *  and whether a day was typed at all (for "2pm" it's today or tomorrow, whichever still has that time ahead). */
+export function parseWhen(text: string, ref = new Date()): { day: string; time: string | null; dayGiven: boolean } | null {
+  const r = chrono.parse(text, ref, { forwardDate: true })[0];
+  if (!r) return null;
+  const d = r.start.date();
+  return {
+    day: toDateStr(d),
+    time: r.start.isCertain("hour") ? toDateTimeStr(d).slice(11) : null,
+    dayGiven: (["day", "weekday", "month", "year"] as const).some((c) => r.start.isCertain(c)),
+  };
+}
