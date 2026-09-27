@@ -220,7 +220,9 @@ function agentCommand(dir: string, session: Session, task: Task, kind: "start" |
     return { command: kind === "resume" ? `${exe} ${mcp} resume --last` : `${exe} ${mcp} "${prompt}"`, conversation: null };
   }
   const last = session.cliSessionId && UUID.test(session.cliSessionId) ? session.cliSessionId : null;
-  const conversation = last && kind === "resume" ? last : crypto.randomUUID();
+  // A start and a resume run the conversation the session names (a start's was made with the session); changes get
+  // a new one.
+  const conversation = last && kind !== "changes" ? last : crypto.randomUUID();
   const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, token, servers && claudeServers(folder, servers));
   const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__organizer__${t}`).join(",");
   const base = `${exe} --mcp-config "${mcpFile}"${servers ? " --strict-mcp-config" : ""} --settings "${settingsFile}" --allowedTools ${allowed}`;
