@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { fmtTime, toDateTimeStr } from "@/lib/dates";
 import type { EventOccurrence, Task, TaskContext } from "@/lib/types";
 import { Icon, type IconName } from "./icons";
+import type { QuickAddDefaults } from "./quick-add";
 import { TaskDetail } from "./task-detail";
 import { TaskRow } from "./task-row";
 import { Button, Segmented, cx } from "./ui";
@@ -17,7 +18,7 @@ export interface TaskGroup {
   add?: { plannedDate?: string; projectId?: string; areaId?: string };
 }
 
-export function openAdd(detail: Record<string, unknown> = {}) {
+export function openAdd(detail: QuickAddDefaults = {}) {
   window.dispatchEvent(new CustomEvent("organizer:new", { detail }));
 }
 
@@ -33,7 +34,7 @@ export function TaskList({
   initialKey?: string | null;
   empty?: ReactNode;
   headerRight?: ReactNode;
-  addDefaults?: Record<string, unknown>;
+  addDefaults?: QuickAddDefaults;
 }) {
   const [sel, setSel] = useState<string | null>(initialKey ?? null);
   const [filter, setFilter] = useState<"all" | "tasks" | "activities">("all");

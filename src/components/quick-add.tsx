@@ -4,13 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addMinutes, format } from "date-fns";
 import { createEventAction, createTaskAction } from "@/app/actions";
 import { parseQuickAdd } from "@/lib/parse";
-import { parseLocal, timeOf, toDateTimeStr, dateOnly } from "@/lib/dates";
+import { hhmm, parseLocal, timeOf, toDateTimeStr, dateOnly } from "@/lib/dates";
 import { PRIORITY_LABEL, STATUS_LABEL, type Area, type Priority, type Project, type Status } from "@/lib/types";
 import { Icon, PriorityIcon, StatusIcon } from "./icons";
 import { DateField } from "./date-field";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
 
-type Defaults = { projectId?: string | null; areaId?: string | null; plannedDate?: string | null; mode?: "task" | "activity" };
+/**
+ * What quick add starts with. `plannedDate` is the day it was opened for (a click on a day, say); `start`, when an
+ * activity would begin, for a click that had a time as well (the week's grid).
+ */
+export type QuickAddDefaults = {
+  projectId?: string | null; areaId?: string | null; plannedDate?: string | null; mode?: "task" | "activity"; start?: string | null;
+};
 
 const HIGHLIGHT: Record<string, string> = {
   date: "bg-accent/20 text-accent-fg",
@@ -30,7 +36,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [doneWhen, setDoneWhen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [scroll, setScroll] = useState(0);
-  const [defaults, setDefaults] = useState<Defaults>({});
+  const [defaults, setDefaults] = useState<QuickAddDefaults>({});
   const [ov, setOv] = useState<{
     areaId?: string | null; projectId?: string | null; status?: Status; priority?: Priority; due?: string | null; planned?: string | null; weekly?: boolean; duration?: number;
   }>({});
@@ -39,7 +45,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
 
   useEffect(() => {
     const show = (e: Event) => {
-      const d = ((e as CustomEvent).detail ?? {}) as Defaults;
+      const d = ((e as CustomEvent).detail ?? {}) as QuickAddDefaults;
       setDefaults(d);
       setMode(d.mode ?? "task");
       setOpen(true);
@@ -64,6 +70,9 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   }, [open, mode]);
 
   const parsed = useMemo(() => parseQuickAdd(text), [text]);
+  const planned = ov.planned !== undefined ? ov.planned : (defaults.plannedDate ?? null);
+  // A time typed without a day is on the planned day, when there is one: the day quick add was opened for, say.
+  const typed = parsed.date && parsed.timeOnly && planned ? `${planned}T${timeOf(parsed.date)}` : parsed.date;
   const projectFromText = parsed.projectQuery
     ? projects.find((p) => p.id.startsWith(parsed.projectQuery!) || p.name.toLowerCase().startsWith(parsed.projectQuery!))
     : undefined;
@@ -73,11 +82,17 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const area = areas.find((a) => a.id === areaId) ?? null;
   const status = ov.status ?? "todo";
   const priority = ov.priority ?? parsed.priority ?? 0;
-  const due = ov.due !== undefined ? ov.due : parsed.date;
-  const planned = ov.planned !== undefined ? ov.planned : (defaults.plannedDate ?? null);
+  const due = ov.due !== undefined ? ov.due : typed;
   const weekly = ov.weekly ?? parsed.weekly;
   const duration = ov.duration ?? parsed.durationMin ?? 60;
-  const start = mode === "activity" ? (parsed.date && parsed.hasTime ? parsed.date : ov.due ?? null) : null;
+  // An activity starts at a typed time, else at When, else on the planned day: at the half hour clicked in the week's
+  // grid, or at the next full hour. With none of these, it starts now.
+  const start = mode !== "activity" ? null
+    : typed && parsed.hasTime ? typed
+    : ov.due !== undefined ? ov.due
+    : !planned ? null
+    : defaults.start && dateOnly(defaults.start) === planned ? defaults.start
+    : `${planned}T${hhmm(Math.min(23, new Date().getHours() + 1) * 60)}`;
 
   // One item per line; list markers someone typed or pasted ("- ", "1. ") are dropped.
   const doneItems = (doneWhen ?? "").split("\n").map((l) => l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim()).filter(Boolean);
