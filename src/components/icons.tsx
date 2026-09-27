@@ -193,8 +193,18 @@ export function AreaIconSvg({ icon, color, size = 14, strokeWidth = 1.8 }: { ico
   );
 }
 
-/** An area's icon in its color, or its dot when it has no icon. */
-export function AreaMark({ area, size = 14, dot = 7 }: { area: Pick<Area, "color" | "icon">; size?: number; dot?: number }) {
+/** An area's own picture (area-picture.ts), as big as its icon would be. */
+export function AreaPicture({ area, size = 14 }: { area: Pick<Area, "id" | "picture">; size?: number }) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- a small PNG from /api/areas, nothing to optimize
+    <img src={`/api/areas/${encodeURIComponent(area.id)}/picture?v=${area.picture}`} alt="" width={size} height={size} draggable={false}
+      className="shrink-0 rounded-[3px] object-contain" />
+  );
+}
+
+/** An area's picture, else its icon in its color, else its dot. */
+export function AreaMark({ area, size = 14, dot = 7 }: { area: Pick<Area, "id" | "color" | "icon" | "picture">; size?: number; dot?: number }) {
+  if (area.picture) return <AreaPicture area={area} size={size} />;
   if (area.icon) return <AreaIconSvg icon={area.icon} color={area.color} size={size} />;
   return <span className="inline-block shrink-0 rounded-full" style={{ width: dot, height: dot, background: area.color }} />;
 }

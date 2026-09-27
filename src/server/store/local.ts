@@ -6,8 +6,8 @@ import {
 } from "../device";
 import { db, tx } from "./local-db";
 import {
-  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences, linksOf,
-  snapshotOf, strings,
+  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
+  linksOf, pictureHash, snapshotOf, strings,
   type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -64,12 +64,18 @@ const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a
 /* ---------- areas and projects ---------- */
 
 const toArea = (r: Row): Area => ({
-  id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon), sort: Number(r.sort),
+  id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
+  picture: pictureHash(r.picture), sort: Number(r.sort),
 });
 const areasNow = () => all("SELECT * FROM areas ORDER BY sort").map(toArea);
 
 export async function listAreas(): Promise<Area[]> {
   return areasNow();
+}
+
+/** An area's own picture, base64 PNG, or null (the picture's route serves it). */
+export async function areaPicture(id: string): Promise<string | null> {
+  return areaPictureOf(get("SELECT picture FROM areas WHERE id = ?", id)?.picture);
 }
 
 export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null }): Promise<Area> {
@@ -84,12 +90,18 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
   return areasNow().find((a) => a.id === id)!;
 }
 
-/** `icon: null` puts the dot back. */
-export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null }) {
+/**
+ * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ */
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null }) {
   const values: Record<string, Value> = {};
   if (patch.name?.trim()) values.name = patch.name.trim();
   if (patch.color) values.color = patch.color;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
+  if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
+  if (values.icon) values.picture = null;
+  if (values.picture) values.icon = null;
   update("areas", id, values);
 }
 

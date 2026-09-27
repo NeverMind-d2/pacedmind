@@ -32,6 +32,7 @@ function via<K extends keyof Store>(name: K): Store[K] {
 
 /* ---------- areas and projects ---------- */
 export const listAreas = via("listAreas");
+export const areaPicture = via("areaPicture");
 export const createArea = via("createArea");
 export const updateArea = via("updateArea");
 export const deleteArea = via("deleteArea");

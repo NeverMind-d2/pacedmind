@@ -19,6 +19,7 @@ import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/se
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
+import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
   LIVE_STATUSES, deviceOnline, isLiveSession,
@@ -487,6 +488,18 @@ export async function updateAreaAction(id: string, patch: { name?: string; color
   await guard();
   if (patch.icon != null && !isAreaIcon(patch.icon)) return { ok: false, error: "Pick one of the icons" };
   await repo.updateArea(id, { name: patch.name, color: patch.color, icon: patch.icon === undefined ? undefined : areaIconOf(patch.icon) });
+  return done();
+}
+
+/**
+ * An area's own picture, such as a company logo: base64 PNG that the browser made small (area-picture.ts), shown
+ * instead of the area's icon. `null` puts the dot back.
+ */
+export async function setAreaPictureAction(id: string, picture: string | null) {
+  await guard();
+  const problem = picture === null ? null : typeof picture === "string" ? areaPictureProblem(picture) : "That isn't a picture.";
+  if (problem) return { ok: false, error: problem };
+  await repo.updateArea(id, { picture });
   return done();
 }
 

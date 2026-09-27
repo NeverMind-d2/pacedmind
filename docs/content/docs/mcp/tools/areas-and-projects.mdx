@@ -7,7 +7,7 @@ description: "Reference for the area and project tools: list_areas, create_area,
 
 **Read-only. Allowed without asking.**
 
-Lists the areas, the top level of the planner. Each line has the name, id, key, color, the icon when the area has one, and the number of projects and open tasks.
+Lists the areas, the top level of the planner. Each line has the name, id, key, color, the icon when the area has one (or *its own picture* for an area with a picture), and the number of projects and open tasks.
 
 No parameters.
 
@@ -39,6 +39,8 @@ Renames an area, or changes its color or icon. The key stays the same, so existi
 | `icon` | string | no | One of the icon names, or `none` to show the area's dot again. |
 
 The icon names are Lucide's names for the icons the area menu offers, such as `briefcase`, `house`, `graduation-cap`, `code`, `heart-pulse`, `plane`, `wallet` and `music`. An unknown name returns an error that lists icons whose names or meanings match it.
+
+An icon replaces the area's own picture. Pictures, such as a company logo, are chosen in the app only: see [the area menu](/concepts/areas-and-projects#the-area-menu).
 
 ## `delete_area`
 
