@@ -1,7 +1,7 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
 import { formatPlanPrice } from "@/lib/markets";
-import { CLOUD, COST, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
+import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, FLOW, NAME, ONE_DEVICE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
 
 /**
  * /llms.txt and /llms-full.txt (https://llmstxt.org): PacedMind in plain Markdown for answer engines
@@ -16,7 +16,7 @@ export function llmsTxt() {
 
 > ${DESCRIPTION}
 
-${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadlines and calendar events share one calendar and one timeline. ${NAME} also coordinates AI coding agents: it starts Claude Code and Codex sessions from your tasks, each in its own terminal, runs them one after another in a flow if you like, and tells you when a session is waiting for you. The agents report back to ${NAME} over MCP (the Model Context Protocol), on your computer. ${NAME} doesn't run an AI model of its own and needs no API key.
+${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadlines and calendar events share one calendar and one timeline. ${NAME} also coordinates AI coding agents: it starts Claude Code and Codex sessions from your tasks, in a terminal, the agent's desktop app or the agent's cloud, runs them one after another in a flow if you like, and tells you when a session is waiting for you. The agents report back to ${NAME} over MCP (the Model Context Protocol), on your computer. ${NAME} doesn't run an AI model of its own and needs no API key.
 
 - Plans: ${COST}
 - Your data: on one device, your plan stays on your computer, with no account.
@@ -31,6 +31,9 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 ## Website
 
 - [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today, Timeline and Flow views.
+- [Your day](${absoluteUrl("/#day")}): Your plan and your agents' sessions on one day, with the checks PacedMind books.
+- [Agents](${absoluteUrl("/#agents")}): Where agent sessions run: a terminal, the agent's app or the cloud.
+- [Flows](${absoluteUrl("/#flow")}): How a flow starts sessions one after another.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
 - [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys and where your plan is stored.
 
@@ -67,6 +70,28 @@ ${DOWNLOAD_NOTE}
 ## Views
 
 ${VIEWS.map(({ tab, title, body }) => `### ${tab}: ${title}\n\n${body}`).join("\n\n")}
+
+## ${DAY.title}
+
+${DAY.subtitle} ${DAY.intro}
+
+## ${PLACES.title}
+
+${PLACES.subtitle} ${PLACES.intro}
+
+${list(PLACES.items.map(({ name, body }) => `${name}: ${body}`))}
+
+${PLACES.note}
+
+${PLACES.harnesses}
+
+## ${FLOW.title}
+
+${FLOW.subtitle} ${FLOW.intro}
+
+${list(FLOW.modes.map(({ name, body }) => `${name}: ${body}`))}
+
+${FLOW.note}
 
 ## Pricing
 

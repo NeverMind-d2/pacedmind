@@ -1,4 +1,4 @@
-import { AREA, AppWindow, Icon, Segmented, StatusIcon } from "./parts";
+import { AREA, AppWindow, FLOW_LINE, Icon, Segmented, StatusIcon, type FlowMode } from "./parts";
 
 // The app's Flow view (views/flow.tsx in the app): sessions anywhere on a free grid, each run by its own agent.
 
@@ -13,13 +13,12 @@ const NODES: Record<string, Node> = {
   D: { x: 560, y: 288, key: "WEB-14", title: "Compress the hero images", agent: "Codex", tone: "todo", state: "Not started", note: "After WEB-12", selected: true },
   E: { x: 300, y: 390, key: "WEB-16", title: "Draft the launch announcement", agent: "Claude Code", tone: "todo", state: "Not started", note: "After both" },
 };
-type Mode = "auto" | "manual" | "session" | "time";
-const EDGES: [string, string, Mode, boolean?][] = [["A", "B", "auto"], ["A", "C", "auto", true], ["B", "D", "manual"], ["C", "E", "auto"], ["D", "E", "time"]];
-const MODE: Record<Mode, { dash?: string; width: number; label: string }> = {
-  auto: { width: 1.5, label: "Auto" },
-  manual: { dash: "5 4", width: 1.5, label: "Manual" },
-  session: { width: 3, label: "Same session" },
-  time: { dash: "1 4", width: 1.8, label: "At 18:00" },
+const EDGES: [string, string, FlowMode, boolean?][] = [["A", "B", "auto"], ["A", "C", "auto", true], ["B", "D", "manual"], ["C", "E", "auto"], ["D", "E", "time"]];
+const MODE: Record<FlowMode, { dash?: string; width: number; label: string }> = {
+  auto: { ...FLOW_LINE.auto, label: "Auto" },
+  manual: { ...FLOW_LINE.manual, label: "Manual" },
+  session: { ...FLOW_LINE.session, label: "Same session" },
+  time: { ...FLOW_LINE.time, label: "At 18:00" },
 };
 
 function ToneIcon({ tone }: { tone: Tone }) {
@@ -114,7 +113,7 @@ export function FlowScreen() {
         </svg>
         <div className="absolute bottom-4 left-4 flex flex-col gap-[7px] rounded-lg border border-app-line bg-app-panel px-3 py-2.5 text-[11.5px] text-app-mut">
           <span className="text-app-mut2">How the next session starts</span>
-          {(["auto", "manual", "session", "time"] as Mode[]).map((m) => (
+          {(["auto", "manual", "session", "time"] as FlowMode[]).map((m) => (
             <span key={m} className="flex items-center gap-2.5">
               <svg width="26" height="6" viewBox="0 0 26 6" className="shrink-0">
                 <path d="M 1 3 L 25 3" stroke="var(--color-app-fg3)" strokeWidth={MODE[m].width} strokeDasharray={MODE[m].dash} strokeLinecap="round" />

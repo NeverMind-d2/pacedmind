@@ -1,0 +1,553 @@
+/*
+ * The day strip (day-strip.tsx): a day written as a score. Each line is a staff with a barline every hour; the
+ * lines' heights and where their clips sit (--cy) are shared by the names on the left and the lines themselves.
+ */
+.strip {
+  --staff: color-mix(in srgb, var(--color-mut) 24%, var(--color-paper));
+  --head: 150px;
+}
+
+/* The controls: play, the clock, what's happening, and the pace. Without scripts they can't do anything. */
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 18px;
+  padding-bottom: 18px;
+}
+
+:global(html:not([data-js])) .play,
+:global(html:not([data-js])) .pace {
+  visibility: hidden;
+}
+
+.play {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 18px 0 8px;
+  border: 1px solid var(--color-ink);
+  border-radius: 999px;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.play:hover {
+  background: color-mix(in srgb, var(--color-ink) 4%, transparent);
+}
+
+.playIcon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+.clock {
+  flex: none;
+  min-width: 5ch;
+  color: var(--color-app-accent);
+  font: 500 17px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.status {
+  flex: 1 1 320px;
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.pace {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-mut);
+  font-size: 15px;
+}
+
+.pace label {
+  color: var(--color-ink);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pace output {
+  min-width: 12.5em;
+}
+
+.pace output b {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+/* The pace: a line with a tick for each of its five steps. */
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 132px;
+  height: 28px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  --tick: linear-gradient(var(--color-mut), var(--color-mut));
+  background-image: linear-gradient(var(--color-ink), var(--color-ink)), var(--tick), var(--tick), var(--tick), var(--tick), var(--tick);
+  background-size: 100% 1px, 1px 7px, 1px 7px, 1px 7px, 1px 7px, 1px 7px;
+  background-position: 0 50%, 7px 50%, calc(25% + 3.5px) 50%, 50% 50%, calc(75% - 3.5px) 50%, calc(100% - 7px) 50%;
+  background-repeat: no-repeat;
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-paper);
+}
+
+.range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--color-ink);
+  border-radius: 50%;
+  background: var(--color-paper);
+}
+
+/* The roll scrolls sideways when the page is narrower than the day; the names stay pinned. */
+.roll {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.roll::-webkit-scrollbar {
+  display: none;
+}
+
+/* The padding on the right leaves room for the playhead at 19:00, so a wide page never scrolls. */
+.sheet {
+  display: grid;
+  grid-template-columns: var(--head) minmax(0, 1fr);
+  min-width: 900px;
+  padding-right: 8px;
+}
+
+.heads {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: var(--color-paper);
+}
+
+.head {
+  height: var(--h);
+  padding: calc(var(--cy) - 10px) 14px 0 0;
+  color: var(--color-ink);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.head.more {
+  color: var(--color-mut);
+  font-weight: 400;
+}
+
+/* The agents' lines are bracketed together, as a score groups its instruments. */
+.agents {
+  position: relative;
+}
+
+.agents::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 34px;
+  bottom: 11px;
+  width: 7px;
+  border: 1.5px solid var(--color-ink);
+  border-left-width: 2.5px;
+  border-right: 0;
+}
+
+.you {
+  --h: 92px;
+  --cy: 58px;
+}
+
+.agent {
+  --h: 76px;
+  --cy: 46px;
+}
+
+.more {
+  --h: 50px;
+  --cy: 26px;
+}
+
+.lanes {
+  position: relative;
+}
+
+/* The hours. Drag along them, or use the arrow keys, to move through the day. */
+.ruler {
+  position: relative;
+  height: 34px;
+  cursor: ew-resize;
+  touch-action: none;
+  background-image: linear-gradient(to right, var(--color-mut) 1px, transparent 1px), linear-gradient(to right, var(--staff) 1px, transparent 1px);
+  background-size: calc(100% / var(--hours)) 7px, calc(100% / var(--hours) / 4) 4px;
+  background-position: 0 100%, 0 100%;
+  background-repeat: repeat-x;
+}
+
+.ruler:focus-visible {
+  outline-offset: -2px;
+}
+
+.hour {
+  position: absolute;
+  top: 4px;
+  transform: translateX(-50%);
+  color: var(--color-mut);
+  font: 400 11.5px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.hour:first-child {
+  transform: none;
+}
+
+.hour:last-child {
+  transform: translateX(-100%);
+}
+
+/* A line: a five-line staff with a barline each hour, and a final barline. */
+.line {
+  position: relative;
+  height: var(--h);
+}
+
+.line::before,
+.line::after {
+  content: "";
+  position: absolute;
+  top: calc(var(--cy) - 12px);
+  height: 25px;
+}
+
+.line::before {
+  left: 0;
+  right: 0;
+  background-image: repeating-linear-gradient(to bottom, var(--staff) 0 1px, transparent 1px 6px), linear-gradient(to right, var(--staff) 1px, transparent 1px);
+  background-size: 100% 25px, calc(100% / var(--hours)) 100%;
+  background-repeat: no-repeat, repeat-x;
+}
+
+.line::after {
+  right: 0;
+  width: 5px;
+  border-left: 1px solid var(--staff);
+  border-right: 2.5px solid var(--staff);
+}
+
+.line.more::before,
+.line.more::after {
+  opacity: 0.5;
+}
+
+/* Clips: dashed while planned, lit while the playhead passes, quiet once done. --c is the area's color. */
+.clip {
+  position: absolute;
+  top: calc(var(--cy) - 18px);
+  left: calc(var(--from) * 100%);
+  width: calc(var(--span) * 100%);
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 8px;
+  border: 1px dashed color-mix(in srgb, var(--c) 62%, var(--color-paper));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--c) 6%, var(--color-paper));
+  font-family: var(--font-app);
+  transition: background-color 300ms, border-color 300ms;
+}
+
+.clip > span {
+  position: relative;
+}
+
+.key,
+.title {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.key {
+  color: var(--color-mut);
+  font: 500 10.5px/1.15 var(--font-mono);
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--color-text);
+  font-size: 12.5px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+}
+
+.clip .fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-radius: 4px 0 0 4px;
+  background: color-mix(in srgb, var(--c) 30%, transparent);
+  pointer-events: none;
+}
+
+.event {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--c) 45%, var(--color-paper));
+  background: color-mix(in srgb, var(--c) 16%, var(--color-paper));
+}
+
+.clip[data-state="running"] {
+  border-style: solid;
+  border-color: var(--c);
+  background: color-mix(in srgb, var(--c) 20%, var(--color-paper));
+}
+
+.clip[data-state="running"] .key,
+.clip[data-state="running"] .title,
+.clip[data-state="waiting"] .title {
+  color: var(--color-ink);
+}
+
+.clip[data-state="done"] {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--c) 30%, var(--color-paper));
+  background: color-mix(in srgb, var(--c) 9%, var(--color-paper));
+}
+
+.clip[data-state="done"] .title {
+  color: var(--color-mut);
+}
+
+/* Finished, waiting for you: navy, with the app's dot. */
+.clip[data-state="waiting"] {
+  border: 1.5px solid var(--color-app-accent);
+  background: color-mix(in srgb, var(--c) 16%, var(--color-paper));
+}
+
+/* The dot sits on the clip's corner, clear of its key however short the clip is. */
+.clip[data-state="waiting"]::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  top: -4px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-app-accent);
+  box-shadow: 0 0 0 2px var(--color-paper);
+}
+
+/* A session still running when the day ends. */
+.open {
+  border-right-style: dashed !important;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* The checks PacedMind books on your line. They show once their session has finished. */
+.check {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--cy) - 18px);
+  left: calc(var(--from) * 100%);
+  width: calc(var(--span) * 100%);
+  min-width: 18px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--color-app-accent);
+  border-radius: 5px;
+  background: var(--color-paper);
+  color: var(--color-app-accent);
+}
+
+.check[data-state="hidden"] {
+  visibility: hidden;
+}
+
+.check[data-state="running"] {
+  border-color: var(--color-accent-strong);
+  background: var(--color-accent-strong);
+  color: #ffffff;
+}
+
+.check[data-state="done"] {
+  border: 1px solid var(--staff);
+  color: var(--color-mut);
+}
+
+/* Notes on the lines: names too long for their clip, and the deadline. */
+.label {
+  position: absolute;
+  top: 6px;
+  left: calc(var(--from) * 100%);
+  color: var(--color-mut);
+  font-size: 12.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.label.end {
+  left: auto;
+  right: 0;
+  top: 8px;
+}
+
+.label .mono {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.deadline {
+  position: absolute;
+  top: calc(var(--cy) - 17px);
+  left: calc(var(--from) * 100%);
+  width: 6px;
+  height: 34px;
+  margin-left: -6px;
+  border-left: 1px solid var(--color-ink);
+  border-right: 3px solid var(--color-ink);
+}
+
+/* The marks: a fermata where a session waits for you, a cue at a set time, a tie across one session. */
+.mark {
+  position: absolute;
+  color: var(--color-ink);
+  pointer-events: none;
+  transition: color 300ms;
+}
+
+.mark svg {
+  display: block;
+  overflow: visible;
+}
+
+.mark[data-state="holding"] {
+  color: var(--color-app-accent);
+}
+
+.cue {
+  position: absolute;
+  top: 4px;
+  left: calc(var(--from) * 100%);
+  transform: translateX(-50%);
+  padding: 3px 4px 2px;
+  border: 1px solid var(--color-ink);
+  border-radius: 3px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font: 500 11px/1 var(--font-mono);
+}
+
+.cue::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  height: 6px;
+  border-left: 1px solid var(--color-ink);
+}
+
+.playhead {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1.5px solid var(--color-app-accent);
+  pointer-events: none;
+}
+
+.playhead::before {
+  content: "";
+  position: absolute;
+  top: 22px;
+  left: -6px;
+  width: 0;
+  border: 5px solid transparent;
+  border-top: 7px solid var(--color-app-accent);
+  border-bottom: 0;
+}
+
+.caption {
+  margin-top: 14px;
+  color: var(--color-mut);
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .strip {
+    --head: 88px;
+  }
+
+  .head {
+    font-size: 13px;
+  }
+
+  .transport {
+    gap: 12px 14px;
+  }
+
+  .status {
+    flex-basis: 100%;
+    order: 3;
+    min-height: 2.9em;
+  }
+
+  .pace {
+    order: 4;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    width: 100%;
+  }
+
+  .range {
+    flex: 1;
+  }
+
+  .pace output {
+    flex-basis: 100%;
+    min-width: 0;
+    padding-left: calc(4.9em + 14px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clip,
+  .mark {
+    transition: none;
+  }
+}
