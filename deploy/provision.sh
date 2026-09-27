@@ -1,6 +1,6 @@
 #!/bin/sh
 # One-time setup of the VPS for the hosted PacedMind web app. Run it on the server as a sudoer, e.g.:
-#   ssh -i ~/Desktop/keys/pacedmind_vps ubuntu@<server> 'sudo sh -s' < deploy/provision.sh
+#   ssh pacedmind 'sudo sh -s' < deploy/provision.sh      (the ssh alias in deploy/README.md)
 # Installs Node and Caddy from Ubuntu's own repositories, and creates the user and folders the service uses.
 set -eu
 

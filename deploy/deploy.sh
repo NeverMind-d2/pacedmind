@@ -3,13 +3,15 @@
 # keeps the site's GitHub star count, to the VPS set up by deploy/provision.sh. Run from the repository (Git Bash
 # on Windows):
 #
+#   deploy/deploy.sh pacedmind          (an alias in ~/.ssh/config, deploy/README.md)
 #   deploy/deploy.sh ubuntu@<server>
 #
 # The app is built on the server (its dependencies include Linux binaries). The site and docs are static:
 # build them first (npm run build in site/ and docs/); each out/ folder goes up whole and replaces the
 # live one in one step (the previous one stays as site.old or docs.old). deploy/Caddyfile, the whole
 # server config with its host names, replaces the live one only after `caddy validate` accepts it.
-# PACEDMIND_KEY overrides the SSH key; SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY, when set, are written
+# PACEDMIND_KEY overrides the SSH key (by default ~/.ssh/pacedmind_vps when it exists, else whatever ssh's
+# own config gives the host); SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY, when set, are written
 # to the server's /srv/pacedmind/web.env. APP_PLACEHOLDER=1, only before the app launches, leaves the app
 # out and redirects app.pacedmind.com to the site for now (deploy/app-placeholder.caddy); once the app
 # runs, it refuses. Several sessions may share a checkout, each with unfinished work in it: SITE_ONLY=1
@@ -19,13 +21,17 @@
 # for a test.
 set -eu
 
-SERVER=${1:?"usage: deploy/deploy.sh user@server"}
-KEY=${PACEDMIND_KEY:-$HOME/Desktop/keys/pacedmind_vps}
+SERVER=${1:?"usage: deploy/deploy.sh pacedmind (an ssh alias) or user@server"}
+KEY=${PACEDMIND_KEY:-$HOME/.ssh/pacedmind_vps}
+# Without that key, ssh's own config (an alias's IdentityFile) picks one.
+[ -n "${PACEDMIND_KEY:-}" ] || [ -f "$KEY" ] || KEY=
 PLACEHOLDER=${APP_PLACEHOLDER:-}
 SITE_ONLY=${SITE_ONLY:-}
 APP_ONLY=${APP_ONLY:-}
 root=$(cd "$(dirname "$0")/.." && pwd)
-remote() { ssh -i "$KEY" -o BatchMode=yes "$SERVER" "$@"; }
+remote() {
+  if [ -n "$KEY" ]; then ssh -i "$KEY" -o BatchMode=yes "$SERVER" "$@"; else ssh -o BatchMode=yes "$SERVER" "$@"; fi
+}
 
 if [ -n "$SITE_ONLY" ] && { [ -n "$APP_ONLY" ] || [ -n "$PLACEHOLDER" ]; }; then
   echo "SITE_ONLY=1 goes alone: it leaves the app as it runs." >&2
