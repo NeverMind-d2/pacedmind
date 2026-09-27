@@ -7,7 +7,10 @@
 //   npm run desktop -- --no-install build and package only (output in dist/package)
 //   npm run desktop -- --no-launch  install without starting it
 //   npm run desktop -- --release    what scripts/release.mjs builds: on macOS a universal app, signed with
-//                                   your Developer ID and notarized (see README.md)
+//                                   your Developer ID and notarized (see deploy/README.md)
+//   npm run desktop -- --allow-unlanded
+//                                   install from a checkout that doesn't contain master (a test): without it,
+//                                   installing refuses, so it can't roll back work already on master (landed.mjs)
 //
 // The app keeps its data in %APPDATA%\Organizer, or ~/Library/Application Support/Organizer on macOS,
 // so reinstalling never touches it.
@@ -16,11 +19,15 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { packager } from "@electron/packager";
+import { assertLanded } from "./landed.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const dist = path.join(root, "dist");
 const stage = path.join(dist, "app");
 const flags = new Set(process.argv.slice(2));
+const installs = !flags.has("--no-install") && ["win32", "darwin"].includes(process.platform);
+// The installed app is this computer's, whichever checkout builds it.
+if (installs && !flags.has("--allow-unlanded")) assertLanded(root, { skip: "npm run desktop -- --allow-unlanded" });
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
 const pkg = readJson(path.join(root, "package.json"));
 const electronVersion = readJson(path.join(root, "node_modules", "electron", "package.json")).version;
@@ -174,7 +181,7 @@ const [packaged] = await packager({
 });
 console.log(`  ${packaged}`);
 
-if (flags.has("--no-install") || !["win32", "darwin"].includes(process.platform)) {
+if (!installs) {
   console.log("\nDone. Run the app from the folder above.");
   process.exit(0);
 }

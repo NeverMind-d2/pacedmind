@@ -4,6 +4,9 @@
 //   npm run release -- ubuntu@<server>         build, package and upload
 //   npm run release -- --no-upload             build and package only, into dist/release
 //
+// An upload replaces the download everyone gets, so it refuses a checkout that doesn't contain master or has
+// uncommitted changes (landed.mjs); --allow-unlanded skips that, for a test.
+//
 // Windows: PacedMind-Windows.exe, an installer that electron-builder makes from the app that
 // scripts/build-desktop.mjs packages. It installs for the current user into %LOCALAPPDATA%\Programs\Organizer,
 // like `npm run desktop`, closes a running PacedMind first and never touches the data. It isn't signed,
@@ -19,6 +22,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { assertLanded } from "./landed.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, "dist", "release");
@@ -41,6 +45,7 @@ if (upload && !server) {
   process.exit(1);
 }
 if (upload && !fs.existsSync(key)) throw new Error(`There's no SSH key at ${key}. Set PACEDMIND_KEY to its path.`);
+if (upload && !args.includes("--allow-unlanded")) assertLanded(root, { committed: true, skip: "--allow-unlanded" });
 
 /** The Developer ID Application certificate to sign with: PACEDMIND_SIGN_IDENTITY, or the keychain's only one. */
 function signingIdentity() {

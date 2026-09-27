@@ -13,7 +13,9 @@
 # out and redirects app.pacedmind.com to the site for now (deploy/app-placeholder.caddy); once the app
 # runs, it refuses. Several sessions may share a checkout, each with unfinished work in it: SITE_ONLY=1
 # uploads the site, docs and Caddy config and leaves the running app alone, and APP_ONLY=1 rebuilds the
-# app without uploading site/out or docs/out.
+# app without uploading site/out or docs/out. It refuses a checkout that doesn't contain master or has
+# uncommitted changes (as scripts/landed.mjs does for installs and releases); ALLOW_UNLANDED=1 skips that,
+# for a test.
 set -eu
 
 SERVER=${1:?"usage: deploy/deploy.sh user@server"}
@@ -27,6 +29,22 @@ remote() { ssh -i "$KEY" -o BatchMode=yes "$SERVER" "$@"; }
 if [ -n "$SITE_ONLY" ] && { [ -n "$APP_ONLY" ] || [ -n "$PLACEHOLDER" ]; }; then
   echo "SITE_ONLY=1 goes alone: it leaves the app as it runs." >&2
   exit 1
+fi
+
+# Every deploy replaces what's live with this checkout, so one that doesn't contain master takes work that already
+# landed there off the server, and uncommitted work would go live without being in git. A copy without git, or
+# without a master branch, isn't checked.
+if [ -z "${ALLOW_UNLANDED:-}" ] && git -C "$root" rev-parse --verify --quiet master >/dev/null 2>&1; then
+  if ! git -C "$root" merge-base --is-ancestor master HEAD; then
+    echo "This checkout doesn't contain master, so it would take work that already landed there off the server." >&2
+    echo "Merge master into it first, or use ALLOW_UNLANDED=1 for a test." >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "$root" status --porcelain)" ]; then
+    echo "This checkout has uncommitted changes, which would go live without being in git." >&2
+    echo "Commit them first, or use ALLOW_UNLANDED=1 for a test." >&2
+    exit 1
+  fi
 fi
 if [ -n "$SITE_ONLY" ] && ! remote 'systemctl is-active --quiet pacedmind-web'; then
   echo "SITE_ONLY=1 keeps the running app, but pacedmind-web isn't running." >&2

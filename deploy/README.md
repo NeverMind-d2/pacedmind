@@ -62,6 +62,8 @@ Before the web app launched, `APP_PLACEHOLDER=1 deploy/deploy.sh ubuntu@<server>
 
 A checkout without the hosted web mode (`src/server/supabase.ts`) refuses to deploy the app: it would put a planner without sign-in on the internet.
 
+Every deploy replaces what's live with the checkout it runs from, so it refuses one that doesn't contain master (it would take work that already landed there off the server) or that has uncommitted changes (they'd go live without being in git). Land the work on master first; `ALLOW_UNLANDED=1` skips the check, for a test.
+
 New migrations go out with `npx supabase db push` before a deploy that needs them.
 
 ## 4. Release the desktop app
@@ -77,7 +79,7 @@ npm run release -- --no-upload       # only build and package, into dist/release
 - **macOS:** `PacedMind-macOS.dmg`, one app for Apple silicon and Intel, signed with your Developer ID and notarized by Apple, the disk image too. Once, on the Mac: put your **Developer ID Application** certificate in the login keychain (Xcode → Settings → Accounts → Manage Certificates), and store the notarization credentials under the name `PacedMind` with `xcrun notarytool store-credentials PacedMind --apple-id <your Apple ID> --team-id <your team ID>` (it asks for an app-specific password from account.apple.com). Both stay in the keychain. `PACEDMIND_SIGN_IDENTITY` picks a certificate if there are several, and `PACEDMIND_NOTARY_PROFILE` another profile name.
 - The upload uses the SSH key `deploy.sh` uses (`PACEDMIND_KEY`; on the Mac, copy the key to the same place and `chmod 600` it).
 
-It creates the folder the first time, checks each upload against its checksum before switching to it, and keeps the previous file as `<name>.old`. `deploy.sh` never touches that folder. Until the first release, the buttons end on the site's 404 page.
+It creates the folder the first time, checks each upload against its checksum before switching to it, and keeps the previous file as `<name>.old`. `deploy.sh` never touches that folder. Until the first release, the buttons end on the site's 404 page. Like a deploy, an upload refuses a checkout that doesn't contain master or has uncommitted changes (`--allow-unlanded` skips that, for a test); `npm run desktop` refuses one that doesn't contain master, since the installed app is shared by every checkout on the computer.
 
 ## 5. Visitor statistics (Umami)
 
