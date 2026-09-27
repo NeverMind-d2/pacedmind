@@ -4,7 +4,7 @@ PacedMind is licensed under the GNU Affero General Public License, version 3 ([L
 
 ## Feather and Lucide
 
-Many of the interface icons in `src/components/icons.tsx` are adapted from [Feather](https://feathericons.com) and [Lucide](https://lucide.dev): their shapes, redrawn as single paths. The icons an area can show, in `src/components/area-icon-paths.ts`, are Lucide's, made the same way by `scripts/area-icons.mjs`.
+Many of the interface icons in `src/components/icons.tsx`, and the website's in `site/components/screens/parts.tsx`, are adapted from [Feather](https://feathericons.com) and [Lucide](https://lucide.dev): their shapes, redrawn as single paths. The icons an area can show, in `src/components/area-icon-paths.ts`, are Lucide's, made the same way by `scripts/area-icons.mjs`.
 
 Feather:
 
@@ -82,9 +82,9 @@ SOFTWARE.
 
 ## Simple Icons
 
-The Claude mark in `src/components/icons.tsx` comes from [Simple Icons](https://simpleicons.org), which dedicates its icons to the public domain (CC0 1.0).
+The Claude mark in `src/components/icons.tsx`, and the GitHub mark in `site/components/github-mark.tsx`, come from [Simple Icons](https://simpleicons.org), which dedicates its icons to the public domain (CC0 1.0).
 
-Claude is a trademark of Anthropic, and Codex of OpenAI. PacedMind uses their names and marks only to show which agent runs a session.
+Claude is a trademark of Anthropic, and Codex of OpenAI. PacedMind uses their names and marks only to show which agent runs a session. GitHub is a trademark of GitHub, Inc.; the website uses its mark only on links to PacedMind's repository.
 
 ## Fonts
 

@@ -1,0 +1,17 @@
+# Copies PacedMind's star count on GitHub to /srv/pacedmind/github/github.json, which the site serves as
+# pacedmind.com/github.json (Caddyfile). pacedmind-github.timer starts it every ten minutes; deploy.sh installs
+# both, with the script (github-stars.mjs) in /usr/local/lib/pacedmind.
+[Unit]
+Description=PacedMind's GitHub star count for the site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=pacedmind
+ExecStart=/usr/bin/node /usr/local/lib/pacedmind/github-stars.mjs /srv/pacedmind/github/github.json
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/srv/pacedmind/github
+ProtectHome=true
+PrivateTmp=true

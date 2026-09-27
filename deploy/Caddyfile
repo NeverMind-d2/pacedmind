@@ -102,6 +102,15 @@ pacedmind.com {
 		file_server
 	}
 
+	# The site's GitHub star count, {"stars": N}, which pacedmind-github.timer copies from GitHub every ten
+	# minutes (github-stars.mjs), so visitors' browsers never contact GitHub themselves. Checked again on every
+	# visit, like the pages.
+	handle /github.json {
+		root * /srv/pacedmind/github
+		header X-Robots-Tag noindex
+		file_server
+	}
+
 	# Visitor statistics: Umami (deploy/umami) on 127.0.0.1:3001. Only its tracker and the address the
 	# tracker reports to pass through, so the tracker is first-party; the dashboard is stats.pacedmind.com.
 	@umami path /stats/script.js /stats/api/send

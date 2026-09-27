@@ -1,7 +1,7 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
 import { formatPlanPrice } from "@/lib/markets";
-import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, FLOW, NAME, ONE_DEVICE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
+import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, FLOW, NAME, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
 
 /**
  * /llms.txt and /llms-full.txt (https://llmstxt.org): PacedMind in plain Markdown for answer engines
@@ -34,6 +34,7 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 - [Your day](${absoluteUrl("/#day")}): Your plan and your agents' sessions on one day, with the checks PacedMind books.
 - [Agents](${absoluteUrl("/#agents")}): Where agent sessions run: a terminal, the agent's app or the cloud.
 - [Flows](${absoluteUrl("/#flow")}): How a flow starts sessions one after another.
+- [Open source](${absoluteUrl("/#open-source")}): The source code on GitHub under the GNU AGPL, and how to build ${NAME} from it.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
 - [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys, where your plan is stored, and the source code.
 
@@ -69,7 +70,7 @@ ${SUMMARY}
 - [Download ${NAME} for Windows](${SITE.downloads.windows})
 - [Download ${NAME} for macOS](${SITE.downloads.mac})
 
-${DOWNLOAD_NOTE}
+${DOWNLOAD_NOTE} ${OPEN_SOURCE.hero}
 
 ## Views
 
@@ -96,6 +97,20 @@ ${FLOW.subtitle} ${FLOW.intro}
 ${list(FLOW.modes.map(({ name, body }) => `${name}: ${body}`))}
 
 ${FLOW.note}
+
+## ${OPEN_SOURCE.title}
+
+${OPEN_SOURCE.subtitle} ${OPEN_SOURCE.intro}
+
+The source code: ${SITE.source} (license: ${OPEN_SOURCE.license}, ${SITE.license}). To build it:
+
+\`\`\`bash
+${OPEN_SOURCE.commands.join("\n")}
+\`\`\`
+
+${list(OPEN_SOURCE.items.map(({ name, body, link, href }) => `${name}: ${body} [${link}](${href.startsWith("/") ? absoluteUrl(href) : href})`))}
+
+${OPEN_SOURCE.note}
 
 ## Pricing
 

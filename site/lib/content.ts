@@ -1,3 +1,5 @@
+import { SITE } from "@/lib/site";
+
 /**
  * The page's words, shared by the home page, /llms.txt, /llms-full.txt and the structured data, so
  * search and answer engines read what visitors see. The entity is always "PacedMind".
@@ -94,6 +96,45 @@ export const TRY = {
   title: "Try it here.",
   subtitle: "Pick something to do and see what happens.",
 };
+
+/**
+ * The source code: why it's public, the commands that build it (the repository's README), and what anyone can do
+ * with it. The FAQ's last answer says the same in short.
+ */
+export const OPEN_SOURCE = {
+  title: "Open source, every line.",
+  subtitle: "Read it, build it, change it.",
+  intro:
+    "PacedMind starts agents on your computer, so you should be able to see exactly what it does. The desktop app, the web app and Cloud's database rules are all on GitHub, under the GNU AGPL.",
+  /** After the download note in the hero, as a link to this section. */
+  hero: "Open source.",
+  license: "GNU AGPL-3.0",
+  commands: [`git clone ${SITE.source}`, `cd ${SITE.repo.split("/")[1]}`, "npm install", "npm run desktop"],
+  items: [
+    {
+      icon: "code",
+      name: "Read the code",
+      body: "See what PacedMind does with your plan and your agents, down to the database rules that keep every Cloud account private.",
+      link: "Browse the repository",
+      href: SITE.source,
+    },
+    {
+      icon: "terminal",
+      name: "Build it yourself",
+      body: "With Node.js and Git, the four commands above build PacedMind on Windows or macOS, install it and start it.",
+      link: "Build from the source code",
+      href: `${SITE.docs}/getting-started/install#build-from-the-source-code`,
+    },
+    {
+      icon: "pullRequest",
+      name: "Make it better",
+      body: "Report a bug, suggest an idea or send a pull request. Fixes and clearer documentation are always welcome.",
+      link: "How to contribute",
+      href: SITE.contributing,
+    },
+  ],
+  note: "The GNU AGPL keeps it that way: whoever shares a changed version of PacedMind, or runs one for other people over a network, has to share its source code too.",
+} as const;
 
 /**
  * Two plans. One device is free and needs no account. Cloud costs what a music subscription costs in

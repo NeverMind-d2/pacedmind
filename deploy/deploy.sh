@@ -1,6 +1,7 @@
 #!/bin/sh
-# Deploys the hosted web app, the public site and docs when they are built, and the Caddy config to the
-# VPS set up by deploy/provision.sh. Run from the repository (Git Bash on Windows):
+# Deploys the hosted web app, the public site and docs when they are built, the Caddy config, and the timer that
+# keeps the site's GitHub star count, to the VPS set up by deploy/provision.sh. Run from the repository (Git Bash
+# on Windows):
 #
 #   deploy/deploy.sh ubuntu@<server>
 #
@@ -117,6 +118,22 @@ tar -C "$root/deploy" -czf - Caddyfile "$snippet" |
     sudo systemctl enable caddy >/dev/null 2>&1
     sudo systemctl reload-or-restart caddy"
 
+# The site's GitHub star count, which the server copies every ten minutes (github-stars.mjs) and Caddy serves as
+# /github.json. Nothing else depends on it, so a failure here only warns: the page keeps the count from its build.
+echo "> GitHub star count"
+if ! tar -C "$root/deploy" -czf - github-stars.mjs pacedmind-github.service pacedmind-github.timer |
+  remote "set -e
+    rm -rf /tmp/pacedmind-github && mkdir /tmp/pacedmind-github && tar -xzf - -C /tmp/pacedmind-github
+    cd /tmp/pacedmind-github
+    sudo install -d -o pacedmind -g pacedmind /srv/pacedmind/github
+    sudo install -D -m 644 github-stars.mjs /usr/local/lib/pacedmind/github-stars.mjs
+    sudo install -m 644 pacedmind-github.service pacedmind-github.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now pacedmind-github.timer >/dev/null 2>&1
+    sudo systemctl start pacedmind-github.service"; then
+  echo "The star count didn't update; see: journalctl -u pacedmind-github" >&2
+fi
+
 echo "> Checking"
 sleep 3
 if [ -n "$PLACEHOLDER" ]; then
@@ -126,6 +143,6 @@ else
   remote 'systemctl is-active pacedmind-web caddy; curl -s -o /dev/null -H "Host: app.pacedmind.com" -w "app on 127.0.0.1:3000: %{http_code}\n" http://127.0.0.1:3000/login'
 fi
 # printf for the newline: Git Bash turns a backslash in curl's -w argument into a slash.
-for url in https://pacedmind.com/ https://pacedmind.com/docs https://app.pacedmind.com/; do
+for url in https://pacedmind.com/ https://pacedmind.com/docs https://app.pacedmind.com/ https://pacedmind.com/github.json; do
   printf '%s: %s\n' "$url" "$(curl -s -o /dev/null -w '%{http_code}' "$url" || echo 'no answer')"
 done
