@@ -1,6 +1,9 @@
 // The one canonical origin, without www and without a trailing slash. The server redirects
 // http:// and www.pacedmind.com here (deploy/).
 const url = "https://pacedmind.com";
+// The source code's repository on GitHub, public under the GNU AGPL (repoUrl in docs/src/lib/shared.ts
+// and REPO in deploy/github-stars.mjs; keep the three in step).
+const repo = "Pacedmind/pacedmind";
 
 /** Public addresses: the site, its docs, the web app, the source code and the downloads. */
 export const SITE = {
@@ -9,8 +12,13 @@ export const SITE = {
   docs: "/docs",
   // The web app, where PacedMind Cloud accounts sign in (it sends visitors without a session to its sign-in page).
   app: "https://app.pacedmind.com",
-  // The source code, public under the GNU AGPL (repoUrl in docs/src/lib/shared.ts; keep the two in step).
-  source: "https://github.com/Pacedmind/pacedmind",
+  // The source code: the repository's name as GitHub's API takes it, its page, and the files the page links to.
+  repo,
+  source: `https://github.com/${repo}`,
+  license: `https://github.com/${repo}/blob/master/LICENSE`,
+  contributing: `https://github.com/${repo}/blob/master/CONTRIBUTING.md`,
+  // The repository's star count as the server keeps it (deploy/github-stars.mjs), so browsers never ask GitHub.
+  stars: "/github.json",
   // The current installers, which `npm run release` uploads (deploy/Caddyfile leads these to them).
   downloads: {
     windows: `${url}/download/windows`,
@@ -49,6 +57,6 @@ export function signInEvent(place: "header" | "footer") {
 }
 
 /** Makes Umami count a click on a link to the source code as a "GitHub" event, with where the link is. */
-export function sourceEvent(place: "header" | "footer") {
+export function sourceEvent(place: "header" | "open-source" | "footer") {
   return { "data-umami-event": "GitHub", "data-umami-event-place": place };
 }

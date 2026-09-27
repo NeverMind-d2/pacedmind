@@ -12,6 +12,7 @@ The server is an OVH VPS with Ubuntu 26.04. It only accepts SSH keys; the script
 | `https://pacedmind.com` | the public site (`site/out`) |
 | `https://pacedmind.com/docs` | the docs (the docs app's static build) |
 | `https://pacedmind.com/download/windows`, `/download/mac` | the current desktop installers (step 4) |
+| `https://pacedmind.com/github.json` | the repository's star count on GitHub, for the site's header (step 3) |
 | `https://stats.pacedmind.com` | the visitor statistics' dashboard, Umami (step 5) |
 | `https://www.pacedmind.com` | redirects to `pacedmind.com` |
 
@@ -54,7 +55,7 @@ Build the static parts first if they should go up too (`npm run build` in `site/
 SUPABASE_URL=https://pyoynjoyhpolijlvoalu.supabase.co SUPABASE_PUBLISHABLE_KEY=sb_publishable_... deploy/deploy.sh ubuntu@<server>
 ```
 
-It uploads the working tree, builds the app on the server, switches `/srv/pacedmind/app` to the new build (the previous one stays in `app.old`), restarts `pacedmind-web`, and uploads `site/out` and `docs/out` when they exist, each replacing the live folder in one step (the previous one stays in `site.old` or `docs.old`). Then it installs `Caddyfile` and `app.caddy` in `/etc/caddy`, once `caddy validate` has accepted them, and reloads Caddy; the previous config stays in `/etc/caddy/Caddyfile.old`. The Supabase variables are only needed the first time (they're kept in `web.env`).
+It uploads the working tree, builds the app on the server, switches `/srv/pacedmind/app` to the new build (the previous one stays in `app.old`), restarts `pacedmind-web`, and uploads `site/out` and `docs/out` when they exist, each replacing the live folder in one step (the previous one stays in `site.old` or `docs.old`). Then it installs `Caddyfile` and `app.caddy` in `/etc/caddy`, once `caddy validate` has accepted them, and reloads Caddy; the previous config stays in `/etc/caddy/Caddyfile.old`. Last, it installs `pacedmind-github.timer`, which copies the repository's star count from GitHub every ten minutes (`github-stars.mjs`, in `/usr/local/lib/pacedmind`) to `/srv/pacedmind/github/github.json`, served as `pacedmind.com/github.json` for the site's header, so visitors' browsers never contact GitHub; if that step fails, the deploy only warns and the page keeps the count from its build (`journalctl -u pacedmind-github` says why). The Supabase variables are only needed the first time (they're kept in `web.env`).
 
 When several sessions share one checkout, each may have unfinished work in it: `SITE_ONLY=1` uploads `site/out`, `docs/out` and the Caddy config and keeps the app that runs, and `APP_ONLY=1` rebuilds the app without uploading `site/out` or `docs/out`.
 
@@ -114,8 +115,9 @@ sudo ufw allow OpenSSH && sudo ufw allow 80,443/tcp && sudo ufw --force enable
 - `provision.sh`: the one-time server setup.
 - `deploy.sh`: builds and switches the app, uploads the static parts, installs the Caddy config.
 - `pacedmind-web.service`: the systemd unit (`HOSTNAME=127.0.0.1`, `PORT=3000`, `ORGANIZER_MODE=web`, `ORGANIZER_PUBLIC_ORIGIN=https://app.pacedmind.com`, `TZ=Europe/Warsaw`).
-- `Caddyfile`: the server's whole Caddy config, for Caddy 2.6.2 as Ubuntu ships it: HTTPS, `www` and `http://` to `https://pacedmind.com`, one URL per page (no `.html`, no trailing slash), the site's and the docs' 404 pages with a 404 status, caching, and the docs' Markdown copies, search index and navigation files marked `noindex`. The docs need their own `/docs` block because a docs section has both `views.html` and a `views/` folder. `/download/*` serves the installers from `/srv/pacedmind/download` (step 4). `/stats/script.js` and `/stats/api/send` go to Umami, and `stats.pacedmind.com` is its dashboard (step 5).
+- `Caddyfile`: the server's whole Caddy config, for Caddy 2.6.2 as Ubuntu ships it: HTTPS, `www` and `http://` to `https://pacedmind.com`, one URL per page (no `.html`, no trailing slash), the site's and the docs' 404 pages with a 404 status, caching, and the docs' Markdown copies, search index and navigation files marked `noindex`. The docs need their own `/docs` block because a docs section has both `views.html` and a `views/` folder. `/download/*` serves the installers from `/srv/pacedmind/download` (step 4). `/stats/script.js` and `/stats/api/send` go to Umami, and `stats.pacedmind.com` is its dashboard (step 5). `/github.json` is the star count (step 3).
 - `app.caddy` and `app-placeholder.caddy`: what `app.pacedmind.com` does, the app or a redirect to the site; `deploy.sh` installs one of them as `/etc/caddy/app.caddy`.
+- `github-stars.mjs`, `pacedmind-github.service` and `pacedmind-github.timer`: the site's GitHub star count, refreshed every ten minutes as the `pacedmind` user (step 3).
 - `umami/compose.yml` and `umami/install.sh`: the visitor statistics (step 5), which `deploy.sh` leaves alone.
 
 The steps for Google Search Console and Bing Webmaster Tools are in `site/deploy/README.md`.

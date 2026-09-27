@@ -1,7 +1,7 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
 import { formatPlanPrice } from "@/lib/markets";
-import { CLOUD, COST, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
+import { CLOUD, COST, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, OPEN_SOURCE, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
 
 /**
  * /llms.txt and /llms-full.txt (https://llmstxt.org): PacedMind in plain Markdown for answer engines
@@ -31,6 +31,7 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 ## Website
 
 - [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today, Timeline and Flow views.
+- [Open source](${absoluteUrl("/#open-source")}): The source code on GitHub under the GNU AGPL, and how to build ${NAME} from it.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
 - [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys, where your plan is stored, and the source code.
 
@@ -66,11 +67,25 @@ ${SUMMARY}
 - [Download ${NAME} for Windows](${SITE.downloads.windows})
 - [Download ${NAME} for macOS](${SITE.downloads.mac})
 
-${DOWNLOAD_NOTE}
+${DOWNLOAD_NOTE} ${OPEN_SOURCE.hero}
 
 ## Views
 
 ${VIEWS.map(({ tab, title, body }) => `### ${tab}: ${title}\n\n${body}`).join("\n\n")}
+
+## ${OPEN_SOURCE.title}
+
+${OPEN_SOURCE.subtitle} ${OPEN_SOURCE.intro}
+
+The source code: ${SITE.source} (license: ${OPEN_SOURCE.license}, ${SITE.license}). To build it:
+
+\`\`\`bash
+${OPEN_SOURCE.commands.join("\n")}
+\`\`\`
+
+${list(OPEN_SOURCE.items.map(({ name, body, link, href }) => `${name}: ${body} [${link}](${href.startsWith("/") ? absoluteUrl(href) : href})`))}
+
+${OPEN_SOURCE.note}
 
 ## Pricing
 

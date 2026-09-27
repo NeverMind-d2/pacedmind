@@ -35,8 +35,11 @@ export const IDS = {
   organization: `${SITE.url}/#organization`,
   website: `${SITE.url}/#website`,
   software: `${SITE.url}/#software`,
+  source: `${SITE.url}/#source`,
   faq: `${SITE.url}/#faq`,
 };
+
+const AGPL = "https://www.gnu.org/licenses/agpl-3.0.html";
 
 type Node = Record<string, unknown>;
 
@@ -85,8 +88,21 @@ export function softwareApplication(): Node {
     downloadUrl: [...new Set(Object.values(SITE.downloads))],
     featureList: ONE_DEVICE,
     offers: { "@type": "Offer", name: "One device", price: "0", priceCurrency: "USD", url: absoluteUrl("/#pricing") },
-    license: "https://www.gnu.org/licenses/agpl-3.0.html",
+    license: AGPL,
     sameAs: [SITE.source],
+    publisher: { "@id": IDS.organization },
+  };
+}
+
+/** The app's source code, which the page's open-source section shows: where it is and its license. */
+export function softwareSourceCode(): Node {
+  return {
+    "@type": "SoftwareSourceCode",
+    "@id": IDS.source,
+    name: NAME,
+    codeRepository: SITE.source,
+    license: AGPL,
+    targetProduct: { "@id": IDS.software },
     publisher: { "@id": IDS.organization },
   };
 }

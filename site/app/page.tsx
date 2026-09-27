@@ -2,15 +2,19 @@ import Link from "next/link";
 import prices from "@/prices.json";
 import { SITE, downloadEvent, signInEvent, sourceEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
-import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
-import { faqPage, graph, pageMetadata, softwareApplication } from "@/lib/seo";
+import { CLOUD, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, OPEN_SOURCE, PRICING, SUMMARY, TAGLINE, VIEWS as VIEW_COPY } from "@/lib/content";
+import { faqPage, graph, pageMetadata, softwareApplication, softwareSourceCode } from "@/lib/seo";
+import { starsAtBuild } from "@/lib/github";
 import { JsonLd } from "@/components/json-ld";
 import { Emblem } from "@/components/emblem";
+import { GitHubMark } from "@/components/github-mark";
+import { StarCount } from "@/components/star-count";
 import { Wordmark } from "@/components/wordmark";
 import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
 import { TodayScreen } from "@/components/screens/today";
 import { TimelineScreen } from "@/components/screens/timeline";
 import { FlowScreen } from "@/components/screens/flow";
+import { Icon } from "@/components/screens/parts";
 import { CountryPicker, PlanPrice } from "@/components/plan-price";
 
 export const metadata = pageMetadata("/");
@@ -29,18 +33,39 @@ const VIEWS: DeckItem[] = VIEW_COPY.map((view) => ({ ...view, screen: SCREENS[vi
 // the caption goes below the fold. They keep to the column's right edge, under the menu.
 const DECK_WIDTH = "lg:justify-self-end lg:w-[min(100%,max(100%_-_120px,calc((100svh_-_372px)*1.4865)))]";
 
-export default function Home() {
+/** A section's heading: a line in ink and one in grey, like the pricing's, and the paragraph under them. */
+function Heading({ title, subtitle, intro }: { title: string; subtitle: string; intro?: string }) {
   return (
     <>
-      <JsonLd data={graph(softwareApplication(), faqPage(FAQ))} />
+      <h2 className="max-w-[24em] text-[clamp(30px,3.9vw,46px)] leading-[1.15] font-light tracking-[-0.01em] text-balance text-ink">
+        {title}{" "}
+        <span className="block text-mut">{subtitle}</span>
+      </h2>
+      {intro && <p className="mt-6 max-w-[640px] text-[16px] leading-[1.6] text-balance text-text sm:mt-8 sm:text-[18px]">{intro}</p>}
+    </>
+  );
+}
+
+export default async function Home() {
+  // The stars as the page is built; in the browser, StarCount swaps in the count the server keeps current.
+  const stars = await starsAtBuild();
+  const [owner, repo] = SITE.repo.split("/");
+  return (
+    <>
+      <JsonLd data={graph(softwareApplication(), softwareSourceCode(), faqPage(FAQ))} />
       <header className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="PacedMind" className="rounded-[7px]"><Emblem size={30} /></Link>
-        <nav className="flex items-center gap-[30px] text-[16px] text-mut">
+        <nav className="flex items-center gap-[18px] text-[16px] text-mut sm:gap-[30px]">
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
-          {/* Phones have room for three items here; the footer has the link too. */}
-          <a href={SITE.source} className="hidden hover:text-ink sm:inline" {...sourceEvent("header")}>GitHub</a>
-          <a href={SITE.app} className="rounded-[10px] border border-line px-4 py-2 font-medium text-ink hover:border-mut" {...signInEvent("header")}>
+          {/* On phones the mark stands for the word, and the narrowest have room for the mark alone. */}
+          <a href={SITE.source} className="group flex items-center gap-2 hover:text-ink" {...sourceEvent("header")}>
+            <GitHubMark size={18} />
+            <span className="max-sm:sr-only">GitHub</span>
+            <StarCount initial={stars}
+              className="text-[14px] max-[359px]:hidden sm:h-6 sm:rounded-full sm:border sm:border-line sm:px-2 sm:group-hover:border-mut" />
+          </a>
+          <a href={SITE.app} className="rounded-[10px] border border-line px-4 py-2 font-medium whitespace-nowrap text-ink hover:border-mut" {...signInEvent("header")}>
             Sign in
           </a>
         </nav>
@@ -62,9 +87,51 @@ export default function Home() {
               <a className="download" data-os="windows" href={SITE.downloads.windows} {...downloadEvent("windows", "hero")}>Download for Windows</a>
               <a className="download" data-os="mac" href={SITE.downloads.mac} {...downloadEvent("mac", "hero")}>Download for macOS</a>
             </div>
-            <p className="mt-4 text-[15px] text-mut">{DOWNLOAD_NOTE}</p>
+            <p className="mt-4 text-[15px] text-mut">
+              {DOWNLOAD_NOTE}{" "}
+              <a href="#open-source" className="whitespace-nowrap underline decoration-line underline-offset-4 hover:text-ink hover:decoration-mut">{OPEN_SOURCE.hero}</a>
+            </p>
           </div>
           <ScreenDeck items={VIEWS} className={{ stage: `min-w-0 ${DECK_WIDTH}`, controls: `lg:col-start-2 ${DECK_WIDTH}` }} />
+        </section>
+
+        {/* The repository with the commands that build it, then what anyone can do with the code. */}
+        <section id="open-source" className="mt-24 scroll-mt-8 sm:mt-[150px]">
+          <Heading title={OPEN_SOURCE.title} subtitle={OPEN_SOURCE.subtitle} intro={OPEN_SOURCE.intro} />
+          <div className="mt-12 overflow-hidden rounded-[14px] border border-line sm:mt-16">
+            <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3 border-b border-line px-5 py-4 sm:px-7">
+              <a href={SITE.source} className="flex items-center gap-3 text-[17px] text-ink underline-offset-4 hover:underline sm:text-[18px]" {...sourceEvent("open-source")}>
+                <GitHubMark size={22} />
+                <span>{owner}<span className="mx-1.5 text-mut">/</span>{repo}</span>
+              </a>
+              <div className="flex items-center gap-5 text-[15px] text-mut">
+                <a href={SITE.license} className="hover:text-ink">{OPEN_SOURCE.license}</a>
+                <StarCount initial={stars} className="h-6 rounded-full border border-line px-2 text-[14px]" />
+              </div>
+            </div>
+            <pre className="overflow-x-auto px-5 py-6 font-mono text-[14px] leading-[1.9] text-text sm:px-7 sm:py-7 sm:text-[15px]">
+              <code>
+                {OPEN_SOURCE.commands.map((command) => (
+                  <span key={command} className="block"><span aria-hidden="true" className="text-mut select-none">$ </span>{command}</span>
+                ))}
+              </code>
+            </pre>
+          </div>
+          <ul className="mt-16 grid gap-x-14 gap-y-10 border-t border-line pt-12 sm:mt-20 md:grid-cols-3 md:pt-14">
+            {OPEN_SOURCE.items.map(({ icon, name, body, link, href }) => (
+              <li key={name} className="flex flex-col items-start">
+                <Icon name={icon} size={22} strokeWidth={1.6} className="text-mut" />
+                <p className="mt-4 text-[17px] text-ink sm:text-[18px]">{name}</p>
+                <p className="mt-1.5 mb-4 text-[16px] leading-[1.6] text-mut">{body}</p>
+                {/* Side by side, the links line up at the bottom. */}
+                <a href={href} className="mt-auto text-[16px] text-text underline decoration-line underline-offset-4 hover:text-ink hover:decoration-mut"
+                  {...(href.startsWith(SITE.source) ? sourceEvent("open-source") : {})}>
+                  {link}
+                </a>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-10 max-w-[720px] text-[16px] leading-[1.6] text-text">{OPEN_SOURCE.note}</p>
         </section>
 
         <section id="pricing" className="mt-24 scroll-mt-8 sm:mt-[150px]">

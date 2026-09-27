@@ -1,0 +1,11 @@
+# Refreshes the site's GitHub star count (pacedmind-github.service) every ten minutes. deploy.sh installs and
+# starts it.
+[Unit]
+Description=Refresh PacedMind's GitHub star count every ten minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target

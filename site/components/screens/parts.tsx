@@ -26,6 +26,10 @@ const PATHS = {
   chevronDown: "M6 9l6 6 6-6",
   flag: "M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z M4 22v-7",
   check: "M5 12l5 5 9-10",
+  // The page's open-source parts, from Feather.
+  code: "M16 18l6-6-6-6 M8 6l-6 6 6 6",
+  pullRequest: "M15 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M13 6h3a2 2 0 0 1 2 2v7 M6 9v12",
+  star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z",
 };
 export type IconName = keyof typeof PATHS;
 
