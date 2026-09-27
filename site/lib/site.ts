@@ -10,7 +10,7 @@ export const SITE = {
   // The web app, where PacedMind Cloud accounts sign in (it sends visitors without a session to its sign-in page).
   app: "https://app.pacedmind.com",
   // The source code, public under the GNU AGPL (repoUrl in docs/src/lib/shared.ts; keep the two in step).
-  source: "https://github.com/NeverMind-d2/pacedmind",
+  source: "https://github.com/Pacedmind/pacedmind",
   // The current installers, which `npm run release` uploads (deploy/Caddyfile leads these to them).
   downloads: {
     windows: `${url}/download/windows`,

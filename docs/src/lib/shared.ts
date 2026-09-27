@@ -50,7 +50,7 @@ export const organizationRef = {
  * Page sources live under docs/content/docs/ in it.
  */
 export const gitConfig = {
-  user: 'NeverMind-d2',
+  user: 'Pacedmind',
   repo: 'pacedmind',
   branch: 'master',
   repoPublic: true,
