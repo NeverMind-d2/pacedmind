@@ -52,6 +52,11 @@ export interface DeviceConfig {
   sessionTokens: Record<string, { sessionId: string; taskId: number; issuedAt: string; expires?: number }>;
   /** Once the import of the folders you work in with Claude Code and Codex was offered here (it opens by itself once). */
   importOffered: boolean;
+  /**
+   * "Continue without an account" was chosen on the sign-in screen and nobody signed in since, so the app
+   * opens with this computer's own data instead of asking. Signing in clears it: after signing out it asks again.
+   */
+  withoutAccount: boolean;
 }
 
 export const dataDir = () =>
@@ -79,6 +84,7 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     ownerToken: newOwnerToken(),
     sessionTokens: {},
     importOffered: false,
+    withoutAccount: false,
   };
 }
 

@@ -13,7 +13,7 @@ export function AuthShell({ note, children }: { note: ReactNode; children: React
         <div className="flex w-full max-w-[380px] flex-col gap-8">
           <div className="flex flex-col items-center gap-3 text-center">
             <BrandWordmark className="w-[168px]" />
-            <p className="text-[13px] leading-relaxed text-mut">{note}</p>
+            <p className="text-balance text-[13px] leading-relaxed text-mut">{note}</p>
           </div>
           {children}
         </div>

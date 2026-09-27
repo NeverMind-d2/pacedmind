@@ -6,7 +6,7 @@ import { MODE, readAuthState, requireAal2, supabase } from "@/server/supabase";
 import { nextStep, safeNext, takeNext } from "@/server/auth-flow";
 import { STEP_UP_REFUSED, refusedStepUp, verifyCode } from "@/server/step-up";
 import { requireDesktopWindow } from "@/server/window";
-import { deviceConfig } from "@/server/device";
+import { deviceConfig, updateDevice } from "@/server/device";
 import { cutOffAgents } from "@/server/requests";
 import * as repo from "@/server/repo";
 
@@ -98,6 +98,20 @@ export async function sendResetAction(email: string): Promise<AuthResult> {
   const { error } = await db.auth.resetPasswordForEmail(clean(email), { redirectTo: callbackUrl("/login/new-password") });
   if (error && /rate limit|too many/i.test(error.message)) return { ok: false, error: explain(error.message) };
   return { ok: true, message: `If an account uses ${clean(email)}, we sent it a link to choose a new password.` };
+}
+
+/**
+ * The sign-in screen's other way in (desktop only): this computer's own data, without an account. The app
+ * remembers the choice and opens with that data until someone signs in.
+ */
+export async function continueWithoutAccountAction(): Promise<void> {
+  if (MODE !== "desktop") redirect("/login");
+  await guard();
+  const state = await readAuthState();
+  if (state) redirect(nextStep(state) ?? "/today");
+  if (!deviceConfig().withoutAccount) updateDevice({ withoutAccount: true });
+  refresh();
+  redirect("/today");
 }
 
 /* ---------- the second factor ---------- */
@@ -225,8 +239,8 @@ export async function signOutAction(): Promise<void> {
   const db = await supabase();
   await db.auth.signOut({ scope: "local" });
   refresh();
-  // The desktop app goes on with this computer's own data.
-  redirect(MODE === "desktop" ? "/today" : "/login");
+  // The sign-in screen, where the desktop app also offers this computer's own data.
+  redirect("/login");
 }
 
 /** Signs out every browser and computer, this one included. */
@@ -236,7 +250,7 @@ export async function signOutEverywhereAction(): Promise<void> {
   if (MODE === "desktop") cutOffAgents();
   await db.auth.signOut({ scope: "global" });
   refresh();
-  redirect(MODE === "desktop" ? "/today" : "/login");
+  redirect("/login");
 }
 
 /** Signs a computer out of the account: its session ends at once and its agents lose access. */
@@ -252,7 +266,7 @@ export async function revokeDeviceAction(deviceId: string): Promise<AuthResult> 
     cutOffAgents();
     await (await supabase()).auth.signOut({ scope: "local" });
     refresh();
-    redirect("/today");
+    redirect("/login");
   }
   refresh();
   return { ok: true, message: "Signed out that computer." };
@@ -269,5 +283,5 @@ export async function deleteAccountAction(code: string, confirmEmail: string): P
   if (error) return { ok: false, error: refusedStepUp(error.message) ? STEP_UP_REFUSED : explain(error.message) };
   await db.auth.signOut({ scope: "local" });
   refresh();
-  redirect(MODE === "desktop" ? "/today" : "/login");
+  redirect("/login");
 }
