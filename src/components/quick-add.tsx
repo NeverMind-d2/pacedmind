@@ -231,10 +231,12 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
-        <div className="flex h-9 items-center gap-2 border-t border-line px-5 text-[12px] text-mut2">
-          <Icon name="check" size={13} className="text-accent" />
-          <span className="flex-1 truncate">{summary || "Type a title. Dates, !priority, #labels and @project are picked up as you type."}</span>
-        </div>
+        {summary && (
+          <div className="flex h-9 items-center gap-2 border-t border-line px-5 text-[12px] text-mut2">
+            <Icon name="check" size={13} className="text-accent" />
+            <span className="flex-1 truncate">{summary}</span>
+          </div>
+        )}
         <div className="flex h-14 items-center gap-2 border-t border-line pl-5 pr-3">
           <Switch on={more} onChange={setMore} label="Create more" />
           <span className="text-[12.5px] text-mut">Create more</span>
