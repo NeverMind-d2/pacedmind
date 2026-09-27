@@ -60,6 +60,8 @@ const subscribeMotion = (cb: () => void) => {
   m.addEventListener("change", cb);
   return () => m.removeEventListener("change", cb);
 };
+// Once the page's HTML is the browser's, it stays so.
+const noSubscribe = () => () => {};
 
 function StateIcon({ state }: { state: State }) {
   if (state === "done") {
@@ -178,20 +180,24 @@ function Diagram({ layout, step, pulsing, className }: { layout: Layout; step: n
  */
 export function SessionFlow({ className = "" }: { className?: string }) {
   const reduced = useSyncExternalStore(subscribeMotion, () => window.matchMedia(motionQuery).matches, () => false);
+  const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   // The page's HTML shows the day's last step, where every state appears; with motion, the day starts from the top.
-  const [step, setStep] = useState(STEPS.length - 1);
+  // A step the day moves to, or the visitor picks, holds until reduced motion is switched on or off; `pulsed` once
+  // the pulse that carries its start along its connection has arrived.
+  const [moved, setMoved] = useState<{ step: number; reduced: boolean; pulsed?: boolean } | null>(null);
+  const current = moved?.reduced === reduced ? moved : null;
+  const step = current ? current.step : hydrated && !reduced ? 0 : STEPS.length - 1;
+  // A start travels along its connection before the session shows as running.
+  const pulsing = !!current && !current.pulsed && !reduced && STEPS[step].edge !== undefined;
   const [auto, setAuto] = useState(true);
   const [hover, setHover] = useState(false);
   const [seen, setSeen] = useState(false);
   const [hidden, setHidden] = useState(false);
-  const [pulsing, setPulsing] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const clock = useRef({ left: HOLD, since: 0 });
   const cycling = auto && !reduced;
   const paused = hover || !seen || hidden;
-
-  useEffect(() => { setStep(reduced ? STEPS.length - 1 : 0); }, [reduced]);
 
   // Play only while the flow is on screen and the page is visible.
   useEffect(() => {
@@ -213,27 +219,22 @@ export function SessionFlow({ className = "" }: { className?: string }) {
     if (!cycling || paused) return;
     const c = clock.current;
     c.since = performance.now();
-    const id = window.setTimeout(() => setStep((s) => (s + 1) % STEPS.length), c.left);
+    const id = window.setTimeout(() => setMoved({ step: (step + 1) % STEPS.length, reduced }), c.left);
     return () => {
       window.clearTimeout(id);
       c.left = Math.max(0, c.left - (performance.now() - c.since));
     };
-  }, [step, cycling, paused]);
+  }, [step, reduced, cycling, paused]);
 
-  // A start travels along its connection before the session shows as running.
   useEffect(() => {
-    if (reduced || STEPS[step].edge === undefined) return;
-    setPulsing(true);
-    const id = window.setTimeout(() => setPulsing(false), PULSE);
-    return () => {
-      window.clearTimeout(id);
-      setPulsing(false);
-    };
-  }, [step, reduced]);
+    if (!pulsing) return;
+    const id = window.setTimeout(() => setMoved((m) => m && { ...m, pulsed: true }), PULSE);
+    return () => window.clearTimeout(id);
+  }, [pulsing, step]);
 
   const pick = (i: number) => {
     setAuto(false);
-    setStep(i);
+    if (i !== step) setMoved({ step: i, reduced });
   };
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
     const move = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;

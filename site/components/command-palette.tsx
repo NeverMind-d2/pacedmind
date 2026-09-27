@@ -51,7 +51,8 @@ const subscribeMotion = (cb: () => void) => {
   m.addEventListener("change", cb);
   return () => m.removeEventListener("change", cb);
 };
-// The site marks the visitor's system before the first paint (app/layout.tsx); it doesn't change.
+// The site marks the visitor's system before the first paint (app/layout.tsx); it doesn't change. Neither does the
+// page's HTML being the browser's, once it is.
 const noSubscribe = () => () => {};
 
 /**
@@ -61,6 +62,7 @@ const noSubscribe = () => () => {};
 export function CommandPalette({ className = "" }: { className?: string }) {
   const reduced = useSyncExternalStore(subscribeMotion, () => window.matchMedia(motionQuery).matches, () => false);
   const mac = useSyncExternalStore(noSubscribe, () => document.documentElement.dataset.os === "mac", () => false);
+  const hydrated = useSyncExternalStore(noSubscribe, () => true, () => false);
   const [query, setQuery] = useState("");
   // The palette's own typing, the first time it's seen; `ran` once it has pressed Enter.
   const [typed, setTyped] = useState<{ text: string; ran?: boolean; picked?: boolean } | null>(null);
@@ -68,7 +70,10 @@ export function CommandPalette({ className = "" }: { className?: string }) {
   const [pane, setPane] = useState<PaneId>("plan");
   // Each time a result is shown it plays in; 0 is the page's own, which doesn't.
   const [shows, setShows] = useState(0);
-  const [planned, setPlanned] = useState(true);
+  // The page's HTML shows the day planned. With motion, it's unplanned until the palette runs "Plan my day" itself,
+  // or the visitor takes over.
+  const [planRun, setPlanRun] = useState(false);
+  const planned = planRun || !hydrated || reduced;
   // On screen with the tab visible; `ready` once the input has come well into the window.
   const [live, setLive] = useState(false);
   const [ready, setReady] = useState(false);
@@ -97,7 +102,7 @@ export function CommandPalette({ className = "" }: { className?: string }) {
   // The visitor takes over: the palette's own typing stops (or never starts), with the day planned.
   const takeOver = () => {
     played.current = true;
-    setPlanned(true);
+    setPlanRun(true);
     stop.current?.();
   };
   const show = (c: Command) => {
@@ -141,7 +146,6 @@ export function CommandPalette({ className = "" }: { className?: string }) {
   useEffect(() => {
     const el = root.current;
     if (!el || !inputRow.current) return;
-    if (!window.matchMedia(motionQuery).matches) setPlanned(false);
     let onScreen = false;
     const update = () => setLive(onScreen && !document.hidden);
     const io = new IntersectionObserver((entries) => {
@@ -169,9 +173,10 @@ export function CommandPalette({ className = "" }: { className?: string }) {
     played.current = true;
     if (window.matchMedia(motionQuery).matches) return;
     const timers: number[] = [];
-    let ms = 450;
+    let ms = 0;
     const at = (fn: () => void) => timers.push(window.setTimeout(fn, ms));
-    setTyped({ text: "" });
+    at(() => setTyped({ text: "" }));
+    ms += 450;
     for (let i = 1; i <= TYPED.length; i++) {
       ms += 55 + ((i * 29) % 50);
       at(() => setTyped({ text: TYPED.slice(0, i) }));
@@ -181,7 +186,7 @@ export function CommandPalette({ className = "" }: { className?: string }) {
     ms += 160;
     at(() => {
       setTyped({ text: TYPED, ran: true });
-      setPlanned(true);
+      setPlanRun(true);
       setPane("plan");
       setShows((n) => n + 1);
       setSaid(COMMANDS[0].say!);
@@ -194,7 +199,7 @@ export function CommandPalette({ className = "" }: { className?: string }) {
       timers.forEach(window.clearTimeout);
       stop.current = null;
       setTyped(null);
-      setPlanned(true);
+      setPlanRun(true);
     };
     // Leaving the window, or the page, ends it where it's going: the day planned.
     return () => stop.current?.();

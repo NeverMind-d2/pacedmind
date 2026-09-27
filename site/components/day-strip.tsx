@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { AREA } from "./screens/parts";
 import styles from "./day-strip.module.css";
 
@@ -152,8 +152,9 @@ export function DayStrip({ className = "" }: { className?: string }) {
   const fills = useRef<(HTMLSpanElement | null)[]>([]);
   const checks = useRef<(HTMLDivElement | null)[]>([]);
 
+  // What paints and moves the day works on the elements only, so it's the same function for every render.
   // A finished session's check flies from where it ended to its place on your line.
-  const fly = (i: number) => {
+  const fly = useCallback((i: number) => {
     const el = checks.current[i];
     const from = lines.current[CLIPS[i].line];
     const you = lines.current.you;
@@ -167,10 +168,10 @@ export function DayStrip({ className = "" }: { className?: string }) {
       { transform: `translate(${dx * 0.3}px, -14px) scale(1.06)`, opacity: 1, offset: 0.62 },
       { transform: "translate(0, 0) scale(1)", opacity: 1 },
     ], { duration: 1300, easing: "cubic-bezier(.25, .6, .3, 1)" });
-  };
+  }, []);
 
   // Paints the day at `time`. With `before`, checks whose session finished since then fly in.
-  const paint = (before?: number) => {
+  const paint = useCallback((before?: number) => {
     const t = time.current;
     if (playhead.current) playhead.current.style.left = `${along(t) * 100}%`;
     if (clock.current) clock.current.textContent = clockOf(t);
@@ -192,23 +193,23 @@ export function DayStrip({ className = "" }: { className?: string }) {
       shown.current = now;
       setStatus(now);
     }
-  };
+  }, [fly]);
 
   // On a narrow page the roll scrolls sideways; it keeps the playhead in view unless the visitor just moved it.
-  const follow = () => {
+  const follow = useCallback(() => {
     const r = roll.current;
     if (!r || !lanes.current || !heads.current || r.scrollWidth <= r.clientWidth + 2 || performance.now() < holdFollow.current) return;
     const visible = r.clientWidth - heads.current.offsetWidth;
     r.scrollLeft = Math.max(0, along(time.current) * lanes.current.clientWidth - visible * 0.4);
-  };
+  }, []);
 
-  const seek = (t: number) => {
+  const seek = useCallback((t: number) => {
     time.current = Math.min(END, Math.max(START, t));
     checks.current.forEach((el) => el?.getAnimations().forEach((a) => a.cancel()));
     paint();
     follow();
     setAt(place(time.current));
-  };
+  }, [paint, follow]);
 
   // Without reduced motion the day waits at 08:00 for its first time on screen; with it, it stays at 10:42.
   useEffect(() => {
@@ -216,7 +217,7 @@ export function DayStrip({ className = "" }: { className?: string }) {
     if (reduced || prefersReduced()) seek(STILL);
     else if (!played.current) seek(START);
     requestAnimationFrame(follow);
-  }, [reduced]);
+  }, [reduced, seek, follow]);
 
   // Play once, the first time it's on screen; pause while it's off screen or the tab is hidden.
   useEffect(() => {
@@ -246,7 +247,7 @@ export function DayStrip({ className = "" }: { className?: string }) {
       document.removeEventListener("visibilitychange", update);
       window.removeEventListener("resize", onResize);
     };
-  }, []);
+  }, [follow]);
 
   // The playhead moves at the visitor's pace.
   useEffect(() => {
@@ -269,7 +270,7 @@ export function DayStrip({ className = "" }: { className?: string }) {
     });
     setAt("middle");
     return () => cancelAnimationFrame(frame);
-  }, [playing, pace]);
+  }, [playing, pace, paint, follow]);
 
   const toggle = () => {
     played.current = true;
