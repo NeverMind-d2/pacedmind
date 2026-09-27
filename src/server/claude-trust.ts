@@ -31,11 +31,20 @@ const fold = (name: string) => (process.platform === "win32" ? name.toLowerCase(
  */
 const nameOf = (folder: string) => fold(process.platform === "win32" ? folder.replace(/\\/g, "/") : folder);
 
-/** Claude Code's config (~/.claude.json), or null when there's none to read. */
+const cached = globalThis as unknown as { __pacedmindClaudeConfig?: { stamp: string; config: Json | null } };
+
+/**
+ * Claude Code's config (~/.claude.json), or null when there's none to read. Read again only once the file changed:
+ * Settings asks for it for every project, and the file can be large.
+ */
 export function claudeConfig(): Json | null {
   try {
+    const stat = fs.statSync(configFile());
+    const stamp = `${stat.mtimeMs}:${stat.size}`;
+    if (cached.__pacedmindClaudeConfig?.stamp === stamp) return cached.__pacedmindClaudeConfig.config;
     const config: unknown = JSON.parse(fs.readFileSync(configFile(), "utf8"));
-    return isObject(config) ? config : null;
+    cached.__pacedmindClaudeConfig = { stamp, config: isObject(config) ? config : null };
+    return cached.__pacedmindClaudeConfig.config;
   } catch {
     return null;
   }
