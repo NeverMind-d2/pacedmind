@@ -4,7 +4,7 @@ PacedMind is licensed under the GNU Affero General Public License, version 3 ([L
 
 ## Feather and Lucide
 
-Many of the interface icons in `src/components/icons.tsx` are adapted from [Feather](https://feathericons.com) and [Lucide](https://lucide.dev): their shapes, redrawn as single paths.
+Many of the interface icons in `src/components/icons.tsx` are adapted from [Feather](https://feathericons.com) and [Lucide](https://lucide.dev): their shapes, redrawn as single paths. The icons an area can show, in `src/components/area-icon-paths.ts`, are Lucide's, made the same way by `scripts/area-icons.mjs`.
 
 Feather:
 
