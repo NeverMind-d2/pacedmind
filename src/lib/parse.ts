@@ -15,6 +15,8 @@ export interface ParsedInput {
   /** "YYYY-MM-DD" or "YYYY-MM-DDTHH:mm" */
   date: string | null;
   hasTime: boolean;
+  /** Only a time was typed, with no day: "15:00", "at 5pm". Its day is the next one that has that time still ahead. */
+  timeOnly: boolean;
   priority: Priority | null;
   labels: string[];
   projectQuery: string | null;
@@ -67,12 +69,14 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
   // Dates: only the first chrono match counts, and only outside other tokens.
   let date: string | null = null;
   let hasTime = false;
+  let timeOnly = false;
   const results = chrono.parse(text, ref, { forwardDate: true });
   for (const r of results) {
     const overlaps = tokens.some((t) => r.index < t.index + t.text.length && t.index < r.index + r.text.length);
     if (overlaps) continue;
     const d = r.start.date();
     hasTime = r.start.isCertain("hour");
+    timeOnly = hasTime && !(["day", "weekday", "month", "year"] as const).some((c) => r.start.isCertain(c));
     date = hasTime ? toDateTimeStr(d) : toDateStr(d);
     tokens.push({ kind: "date", text: r.text, index: r.index });
     break;
@@ -85,5 +89,5 @@ export function parseQuickAdd(text: string, ref = new Date()): ParsedInput {
   }
   title = title.replace(/\s{2,}/g, " ").replace(/\s+([,.])/g, "$1").trim();
 
-  return { title, date, hasTime, priority, labels, projectQuery, durationMin, weekly, tokens };
+  return { title, date, hasTime, timeOnly, priority, labels, projectQuery, durationMin, weekly, tokens };
 }

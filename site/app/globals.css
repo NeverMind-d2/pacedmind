@@ -211,10 +211,34 @@ html[data-js] .deck-stage:not(.is-sized) {
   }
 }
 
+/* The flow in the agents section (components/session-flow.tsx): states fade, and a start travels its connection. */
+.flow-fade {
+  transition: fill 400ms ease, stroke 400ms ease;
+}
+
+.flow-pulse {
+  stroke-dasharray: 10 100;
+  animation: flow-pulse cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+@keyframes flow-pulse {
+  from {
+    stroke-dashoffset: 10;
+  }
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .unfold-tail,
   .unfold-letter,
-  .flowing {
+  .flowing,
+  .flow-pulse {
     animation: none;
+  }
+
+  .flow-fade {
+    transition: none;
   }
 }

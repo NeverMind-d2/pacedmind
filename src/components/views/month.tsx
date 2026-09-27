@@ -10,8 +10,9 @@ import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
 import { Diamond, Icon, StatusIcon } from "../icons";
 import { Popover, PopoverItem, PopoverSeparator, anchorOf, type Anchor } from "../popover";
 import { TaskDetail } from "../task-detail";
+import { openAdd } from "../task-list";
 import { Dot, cx, useAction } from "../ui";
-import { PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, useSelection } from "./calendar-parts";
+import { AddButton, PeriodNav, ViewHeader, ViewSwitch, areaColor, isOpenTask, useAddOnClick, useSelection } from "./calendar-parts";
 
 const DRAG_TYPE = "application/x-organizer-task";
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -116,6 +117,7 @@ export function MonthView({
   const today = now.slice(0, 10);
   const weeks = days.length / 7;
   const { run } = useAction();
+  const addOnClick = useAddOnClick();
   const [sel, setSel] = useSelection(initialKey);
   // A null patch means the task was deleted.
   const [all, patchTask] = useOptimistic([...tasks, ...undated], (state, p: { id: number; patch: DatePatch | null }) =>
@@ -279,7 +281,7 @@ export function MonthView({
     if (it.kind === "event") {
       const e = it.event;
       return (
-        <div key={`e${e.eventId}-${e.start}`} title={`${fmtTime(e.start)}–${fmtTime(e.end)} ${e.title}`}
+        <div key={`e${e.eventId}-${e.start}`} data-item title={`${fmtTime(e.start)}–${fmtTime(e.end)} ${e.title}`}
           className={cx(pill, "border-transparent", it.past ? "text-mut2" : "text-fg3")}>
           <Dot color={areaColor(ctx.areas, e.areaId)} size={6} />
           <span className="shrink-0 font-mono text-[10.5px] text-mut2">{fmtTime(e.start)}</span>
@@ -358,9 +360,11 @@ export function MonthView({
                 const isOver = over?.day === day;
                 const row = Math.floor(i / 7);
                 const col = i % 7;
+                // A click on the day's empty space, or its "+", adds a task planned for it.
                 return (
                   <div key={day} role="group" aria-label={format(parseLocal(day), "EEEE d MMMM")} {...dropTarget(day)}
-                    className={cx("relative flex min-h-0 min-w-0 flex-col gap-[3px] border-b border-line p-1.5",
+                    {...addOnClick(() => ({ plannedDate: day }))}
+                    className={cx("group/day relative flex min-h-0 min-w-0 flex-col gap-[3px] border-b border-line p-1.5",
                       col < 6 && "border-r", expanded === day ? "z-20" : "overflow-hidden",
                       isOver ? "bg-accent/[0.07] ring-1 ring-inset ring-accent/55" : isToday ? "bg-raised" : out && "bg-input")}>
                     <div className="flex h-6 shrink-0 items-center gap-1 px-0.5">
@@ -377,6 +381,7 @@ export function MonthView({
                           <Icon name="flag" size={10} strokeWidth={2.4} />Due
                         </span>
                       )}
+                      {!drag && <AddButton label={fmtDay(day)} onAdd={() => openAdd({ plannedDate: day })} className="ml-auto max-md:hidden" />}
                     </div>
                     {visible.map(renderItem)}
                     {hidden > 0 && (
@@ -389,8 +394,9 @@ export function MonthView({
                       <div ref={popRef} role="dialog" aria-label={format(parseLocal(day), "EEEE d MMMM")}
                         className={cx("absolute z-30 flex max-h-[320px] w-[calc(100%+2px)] min-w-[240px] flex-col gap-[3px] overflow-y-auto rounded-lg border border-line2 bg-raised p-1.5 shadow-[var(--shadow-popover)]",
                           row >= weeks / 2 ? "-bottom-px" : "-top-px", col === 6 ? "-right-px" : "-left-px")}>
-                        <div className="flex h-6 shrink-0 items-center px-1 text-[12px] font-medium text-fg2">
+                        <div className="flex h-6 shrink-0 items-center gap-0.5 px-1 text-[12px] font-medium text-fg2">
                           <span className="flex-1">{format(parseLocal(day), "EEE d MMM")}</span>
+                          <AddButton label={fmtDay(day)} shown onAdd={() => { setExpanded(null); openAdd({ plannedDate: day }); }} />
                           <button type="button" aria-label="Close" onClick={() => setExpanded(null)}
                             className="flex h-5 w-5 items-center justify-center rounded text-mut2 hover:bg-hover">
                             <Icon name="x" size={12} />
