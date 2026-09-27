@@ -4,6 +4,12 @@ PacedMind starts Claude Code and Codex in terminals on your computers. Anyone wh
 
 Without an account (the free One device plan), the desktop app keeps its data in a SQLite file next to its settings (`src/server/store/local.ts`), and nothing leaves the computer. Everything under "Your computer", "Agents" and "Starting sessions" applies the same way; "Accounts" and "Your data" are about PacedMind Cloud, which the app switches to once you sign in (`src/server/scope.ts`).
 
+## Reporting a vulnerability
+
+Report security problems privately, not in a public issue: select **Report a vulnerability** on this repository's **Security** tab, which opens an advisory only the maintainer can see, or email mbednarczyk@preseed.tech. Say what's affected, how to reproduce it, and what an attacker could do with it, and give us time to release a fix before you tell anyone else.
+
+This covers the desktop app, the MCP server, the web app at app.pacedmind.com, and the database rules in `supabase/`. Test only with your own accounts, computers and data: your own PacedMind Cloud account, or a local Supabase stack (`npx supabase start`). Denial of service and spam are out of scope.
+
 ## What protects what
 
 ### Accounts
@@ -55,7 +61,7 @@ Every request you're asked about shows the task, the agent, where it runs and th
 
 ## What you need to set in Supabase
 
-The database side is applied (`supabase/migrations/`). These project settings live outside the database; set them in the dashboard (Authentication), or review and apply `supabase/config.toml` with `npx supabase login`, `npx supabase link --project-ref pyoynjoyhpolijlvoalu` and `npx supabase config push` (it shows the differences first; items marked *dashboard only* aren't in the file).
+The database side is applied (`supabase/migrations/`). These project settings live outside the database; set them in the dashboard (Authentication), or review and apply `supabase/config.toml` with `npx supabase login`, `npx supabase link --project-ref pyoynjoyhpolijlvoalu` (PacedMind Cloud's project; your own project's ref if you run one) and `npx supabase config push` (it shows the differences first; items marked *dashboard only* aren't in the file).
 
 1. **Multi-factor: TOTP on** (enroll and verify). It's on by default; never push a `config.toml` with it off.
 2. **Email: confirm email on.**
@@ -76,7 +82,7 @@ The database side is applied (`supabase/migrations/`). These project settings li
 - **Right after setting up two-factor sign-in,** starting a session from the web or deleting the account asks you to sign out and in again once, because the authenticator you just added is newer than that sign-in.
 - **Losing every authenticator locks the account.** Backup codes aren't available on hosted Supabase projects yet, so keep two authenticators. The project's owner can remove a factor in the Supabase dashboard (Authentication → Users).
 - **Guessing codes** is limited by Supabase's rate limits. Locking an account after failed codes needs the MFA verification hook, which is on the Team plan.
-- **The web app isn't deployed yet.** Before it is, set `ORGANIZER_MODE=web`, `ORGANIZER_PUBLIC_ORIGIN=https://app.pacedmind.com` and `TZ` on the server, and consider CAPTCHA on sign-up and sign-in (Turnstile).
+- **Sign-up and sign-in have no CAPTCHA.** The web app (app.pacedmind.com, run with `ORGANIZER_MODE=web`, `ORGANIZER_PUBLIC_ORIGIN` and `TZ` from `deploy/pacedmind-web.service`) relies on Supabase's rate limits; a CAPTCHA (Turnstile) would also slow down automated sign-ups.
 
 ## Checking it
 

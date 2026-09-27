@@ -2,7 +2,15 @@
 
 A personal planner in the style of Linear: tasks, time blocks, one calendar and timeline for everything, and deadlines. It also coordinates Claude Code and Codex sessions: start a session from a task, keep talking to the agent in its own terminal, and see here when the agent says it's finished, with its report and screenshots.
 
-## Desktop app
+![PacedMind's Today view: the day's schedule, overdue tasks and tasks due today](docs/public/screenshots/today.png)
+
+[Download for Windows or macOS](https://pacedmind.com) · [Documentation](https://pacedmind.com/docs) · [Web app](https://app.pacedmind.com)
+
+PacedMind is free on one computer and needs no account: your tasks, projects and calendar stay on that computer. [PacedMind Cloud](https://pacedmind.com/#pricing) keeps them in your account instead, for all your computers and the web app, and lets you start a session on one of your computers from another one or from your phone.
+
+## Build from source
+
+You need [Node.js](https://nodejs.org/) 22.13 or later.
 
 ```bash
 npm install
@@ -13,24 +21,13 @@ This builds the app, installs it and starts it. Run the same command again after
 
 - **Windows:** it installs to `%LOCALAPPDATA%\Programs\Organizer` and adds **PacedMind** to the Start Menu and the desktop. Its data and settings for this computer live in `%APPDATA%\Organizer\data`.
 - **macOS:** it installs `PacedMind.app` in the Applications folder of your home folder (`~/Applications`). Its data and settings for this computer live in `~/Library/Application Support/Organizer/data`.
-- It works without an account: your tasks, projects and calendar stay on this computer, in `organizer.db` in that data folder (the free One device plan).
+- It works without an account: your tasks, projects and calendar stay on this computer, in `organizer.db` in that data folder.
 - To use them on other computers too, sign in to PacedMind Cloud from **Settings**. Every Cloud account uses two-factor sign-in: the first time you set up an authenticator app, and every sign-in asks for its code. **Settings → Data** then moves this computer's data into the account. Signing out goes back to this computer's own data.
 - Closing the window keeps PacedMind running in the tray (the menu bar on macOS), so agents can still report back. It shows a notification when a session finishes, and when a session asked for elsewhere waits for you to allow it. Quit from the icon's menu, which also has **Start with Windows** (**Open at Login** on macOS).
 - The app serves itself at http://127.0.0.1:4319. Only this computer can reach it, and only the app's own window can use it. Its sign-in, tokens and settings for this computer are encrypted with a key from the system's keychain.
 - To uninstall on Windows, run `Organizer.exe --uninstall` from the install folder (removes the shortcuts and the login item), then delete the folder. On macOS, turn off **Open at Login** and move `PacedMind.app` to the Bin. Delete the data folder to remove this computer's data and settings as well; what's in your Cloud account stays there.
 
-## Releases
-
-The site's download buttons lead to `pacedmind.com/download/windows` and `/download/mac`. `npm run release` builds the installer for the system it runs on and uploads it there (`scripts/release.mjs`); run it on a PC and on a Mac:
-
-```bash
-npm run release -- ubuntu@57.131.192.185   # build, package and upload
-npm run release -- --no-upload             # only build and package, into dist/release
-```
-
-- **Windows:** `PacedMind-Windows.exe`, an installer made with electron-builder. It installs for the current user where `npm run desktop` does, closes a running PacedMind first and keeps the data. It isn't signed, so SmartScreen asks once before it runs.
-- **macOS:** `PacedMind-macOS.dmg`, one app for Apple silicon and Intel, signed with your Developer ID and notarized by Apple, the disk image too. Once, on the Mac: put your **Developer ID Application** certificate in the login keychain (Xcode → Settings → Accounts → Manage Certificates), and store the notarization credentials under the name `PacedMind` with `xcrun notarytool store-credentials PacedMind --apple-id <your Apple ID> --team-id <your team ID>` (it asks for an app-specific password from account.apple.com). Both stay in the keychain. `PACEDMIND_SIGN_IDENTITY` picks a certificate if there are several, and `PACEDMIND_NOTARY_PROFILE` another profile name.
-- The upload uses the SSH key `deploy/deploy.sh` uses (`PACEDMIND_KEY`, by default `~/Desktop/keys/pacedmind_vps`; on the Mac, copy it there and `chmod 600` it) and keeps the previous file on the server as `<name>.old`.
+The installation folder, the executable, the data folder and the MCP server's name keep PacedMind's earlier name, Organizer, so updates keep the data and the agents' connections.
 
 ## Development
 
@@ -38,28 +35,20 @@ npm run release -- --no-upload             # only build and package, into dist/r
 npm run dev
 ```
 
-The data lives in Supabase, in PacedMind's own project unless `.env.local` names another (see `.env.example`). For a local stack:
+The dev server runs at http://127.0.0.1:4320, apart from any installed PacedMind. It prints an unlock link when it starts: open it once in your browser (only the app's own window may use it otherwise). Without an account it keeps its data in `data/organizer.db`, created with sample data on its first start. Press **C** anywhere to add a task.
+
+Signing in uses PacedMind Cloud's Supabase project unless `.env.local` names another (see `.env.example`). For a local stack (it needs Docker):
 
 ```bash
 npx supabase start
 npx supabase db reset
 ```
 
-`start` needs Docker and prints the local URL and publishable key; `db reset` applies `supabase/migrations`. The dev server prints an unlock link when it starts: open it once in your browser (only the app's own window may use it otherwise). Then create an account, set up two-factor sign-in, and load sample data from **Settings → Data** if you like. Press **C** anywhere to add a task.
+`start` prints the local URL and publishable key for `.env.local`; `db reset` applies `supabase/migrations`. Then create an account and set up two-factor sign-in.
 
 The hosted web version is the same app with `ORGANIZER_MODE=web` and `ORGANIZER_PUBLIC_ORIGIN`: every browser signs in on its own, it never starts agents, and asking a computer to start a session takes a fresh two-factor code.
 
-## Security
-
-PacedMind starts agents that work on your computer, so it's built to make that hard to abuse: two-factor sign-in the database itself insists on, nothing in the cloud that decides what runs on a computer, a key only the app's window holds, and a token per session that can only report on its own task. [SECURITY.md](SECURITY.md) has the details, the settings the Supabase project needs, and what's left to you.
-
-## Website
-
-The public home page is in `site/`, a separate static Next.js project with its own dependencies. See [site/README.md](site/README.md), including how to keep the Cloud price in step with Spotify.
-
-## Documentation
-
-The user guide is in `docs/`, a separate static Fumadocs site served at pacedmind.com/docs, with its own dependencies. See [docs/README.md](docs/README.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) has the checks to run and how to send changes; [AGENTS.md](AGENTS.md) describes the architecture and the rules the code follows.
 
 ## Agents and MCP
 
@@ -109,12 +98,32 @@ Agents attach screenshots by saving an image file and passing its path (`attach_
 
 ## Views
 
-Today, Inbox, Upcoming, Calendar (month and week with auto-planned time blocks), Timeline, Projects, Roadmap and Flow (two views of one plan), Sessions, Settings. Pages refresh on their own when an agent changes something.
+Today, Inbox, Upcoming, Calendar (month and week with auto-planned time blocks), Timeline, Projects, Roadmap and Flow (two views of one plan), Sessions, Computers, Settings. Pages refresh on their own when an agent changes something.
 
 Switch between dark and light mode beside Settings in the sidebar, or in **Settings → Appearance**. The choice is remembered on this device and also updates the Windows title-bar controls.
 
-## Brand assets
+## What's where
 
-The refined wordmark (with continuous m and n curves) and solid connected **pd** emblem are saved in `public/brand/`. The compact 112px header logo, beside the back/forward controls, unfolds from pd into pacedmind on initial load (with a reduced-motion fallback). On Windows the header replaces the native title text, keeps native minimize/maximize/close controls and supports dragging the window. On macOS the traffic lights sit in the same header. The loading screen uses the same header; the emblem is used for the Windows executable, tray, notifications and favicon, and for the macOS app icon (`desktop/icon.icns`, on Apple's icon grid). The macOS menu bar shows the pd glyph alone, as a template image macOS tints for light and dark (`desktop/trayTemplate.png`). Run `npm run icons` to regenerate the emblem's SVG and icon exports.
+| Folder | What |
+| --- | --- |
+| `src/` | The app: Next.js pages, Server Actions, the MCP server and everything server-side (`src/server/`). |
+| `desktop/` | The Electron app around it: window, tray, notifications, installer. |
+| `supabase/` | PacedMind Cloud's database: migrations, row level security, and `tests/security.sql`. |
+| `skills/` | The agent skills. |
+| `scripts/` | Building and installing the desktop app, releases, icons, skills. |
+| `site/` | The website at pacedmind.com, a separate static Next.js project ([site/README.md](site/README.md)). |
+| `docs/` | The user guide at pacedmind.com/docs, a separate static Fumadocs project ([docs/README.md](docs/README.md)). |
+| `deploy/` | How pacedmind.com and the web app are hosted, and how releases are published ([deploy/README.md](deploy/README.md)). |
+| `public/brand/` | The wordmark and the emblem ([public/brand/README.md](public/brand/README.md)); `npm run icons` redraws the icons from them. |
 
-The existing `Organizer` installation directory, executable name, data directory and MCP identifiers are intentionally retained so upgrades preserve integrations and data. The app and shortcuts display **PacedMind**.
+## Security
+
+PacedMind starts agents that work on your computer, so it's built to make that hard to abuse: two-factor sign-in the database itself insists on, nothing in the cloud that decides what runs on a computer, a key only the app's window holds, and a token per session that can only report on its own task. [SECURITY.md](SECURITY.md) has the details, the settings the Supabase project needs, what's left to you, and how to report a vulnerability privately.
+
+## License
+
+Copyright (C) 2026 NMD Mikołaj Bednarczyk and PacedMind's contributors.
+
+PacedMind is free software: you can redistribute it and modify it under the terms of the [GNU Affero General Public License, version 3](LICENSE), as published by the Free Software Foundation. It's distributed in the hope that it will be useful, but without any warranty, without even the implied warranty of merchantability or fitness for a particular purpose. If you run a modified version for other people over a network, the license requires you to offer them its source code. To ask about other terms, write to mbednarczyk@preseed.tech.
+
+Contributions need the [Contributor License Agreement](CLA.md) ([CONTRIBUTING.md](CONTRIBUTING.md)). The PacedMind name and logo aren't covered by the license: see [TRADEMARKS.md](TRADEMARKS.md). The icons and fonts from other projects are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

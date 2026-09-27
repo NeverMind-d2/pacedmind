@@ -2,7 +2,7 @@
 # Deploys the hosted web app, the public site and docs when they are built, and the Caddy config to the
 # VPS set up by deploy/provision.sh. Run from the repository (Git Bash on Windows):
 #
-#   deploy/deploy.sh ubuntu@57.131.192.185
+#   deploy/deploy.sh ubuntu@<server>
 #
 # The app is built on the server (its dependencies include Linux binaries). The site and docs are static:
 # build them first (npm run build in site/ and docs/); each out/ folder goes up whole and replaces the

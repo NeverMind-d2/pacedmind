@@ -53,7 +53,7 @@ export const gitConfig = {
   user: 'NeverMind-d2',
   repo: 'pacedmind',
   branch: 'master',
-  repoPublic: false,
+  repoPublic: true,
 };
 
 export const repoUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
