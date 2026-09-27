@@ -23,7 +23,8 @@ import type { EdgeMode, TerminalId } from "@/lib/types";
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS areas (
-  id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, color TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0, icon TEXT
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, key TEXT NOT NULL UNIQUE, color TEXT NOT NULL, sort INTEGER NOT NULL DEFAULT 0, icon TEXT,
+  picture TEXT
 );
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
@@ -131,7 +132,7 @@ function migrate(conn: DatabaseSync) {
   // Again here, because in development a code reload keeps the open connection, which ran an older schema.
   conn.exec(SCHEMA);
   const added: Record<string, [string, string][]> = {
-    areas: [["icon", "TEXT"]],
+    areas: [["icon", "TEXT"], ["picture", "TEXT"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"]],
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],

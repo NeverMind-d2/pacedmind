@@ -8,7 +8,7 @@ import { FALLBACK_COLOR, nextColor, projectColor } from "@/lib/colors";
 import { fmtShort } from "@/lib/dates";
 import type { Area, Project, Usage } from "@/lib/types";
 import { AreaMenu, InlineName, MoreButton, ProjectMenu, type OpenMenu } from "./entity-menu";
-import { AreaIconSvg, AreaMark, Icon, ProgressRing, type IconName } from "./icons";
+import { AreaIconSvg, AreaMark, AreaPicture, Icon, ProgressRing, type IconName } from "./icons";
 import { Popover, PopoverItem, PopoverLabel, anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
 import { ThemeToggle } from "./theme";
@@ -34,8 +34,9 @@ export function openQuickAdd() {
 const item = "flex h-[30px] items-center gap-2.5 rounded-md px-2 text-fg3 hover:bg-hover";
 const editing = "flex h-[30px] items-center gap-2.5 rounded-md bg-hover px-2";
 
-/** The area's icon in its color, else its dot on a faint square, both as wide as the icons above. */
-function AreaDot({ area }: { area: Pick<Area, "color" | "icon"> }) {
+/** The area's picture, else its icon in its color, else its dot on a faint square, all as wide as the icons above. */
+function AreaDot({ area }: { area: Pick<Area, "id" | "color" | "icon" | "picture"> }) {
+  if (area.picture) return <AreaPicture area={area} size={16} />;
   if (area.icon) {
     return <span className="flex h-4 w-4 shrink-0 items-center justify-center"><AreaIconSvg icon={area.icon} color={area.color} size={16} /></span>;
   }
@@ -184,7 +185,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
           )}
           {draft?.kind === "area" ? (
             <div className={editing}>
-              <AreaDot area={{ color: nextColor(areas.map((a) => a.color)), icon: null }} />
+              <AreaDot area={{ id: "new", color: nextColor(areas.map((a) => a.color)), icon: null, picture: null }} />
               <InlineName initial="" placeholder="Area name" onSave={createArea} onCancel={() => setDraft(null)} />
             </div>
           ) : !areas.length && (

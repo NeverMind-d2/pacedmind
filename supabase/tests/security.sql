@@ -75,6 +75,26 @@ begin
     reset role;
   exception when others then out := out || '2d icon that is not a name rejected: ' || left(sqlerrm, 60) || E'\n'; end;
 
+  -- 2e. an area's picture is base64 of a small PNG (a 1 by 1 one here), never markup, other data or anything big
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set picture = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=' where id = area_a;
+    select count(*) into n from public.areas where id = area_a and picture is not null; out := out || '2e picture saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '2e ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set picture = 'PHN2ZyBvbmxvYWQ9YWxlcnQoMSk+' where id = area_a;
+    out := out || '2f FAIL a picture that is not a PNG accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '2f picture that is not a PNG rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set picture = 'iVBORw0KGgo' || repeat('A', 40000) where id = area_a;
+    out := out || '2g FAIL a picture over the size accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '2g picture over the size rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+
   -- 3. unknown/revoked session id reads nothing
   begin
     perform set_config('request.jwt.claims', claims_bad_session, true); set local role authenticated;

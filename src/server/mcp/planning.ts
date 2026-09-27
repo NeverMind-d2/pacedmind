@@ -202,7 +202,7 @@ export function registerPlanningTools(server: McpServer) {
     const [areas, projects, tasks] = await Promise.all([repo.listAreas(), repo.listProjects(), repo.listTasks()]);
     if (!areas.length) return "No areas yet.";
     const u = usage(areas, projects, tasks);
-    return areas.map((a) => `${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}${a.icon ? ` · icon ${a.icon}` : ""} · ${plural(u.areas[a.id]?.projects ?? 0, "project")} · ${plural(u.areas[a.id]?.open ?? 0, "open task")}`).join("\n");
+    return areas.map((a) => `${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}${a.icon ? ` · icon ${a.icon}` : a.picture ? " · its own picture" : ""} · ${plural(u.areas[a.id]?.projects ?? 0, "project")} · ${plural(u.areas[a.id]?.open ?? 0, "open task")}`).join("\n");
   });
 
   tool(server, "create_area", {
@@ -224,7 +224,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "update_area", {
     title: "Update area",
-    description: `Rename an area, or change its color or icon. Its key stays the same, so existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}.`,
+    description: `Rename an area, or change its color or icon. Its key stays the same, so existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}. An icon replaces the area's own picture, which only the app sets.`,
     input: z.object({
       area: areaRef, name: z.string().optional(), color: z.string().optional().describe(`${PALETTE_NAMES}, or a hex color`),
       icon: z.string().optional().describe("One of the icons, or none to show the dot again"),

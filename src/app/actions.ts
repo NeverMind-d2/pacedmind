@@ -19,6 +19,8 @@ import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/se
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
+import { areaPictureProblem } from "@/lib/area-picture";
+import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
   LIVE_STATUSES, deviceOnline, isLiveSession,
   type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
@@ -105,6 +107,34 @@ export async function createEventAction(input: { title: string; areaId?: string 
   await guard();
   if (!input.title?.trim()) return { ok: false, error: "Give the activity a title" };
   await repo.createEvent(input);
+  return done();
+}
+
+/** A real local date and time, "YYYY-MM-DDTHH:mm". */
+const isStamp = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s) && toDateTimeStr(parseLocal(s)) === s;
+
+/**
+ * Changes an activity from one of its days: `occurrence` is the start it had there. A weekly activity changes every
+ * week. Moved to another day, the whole series moves by as many days and keeps its first week; made one-off, it
+ * stays only on the day the change gives it.
+ */
+export async function updateEventAction(id: number, occurrence: string, input: { title: string; areaId: string | null; start: string; end: string; weekly: boolean }) {
+  await guard();
+  const e = await repo.getEvent(id);
+  if (!e) return { ok: false, error: "That activity is no longer in the calendar" };
+  const title = typeof input.title === "string" ? input.title.trim() : "";
+  if (!title) return { ok: false, error: "Give the activity a title" };
+  if (title.length > 200) return { ok: false, error: "Keep the title under 200 characters" };
+  if (!isStamp(occurrence) || !isStamp(input.start) || !isStamp(input.end)) return { ok: false, error: "That isn't a day and time" };
+  if (dateOnly(input.end) !== dateOnly(input.start)) return { ok: false, error: "An activity starts and ends on the same day" };
+  if (input.end <= input.start) return { ok: false, error: "The end has to be after the start" };
+  let { start, end } = input;
+  if (e.recurrence === "weekly" && input.weekly) {
+    const first = addDaysStr(e.start, dayDiff(occurrence, start));
+    start = `${first}T${timeOf(start)}`;
+    end = `${first}T${timeOf(end)}`;
+  }
+  await repo.updateEvent(id, { title, areaId: input.areaId ?? null, start, end, recurrence: input.weekly ? "weekly" : null });
   return done();
 }
 
@@ -458,6 +488,18 @@ export async function updateAreaAction(id: string, patch: { name?: string; color
   await guard();
   if (patch.icon != null && !isAreaIcon(patch.icon)) return { ok: false, error: "Pick one of the icons" };
   await repo.updateArea(id, { name: patch.name, color: patch.color, icon: patch.icon === undefined ? undefined : areaIconOf(patch.icon) });
+  return done();
+}
+
+/**
+ * An area's own picture, such as a company logo: base64 PNG that the browser made small (area-picture.ts), shown
+ * instead of the area's icon. `null` puts the dot back.
+ */
+export async function setAreaPictureAction(id: string, picture: string | null) {
+  await guard();
+  const problem = picture === null ? null : typeof picture === "string" ? areaPictureProblem(picture) : "That isn't a picture.";
+  if (problem) return { ok: false, error: problem };
+  await repo.updateArea(id, { picture });
   return done();
 }
 

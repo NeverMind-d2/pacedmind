@@ -1,5 +1,7 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { addDays } from "date-fns";
+import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
   AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequestKind, LaunchRequestStatus, Priority, ReportCriterion,
@@ -131,12 +133,12 @@ export function expandOccurrences(events: CalEvent[], from: string, to: string):
         if (d.getDay() !== first.getDay() || toDateStr(d) < e.start.slice(0, 10)) continue;
         const st = new Date(d.getFullYear(), d.getMonth(), d.getDate(), first.getHours(), first.getMinutes());
         const en = new Date(st.getTime() + durMs);
-        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: stampMin(st), end: stampMin(en) });
+        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: stampMin(st), end: stampMin(en), weekly: true });
       }
     } else {
       const day = e.start.slice(0, 10);
       if (day >= from.slice(0, 10) && day <= to.slice(0, 10)) {
-        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: e.start, end: e.end });
+        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: e.start, end: e.end, weekly: false });
       }
     }
   }
@@ -186,6 +188,15 @@ export function snapshotOf(taskIds: number[], edges: FlowEdge[], after: string |
  * A computer's name as the account keeps it: plain text on one line, at most 80 characters (the database refuses
  * control characters). Any session of the account can rename a computer, and the computer takes the name over.
  */
+/** An area's picture as stored (base64 PNG), or null when there's none or it isn't one (area-picture.ts). */
+export const areaPictureOf = (v: unknown): string | null => (typeof v === "string" && v && !areaPictureProblem(v) ? v : null);
+
+/** What Area.picture carries: a short hash of the stored picture, which keeps its URL cacheable. */
+export const pictureHash = (v: unknown): string | null => {
+  const picture = areaPictureOf(v);
+  return picture ? createHash("sha256").update(picture).digest("hex").slice(0, 16) : null;
+};
+
 export const cleanDeviceName = (name: string) => name.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
 
 /** PacedMind's version as a computer reports it, in the shape the database keeps (supabase/migrations). */

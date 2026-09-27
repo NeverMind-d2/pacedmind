@@ -38,6 +38,11 @@ export interface Area {
   color: string;
   /** Shown in the area's color instead of its dot; null shows the dot. */
   icon: AreaIcon | null;
+  /**
+   * A hash of the area's own picture (area-picture.ts), shown instead of the icon and served by
+   * /api/areas/[id]/picture, which the hash keeps cacheable; null when it has none. An area has a picture or an icon.
+   */
+  picture: string | null;
   sort: number;
 }
 
@@ -121,6 +126,8 @@ export interface EventOccurrence {
   areaId: string | null;
   start: string;
   end: string;
+  /** Its event repeats every week, so a change to this occurrence changes every week. */
+  weekly: boolean;
 }
 
 export interface Session {

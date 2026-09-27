@@ -10,7 +10,7 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot } from "./repo";
 import { localDbPath } from "./store/local-db";
-import { deriveKey } from "./store/shared";
+import { areaPictureOf, deriveKey } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { PALETTE, renewColor } from "@/lib/colors";
 import { nowStamp, toDateStr, toStamp } from "@/lib/dates";
@@ -268,9 +268,13 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       if (!/^[A-Z][A-Z0-9]{1,7}$/.test(key) || keys.has(key)) key = deriveKey(String(a.name ?? ""), keys);
       keys.add(key);
       const icon = areaIconOf(a.icon);
+      const picture = areaPictureOf(a.picture);
       return {
         old: String(a.id),
-        row: { name: clip(a.name, 80) || "Area", key, color: renewColor(match(a.color, COLOR) ?? PALETTE[0].value), ...(icon ? { icon } : {}), sort: int(a.sort, -1e6, 1e6, 0) },
+        row: {
+          name: clip(a.name, 80) || "Area", key, color: renewColor(match(a.color, COLOR) ?? PALETTE[0].value),
+          ...(picture ? { picture } : icon ? { icon } : {}), sort: int(a.sort, -1e6, 1e6, 0),
+        },
       };
     });
     const newAreas = check(await db.from("areas").insert(areaRows.map((a) => a.row)).select("id, key")) as Row[];
