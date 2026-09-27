@@ -21,7 +21,7 @@ Each row shows the session's state dot, the task's key and title, the project an
 | State | Row text |
 | --- | --- |
 | Finished | *finished 12:22*; handed back partly done, *partly done 12:22*; blocked, *stuck 12:22* |
-| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*. When the agent hasn't checked in after 90 seconds: *waiting in its terminal*, or *waiting in the Claude app* |
+| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*. When the agent hasn't checked in after 90 seconds, or Claude Code is asking whether you trust the folder: *waiting in its terminal*, or *waiting in the Claude app* |
 | Done | *done yesterday 18:10* |
 | Closed | *closed before finishing* |
 | Failed | *couldn't start* |
@@ -43,6 +43,7 @@ The details panel shows the project and the key, **Open task**, the task's title
 * *Running in Claude Code since 09:40* (or *Starting*), and outside a terminal with the place: *Running in the Claude app on DESKTOP-1 since 09:40* or *Running in Claude Code on the web since 09:40*;
 * *Claude Code is working on your changes since 14:05*, after **Request changes**;
 * *Sending to Codex cloud since 09:40*, while Codex takes the task on;
+* *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.*, for a terminal session in a folder Claude Code doesn't trust yet, until the agent checks in. See [Trusting the folder in Claude Code](/agents/start-and-manage#trusting-the-folder-in-claude-code);
 * *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.*;
 * *Claude Code finished at 12:22 · waiting for you*;
 * *Claude Code handed back part of it at 12:22 · waiting for you*, for a hand-back that is partly done;

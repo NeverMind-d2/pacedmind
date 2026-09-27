@@ -1,6 +1,9 @@
 import "server-only";
+import { trustCheck } from "./claude-trust";
+import { runsHere } from "./devices";
 import { changesProblemIn, changesViaIn } from "./ops";
 import * as repo from "./repo";
+import { MODE } from "./supabase";
 import { dateOnly, todayStr } from "@/lib/dates";
 import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
 import { agentOf, taskHref, type Report, type Session, type Status, type Task } from "@/lib/types";
@@ -46,6 +49,8 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
   for (const list of reports.values()) {
     for (const r of list) if ((newestOfTask.get(r.taskId)?.id ?? 0) < r.id) newestOfTask.set(r.taskId, r);
   }
+  // Claude Code terminals here in folders it doesn't trust yet ask about them first (claude-trust.ts).
+  const trustAsks = MODE === "desktop" && running.some((s) => s.agent === "claude") ? trustCheck() : null;
 
   const item = (s: Session): SessionItem => {
     const task = tasks.get(s.taskId);
@@ -89,6 +94,7 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       changesVia: s.status === "finished" || s.status === "done"
         ? changesViaIn(s, { task, live: busy.has(s.taskId), newest: newestOfTask.get(s.taskId) }) : null,
       deviceId: s.deviceId,
+      asksTrust: !!trustAsks && active(s) && s.agent === "claude" && s.surface === "terminal" && !!s.folder && runsHere(s.deviceId) && trustAsks(s.folder),
       next: next
         ? {
           id: next.id, key: next.key, title: next.title, href: taskHref(next),

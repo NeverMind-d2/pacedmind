@@ -369,6 +369,11 @@ export interface TaskContext {
   desktop?: boolean;
   /** This computer's id in the account's list (desktop app, signed in and registered); null otherwise. */
   deviceId?: string | null;
+  /**
+   * Task ids whose Claude Code session here opens in a folder Claude Code doesn't trust yet, so it first asks
+   * whether you do (desktop app): the running one's folder, else where the next one would start.
+   */
+  asksTrust?: Record<number, boolean>;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
@@ -406,6 +411,11 @@ export const SURFACE_LABEL: Record<Surface, string> = { terminal: "Terminal", de
 /** The agent's desktop app and its cloud, by name. */
 export const APP_LABEL: Record<AgentId, string> = { claude: "Claude app", codex: "Codex app" };
 export const CLOUD_LABEL: Record<AgentId, string> = { claude: "Claude Code on the web", codex: "Codex cloud" };
+
+/** The answer Claude Code needs the first time it starts in a folder, before it reads its first message (claude-trust.ts). */
+export const TRUST_ANSWER = "Yes, I trust this folder";
+export const TRUST_FIRST = `Claude Code first asks whether you trust the folder: choose “${TRUST_ANSWER}” in its terminal.`;
+export const TRUST_WAITING = `Claude Code is asking whether you trust this folder. Choose “${TRUST_ANSWER}” in its terminal.`;
 
 /**
  * Where a task's sessions run when the task doesn't say: in a terminal when the agent's CLI is on the device,

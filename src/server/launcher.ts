@@ -3,8 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
+import { trustCheck } from "./claude-trust";
 import { cliCommand, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
-import { folderProblem } from "./folders";
+import { folderProblem, repoRoot } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { MODE } from "./supabase";
@@ -14,7 +15,7 @@ import { agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
 import { terminalFor } from "@/lib/terminals";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, agentOf, canRun, surfaceOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, TRUST_FIRST, agentOf, canRun, surfaceOf,
   type AgentId, type Session, type Surface, type Task, type TerminalId,
 } from "@/lib/types";
 
@@ -237,6 +238,15 @@ function openMacTerminal(dir: string, folder: string, title: string, token: stri
 }
 
 /**
+ * Whether Claude Code, opened in a terminal in `folder`, first asks whether you trust it (claude-trust.ts). Checked
+ * before the terminal opens, so the answer can't have come in yet.
+ */
+const asksTrust = (agent: AgentId, folder: string) => agent === "claude" && !!trustCheck()?.(folder);
+
+/** A message about a terminal that just opened, and what to answer in it first when Claude Code asks about the folder. */
+const withTrust = (message: string, asks: boolean) => (asks ? `${message.replace(/\.?$/, ".")} ${TRUST_FIRST}` : message);
+
+/**
  * Where a task's sessions run here: its own folder on this computer, else its project's, else a scratch folder per
  * task. All three come from this computer's settings.
  */
@@ -274,14 +284,6 @@ export function forgetSessionFiles(sessionIds: string[]) {
 function checkTask(task: Task): string | null {
   if (!TASK_KEY.test(task.key)) return `The task key ${safe(task.key, 20)} isn't in the expected shape, so PacedMind won't start it.`;
   return null;
-}
-
-/** Whether a folder is in a git repository: it or a folder above it has a .git. */
-function inGitRepo(folder: string): boolean {
-  for (let dir = path.resolve(folder); ; dir = path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, ".git"))) return true;
-    if (path.dirname(dir) === dir) return false;
-  }
 }
 
 /** Where a session of `agent` runs that way, in words. */
@@ -367,7 +369,7 @@ export function startSession(
     const { folder, error } = resolveFolder(task);
     if (!folder) return { ok: false, error };
     // The cloud works on a copy of the repository (from GitHub, or uploaded), so there has to be one.
-    if (surface === "cloud" && !inGitRepo(folder)) {
+    if (surface === "cloud" && !repoRoot(folder)) {
       return { ok: false, error: `${CLOUD_LABEL[agent]} works on a git repository, and ${folder} isn't in one. Give ${task.key} or its project a repository folder.` };
     }
     const e = options.expect;
@@ -390,6 +392,7 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   const dir = sessionDir(session.id);
   const where = place(session.surface, agent);
   const title = safe(`${task.key} · ${session.surface === "cloud" ? CLOUD_LABEL[agent] : AGENT_LABEL[agent]}`, 60);
+  const trust = session.surface !== "desktop" && asksTrust(agent, folder);
   let failed: string | null = null;
   if (session.surface === "desktop") {
     failed = openUrl(desktopLink(agent, folder, kickoffPrompt(task, session.id)));
@@ -425,7 +428,7 @@ async function launch(session: Session, task: Task, folder: string, env: string,
     message = `Started ${task.key} in a new terminal`;
   }
   if (task.status === "todo" || task.status === "backlog") await repo.updateTask(task.id, { status: "progress" });
-  return { ok: true, session: (await repo.getSession(session.id))!, message };
+  return { ok: true, session: (await repo.getSession(session.id))!, message: withTrust(message, trust) };
 }
 
 /**
@@ -468,6 +471,7 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     const dir = sessionDir(session.id);
     const title = safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60);
     const surface = to ?? session.surface;
+    const trust = surface !== "desktop" && asksTrust(session.agent, folder);
     let failed: string | null;
     let text: string;
     if (surface === "desktop") {
@@ -499,7 +503,7 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     }
     if (failed) return { ok: false, error: failed };
     await repo.addSessionEvent(session.id, "resumed", text);
-    return { ok: true, session: (await repo.getSession(session.id))!, message: text };
+    return { ok: true, session: (await repo.getSession(session.id))!, message: withTrust(text, trust) };
   });
 }
 
@@ -546,11 +550,12 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     const { command, conversation } = agentCommand(dir, session, task, "changes", token);
     // The new conversation counts before its terminal opens, so a terminal still open on the old one can't end the session.
     if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: conversation });
+    const trust = asksTrust(session.agent, folder);
     const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), command, token, device.terminal);
     if (failed) {
       if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: session.cliSessionId });
       return { ok: false, error: failed };
     }
-    return { ok: true, session: (await repo.getSession(session.id))!, message: `Sent to ${AGENT_LABEL[session.agent]} in a new terminal` };
+    return { ok: true, session: (await repo.getSession(session.id))!, message: withTrust(`Sent to ${AGENT_LABEL[session.agent]} in a new terminal`, trust) };
   });
 }
