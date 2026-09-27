@@ -1,6 +1,6 @@
 ---
 title: How a session runs
-description: The life of an agent session from start to review, in a terminal, a desktop app or the cloud, its states, what the agent is told, and what PacedMind records along the way.
+description: The life of an agent session from start to review, in a terminal, a desktop app or the cloud, its states, what the agent is told, how PacedMind hears that the agent waits for you, and what it records along the way.
 ---
 
 A session moves through a few states. PacedMind changes them when it starts the session and when you act; the agent changes them by calling two MCP tools, `start_task` and `finish_task`.
@@ -25,7 +25,7 @@ When a session starts, from a task, from **Sessions**, from a flow or at an agen
 1. checks that the task has no running session, that it isn't yours, that the computer has what the session needs, and that the task's folder is usable;
 2. creates the session record, with an eight-character id, the agent, where it runs, the folder and a branch name such as `agent/dev-22`;
 3. starts it where the task runs:
-   * **in a terminal**: writes a start script, and for Claude Code the MCP connection and a hook that reports when the terminal closes, then opens a terminal titled with the key and the agent, such as *DEV-22 · Claude Code*, in the folder, runs the agent with its first message, and marks the session **Running** (*Started Claude Code in a terminal on DESKTOP-1*);
+   * **in a terminal**: writes a start script, and for Claude Code the MCP connection and hooks that report when the agent waits for you and when the terminal closes (for Codex, a `notify` program that reports when its turn ends), then opens a terminal titled with the key and the agent, such as *DEV-22 · Claude Code*, in the folder, runs the agent with its first message, and marks the session **Running** (*Started Claude Code in a terminal on DESKTOP-1*);
    * **in a desktop app**: opens the app with a new session in the folder and the first message written (*Opened in the Claude app on DESKTOP-1. Send the first message there to start.*). The session stays **Starting** until the agent calls `start_task`;
    * **in Claude Code on the web**: opens a terminal in the folder that sends the task with `claude --cloud`, and marks the session **Running** (*Sent to Claude Code on the web from a terminal in app*);
    * **in Codex cloud**: sends the task with `codex cloud exec` (*Sending it to Codex cloud*), and marks the session **Running** with the task's link once Codex takes it on (*Codex cloud took it on in the my-app environment*);
@@ -41,9 +41,9 @@ A cloud session can't call PacedMind's tools, so its first message carries the w
 
 ## 2. Pick up
 
-The agent calls `start_task` with the task key and the session id. PacedMind records *Claude Code read the task over MCP* and keeps the task **In progress**. The agent receives:
+The agent calls `start_task` with the task key and the session id. PacedMind records *Claude Code read the task over MCP* and keeps the task **In progress**. When the agent also says what it runs with, PacedMind records that first, such as *Claude Code says it runs as …, with the MCP servers github, playwright*. The agent receives:
 
-* after **Request changes**, first the changes you asked for, with the instruction to make them before anything else;
+* after **Request changes**, first the changes you asked for, with the instruction to make them before anything else; after **Answer its questions**, your answers, with the instruction to go on with the task using them;
 * the task: title, status, priority, dates, estimate, labels, its folder and where its sessions run, the description, the numbered **Done when** items, the numbered sub-tasks, the tasks it follows and leads to, and its latest report;
 * the instruction to hand the task back with `finish_task`, the task key, the session id and a report: a summary, an answer to each **Done when** item, screenshots of anything it changed that can be seen, how to check the result and its questions. If it can't finish, it still hands the task back, partly done or blocked. It doesn't mark the task done itself.
 
@@ -53,6 +53,12 @@ The agent works in the task's folder as it normally does, in conversation with y
 
 * ticks off sub-tasks as it completes them, and adds the ones it discovers;
 * records work it finds outside the task, such as a bug elsewhere, as new tasks in the same project, and lists them in its report.
+
+It keeps you posted with `report_progress`, only when it matters:
+
+* its plan, once it has one, sent again as steps get done. While the session runs, the latest plan shows as **Plan** in the task's details and in **Sessions**, with the done steps ticked off and a count such as *2 of 5 done · 14:05*;
+* a problem that changes the scope or the risk (*Claude Code ran into a problem: …*);
+* a decision it needs from you (*Claude Code asks you: …*), which it also asks in its terminal. The session then waits for you, as [below](#when-the-agent-waits-for-you).
 
 It can attach screenshots as it goes, with `attach_image`. They show under **Images so far** in the task's details and in **Sessions**, and join its report when it hands the task back. PacedMind shows all these changes as they happen.
 
@@ -76,12 +82,34 @@ If the next task in the flow continues **in the same session**, and the agent ha
 Check the result: the agent's report, its terminal or app, and the changed files, or the pull request of a cloud session. Then:
 
 * **Mark done** marks the task done. Its finished sessions count as reviewed (*You marked it done*) and show as **Done**. Tasks connected **Manually** after it can now start.
-* **Request changes**, for a session in a terminal on this computer, adds what should change to the report and reopens the session in a new terminal (*You asked for changes: …*). The task goes back to **In progress**, and the agent reads your changes first when it calls `start_task`.
+* **Request changes**, for a session in a terminal on this computer, adds what should change to the report and reopens the session in a new terminal, in a new conversation (*You asked for changes: …*). The task goes back to **In progress**, and the agent reads your changes first when it calls `start_task`.
+* **Answer its questions**, when its report asks you something, sends your answers the same way (*You answered its questions: …*).
 * Or switch to the still-open terminal or app, or select **Resume in terminal**, and continue the conversation. The agent picks the task up again with `start_task`.
 
 Either way, the agent hands the task back with `finish_task` and a new report when it's done.
 
 See [Review finished work](/agents/review).
+
+## When the agent waits for you
+
+While a session runs, PacedMind hears when its agent stops to wait for you in its terminal, and shows it with a navy dot until the agent goes on:
+
+| The agent | Task's details and **Sessions** | Task list | **Sessions** row | Notification |
+| --- | --- | --- | --- | --- |
+| Ended its turn and waits for your next message | *Claude Code is waiting for you in its terminal: “…”*, with its last message, shortened | *Waiting for you* | *waiting for you* | *DEV-22 is waiting for you* |
+| Asks for your permission, such as to run a command | *Claude Code asks for your permission in its terminal: …* | *Asks your permission* | *asks your permission* | *DEV-22 asks for your permission* |
+| Asks you something in its terminal | *Claude Code asks you something in its terminal: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
+| Asked you a question with `report_progress` | *Claude Code asks you: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
+
+In the task list, hover over the words to read the whole line; on a phone, only the dot shows. In **Sessions**, the session stays under **Running**, with a navy dot like a finished one. The desktop app notifies once each time the agent starts waiting, with the task's title and the line above, and a click opens the session; the tray icon's tooltip counts these sessions with the finished ones. See [Notifications](/desktop-app#notifications).
+
+The session is back at work as soon as the agent is: when you answer in its terminal (*You answered in its terminal, and Claude Code went on*), when you allow what it asked (*You allowed it in its terminal, and Claude Code went on*), or when it calls PacedMind again (*Claude Code went on*).
+
+How PacedMind hears it depends on the agent:
+
+* **Claude Code in a terminal**: the hooks PacedMind installs for the session report when its turn ends, when it shows a permission prompt or a question, or a reminder that it's still waiting, when you send it a message, and, while it waits for your permission, when it runs the tool.
+* **Codex in a terminal**: the session's `notify` program reports when a turn ends. Codex doesn't report your messages or its permission prompts, so PacedMind hears it went on when it next calls PacedMind.
+* **Desktop apps and the cloud** have no such hooks. Only a question the agent sends with `report_progress` shows there.
 
 ## When the terminal closes
 
@@ -105,7 +133,19 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Opened in the Claude app on DESKTOP-1. Send the first message there to start.* | PacedMind opened the desktop app. |
 | *Sent to Claude Code on the web from a terminal in app* | A terminal sent the task to Claude Code on the web. |
 | *Sending it to Codex cloud*, then *Codex cloud took it on in the my-app environment* | PacedMind sent the task to Codex cloud, and Codex accepted it. |
+| *Connected from Claude Code 2.1.278* | The agent of a session PacedMind started in a terminal connected to PacedMind's MCP server, with the name and version of its MCP client. |
+| *Claude Code says it runs as …, with the MCP servers github, playwright*, or *… with no other MCP servers* | The agent said what it runs with when it called `start_task`. |
 | *Claude Code read the task over MCP* | The agent called `start_task`. |
+| *Plan: 2 of 5 steps done* | The agent sent its plan with `report_progress`. |
+| *Claude Code:* and a message | The agent sent an update with `report_progress`. |
+| *Claude Code ran into a problem:* and a message | The agent reported a problem with `report_progress`. |
+| *Claude Code asks you:* and a question | The agent asked you something with `report_progress`. |
+| *Claude Code is waiting for you in its terminal*, with its last message | The agent's turn ended in its terminal. |
+| *Claude Code asks for your permission in its terminal:* and what it asks | Claude Code showed a permission prompt. |
+| *Claude Code asks you something in its terminal:* and what it asks | Claude Code asked you a question in its terminal. |
+| *You answered in its terminal, and Claude Code went on* | You sent Claude Code a message while it waited for you. |
+| *You allowed it in its terminal, and Claude Code went on* | Claude Code ran what it asked your permission for. |
+| *Claude Code went on* | The agent called PacedMind while it waited for you. |
 | *Claude marked it finished* (the task's details show the report's summary instead) | The agent called `finish_task`. |
 | *You marked it finished* | You selected **Mark finished**. |
 | *Codex cloud finished: …* | PacedMind found the Codex cloud task ready. |
@@ -117,6 +157,7 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Started outside PacedMind* | An agent PacedMind didn't start reported on the task. |
 | *Reopened in a terminal* | You selected **Resume in terminal**. |
 | *You asked for changes:* and the start of your text | You selected **Request changes**. |
+| *You answered its questions:* and the start of your answers | You selected **Answer its question** or **Answer its questions**. |
 | *Opened in the Claude app* | You selected **Continue in Claude app** or **Open the Claude app**. |
 | *Opened a terminal to pull the cloud session in (claude --teleport)* | You selected **Pull into terminal**. |
 | *Continues session 3f2a9c1b in the same terminal* | A same-session connection continued the session; in a desktop app, *in the same app session*. |

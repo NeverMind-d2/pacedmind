@@ -3,7 +3,7 @@ title: Connect Codex
 description: Add PacedMind's MCP server to Codex's configuration, for the Codex app and the Codex sessions you start yourself, check the connection, and update it after a new token.
 ---
 
-Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`, which the Codex command-line tool and the Codex app share. Sessions PacedMind starts in a terminal bring their own connection to PacedMind. The Codex app, and Codex sessions you start yourself, need PacedMind's entry in that file.
+Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`, which the Codex command-line tool and the Codex app share. Sessions PacedMind starts in a terminal bring their own connection to PacedMind, which replaces this entry for them, headers included, so they only send their own token. The Codex app, and Codex sessions you start yourself, need PacedMind's entry in that file.
 
 ## With Connect in Settings
 

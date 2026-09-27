@@ -11,7 +11,7 @@ PacedMind keeps everything in one SQLite database on the computer: areas, projec
 | --- | --- |
 | The database | `%APPDATA%\Organizer\data\organizer.db`, with `organizer.db-wal` and `organizer.db-shm` next to it |
 | This computer's id in PacedMind, which sessions use to know where they run | `%APPDATA%\Organizer\data\device.json` |
-| Files for each agent session: the start script and, for Claude Code, its MCP and hook settings | `%APPDATA%\Organizer\data\sessions\<session id>\` |
+| Files for each agent session: the start script and, for Claude Code, its MCP and hook settings, or for Codex, the token file its `notify` program reads | `%APPDATA%\Organizer\data\sessions\<session id>\` |
 | Images from agents' reports, copied when the agent attaches them, one file per image | `%APPDATA%\Organizer\data\attachments\` |
 | Working folders for tasks without their own folder or a project folder, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
 | Window size and position, the theme, and whether the tray hint was shown | `%APPDATA%\Organizer\window-state.json` |
@@ -31,7 +31,7 @@ The server listens on `127.0.0.1`, port 4319, so only programs on the same compu
 
 The MCP server at `http://127.0.0.1:4319/api/mcp` also needs the access token from **Settings → MCP server**. See [MCP server](/mcp).
 
-The session files contain the access token: the start script passes it to the agent, Claude Code's MCP configuration (`mcp.json`) uses it for the connection, and its settings files, one per conversation (`settings-<conversation id>.json`), use it for the hook that reports the end of the session. Keep the data folder private, and regenerate the token if it was shared by mistake. Sessions that are resumed afterwards get the new token.
+The session files contain the access token: the start script passes it to the agent, Claude Code's MCP configuration (`mcp.json`) uses it for the connection, and its settings files, one per conversation (`settings-<conversation id>.json`), use it for the hooks that report when the agent waits for you and when the session ends. For Codex, a `hooks-….auth` file holds it for the `notify` program that reports the end of each turn. When a project limits its sessions' MCP servers, Claude Code's `mcp.json` also holds the settings of the servers chosen, copied from Claude Code's own files. Keep the data folder private, and regenerate the token if it was shared by mistake. Sessions that are resumed afterwards get the new token.
 
 ## Back up and restore
 

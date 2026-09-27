@@ -10,8 +10,8 @@ An **agent session** is Claude Code or Codex working on one task. PacedMind star
 PacedMind **tracks state**. It:
 
 * starts the session where the task runs, in the right folder, with the right agent and the connection to PacedMind;
-* records when the agent picks the task up and when it hands it back, with its report: a summary, its answer to each **Done when** item, screenshots, how to check the result and its questions;
-* shows running and finished sessions in every view, and notifies when one finishes;
+* records when the agent picks the task up, the plan, problems and questions it reports while it works, and when it hands the task back, with its report: a summary, its answer to each **Done when** item, screenshots, how to check the result and its questions;
+* shows running and finished sessions in every view, and notifies when one finishes or its agent waits for you in its terminal;
 * starts the next session of a flow when the previous one is ready.
 
 PacedMind **doesn't** chat with the agent, show its output or review its code. The conversation happens in the agent's terminal or app, where you answer its questions, approve its actions and see what it changed.
@@ -29,9 +29,9 @@ Sessions PacedMind starts in a terminal are connected to its MCP server automati
 
 1. **Start**: select **Start with Claude Code** on a task, or let a flow start it. The agent starts where the task runs, and the task goes to **In progress**.
 2. **Pick up**: the agent calls `start_task` and reads the task, its description and sub-tasks.
-3. **Work**: the agent works in the task's folder. It ticks off sub-tasks and records follow-up tasks as it goes.
+3. **Work**: the agent works in the task's folder. It ticks off sub-tasks, records follow-up tasks and reports its plan and questions as it goes. When it waits for you in its terminal, PacedMind shows it.
 4. **Hand back**: the agent calls `finish_task` with its report, or you select **Mark finished** for a session that can't. The session is **finished, waiting for you**, the task is **In review**, and PacedMind notifies.
-5. **Review**: read the report and check the result, then select **Mark done**, or **Request changes** to send the work back with what should change.
+5. **Review**: read the report and check the result, then select **Mark done**, **Request changes** to send the work back with what should change, or **Answer its questions** when the agent asked you something.
 6. **Next**: marking the task done can start the next sessions of the project's flow.
 
 ## Pages in this section

@@ -116,17 +116,28 @@ Requests without the right token get `401 Unauthorized`.
 
 ### Request changes is missing, or doesn't reopen the session
 
-**Request changes** shows only where it can send the work back: on the task's latest report, for a session that ran in a terminal on this computer, while no other session of the task runs, and not for your own tasks. When an agent sends changes with `request_changes`, or a request can't go through, the message says why:
+**Request changes**, and **Answer its questions**, show only where they can send the work back: on the task's latest report, for a session that ran in a terminal on this computer, while no other session of the task runs, and not for your own tasks. When an agent sends changes with `request_changes`, or a request can't go through, the message says why:
 
 | Message | Solution |
 | --- | --- |
 | *This session runs in the Claude app. Open it there and write your changes to the agent.* | Sessions in a desktop app or in the cloud take changes where they run. |
-| *This session ran on DESKTOP-2. Ask for the changes in PacedMind there.* | Use PacedMind on the computer where the session ran. |
+| *This session ran on another computer. Ask for the changes in PacedMind there.* | Use PacedMind on the computer where the session ran. |
 | *This task already has a running session* | Wait until that session hands the task back, or close it with **Close session**. |
 | *DEV-22 has a newer report. Ask for the changes on that one.* | Ask for the changes on the task's latest report. |
-| *DEV-22 has no folder to work in* | Give the task or its project a folder. |
+| *Can't use the folder …* | Correct the task's or the project's folder, as when a session starts. |
 
 When the terminal doesn't open, the message gives the reason, as when a session starts. See [A session couldn't start](#a-session-couldnt-start).
+
+The reopened session is a new conversation, for Claude Code too: the agent reads your changes or answers and its last report from `start_task`, not from its earlier conversation. To continue the earlier conversation itself, select **Resume in terminal** instead.
+
+### A session doesn't show that its agent waits for you
+
+PacedMind hears that an agent waits for you only from sessions it started in a terminal. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
+
+* **Sessions in a desktop app or the cloud** have no hooks: look at the app, or the cloud session, yourself.
+* **Codex** reports only the end of a turn. Its permission prompts don't show, and after you answer it, the session shows it went on only once Codex calls PacedMind again.
+* **Claude Code older than 2.1.84, and Codex,** report through `curl`. Check that `curl --version` works in a new terminal. In PacedMind's Codex sessions, PacedMind's `notify` program takes the place of your own.
+* **The desktop app notifies once each time the agent starts waiting.** If none appear, check the system's notification settings: see [Notifications](/desktop-app#notifications).
 
 ### An image is missing from a report
 

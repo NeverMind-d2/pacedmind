@@ -1,6 +1,6 @@
 ---
 title: Sessions
-description: "Reference for the session tools: list_sessions, start_session, close_session and request_changes, and the protocol agents follow on a task: get_next_task, start_task, attach_image and finish_task."
+description: "Reference for the session tools: list_sessions, start_session, close_session and request_changes, and the protocol agents follow on a task: get_next_task, start_task, attach_image, report_progress and finish_task."
 ---
 
 ## `list_sessions`
@@ -49,43 +49,50 @@ Marks a running session as closed, for example when its terminal was closed or i
 
 ## `request_changes`
 
-**Reopens an agent's session in a new terminal on the user's computer. Agents ask the user first.**
+**Reopens an agent's session in a new terminal on the user's computer, once the user allows it. Agents ask the user first.**
 
-Sends work an agent handed back to it again, with what the user wants changed, the same way as **Request changes** under a report in the app. See [Request changes](/agents/review#request-changes).
+Asks to send work an agent handed back to it again, with what the user wants changed, the same way as **Request changes** under a report in the app. See [Request changes](/agents/review#request-changes).
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `task` | string | yes | The task key. |
 | `changes` | string | yes | What should change, in the user's words. The agent reads it as written. |
 
-The task's latest session must have handed the task back: it's **Finished**, or **Done** when the user already marked the task done. PacedMind then:
-
-1. adds the changes to the agent's last report;
-2. reopens the session in a new terminal, in the session's folder, or the task's when the session has none, with a first message that sends the agent to `start_task`, which shows the changes first;
-3. sets the session back to **Running** (*You asked for changes: …*) and the task to **In progress**, also when the task was done.
-
-Claude Code continues its conversation as a new branch of it, with its own id, so closing a terminal still open on the old conversation doesn't close the reopened session. A Claude Code session without a conversation to go back to, such as one started outside PacedMind, starts a new conversation. Codex starts a new conversation. The first message reads:
+The tool only asks. PacedMind shows the request in its window, with **Allow** and **Refuse**, and as a notification (*Send DEV-22 back to Claude Code with changes?*). Nothing happens until the user allows it, within 10 minutes. The tool returns:
 
 ```text
-PacedMind task DEV-22, session 3f2a9c1b: the user reviewed your work on Start sessions from the app and asked for changes. Call the organizer MCP tool start_task with task DEV-22 and session 3f2a9c1b to read them, then follow the instructions it returns.
+Asked the user to allow sending the changes to Claude Code for DEV-22: PacedMind shows the request in its window and a notification. Once they allow it (within 10 minutes), session 3f2a9c1b reopens in a new terminal and the task is in progress again. Tell the user to look at PacedMind; don't ask again.
 ```
 
-Returns *Sent the changes to Claude Code. DEV-22 is in progress again: session 3f2a9c1b reopened in a new terminal on the user's computer.*
+The task's latest session must have handed the task back: it's **Finished**, or **Done** when the user already marked the task done. Once the user allows the request, PacedMind:
 
-Only a session in a terminal on this computer can be reopened. Refused when:
+1. adds the changes to the agent's last report;
+2. reopens the session in a new terminal, in the task's folder, in a new conversation whose first message sends the agent to `start_task`, which shows the changes first;
+3. sets the session back to **Running** (*You asked for changes: …*) and the task to **In progress**, also when the task was done.
+
+Claude Code and Codex both start a new conversation, with the changes and the last report from `start_task`. Claude Code doesn't resume its earlier conversation, so that PacedMind's tools are connected when it reads its first message. The new conversation has its own id, so closing a terminal still open on the old one doesn't close the reopened session. The first message reads:
+
+```text
+PacedMind task DEV-22, session 3f2a9c1b: the user reviewed your work and wrote back. Call the organizer MCP tool start_task with task DEV-22 and session 3f2a9c1b to read it, then follow the instructions it returns.
+```
+
+Answers to the agent's questions, sent with **Answer its questions** in the app, go back the same way. See [Answer the agent's questions](/agents/review#answer-the-agents-questions).
+
+Only a session in a terminal on this computer can be reopened. Refused, before anything is asked, when:
 
 * the task's latest session hasn't handed it back, or the task has no session (*DEV-22 has no hand-back to send changes to: its latest session is running. start_session starts a new session.*);
-* `changes` is empty (*Write what should change*);
+* `changes` is empty (*Write what should change.*);
 * the task is the user's own (*DEV-22 is marked as yours. Hand it to Claude Code or Codex first.*);
 * the task already has a running session (*This task already has a running session*);
 * the task's latest report comes from another of its sessions (*DEV-22 has a newer report. Ask for the changes on that one.*);
 * the session runs in a desktop app or in the cloud (*This session runs in the Claude app. Open it there and write your changes to the agent.*);
-* the session ran on another computer (*This session ran on DESKTOP-2. Ask for the changes in PacedMind there.*);
-* the session has no folder and the task's folder can't be used (*DEV-22 has no folder to work in*), or the terminal doesn't open.
+* the session ran on another computer (*This session ran on another computer. Ask for the changes in PacedMind there.*).
+
+After the user allows it, the task's folder can still be unusable (*Can't use the folder …*), or the terminal can fail to open: the message in PacedMind says why, and the session stays as it was.
 
 ## The protocol for agents working on a task
 
-A session that PacedMind starts begins with a message naming the task and the session. The agent picks the task up with `start_task`, can attach screenshots with `attach_image` while it works, and hands the task back with a report through `finish_task`. The **pacedmind-agent-session** skill teaches the protocol in detail. See [How a session runs](/agents/lifecycle).
+A session that PacedMind starts begins with a message naming the task and the session. The agent picks the task up with `start_task`. While it works, it can attach screenshots with `attach_image` and keep the user posted with `report_progress`. It hands the task back with a report through `finish_task`. The **pacedmind-agent-session** skill teaches the protocol in detail. See [How a session runs](/agents/lifecycle).
 
 ### `get_next_task`
 
@@ -108,18 +115,22 @@ Tells PacedMind that the agent is starting work on a task. The session becomes *
 | `task` | string | yes | The task key. |
 | `session` | string | no | The session id from the agent's first message. |
 | `agent` | `claude` or `codex` | no | Used when PacedMind didn't start the session. |
+| `environment` | object | no | What the agent runs with, for the user to see: `model`, the model it runs as (up to 80 characters), and `mcp_servers`, the MCP servers it has tools from besides `organizer` (up to 30 names). |
+
+With `environment`, PacedMind records *Claude Code says it runs as …, with the MCP servers github, linear*, or *… with no other MCP servers*, before *Claude Code read the task over MCP*. It keeps up to 30 plain server names: `organizer`, and names with spaces or other unusual characters, are left out. **Sessions** shows it as **Agent says**.
 
 Returns, in this order:
 
-1. the changes the user asked for, when they reviewed the last hand-back and sent it back with **Request changes** or `request_changes`, with the instruction to make these changes first;
+1. what the user wrote back, when they reviewed the last hand-back and sent it back: the changes they asked for with **Request changes** or `request_changes`, with the instruction to make these changes first, or their answers to the agent's questions, with the instruction to go on with the task using them;
 2. the task's details, the same as [`get_task`](/mcp/tools/tasks#get_task) returns, including the numbered **Done when** items and the last report, if the task was handed back before;
-3. the session id and the instructions for handing the task back with a report.
+3. the session id, when to keep the user posted with `report_progress`, and the instructions for handing the task back with a report.
 
 For example:
 
 ```text
 PacedMind session: 3f2a9c1b
-Work on this task here. When it is ready for the user to check, call finish_task with task DEV-22, session 3f2a9c1b and a report:
+Work on this task here. Keep the user posted with report_progress, but only when it matters: your plan once you have one (send it again as steps get done), anything that changes the scope or the risk (kind issue), and a decision you need from the user (kind question, which you then also ask here and wait for). Skip routine updates.
+When it is ready for the user to check, call finish_task with task DEV-22, session 3f2a9c1b and a report:
 - summary: one or two sentences on what changed and what the user should look at first;
 - criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);
 - images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;
@@ -139,7 +150,19 @@ Show the running session in the task list too, not only in the task panel.
 Make these changes first; your last report is at the end of the task below. Then hand the task back again with finish_task and a new report whose summary starts with what you changed.
 ```
 
-The changes stay on the last report until the agent hands the task back with a new one, so every `start_task` until then shows them.
+When the user answered the agent's questions, the result starts with the answers instead:
+
+```text
+The user reviewed your last hand-back and answered your questions (2026-09-25 11:02:13):
+My answers to your questions:
+
+1. Should the task list show the running session too?
+Yes, next to the title.
+
+Go on with the task using these answers; your last report is at the end of the task below. Then hand the task back again with finish_task and a new report whose summary starts with what you changed.
+```
+
+The changes or answers stay on the last report until the agent hands the task back with a new one, so every `start_task` until then shows them.
 
 With a session id of that task, `start_task` sets that session back to **Running**, whatever its state. Without one, it uses the task's running session; when there's none, as when the agent was started outside PacedMind, it creates one (*Started outside PacedMind*). It refuses to create one for tasks that are the user's own.
 
@@ -176,6 +199,40 @@ Refused when:
 * the path is a folder (*… is a folder, not an image file.*);
 * the file is larger than 20 MB (*panel.png is 23.4 MB; an image can be up to 20 MB. Save a smaller one, for example only the window instead of the whole screen.*);
 * the file isn't one of the four image types (*panel.png isn't a PNG, JPEG, GIF or WebP image.*).
+
+### `report_progress`
+
+**Changes data. Allowed without asking.**
+
+Keeps the user posted while the agent works on a task, when it matters: its plan once it has one, a problem that changes the scope or the risk, or a decision it needs from the user. It isn't meant for routine steps, and it doesn't hand anything back: `finish_task` does.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `task` | string | yes | The task key. |
+| `session` | string | no | The agent's session id. |
+| `message` | string | no | What happened or what the agent needs, in a sentence or two, up to 1,000 characters. Line breaks become spaces. |
+| `kind` | `progress`, `issue` or `question` | no | What the message is. `progress`, the default: an update. `issue`: something that changes the scope or the risk. `question`: a decision the agent needs from the user. |
+| `plan` | list | no | The agent's whole plan, in order: up to 15 steps, each with `step`, a short outcome of up to 120 characters, and `done`, whether it's done. The agent sends it again when a step is done or the plan changes. |
+
+Each call needs a message, a plan, or both. The update goes to the session named in `session`, else the task's running session; a session PacedMind started can only report on its own. PacedMind records it in the session's history:
+
+| Sent | Recorded as |
+| --- | --- |
+| `plan` | *Plan: 2 of 5 steps done*. While the session runs, the latest plan shows as **Plan** in the task's details and in **Sessions**: its steps in order, the done ones ticked off, with a count and the time, such as *2 of 5 done · 14:05*. |
+| `message`, `progress` | *Claude Code:* and the message. |
+| `message`, `issue` | *Claude Code ran into a problem:* and the message. |
+| `message`, `question` | *Claude Code asks you:* and the message. The session then waits for you: the task's details and **Sessions** show the question, the task list shows *Has a question*, and the desktop app notifies (*DEV-22 has a question for you*). See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you). |
+
+With both, the plan is recorded first, so a question stays the latest word from the agent.
+
+Returns *Your plan is on DEV-22: 2 of 5 steps done.* for a plan, and for a message *Noted on DEV-22.*, or for a question *PacedMind shows your question on the task and notifies the user. Ask it in this conversation too, then wait for the answer here.* With both, the two sentences follow each other.
+
+Refused when:
+
+* the task has no running session to report on (*DEV-22 has no running session. Call start_task with task DEV-22 first.*);
+* a session PacedMind started names another task or session (*This session works on DEV-21 (session 3f2a9c1b); it can only report on that task.*);
+* there's neither a message nor a plan (*Pass a message, a plan, or both.*);
+* the session already sent 100 updates (*This session already sent 100 updates. Put the rest in your report when you call finish_task.*).
 
 ### `finish_task`
 

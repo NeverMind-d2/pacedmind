@@ -1,6 +1,6 @@
 ---
 title: The task details panel
-description: Every field of the task details panel, the Done when list, the agent session card with its report and buttons, Request changes, sub-tasks, and the task's activity history.
+description: Every field of the task details panel, the Done when list, the agent session card with its plan, report and buttons, Request changes, answering the agent's questions, sub-tasks, and the task's activity history.
 ---
 
 Clicking a task's title opens its details on the right side of the view: in task lists, on **Upcoming**, on the **Timeline** and on the **Roadmap**, from a focus block or a session lane in the calendar's week view, and through **Open task** in the month view's task menu. Changes save as they're made. The **×** button (**Close details**), a second click on the task, or <kbd>Esc</kbd> outside a text field closes the panel.
@@ -78,7 +78,8 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | State | Card text |
 | --- | --- |
 | Running | *Running in Claude Code since 14:05*, or with the place: *Running in the Claude app since 14:05*, *Running in Claude Code on the web since 14:05* |
-| Running again after **Request changes** | *Claude Code is working on your changes since 14:05* |
+| Running again after **Request changes** | *Claude Code is working on your changes since 14:05*, or after you answered its questions *Claude Code is working with your answers since 14:05* |
+| Running, the agent waits for you, with a navy dot | *Claude Code is waiting for you in its terminal: “…”*, *Claude Code asks for your permission in its terminal: …*, *Claude Code asks you something in its terminal: …* or *Claude Code asks you: …*. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you). |
 | Running in a terminal, in a folder Claude Code doesn't trust yet, until the agent checks in | *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.* |
 | Running, no word from the agent after 90 seconds | *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.* After **Request changes**, the 90 seconds count from the request. |
 | Finished | *Claude Code finished at 14:40 · waiting for you* |
@@ -88,7 +89,7 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | Closed | *Closed before the agent finished* |
 | Failed | *Couldn't start:* and the reason |
 
-The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. Under the buttons of a session that ended, the card repeats the line about trusting the folder when the next session would start in a folder Claude Code doesn't trust yet. A task handed back partly done or blocked holds its flow until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
+The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. While the session runs, **Plan** follows, with the latest plan the agent sent with `report_progress`: its steps in order, the done ones ticked off, with a count and the time, such as *2 of 5 done · 14:05*. Under the buttons of a session that ended, the card repeats the line about trusting the folder when the next session would start in a folder Claude Code doesn't trust yet. A task handed back partly done or blocked holds its flow until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
 ### The agent's report
 
@@ -103,7 +104,7 @@ When an agent hands the task back, its report shows in the card, in this order. 
 | **How to check it** | Numbered steps to check the result, such as a command to run or a page to open. |
 | **Details** | Anything longer, such as what the agent did and why, or test results. A long text is cut short: **Show all** shows the rest, **Show less** shortens it again. |
 | Links and follow-ups | Links, such as a pull request, open in the browser; a link that isn't a web address only shows its address. Follow-up tasks the agent created for work outside this one show their key and title; select one to open it. |
-| **You asked for changes** | After **Request changes**: the time and what you wrote. |
+| **You asked for changes** | After **Request changes**: the time and what you wrote. After you answered its questions, **You answered its questions** with your answers. |
 
 The summary is plain text. **Details** is Markdown: headings, lists, quotes, code blocks, bold and italic text, inline code and links to web pages; tables show as written. The notes, questions and steps can use bold and italic text, inline code and links too.
 
@@ -137,6 +138,7 @@ The card ends with the session's folder and branch name, and these buttons:
 | **Open the Claude app** or **Open the Codex app** | A session in a desktop app. | Brings the app forward. |
 | **Open in the cloud** | A cloud session with a link. | Opens it in the browser. |
 | **Request changes** | A terminal session on this computer whose agent handed the task back, finished or done after you marked the task done, with the task's latest report. Not for a task that is yours, or while another session of it runs. | Opens a box to write what should change, and sends it to the agent. See [Request changes](#request-changes). |
+| **Answer its question** or **Answer its questions** | As for **Request changes**, when the agent's latest report has questions for you. | Opens a field for each question, and sends your answers to the agent. See [Answer the agent's questions](#answer-the-agents-questions). |
 | **Mark finished** | A running session outside a terminal. | Marks the session finished and the task **In review**, for sessions that can't report back. |
 | **New session** | The session is closed, done or failed, and the task isn't done. | Starts a fresh session. |
 | **Mark done** | The agent finished. | Marks the task done after your review. This can start the next sessions of a flow. |
@@ -152,12 +154,7 @@ See [Review finished work](/agents/review).
 2. Write what should change in the box: *What should change? Be as specific as you'd be with a colleague.*
 3. Select **Send to Claude Code** (or **Send to Codex**), or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>. **Cancel** or <kbd>Esc</kbd> closes the box without sending.
 
-A line under the box says how the agent goes back to work:
-
-| Text | When |
-| --- | --- |
-| *Claude Code continues its conversation in a new terminal.* | A Claude Code session that PacedMind started in a terminal. Claude Code picks up its conversation as a new branch of it, so a terminal still open on the old conversation can stay open: closing it doesn't close the session. |
-| *Codex starts again in a new terminal, with its last report and your changes.* | A Codex session: Codex starts a new conversation, and reads your changes and its last report when it picks the task up. A Claude Code session without a conversation to go back to, such as one reported from outside PacedMind, shows the same text with Claude Code. |
+A line under the box says how the agent goes back to work: *Claude Code starts again in a new terminal, with its last report and your changes.* (or *Codex starts again …*). The agent starts a new conversation and reads your changes and its last report when it picks the task up. A terminal still open on the old conversation can stay open: closing it doesn't close the session.
 
 PacedMind opens a new tab in Windows Terminal, and a new window otherwise, and confirms *Sent to Claude Code in a new terminal*. Then:
 
@@ -168,7 +165,17 @@ PacedMind opens a new tab in Windows Terminal, and a new window otherwise, and c
 
 If the terminal can't open, PacedMind shows why, and the session stays as it was. A terminal session that ran on another computer doesn't offer **Request changes** here: ask for the changes in PacedMind on that computer.
 
-Sessions in the Claude or Codex app, or in the cloud, don't offer **Request changes**: they take changes where they run. Select **Open the Claude app**, **Open the Codex app** or **Open in the cloud**, and write the changes to the agent there. See [Request changes](/agents/review#request-changes).
+Sessions in the Claude or Codex app, or in the cloud, don't offer **Request changes** or **Answer its questions**: they take changes where they run. Select **Open the Claude app**, **Open the Codex app** or **Open in the cloud**, and write the changes to the agent there. See [Request changes](/agents/review#request-changes).
+
+## Answer the agent's questions
+
+When the report of the task's latest session has questions for you, **Answer its question** (or **Answer its questions**, for several) appears next to **Request changes**, wherever that is offered.
+
+1. Select **Answer its question**.
+2. Under each question, write your answer in the field marked *Your answer*. Questions you leave empty are left out. *Anything else it should know (optional)* takes anything else.
+3. Select **Send to Claude Code** (or **Send to Codex**), or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, once at least one answer is written. **Cancel** or <kbd>Esc</kbd> closes the fields without sending.
+
+The line under the fields reads *Claude Code starts again in a new terminal, with its last report and your answers.* Your answers go to the agent as one message that starts with *My answers to your questions:*, and from there everything happens as for **Request changes**: the report shows your answers under **You answered its questions**, the activity records *You answered its questions:* with the start of your answers, and the card reads *Claude Code is working with your answers since 14:05* until the agent hands the task back again. See [Answer the agent's questions](/agents/review#answer-the-agents-questions).
 
 ## Sub-tasks
 
@@ -180,4 +187,4 @@ The **Sub-tasks** section lists the checklist, with a counter such as *2 / 4* an
 
 ## Activity
 
-The bottom of the panel lists what happened to the task, with times: *Created*, what PacedMind heard from the latest session (such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, the summary of the agent's report, and *You asked for changes:* with the start of what you wrote), and *Marked done*.
+The bottom of the panel lists what happened to the task, with times: *Created*, what PacedMind heard from the latest session (such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, a plan the agent sent as *Plan: 2 of 5 steps done*, *Claude Code is waiting for you in its terminal*, the summary of the agent's report, *You asked for changes:* with the start of what you wrote, and *You answered its questions:* with the start of your answers), and *Marked done*. See [What PacedMind records](/agents/lifecycle#what-pacedmind-records).
