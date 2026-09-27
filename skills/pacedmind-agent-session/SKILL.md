@@ -7,15 +7,15 @@ description: How to work on a task that PacedMind (Organizer) handed to you as a
 
 PacedMind started this session so that you do one task and then hand it back for the user's review. The user reviews it from your report in PacedMind, often without opening your terminal, so the report has to stand on its own. The tools come from the PacedMind MCP server, `organizer` (in Claude Code: `mcp__organizer__<tool>`).
 
-1. **Pick it up.** Call `start_task` with the task key and the session id from your first message. It returns:
-   - the changes the user asked for, if they reviewed your last hand-back and sent it back. They come first;
+1. **Pick it up.** Call `start_task` with the task key and the session id from your first message, and with `environment`: the model you run as and the MCP servers you have tools from besides `organizer` (the part between `mcp__` and the next `__` in their names), so the user sees what this session runs with. It returns:
+   - what the user wrote back after your last hand-back, if they sent it back: the changes they asked for, or their answers to your questions. It comes first;
    - the task: its description, **Done when** list, sub-tasks and folder;
    - the last report, if the task was handed back before;
    - instructions for handing it back.
 
    The Done when items are your acceptance criteria. Your report answers each one.
 
-   When the user asked for changes, make those changes. Don't start the task over, and don't reopen parts of it that they didn't mention. Then hand it back with a new report: start its summary with what you changed, answer every Done when item again, and attach new screenshots of what changed.
+   When the user answered your questions, go on with the task using the answers. When they asked for changes, make those changes. You start in a new conversation either way: your last report, at the end of the task, says what you did before. Don't start the task over, and don't reopen parts of it that they didn't mention. Then hand it back with a new report: start its summary with what you changed, answer every Done when item again, and attach new screenshots of what changed.
 2. **Work** in the project folder as you normally would. Your session's PacedMind access covers your own task only: you can read, update your task's details and sub-tasks, attach images, and add new open tasks for follow-up work. Changing statuses (other than through `finish_task`), where your task runs, other tasks, flows or settings, and starting sessions, are left to the user.
    - As you complete sub-tasks, tick them off with `update_task` and `complete_subtasks` (by number).
    - When you find steps that are needed, add them with `add_subtasks`.

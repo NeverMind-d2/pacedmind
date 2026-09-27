@@ -174,9 +174,10 @@ export async function changesProblem(s: Session, where: "here" | "remote" = "her
 
 /**
  * The user read an agent's hand-back and wants changes. They go on the session's last report, where start_task
- * finds them, and the session reopens in a new terminal: Claude Code continues its conversation, Codex starts
- * a new one. The task goes back to in progress, also when it was already marked done. From the desktop app's own
- * window, or a request you allowed there (an agent's request_changes waits for you, see requests.ts).
+ * finds them, and the session reopens in a new terminal, in a new conversation (reopenForChanges in launcher.ts).
+ * Answers to the agent's questions go the same way (their text starts with ANSWERS_HEADING). The task goes back to in
+ * progress, also when it was already marked done. From the desktop app's own window, or a request you allowed there
+ * (an agent's request_changes waits for you, see requests.ts).
  */
 export async function requestChanges(sessionId: string, changes: string): Promise<LaunchResult> {
   const text = changes.trim().slice(0, 20000);

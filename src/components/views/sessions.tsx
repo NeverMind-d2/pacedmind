@@ -12,7 +12,7 @@ import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } f
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
   type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type Surface,
 } from "@/lib/types";
 
@@ -162,7 +162,7 @@ function meta(s: SessionItem, now: number): string {
       if (waits) return waits.kind === "permission" ? "asks your permission" : waits.kind === "waiting" ? "waiting for you" : "has a question";
       if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
-      if (asked) return `changes since ${clock(asked, now)}`;
+      if (asked) return `${isAnswers(s.reports[0].changes ?? "") ? "answers" : "changes"} since ${clock(asked, now)}`;
       return `${s.surface === "cloud" ? "in the cloud " : ""}since ${clock(s.startedAt, now)}`;
     }
     case "done":
@@ -189,7 +189,7 @@ function headline(s: SessionItem, now: number): string {
       return s.surface === "cloud" ? `Sending to ${CLOUD_LABEL[s.agent]} since ${clockLong(s.startedAt, now)}` : `Starting ${who} since ${clockLong(s.startedAt, now)}`;
     case "running": {
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
-      if (asked) return `${who} is working on your changes since ${clockLong(asked, now)}`;
+      if (asked) return `${who} is working ${isAnswers(s.reports[0].changes ?? "") ? "with your answers" : "on your changes"} since ${clockLong(asked, now)}`;
       return s.surface === "terminal" ? `Running in ${who} since ${clockLong(s.startedAt, now)}` : `Running in ${place(s)} since ${clockLong(s.startedAt, now)}`;
     }
     case "finished": {

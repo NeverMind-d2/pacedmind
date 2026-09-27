@@ -10,7 +10,7 @@ import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote
 import { RequestStatus, useComputer } from "./request-status";
 import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
   type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
   type Task, type TaskContext,
 } from "@/lib/types";
@@ -62,7 +62,9 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
             : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`,
         };
       }
-      if (report?.changes && report.changesAt) return { dot: "var(--color-fg3)", text: `${who} is working on your changes since ${fmtTime(report.changesAt)}` };
+      if (report?.changes && report.changesAt) {
+        return { dot: "var(--color-fg3)", text: `${who} is working ${isAnswers(report.changes) ? "with your answers" : "on your changes"} since ${fmtTime(report.changesAt)}` };
+      }
       return { dot: "var(--color-fg3)", text: `Running ${s.surface === "terminal" ? `in ${who}` : placeOf(s.agent, s.surface)} since ${fmtTime(s.startedAt)}` };
     }
     case "finished": {

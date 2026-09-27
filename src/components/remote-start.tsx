@@ -6,7 +6,7 @@ import {
   requestChangesRemoteAction, requestResumeAction, requestSessionAction, resumeSessionAction, startSessionAction,
 } from "@/app/actions";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, platformName, surfaceOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, isAnswers, platformName, surfaceOf,
   type AgentId, type AgentTools, type Device, type Doer, type LaunchRequestView, type RemoteStart as Setting, type Surface,
 } from "@/lib/types";
 import { AgentIcon, Icon, SurfaceIcon, type IconName } from "./icons";
@@ -250,11 +250,11 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   const agentName = who ? AGENT_LABEL[who] : "the agent";
 
   const title = ask.kind === "start" ? "Run on a computer"
-    : ask.kind === "changes" ? `Send changes to ${name}`
+    : ask.kind === "changes" ? `Send ${isAnswers(text) ? "answers" : "changes"} to ${name}`
       : ask.to === "desktop" ? `Continue in the ${APP_LABEL[ask.agent]} on ${name}`
         : ask.from === "cloud" ? `Pull into a terminal on ${name}` : `Resume on ${name}`;
   const action = ask.kind === "start" ? `Send to ${name}`
-    : ask.kind === "changes" ? "Send changes"
+    : ask.kind === "changes" ? `Send ${isAnswers(text) ? "answers" : "changes"}`
       : ask.to === "desktop" ? `Open in the ${APP_LABEL[ask.agent]}` : ask.from === "cloud" ? "Pull it in" : "Resume";
 
   const submit = async (e?: FormEvent) => {

@@ -11,7 +11,7 @@ import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL,
+  AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isAnswers,
   type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task,
 } from "@/lib/types";
 
@@ -311,7 +311,7 @@ export function reportText(r: Report, heading = "Report"): string {
     r.links.length ? `Links: ${r.links.map((l) => (l.label === l.url ? l.url : `${l.label} (${l.url})`)).join(", ")}` : null,
     r.followUps.length ? `Follow-ups: ${r.followUps.map((f) => (f.title ? `${f.key} ${f.title}` : f.key)).join(", ")}` : null,
     r.details ? `Details:\n${r.details}` : null,
-    r.changes ? `The user asked for changes (${(r.changesAt ?? "").replace("T", " ")}):\n${r.changes}` : null,
+    r.changes ? `The user ${isAnswers(r.changes) ? "answered your questions" : "asked for changes"} (${(r.changesAt ?? "").replace("T", " ")}):\n${r.changes}` : null,
   ].filter((x) => x !== null).join("\n");
 }
 

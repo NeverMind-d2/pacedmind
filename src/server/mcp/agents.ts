@@ -356,7 +356,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "request_changes", {
     title: "Request changes",
     description:
-      "Ask to send work an agent handed back to the agent again, with what the user wants changed. Once the user allows it in the PacedMind app, the changes go on the agent's last report and its session reopens in a new terminal on the user's computer: Claude Code continues its conversation, Codex starts a new one that reads the report and the changes. The task goes back to in progress. Only when the user asks.",
+      "Ask to send work an agent handed back to the agent again, with what the user wants changed. Once the user allows it in the PacedMind app, the changes go on the agent's last report and its session reopens in a new terminal on the user's computer, in a new conversation that reads the report and the changes. The task goes back to in progress. Only when the user asks.",
     input: z.object({
       task: taskRef,
       changes: z.string().max(20000).describe("What should change, in the user's words. The agent reads it as written"),
@@ -402,7 +402,7 @@ export function registerAgentTools(server: McpServer) {
       agent: agentSchema.optional(),
       environment: z.object({
         model: z.string().max(80).optional().describe("The model you run as"),
-        mcp_servers: z.array(z.string().max(60)).max(40).optional()
+        mcp_servers: z.array(z.string().max(60)).max(30).optional()
           .describe("The MCP servers you have tools from besides organizer: the part between mcp__ and the next __ in those tools' names"),
       }).optional().describe("What you run with. PacedMind shows it on the session as you report it"),
     }),

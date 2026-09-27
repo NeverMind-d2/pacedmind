@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { parseLocal, type PlanStep } from "@/lib/dates";
-import { AGENT_LABEL, ANSWERS_HEADING, OUTCOME_LABEL, VERDICT_LABEL, type AgentId, type Attachment, type Report, type ReportCriterion } from "@/lib/types";
+import { AGENT_LABEL, ANSWERS_HEADING, OUTCOME_LABEL, isAnswers, VERDICT_LABEL, type AgentId, type Attachment, type Report, type ReportCriterion } from "@/lib/types";
 import { Icon, StatusIcon, VerdictIcon } from "./icons";
 import { InlineMarkdown, Markdown } from "./markdown";
 import { Button, cx } from "./ui";
@@ -69,17 +69,18 @@ export function CriterionRow({ c }: { c: ReportCriterion }) {
   );
 }
 
-/** What the user asked to change after reading a report. */
+/** What the user asked to change after reading a report, or their answers to its questions. */
 export function ChangesNote({ report }: { report: Report }) {
   if (!report.changes) return null;
+  const answers = isAnswers(report.changes);
   return (
     <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-3 max-md:wrap-break-word">
       <div className="flex items-center gap-1.5 text-[12px] font-medium text-fg3">
         <Icon name="user" size={12} className="text-mut2" />
-        You asked for changes
+        {answers ? "You answered its questions" : "You asked for changes"}
         {report.changesAt && <span className="font-normal text-mut2">· {format(parseLocal(report.changesAt), "d MMM HH:mm")}</span>}
       </div>
-      <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg2">{report.changes}</p>
+      <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg2">{answers ? report.changes.slice(ANSWERS_HEADING.length).trim() : report.changes}</p>
     </div>
   );
 }
