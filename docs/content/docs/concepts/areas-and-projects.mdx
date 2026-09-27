@@ -1,13 +1,13 @@
 ---
 title: Areas and projects
-description: Create, rename, recolor, move and delete areas and projects, and set a project's target date, folder, default agent and flow.
+description: Create, rename, recolor, move and delete areas and projects, give an area an icon, and set a project's target date, folder, default agent and flow.
 ---
 
 Areas are the top level of the planner. Each project belongs to exactly one area, and a project's tasks belong to its area too.
 
 ## Areas
 
-An area has a name, a color and a **key**. The key is three letters made from the name's letters A to Z: usually the first letter and the next two consonants, such as **WRK** for Work and **HLT** for Health. A name of three letters or fewer keeps them (**DEV** for Dev), and a name without enough consonants uses its first three letters (**HOM** for Home). If the key is already taken, a number replaces its last letter, such as **WR2**.
+An area has a name, a color, an optional icon and a **key**. The key is three letters made from the name's letters A to Z: usually the first letter and the next two consonants, such as **WRK** for Work and **HLT** for Health. A name of three letters or fewer keeps them (**DEV** for Dev), and a name without enough consonants uses its first three letters (**HOM** for Home). If the key is already taken, a number replaces its last letter, such as **WR2**.
 
 The key starts the key of every task in the area (WRK-1, WRK-2, …). It never changes, not even when the area is renamed, so existing task keys stay valid.
 
@@ -28,7 +28,10 @@ Right-click an area in the sidebar or on the **Projects** page, or use its **…
 | **New project** | Adds a project to this area. |
 | **Open tasks** | Opens the area's task list. |
 | **Color** | Ten muted colors: Blue, Teal, Green, Olive, Sand, Clay, Rose, Violet, Mauve and Gray. |
+| **Icon** | About 330 icons in groups such as Work, Tech, Learning, Health, Home, Travel and Money, drawn in the area's color. **Search icons** finds them by name or meaning, such as *money* or *school*, and <kbd>Enter</kbd> picks the first one found. **Remove** shows the area's dot again. |
 | **Delete area…** | Deletes the area after a confirmation. |
+
+An area's icon replaces its dot in the sidebar, on the **Projects** page, in the header of the area page, and where a task's area is shown or picked: the task details, quick add, and the lists of areas in menus.
 
 Deleting an area also deletes its projects. Their tasks, and the area's own tasks, are kept and move to the Inbox; the confirmation says how many. Activities in the area stay in the calendar without an area.
 

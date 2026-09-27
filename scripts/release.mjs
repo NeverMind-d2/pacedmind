@@ -1,15 +1,18 @@
 // Builds PacedMind for the system it runs on and puts it on pacedmind.com, where the site's download
 // buttons point (/download/windows and /download/mac, deploy/Caddyfile):
 //
-//   npm run release -- ubuntu@57.131.192.185   build, package and upload
+//   npm run release -- ubuntu@<server>         build, package and upload
 //   npm run release -- --no-upload             build and package only, into dist/release
+//
+// An upload replaces the download everyone gets, so it refuses a checkout that doesn't contain master or has
+// uncommitted changes (landed.mjs); --allow-unlanded skips that, for a test.
 //
 // Windows: PacedMind-Windows.exe, an installer that electron-builder makes from the app that
 // scripts/build-desktop.mjs packages. It installs for the current user into %LOCALAPPDATA%\Programs\Organizer,
 // like `npm run desktop`, closes a running PacedMind first and never touches the data. It isn't signed,
 // so Windows SmartScreen asks once before running it.
 // macOS: PacedMind-macOS.dmg, one app for Apple silicon and Intel, signed with your Developer ID and
-// notarized, and the disk image too. The one-time keychain setup is in README.md.
+// notarized, and the disk image too. The one-time keychain setup is in deploy/README.md.
 //
 // The upload goes to /srv/pacedmind/download on the server, with the SSH key deploy/deploy.sh uses
 // (PACEDMIND_KEY, by default ~/Desktop/keys/pacedmind_vps). The previous file stays as <name>.old.
@@ -19,6 +22,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
+import { assertLanded } from "./landed.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, "dist", "release");
@@ -41,13 +45,14 @@ if (upload && !server) {
   process.exit(1);
 }
 if (upload && !fs.existsSync(key)) throw new Error(`There's no SSH key at ${key}. Set PACEDMIND_KEY to its path.`);
+if (upload && !args.includes("--allow-unlanded")) assertLanded(root, { committed: true, skip: "--allow-unlanded" });
 
 /** The Developer ID Application certificate to sign with: PACEDMIND_SIGN_IDENTITY, or the keychain's only one. */
 function signingIdentity() {
   if (process.env.PACEDMIND_SIGN_IDENTITY) return process.env.PACEDMIND_SIGN_IDENTITY;
   const found = [...new Set(execFileSync("security", ["find-identity", "-v", "-p", "codesigning"], { encoding: "utf8" })
     .split("\n").map((line) => line.match(/"(Developer ID Application: [^"]+)"/)?.[1]).filter(Boolean))];
-  if (found.length === 0) throw new Error("Your keychain has no Developer ID Application certificate. See README.md.");
+  if (found.length === 0) throw new Error("Your keychain has no Developer ID Application certificate. See deploy/README.md.");
   if (found.length > 1) throw new Error(`Your keychain has several Developer ID certificates; pick one with PACEDMIND_SIGN_IDENTITY:\n  ${found.join("\n  ")}`);
   return found[0];
 }

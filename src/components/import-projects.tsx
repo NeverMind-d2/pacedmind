@@ -6,8 +6,8 @@ import { differenceInCalendarDays } from "date-fns";
 import { dismissImportAction, findProjectsAction, importProjectsAction } from "@/app/actions";
 import type { FoundProject, ImportSource } from "@/server/import";
 import type { AgentId, Area } from "@/lib/types";
-import { AgentIcon, Icon } from "./icons";
-import { Button, Dot, Menu, cx, useAction } from "./ui";
+import { AgentIcon, AreaMark, Icon } from "./icons";
+import { Button, Menu, cx, useAction } from "./ui";
 
 const SOURCE_LABEL: Record<ImportSource, string> = {
   "claude-app": "Claude app", "claude-cli": "Claude Code CLI", "codex-app": "Codex app", "codex-cli": "Codex CLI",
@@ -165,10 +165,10 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
           <Menu width={200}
             trigger={
               <button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
-                {area && <Dot color={area.color} size={7} />}{area?.name ?? "Pick an area"}<Icon name="chevronDown" size={11} className="text-mut2" />
+                {area && <AreaMark area={area} size={13} />}{area?.name ?? "Pick an area"}<Icon name="chevronDown" size={11} className="text-mut2" />
               </button>
             }
-            items={areas.map((a) => ({ value: a.id, label: a.name, icon: <Dot color={a.color} size={7} /> }))}
+            items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} /> }))}
             onSelect={setAreaId} />
           <span className="flex-1" />
           <div className="ml-auto flex gap-2">

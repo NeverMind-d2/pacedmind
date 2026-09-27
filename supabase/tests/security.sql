@@ -61,6 +61,20 @@ begin
     reset role;
   exception when others then out := out || '2 ERROR ' || sqlerrm || E'\n'; end;
 
+  -- 2c. an area's icon is the name of one the app draws, never markup or other text
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set icon = 'briefcase' where id = area_a;
+    select count(*) into n from public.areas where id = area_a and icon = 'briefcase'; out := out || '2c icon saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '2c ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set icon = '<svg onload=alert(1)>' where id = area_a;
+    out := out || '2d FAIL an icon that is not a name accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '2d icon that is not a name rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+
   -- 3. unknown/revoked session id reads nothing
   begin
     perform set_config('request.jwt.claims', claims_bad_session, true); set local role authenticated;

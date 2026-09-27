@@ -6,9 +6,9 @@ import { createEventAction, createTaskAction } from "@/app/actions";
 import { parseQuickAdd } from "@/lib/parse";
 import { hhmm, parseLocal, timeOf, toDateTimeStr, dateOnly } from "@/lib/dates";
 import { PRIORITY_LABEL, STATUS_LABEL, type Area, type Priority, type Project, type Status } from "@/lib/types";
-import { Icon, PriorityIcon, StatusIcon } from "./icons";
+import { AreaMark, Icon, PriorityIcon, StatusIcon } from "./icons";
 import { DateField } from "./date-field";
-import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
+import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
 
 /**
  * What quick add starts with. `plannedDate` is the day it was opened for (a click on a day, say); `start`, when an
@@ -164,9 +164,9 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         }}>
         <div className="flex h-12 items-center gap-2 pl-4 pr-3">
           <Menu
-            trigger={<button type="button" className={chip}>{area ? <Dot color={area.color} size={7} /> : <Icon name="inbox" size={13} />}{area?.name ?? "Inbox"}<Icon name="chevronDown" size={12} /></button>}
+            trigger={<button type="button" className={chip}>{area ? <AreaMark area={area} size={13} /> : <Icon name="inbox" size={13} />}{area?.name ?? "Inbox"}<Icon name="chevronDown" size={12} /></button>}
             items={[{ value: null as string | null, label: "Inbox, no area", icon: <Icon name="inbox" size={13} /> },
-              ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <Dot color={a.color} size={7} /> }))]}
+              ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={13} /> }))]}
             onSelect={(v) => setOv((o) => ({ ...o, areaId: v, projectId: v && project?.areaId !== v ? null : o.projectId }))}
           />
           <span className="text-faint">›</span>

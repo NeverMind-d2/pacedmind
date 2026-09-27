@@ -1,7 +1,10 @@
-import type { AgentId, Priority, Status, Surface, Verdict } from "@/lib/types";
+import type { AgentId, Area, Priority, Status, Surface, Verdict } from "@/lib/types";
+import type { AreaIcon } from "@/lib/area-icons";
+import { AREA_ICON_PATHS } from "./area-icon-paths";
 
 type IconProps = { size?: number; className?: string; strokeWidth?: number };
 
+/** Many of these shapes are adapted from Feather (MIT) and Lucide (ISC): see THIRD_PARTY_NOTICES.md. */
 const P = {
   inbox: "M22 12h-6l-2 3h-4l-2-3H2 M5.5 5.1L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.5-6.9A2 2 0 0 0 16.8 4H7.2a2 2 0 0 0-1.7 1.1z",
   sun: "M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
@@ -62,7 +65,8 @@ export function Icon({ name, size = 16, className, strokeWidth = 1.8 }: IconProp
 
 /*
  * The agents' marks, drawn in the current text color like the other icons: Claude's from Simple Icons (CC0),
- * Codex's from LobeHub Icons (MIT). The names are their owners' trademarks and only say which agent runs a session.
+ * Codex's from LobeHub Icons (MIT, notice in THIRD_PARTY_NOTICES.md). The names are their owners' trademarks and
+ * only say which agent runs a session.
  */
 const AGENT_MARK: Record<AgentId, string> = {
   claude:
@@ -176,4 +180,21 @@ export function Diamond({ color, size = 11, hollow = false }: { color: string; s
       <path d="M6 1l5 5-5 5-5-5z" fill={hollow ? "var(--color-panel)" : color} stroke={color} strokeWidth={hollow ? 1.6 : 0} />
     </svg>
   );
+}
+
+/* ---------- areas ---------- */
+
+export function AreaIconSvg({ icon, color, size = 14, strokeWidth = 1.8 }: { icon: AreaIcon; color?: string; size?: number; strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? "currentColor"} strokeWidth={strokeWidth}
+      strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden="true">
+      <path d={AREA_ICON_PATHS[icon]} />
+    </svg>
+  );
+}
+
+/** An area's icon in its color, or its dot when it has no icon. */
+export function AreaMark({ area, size = 14, dot = 7 }: { area: Pick<Area, "color" | "icon">; size?: number; dot?: number }) {
+  if (area.icon) return <AreaIconSvg icon={area.icon} color={area.color} size={size} />;
+  return <span className="inline-block shrink-0 rounded-full" style={{ width: dot, height: dot, background: area.color }} />;
 }

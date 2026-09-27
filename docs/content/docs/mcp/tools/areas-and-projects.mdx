@@ -7,7 +7,7 @@ description: "Reference for the area and project tools: list_areas, create_area,
 
 **Read-only. Allowed without asking.**
 
-Lists the areas, the top level of the planner. Each line has the name, id, key, color, and the number of projects and open tasks.
+Lists the areas, the top level of the planner. Each line has the name, id, key, color, the icon when the area has one, and the number of projects and open tasks.
 
 No parameters.
 
@@ -21,6 +21,7 @@ Adds an area. Its key, used in task keys such as WRK-12, is made from the name.
 | --- | --- | --- | --- |
 | `name` | string | yes | The area's name. |
 | `color` | string | no | A palette name or a hex color. Defaults to a palette color no other area uses. |
+| `icon` | string | no | One of the icon names (listed below). Without one, the area shows a dot. |
 
 Returns the new area with its id and key, such as *Created area Finance · id finance · key FNN · Olive.*
 
@@ -28,13 +29,16 @@ Returns the new area with its id and key, such as *Created area Finance · id fi
 
 **Changes data.**
 
-Renames an area or changes its color. The key stays the same, so existing task keys don't change.
+Renames an area, or changes its color or icon. The key stays the same, so existing task keys don't change.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `area` | string | yes | The area's id, name or key. |
 | `name` | string | no | The new name. |
 | `color` | string | no | A palette name or a hex color. |
+| `icon` | string | no | One of the icon names, or `none` to show the area's dot again. |
+
+The icon names are Lucide's names for the icons the area menu offers, such as `briefcase`, `house`, `graduation-cap`, `code`, `heart-pulse`, `plane`, `wallet` and `music`. An unknown name returns an error that lists icons whose names or meanings match it.
 
 ## `delete_area`
 

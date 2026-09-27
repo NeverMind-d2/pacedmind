@@ -10,6 +10,7 @@ import {
   snapshotOf, strings,
   type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
+import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   taskHref,
@@ -62,28 +63,33 @@ const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a
 
 /* ---------- areas and projects ---------- */
 
-const toArea = (r: Row): Area => ({ id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), sort: Number(r.sort) });
+const toArea = (r: Row): Area => ({
+  id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon), sort: Number(r.sort),
+});
 const areasNow = () => all("SELECT * FROM areas ORDER BY sort").map(toArea);
 
 export async function listAreas(): Promise<Area[]> {
   return areasNow();
 }
 
-export async function createArea(input: { name: string; color: string }): Promise<Area> {
+export async function createArea(input: { name: string; color: string; icon?: AreaIcon | null }): Promise<Area> {
   const areas = areasNow();
   const base = slug(input.name, "area");
   const ids = new Set(areas.map((a) => a.id));
   let id = base;
   for (let i = 2; ids.has(id); i++) id = `${base}-${i}`;
-  run("INSERT INTO areas (id, name, key, color, sort) VALUES (?, ?, ?, ?, ?)",
-    id, input.name.trim(), deriveKey(input.name, new Set(areas.map((a) => a.key))), input.color, areas.reduce((m, a) => Math.max(m, a.sort), 0) + 1);
+  run("INSERT INTO areas (id, name, key, color, icon, sort) VALUES (?, ?, ?, ?, ?, ?)",
+    id, input.name.trim(), deriveKey(input.name, new Set(areas.map((a) => a.key))), input.color, areaIconOf(input.icon),
+    areas.reduce((m, a) => Math.max(m, a.sort), 0) + 1);
   return areasNow().find((a) => a.id === id)!;
 }
 
-export async function updateArea(id: string, patch: { name?: string; color?: string }) {
+/** `icon: null` puts the dot back. */
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null }) {
   const values: Record<string, Value> = {};
   if (patch.name?.trim()) values.name = patch.name.trim();
   if (patch.color) values.color = patch.color;
+  if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   update("areas", id, values);
 }
 

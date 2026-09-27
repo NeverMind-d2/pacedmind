@@ -35,12 +35,16 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 - [Agents](${absoluteUrl("/#agents")}): Where agent sessions run: a terminal, the agent's app or the cloud.
 - [Flows](${absoluteUrl("/#flow")}): How a flow starts sessions one after another.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
-- [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys and where your plan is stored.
+- [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys, where your plan is stored, and the source code.
 
 ## Download
 
 - [${NAME} for Windows](${SITE.downloads.windows})
 - [${NAME} for macOS](${SITE.downloads.mac})
+
+## Source code
+
+- [${NAME} on GitHub](${SITE.source}): The source code, under the GNU AGPL.
 
 ## Optional
 

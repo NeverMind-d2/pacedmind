@@ -11,6 +11,8 @@ import {
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot } from "./repo";
 import { localDbPath } from "./store/local-db";
 import { deriveKey } from "./store/shared";
+import { areaIconOf } from "@/lib/area-icons";
+import { PALETTE, renewColor } from "@/lib/colors";
 import { nowStamp, toDateStr, toStamp } from "@/lib/dates";
 
 /*
@@ -27,11 +29,11 @@ function check<T>(res: { data: T; error: PostgrestError | null }): T {
 
 /** The areas every account starts with. The database trigger for new accounts (supabase/migrations) makes the same ones. */
 export const DEFAULT_AREAS = [
-  { name: "Work", key: "WRK", color: "#7D93B5" },
-  { name: "Personal", key: "PER", color: "#7FA894" },
-  { name: "Health", key: "HLT", color: "#B08A9B" },
-  { name: "Learning", key: "LRN", color: "#9C93B8" },
-  { name: "Dev", key: "DEV", color: "#7AA3AD" },
+  { name: "Work", key: "WRK", color: "#6A8DC3" },
+  { name: "Personal", key: "PER", color: "#70B192" },
+  { name: "Health", key: "HLT", color: "#B97C97" },
+  { name: "Learning", key: "LRN", color: "#9485C0" },
+  { name: "Dev", key: "DEV", color: "#68AAB9" },
 ];
 
 /** Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay. */
@@ -233,6 +235,8 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const s = (v: unknown) => (v == null ? null : String(v));
     const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
     const match = (v: unknown, re: RegExp) => (typeof v === "string" && re.test(v) ? v : null);
+    // An older file may still have the palette's earlier colors.
+    const renewOptional = (color: string | null) => (color ? renewColor(color) : null);
     const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | null => (allowed.includes(v as T) ? (v as T) : null);
     const int = (v: unknown, min: number, max: number, fallback: number) => {
       const x = Math.round(Number(v));
@@ -263,7 +267,11 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       let key = String(a.key ?? "").toUpperCase();
       if (!/^[A-Z][A-Z0-9]{1,7}$/.test(key) || keys.has(key)) key = deriveKey(String(a.name ?? ""), keys);
       keys.add(key);
-      return { old: String(a.id), row: { name: clip(a.name, 80) || "Area", key, color: match(a.color, COLOR) ?? "#7D93B5", sort: int(a.sort, -1e6, 1e6, 0) } };
+      const icon = areaIconOf(a.icon);
+      return {
+        old: String(a.id),
+        row: { name: clip(a.name, 80) || "Area", key, color: renewColor(match(a.color, COLOR) ?? PALETTE[0].value), ...(icon ? { icon } : {}), sort: int(a.sort, -1e6, 1e6, 0) },
+      };
     });
     const newAreas = check(await db.from("areas").insert(areaRows.map((a) => a.row)).select("id, key")) as Row[];
     const areaByKey = new Map(newAreas.map((a) => [String(a.key), String(a.id)]));
@@ -277,7 +285,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       if (!area) continue;
       const env = typeof p.codex_env === "string" ? p.codex_env.trim() : "";
       const r = check(await db.from("projects").insert({
-        area_id: area, name: clip(p.name, 120) || "Project", color: match(p.color, COLOR), start_date: match(p.start_date, DAY),
+        area_id: area, name: clip(p.name, 120) || "Project", color: renewOptional(match(p.color, COLOR)), start_date: match(p.start_date, DAY),
         target_date: match(p.target_date, DAY), agent: oneOf(p.agent, ["claude", "codex"]), sort: int(p.sort, -1e6, 1e6, 0),
         codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null,
       }).select("id").single()) as Row;

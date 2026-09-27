@@ -78,6 +78,12 @@ export function dueInfo(due: string | null, now = new Date()): { text: string; t
   };
 }
 
+/** Whether a session's agent checked in over MCP since the session started, or since it went back to work on changes. */
+export function checkedIn(events: { kind: string }[]): boolean {
+  const back = events.findLastIndex((e) => e.kind === "changes_requested");
+  return events.slice(back + 1).some((e) => e.kind === "picked_up");
+}
+
 /**
  * True when a session started, or went back to work on requested changes, a while ago but its agent hasn't
  * checked in over MCP since. Usually the agent is waiting for an answer in its terminal.
@@ -88,8 +94,8 @@ export function waitingInTerminal(
   now = new Date(),
 ): boolean {
   if (s.status !== "starting" && s.status !== "running") return false;
+  if (checkedIn(events)) return false;
   const back = events.findLastIndex((e) => e.kind === "changes_requested");
-  if (events.slice(back + 1).some((e) => e.kind === "picked_up")) return false;
   return now.getTime() - parseLocal(back >= 0 ? events[back].at : s.startedAt).getTime() > 90_000;
 }
 

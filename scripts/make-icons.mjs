@@ -189,8 +189,15 @@ function ico(sizes) {
   return Buffer.concat([head, dir, ...images.map((im) => im.data)]);
 }
 
+// A file that already holds the same thing is left alone (a text file in either line ending), so a build doesn't
+// leave the checkout looking changed: the builds that publish refuse uncommitted changes (landed.mjs).
 const write = (rel, data) => {
   const file = path.join(root, rel);
+  const old = fs.existsSync(file) ? fs.readFileSync(file) : null;
+  if (old && (typeof data === "string" ? old.toString("utf8").replace(/\r\n/g, "\n") === data : old.equals(data))) {
+    console.log(`kept ${rel}`);
+    return;
+  }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, data);
   console.log(`wrote ${rel} (${data.length} bytes)`);

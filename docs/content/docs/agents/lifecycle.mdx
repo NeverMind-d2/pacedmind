@@ -16,7 +16,7 @@ A session moves through a few states. PacedMind changes them when it starts the 
 | **Closed** | The session ended before the agent finished: you closed it, its terminal closed, or Codex cloud couldn't finish it. | *Closed before the agent finished* |
 | **Failed** | The session couldn't be opened or sent. | *Couldn't start:* and the reason |
 
-A session on the computer whose agent hasn't picked the task up within 90 seconds, of its start or of **Request changes**, shows *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.* The agent is usually waiting for an answer there, for example to trust the folder or to sign in. See [Troubleshooting](/troubleshooting#a-session-hasnt-checked-in). In a desktop app, it shows *Opened in the Claude app. Send the first message there to start.* Cloud sessions don't check in.
+A session on the computer whose agent hasn't picked the task up within 90 seconds, of its start or of **Request changes**, shows *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.* The agent is usually waiting for an answer there, for example to trust the folder or to sign in. See [Troubleshooting](/troubleshooting#a-session-hasnt-checked-in). When Claude Code doesn't trust the session's folder yet, the session shows *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.* from the start instead: see [Trusting the folder in Claude Code](/agents/start-and-manage#trusting-the-folder-in-claude-code). In a desktop app, it shows *Opened in the Claude app. Send the first message there to start.* Cloud sessions don't check in.
 
 ## 1. Start
 

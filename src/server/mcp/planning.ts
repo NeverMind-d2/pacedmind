@@ -11,7 +11,7 @@ import { nextColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, timeOf, toDateStr } from "@/lib/dates";
 import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Status, type Task } from "@/lib/types";
 import {
-  PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail,
+  AREA_ICON_EXAMPLES, PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail, iconFrom,
   findArea, findAreaOrInbox, findProject, findTask, fmtWhen, isOpen, names, prioritySchema, priorityOf, projectLine,
   plural, projectRef, statusOf, statusSchema, taskLine, taskRef, todayLine, tool, when,
   type PRIORITY_NAMES, type STATUS_NAMES,
@@ -195,38 +195,48 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "list_areas", {
     title: "List areas",
-    description: "Areas are the top level (like Work, Personal, Health). Each has an id, a name, a key used in task keys (WRK-12) and a color.",
+    description: "Areas are the top level (like Work, Personal, Health). Each has an id, a name, a key used in task keys (WRK-12), a color and maybe an icon.",
     input: z.object({}),
     kind: "read",
   }, async () => {
     const [areas, projects, tasks] = await Promise.all([repo.listAreas(), repo.listProjects(), repo.listTasks()]);
     if (!areas.length) return "No areas yet.";
     const u = usage(areas, projects, tasks);
-    return areas.map((a) => `${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)} · ${plural(u.areas[a.id]?.projects ?? 0, "project")} · ${plural(u.areas[a.id]?.open ?? 0, "open task")}`).join("\n");
+    return areas.map((a) => `${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}${a.icon ? ` · icon ${a.icon}` : ""} · ${plural(u.areas[a.id]?.projects ?? 0, "project")} · ${plural(u.areas[a.id]?.open ?? 0, "open task")}`).join("\n");
   });
 
   tool(server, "create_area", {
     title: "Create area",
-    description: `Add an area. Its key (for task keys like WRK-12) is made from the name. Colors: ${PALETTE_NAMES}, or a hex color.`,
-    input: z.object({ name: z.string(), color: z.string().optional().describe("Palette name or hex; defaults to an unused palette color") }),
+    description: `Add an area. Its key (for task keys like WRK-12) is made from the name. Colors: ${PALETTE_NAMES}, or a hex color. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}.`,
+    input: z.object({
+      name: z.string(),
+      color: z.string().optional().describe("Palette name or hex; defaults to an unused palette color"),
+      icon: z.string().optional().describe("One of the icons; without one the area shows a dot"),
+    }),
     kind: "write",
-  }, async ({ name, color }) => {
+  }, async ({ name, color, icon }) => {
     if (!name.trim()) fail("An area needs a name.");
-    const a = await repo.createArea({ name, color: color ? colorFrom(color) : nextColor((await repo.listAreas()).map((x) => x.color)) });
-    return `Created area ${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}.`;
+    const a = await repo.createArea({
+      name, color: color ? colorFrom(color) : nextColor((await repo.listAreas()).map((x) => x.color)), icon: icon ? iconFrom(icon) : null,
+    });
+    return `Created area ${a.name} · id ${a.id} · key ${a.key} · ${colorName(a.color)}${a.icon ? ` · icon ${a.icon}` : ""}.`;
   });
 
   tool(server, "update_area", {
     title: "Update area",
-    description: "Rename an area or change its color. Its key stays the same, so existing task keys don't change.",
-    input: z.object({ area: areaRef, name: z.string().optional(), color: z.string().optional().describe(`${PALETTE_NAMES}, or a hex color`) }),
+    description: `Rename an area, or change its color or icon. Its key stays the same, so existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}.`,
+    input: z.object({
+      area: areaRef, name: z.string().optional(), color: z.string().optional().describe(`${PALETTE_NAMES}, or a hex color`),
+      icon: z.string().optional().describe("One of the icons, or none to show the dot again"),
+    }),
     kind: "write",
-  }, async ({ area, name, color }) => {
+  }, async ({ area, name, color, icon }) => {
     const a = await findArea(area);
     if (name !== undefined && !name.trim()) fail("The name can't be empty.");
-    await repo.updateArea(a.id, { name, color: color ? colorFrom(color) : undefined });
+    const nextIcon = icon === undefined ? undefined : icon.trim().toLowerCase() === "none" ? null : iconFrom(icon);
+    await repo.updateArea(a.id, { name, color: color ? colorFrom(color) : undefined, icon: nextIcon });
     const after = (await repo.listAreas()).find((x) => x.id === a.id)!;
-    return `Updated area ${after.name} · id ${after.id} · key ${after.key} · ${colorName(after.color)}.`;
+    return `Updated area ${after.name} · id ${after.id} · key ${after.key} · ${colorName(after.color)}${after.icon ? ` · icon ${after.icon}` : ""}.`;
   });
 
   tool(server, "delete_area", {

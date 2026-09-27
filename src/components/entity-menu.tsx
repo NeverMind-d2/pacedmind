@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deleteAreaAction, deleteProjectAction, updateAreaAction, updateProjectAction } from "@/app/actions";
+import { AREA_ICON_CATEGORIES, areaIconLabel, findAreaIcons, type AreaIcon } from "@/lib/area-icons";
 import { PALETTE, projectColor } from "@/lib/colors";
 import type { Area, Project, Usage } from "@/lib/types";
 import { ConfirmDialog } from "./dialog";
-import { Icon } from "./icons";
+import { AreaIconSvg, AreaMark, Icon } from "./icons";
 import { Popover, PopoverItem, PopoverLabel, PopoverLink, PopoverSeparator, anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
 
@@ -30,6 +31,59 @@ export function ColorSwatches({ value, onPick }: { value: string | null; onPick:
         );
       })}
     </div>
+  );
+}
+
+/**
+ * The area's icon, drawn in its color: every icon by category, or those a search finds by name or meaning (Enter
+ * picks the first). Remove puts the area's dot back. The current icon is scrolled into view when the menu opens.
+ */
+export function AreaIconPicker({ area, onPick }: { area: Pick<Area, "color" | "icon">; onPick: (icon: AreaIcon | null) => void }) {
+  const [query, setQuery] = useState("");
+  const list = useRef<HTMLDivElement>(null);
+  const current = useRef<HTMLButtonElement>(null);
+  // Only the list scrolls (scrollIntoView could move the page, which closes the menu).
+  useEffect(() => {
+    if (list.current && current.current) list.current.scrollTop = current.current.offsetTop - 64;
+  }, []);
+  const found = query.trim() ? findAreaIcons(query) : null;
+  const grid = (icons: readonly AreaIcon[]) => (
+    <div className="grid grid-cols-8 gap-0.5">
+      {icons.map((icon) => (
+        <button key={icon} ref={area.icon === icon ? current : undefined} type="button" title={areaIconLabel(icon)} aria-label={areaIconLabel(icon)}
+          aria-pressed={area.icon === icon} onClick={() => onPick(icon)}
+          className={cx("flex h-[26px] items-center justify-center rounded-[5px] border", area.icon === icon ? "border-strong" : "border-transparent hover:border-line-strong")}>
+          <AreaIconSvg icon={icon} color={area.color} size={15} />
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <>
+      <div className="flex items-center justify-between pr-1.5">
+        <PopoverLabel>Icon</PopoverLabel>
+        {area.icon && (
+          <button type="button" title="Show the area's dot instead" onClick={() => onPick(null)} className="rounded px-1 pt-0.5 text-[11.5px] text-mut2 hover:text-fg2">
+            Remove
+          </button>
+        )}
+      </div>
+      <div className="px-1.5 pb-1.5">
+        <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search icons" placeholder="Search icons"
+          onKeyDown={(e) => { if (e.key === "Enter" && found?.length) { e.preventDefault(); onPick(found[0]); } }}
+          className="mb-1 h-7 w-full rounded-md border border-line2 bg-input px-2 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
+        <div ref={list} className="relative max-h-[204px] overflow-y-auto">
+          {found
+            ? found.length ? grid(found) : <p className="px-1 py-2 text-[12px] text-mut2">No icons match.</p>
+            : AREA_ICON_CATEGORIES.map((c) => (
+              <div key={c.name}>
+                <div className="px-0.5 pb-0.5 pt-1.5 text-[11px] text-mut2">{c.name}</div>
+                {grid(c.icons)}
+              </div>
+            ))}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -108,6 +162,8 @@ export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject 
       <PopoverLabel>Color</PopoverLabel>
       <ColorSwatches value={area.color} onPick={(c) => run(() => updateAreaAction(area.id, { color: c }))} />
       <PopoverSeparator />
+      <AreaIconPicker area={area} onPick={(icon) => run(() => updateAreaAction(area.id, { icon }))} />
+      <PopoverSeparator />
       <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete area…</PopoverItem>
     </Popover>
   );
@@ -153,7 +209,7 @@ export function ProjectMenu({ project, areas, anchor, usage, onClose, onRename }
             Move to area
           </PopoverItem>
           {moving && others.map((a) => (
-            <PopoverItem key={a.id} icon={<span className="h-2 w-2 rounded-full" style={{ background: a.color }} />}
+            <PopoverItem key={a.id} icon={<AreaMark area={a} dot={8} />}
               onClick={() => { run(() => updateProjectAction(project.id, { areaId: a.id }), `Moved ${project.name} to ${a.name}`); onClose(); }}>
               <span className="pl-1">{a.name}</span>
             </PopoverItem>

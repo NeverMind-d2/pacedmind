@@ -24,9 +24,11 @@ export function openAdd(detail: QuickAddDefaults = {}) {
 }
 
 export function TaskList({
-  icon, title, subtitle, groups, schedule, ctx, initialKey, empty, headerRight, addDefaults,
+  icon, mark, title, subtitle, groups, schedule, ctx, initialKey, empty, headerRight, addDefaults,
 }: {
   icon: IconName;
+  /** Shown instead of the icon, such as an area's own icon. */
+  mark?: ReactNode;
   title: string;
   subtitle?: string;
   groups: TaskGroup[];
@@ -60,7 +62,7 @@ export function TaskList({
     <div className="flex min-w-0 flex-1">
       <section aria-label={title} className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
-          <Icon name={icon} className="shrink-0 text-mut" />
+          {mark ?? <Icon name={icon} className="shrink-0 text-mut" />}
           <h1 className="min-w-0 truncate text-[14px] font-semibold text-strong">{title}</h1>
           {subtitle && <span className="min-w-0 shrink-[3] truncate text-mut2">{subtitle}</span>}
           <span className="flex-1" />
