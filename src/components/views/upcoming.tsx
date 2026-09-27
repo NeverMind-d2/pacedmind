@@ -7,6 +7,7 @@ import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtTime, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import type { EventOccurrence, Task, TaskContext } from "@/lib/types";
 import type { Health, ProjectTarget } from "@/server/calendar";
+import { openActivity } from "../activity-editor";
 import { Diamond, Icon } from "../icons";
 import { openAdd } from "../task-list";
 import { TaskDetail } from "../task-detail";
@@ -109,12 +110,13 @@ export function UpcomingView({ today, tasks, events, targets, ctx, initialKey }:
                     {g.events.map((e) => {
                       const area = ctx.areas.find((a) => a.id === e.areaId);
                       return (
-                        <div key={`${e.eventId}-${e.start}`} className="flex h-[38px] items-center gap-3 border-b border-hover pl-5 pr-4">
+                        <button key={`${e.eventId}-${e.start}`} type="button" onClick={() => openActivity(e)}
+                          className="flex h-[38px] w-full items-center gap-3 border-b border-hover pl-5 pr-4 text-left hover:bg-hover">
                           <span className="w-[96px] shrink-0 font-mono text-[11.5px] text-mut">{fmtTime(e.start)}–{fmtTime(e.end)}</span>
                           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "var(--color-mut2)" }} />
                           <span className="min-w-0 flex-1 truncate">{e.title}</span>
                           <span className="shrink-0 text-[11.5px] text-mut2">{area?.name}</span>
-                        </div>
+                        </button>
                       );
                     })}
                   </>
