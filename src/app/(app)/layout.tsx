@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
 import { QuickAdd } from "@/components/quick-add";
+import { ActivityEditor } from "@/components/activity-editor";
 import { CommandPalette } from "@/components/command-palette";
 import { LiveRefresh } from "@/components/live-refresh";
 import { Approvals } from "@/components/approvals";
@@ -59,6 +60,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {approvals.length > 0 && <Approvals items={approvals} />}
       <RemoteStart devices={devices} tasks={tasks.map((t) => ({ id: t.id, key: t.key, title: t.title }))} />
       <QuickAdd areas={areas} projects={projects} />
+      <ActivityEditor areas={areas} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />
       <Toaster />
       <LiveRefresh />

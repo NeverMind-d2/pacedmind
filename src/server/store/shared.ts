@@ -133,12 +133,12 @@ export function expandOccurrences(events: CalEvent[], from: string, to: string):
         if (d.getDay() !== first.getDay() || toDateStr(d) < e.start.slice(0, 10)) continue;
         const st = new Date(d.getFullYear(), d.getMonth(), d.getDate(), first.getHours(), first.getMinutes());
         const en = new Date(st.getTime() + durMs);
-        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: stampMin(st), end: stampMin(en) });
+        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: stampMin(st), end: stampMin(en), weekly: true });
       }
     } else {
       const day = e.start.slice(0, 10);
       if (day >= from.slice(0, 10) && day <= to.slice(0, 10)) {
-        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: e.start, end: e.end });
+        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: e.start, end: e.end, weekly: false });
       }
     }
   }

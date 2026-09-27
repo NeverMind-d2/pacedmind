@@ -7,6 +7,7 @@ import { deleteTaskAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { dateOnly, fmtDay, fmtTime, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import type { EventOccurrence, Project, Task, TaskContext } from "@/lib/types";
+import { openActivity } from "../activity-editor";
 import { Diamond, Icon, StatusIcon } from "../icons";
 import { Popover, PopoverItem, PopoverSeparator, anchorOf, type Anchor } from "../popover";
 import { TaskDetail } from "../task-detail";
@@ -281,12 +282,12 @@ export function MonthView({
     if (it.kind === "event") {
       const e = it.event;
       return (
-        <div key={`e${e.eventId}-${e.start}`} data-item title={`${fmtTime(e.start)}–${fmtTime(e.end)} ${e.title}`}
-          className={cx(pill, "border-transparent", it.past ? "text-mut2" : "text-fg3")}>
+        <button key={`e${e.eventId}-${e.start}`} type="button" title={`${fmtTime(e.start)}–${fmtTime(e.end)} ${e.title}`} onClick={() => openActivity(e)}
+          className={cx(pill, "border-transparent hover:bg-hover", it.past ? "text-mut2" : "text-fg3")}>
           <Dot color={areaColor(ctx.areas, e.areaId)} size={6} />
           <span className="shrink-0 font-mono text-[10.5px] text-mut2">{fmtTime(e.start)}</span>
           <span className="truncate">{e.title}</span>
-        </div>
+        </button>
       );
     }
     if (it.kind === "target") {

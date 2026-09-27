@@ -126,6 +126,8 @@ export interface EventOccurrence {
   areaId: string | null;
   start: string;
   end: string;
+  /** Its event repeats every week, so a change to this occurrence changes every week. */
+  weekly: boolean;
 }
 
 export interface Session {
