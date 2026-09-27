@@ -56,6 +56,7 @@ The message *Claude Code reports to PacedMind now* confirms it. Use **Connect** 
 | **Terminal** | Where terminal sessions open: **Windows Terminal** or **Command Prompt** on Windows, **Terminal** or **iTerm** on macOS. |
 | **Claude command** | The command that starts Claude Code, `claude` by default. |
 | **Codex command** | The command that starts Codex, `codex` by default. |
+| **Trust session folders** | On (the default): PacedMind answers Claude Code's and Codex's question whether you trust a session's folder just before the session starts, and the row reads *Answered for you*. Off: you answer in the terminal (*You answer in the terminal*). See [Trusting the folder](/agents/start-and-manage#trusting-the-folder). |
 
 Change a command to use a full path or to add options. PacedMind adds its own options after it and uses the command as typed, so put a path with spaces in double quotes. See [Start, resume and close sessions](/agents/start-and-manage#the-agent-command).
 
@@ -91,9 +92,11 @@ The first time PacedMind opens, it offers to bring your projects over; **Import 
 * the marks of the agents that worked there, with the exact sources in the tooltip, such as *Claude app, Codex app*;
 * when either agent last worked there, such as *today* or *3 days ago*; or *Already a project*, or *Can't be used* for a folder whose path can't be passed to a terminal.
 
-A folder used by both Claude Code and Codex is listed once. Sessions in a git worktree, or in a subfolder of a repository, count for the repository. Temporary and scratch folders, folders that no longer exist, and your user folder with its Documents, Desktop and Downloads are left out. Folders used in the last four months are ticked, except one that holds two or more of the others, such as a folder of projects.
+A folder used by both Claude Code and Codex is listed once. Sessions in a git worktree, or in a subfolder of a repository, count for the repository, wherever the worktree is. Temporary and scratch folders, folders that no longer exist, and your user folder with its Documents, Desktop and Downloads are left out. Folders used in the last four months are ticked, except one that holds two or more of the others, such as a folder of projects.
 
-Choose the area under **Add to**, then select **Add 9 projects** (*Added 9 projects*). Each project gets its folder, on this computer, and as its default agent the one that worked there last. **Not now** closes the window for good; **Import from Claude and Codex** is always here.
+A folder that is a copy of a project you already have, such as one made on another computer, joins that project instead of becoming another: it holds the same git repository, or else has the same name, and the project has no folder on this computer yet. Its row shows the project's name and **Existing project**, and it's ticked however long ago it was used. Select **Existing project** to make it a new project instead (the tag then reads **New project**, which puts it back). See [Projects on several computers](/concepts/areas-and-projects#projects-on-several-computers).
+
+Choose the area under **Add to**, then select **Add 9 projects** (*Added 9 projects*). Each new project gets its folder, on this computer, and as its default agent the one that worked there last; each project a folder joins gets that folder on this computer (*Linked PacedMind to its folder here*). **Not now** closes the window for good; **Import from Claude and Codex** is always here.
 
 ## Auto-plan
 

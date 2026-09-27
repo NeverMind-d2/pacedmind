@@ -16,7 +16,7 @@ export default async function SettingsPage() {
   const d = MODE === "desktop" ? deviceConfig() : null;
   const device: DeviceSettings | null = d && {
     name: d.name, terminal: d.terminal, claudeCommand: d.claudeCommand, codexCommand: d.codexCommand, remoteStart: d.remoteStart,
-    deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
+    trustFolders: d.trustFolders, deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
   };
   // This computer first, with what it found of the agents itself; then the other computers signed in. Without
   // an account, there is only this one (and it has no id in any account yet).

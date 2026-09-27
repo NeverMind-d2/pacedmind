@@ -59,17 +59,19 @@ For a task's own folder, the message ends with *Change it in the task's details.
 
 A task with neither its own folder nor a project folder gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The **Flows** panel shows it as *PacedMind workspace*.
 
-### Trusting the folder in Claude Code
+### Trusting the folder
 
-The first time Claude Code starts in a folder, it asks whether you trust it, and waits for the answer before it reads its first message. Choose **Yes, I trust this folder** in the session's terminal: Claude Code remembers it for that folder, and the session goes on. **No, exit** ends the session, and Claude Code asks again next time.
+The first time Claude Code or Codex starts in a folder, it asks whether you trust it, and waits for the answer before it reads its first message. Trusting a folder also lets the agent use that folder's own settings, hooks and MCP servers.
 
-PacedMind doesn't answer for you, because trusting a folder also lets Claude Code use that folder's own settings, hooks and MCP servers. It reads Claude Code's settings file (`~/.claude.json`) to tell you the question is coming, for sessions in a terminal on this computer:
+With **Trust session folders** on (Settings → **Starting sessions**, on by default, for each computer), PacedMind answers yes just before it starts, resumes or sends back a session, for that session's folder only, so the session never waits for it. It writes the answer where the agent keeps it: for Claude Code in its settings file (`~/.claude.json`), for Codex in its `config.toml`, for the folder's repository. A folder Codex was told not to trust stays that way. Give projects only folders whose settings and hooks you'd let an agent run.
+
+With it off, answer in the session's terminal: **Yes, I trust this folder** in Claude Code, which remembers it for that folder, and the session goes on; **No, exit** ends the session, and Claude Code asks again next time. PacedMind then reads Claude Code's settings file to tell you the question is coming, for sessions in a terminal on this computer:
 
 * in the task's details, under **Start with Claude Code** (and under the session card of an ended session): *Claude Code first asks whether you trust the folder: choose “Yes, I trust this folder” in its terminal.*;
 * in the message after starting, resuming or **Request changes**, which ends with the same sentence;
 * on the running session, until the agent checks in: *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.*
 
-A scratch folder is new for every task, so Claude Code asks once for each task without a folder.
+A scratch folder is new for every task, so without the setting Claude Code asks once for each task without a folder.
 
 Every session also gets a branch name, `agent/` and the task key, such as `agent/dev-22`. PacedMind records it with the session; it doesn't create or switch branches itself.
 

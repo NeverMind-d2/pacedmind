@@ -61,6 +61,8 @@ export async function thisDevice(): Promise<Device> {
     agents: localTools(), createdAt: row?.createdAt ?? "", lastSeenAt: row?.lastSeenAt ?? null,
     checkedAt: g.__pacedmindToolsAt ?? row?.checkedAt ?? null, revokedAt: row?.revokedAt ?? null,
     isDefault: row ? row.isDefault : !cloud, appVersion: APP_VERSION, flowsOn: flowsOnHere(cloud),
+    // The Sessions page looks for this computer's own itself (other-sessions.ts), more often than it reports them.
+    otherSessions: [],
   };
 }
 

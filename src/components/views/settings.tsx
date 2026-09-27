@@ -301,6 +301,13 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   <input className={input} defaultValue={device.codexCommand} aria-label="Codex command"
                     onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.codexCommand && saveDevice({ codexCommand: e.target.value })} />
                 </Row>
+                <Row label="Trust session folders">
+                  <span className="flex-1 text-[12.5px] text-fg3">{device.trustFolders ? "Answered for you" : "You answer in the terminal"}</span>
+                  <Switch on={device.trustFolders} label="Trust session folders" onChange={(v) => saveDevice({ trustFolders: v })} />
+                </Row>
+                <div className="border-t border-line px-3.5 py-2.5 text-[12px] leading-relaxed text-mut2">
+                  Claude Code and Codex ask whether you trust a folder the first time they start there. When this is on, PacedMind says yes for the folder a session starts in, just before it starts, so the session doesn&apos;t wait for you. A yes also lets the agent use that folder&apos;s own settings, hooks and MCP servers.
+                </div>
               </Section>
             </>}
 

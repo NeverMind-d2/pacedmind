@@ -3,6 +3,7 @@ import { checkCodexCloud } from "./cloud";
 import { checkThisDevice, saveToolsOnce } from "./devices";
 import { tick, watchStatuses } from "./flow";
 import { mcpUrl } from "./launcher";
+import { linkProjects } from "./project-links";
 import { syncDevice } from "./requests";
 import { MODE, NotSignedIn, authState } from "./supabase";
 
@@ -10,7 +11,9 @@ const CHECK_EVERY = 30 * 60_000;
 
 /** Background work of the desktop app's server (and `npm run dev`), started once from src/instrumentation.ts. */
 export function startBackground() {
-  const g = globalThis as unknown as { __organizerTick?: NodeJS.Timeout; __organizerSync?: NodeJS.Timeout; __organizerCloud?: NodeJS.Timeout };
+  const g = globalThis as unknown as {
+    __organizerTick?: NodeJS.Timeout; __organizerSync?: NodeJS.Timeout; __organizerCloud?: NodeJS.Timeout; __organizerLinks?: NodeJS.Timeout;
+  };
   if (MODE !== "desktop" || g.__organizerTick) return;
 
   // Started by the desktop app: stop when the app goes away, even if it crashed and could not stop us.
@@ -56,4 +59,6 @@ export function startBackground() {
   g.__organizerTick = every(60_000, "flow tick", tick);
   // Codex cloud tasks don't report back; asking Codex tells which are ready.
   g.__organizerCloud = every(60_000, "Codex cloud check", checkCodexCloud);
+  // Which repository each project is, for your other computers, and this computer's folders after merges elsewhere.
+  g.__organizerLinks = every(60_000, "project links", linkProjects);
 }

@@ -60,6 +60,11 @@ export interface Project {
   deviceId: string | null;
   /** The Codex cloud environment (its label or id) that tasks sent to Codex cloud run in. */
   codexEnv: string | null;
+  /**
+   * Its git repository as host/owner/name (and "#subfolder" inside one), read from its folder on a computer, so each
+   * computer recognizes the project in its own copy. Null until a computer with its folder saw one.
+   */
+  repo: string | null;
   agent: AgentId | null;
   afterProjectId: string | null;
   /** Whether its flow may start sessions on this computer by itself (a switch in the desktop app). */
@@ -233,6 +238,8 @@ export interface DeviceSettings {
   claudeCommand: string;
   codexCommand: string;
   remoteStart: RemoteStart;
+  /** Whether PacedMind answers Claude Code's and Codex's question whether you trust a session's folder, before it starts. */
+  trustFolders: boolean;
   /** This computer's id in the account's list, once registered. */
   deviceId: string | null;
   /** Whether the app's secrets on disk are encrypted with a key from the OS keychain. */
@@ -288,6 +295,40 @@ export interface Device {
   appVersion: string | null;
   /** Projects whose flow is switched on at that computer, as it last said. For display: each computer decides for itself. */
   flowsOn: string[];
+  /** The Claude Code and Codex sessions it found that PacedMind didn't start, as it last said (other-sessions.ts). */
+  otherSessions: OtherSession[];
+}
+
+/** Where a Claude Code or Codex session runs on a computer: the command-line tool in a terminal, or the desktop app. */
+export type Harness = "claude-cli" | "claude-app" | "codex-cli" | "codex-app";
+
+export const HARNESS_LABEL: Record<Harness, string> = {
+  "claude-cli": "Claude Code", "claude-app": "Claude app", "codex-cli": "Codex CLI", "codex-app": "Codex app",
+};
+
+export const harnessAgent = (h: Harness): AgentId => (h.startsWith("claude") ? "claude" : "codex");
+
+/**
+ * What a session is doing, as its own record shows: at work right now, waiting for you (its turn ended, or it stopped
+ * in the middle of one, such as for a permission), or quiet for hours.
+ */
+export type OtherSessionState = "working" | "waiting" | "idle";
+
+/** A Claude Code or Codex session on one of your computers that PacedMind didn't start, as that computer found it. */
+export interface OtherSession {
+  harness: Harness;
+  /** The tool's own id for the session. */
+  ref: string;
+  /** Its own title, else its first message, on one line and short. */
+  title: string;
+  /** The name of its folder (never the path). */
+  place: string;
+  /** The project its folder is, on that computer; null for none. */
+  projectId: string | null;
+  state: OtherSessionState;
+  /** ISO timestamps. */
+  startedAt: string;
+  activeAt: string;
 }
 
 /** A computer counts as online when it said so in the last two minutes (it does every minute while it runs). */

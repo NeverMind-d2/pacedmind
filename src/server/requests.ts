@@ -8,11 +8,12 @@ import { deviceConfig, deviceFor, revokeAllSessionTokens, thisPlatform, updateDe
 import { approvals, clearApprovals, handledRequests, type Approval } from "./approval-store";
 import { APP_VERSION, deviceIdFor, flowsOnHere, runsHere } from "./devices";
 import { changesProblem, requestChanges } from "./ops";
+import { scanOtherSessions } from "./other-sessions";
 import { MODE, authState, supabase } from "./supabase";
 import { cleanDeviceName } from "./store/shared";
 import {
   AGENT_LABEL, SURFACE_LABEL, agentOf,
-  type AgentId, type LaunchRequest, type LaunchRequestKind, type RemoteStart, type Session, type Surface, type Task,
+  type AgentId, type LaunchRequest, type LaunchRequestKind, type OtherSession, type RemoteStart, type Session, type Surface, type Task,
 } from "@/lib/types";
 
 /*
@@ -180,7 +181,25 @@ const g = globalThis as unknown as {
   __pacedmindRowName?: string;
   /** The flows the account's list shows as on here, as last written or seen. */
   __pacedmindFlowsSent?: string;
+  /** This computer's other sessions as last written to the account's list. */
+  __pacedmindOthersSent?: string;
 };
+
+/**
+ * This computer's sessions that PacedMind didn't start, for the Sessions page on the other computers and in the web app,
+ * with their last activity to five minutes: within those, only a new state or session changes the list, and open pages
+ * refresh for that. Null when looking failed; nothing then changes in the account.
+ */
+async function othersToReport(): Promise<OtherSession[] | null> {
+  try {
+    const five = 5 * 60_000;
+    return scanOtherSessions(await repo.listProjects())
+      .map((s) => ({ ...s, activeAt: new Date(Math.floor(Date.parse(s.activeAt) / five) * five).toISOString() }));
+  } catch (e) {
+    console.error("[organizer] looking for other sessions failed", e);
+    return null;
+  }
+}
 
 /** The account's projects whose flow is on here, as the account's list keeps them. */
 const cloudFlows = () => flowsOnHere(true).slice(0, 200);
@@ -225,12 +244,17 @@ export async function syncDevice(): Promise<void> {
       else pushName = !!cleanDeviceName(d.name);
       d = deviceConfig();
     }
+    const others = await othersToReport();
+    const othersKey = others && JSON.stringify(others);
+    const sendOthers = !!others && othersKey !== (g.__pacedmindOthersSent ?? JSON.stringify(me.otherSessions));
     await repo.updateDeviceRow(d.deviceId!, {
       lastSeen: true,
       ...(me.remoteStart !== d.remoteStart ? { remoteStart: d.remoteStart } : {}),
       ...(pushName ? { name: d.name } : {}),
       ...(APP_VERSION && me.appVersion !== APP_VERSION ? { appVersion: APP_VERSION } : {}),
+      ...(sendOthers ? { otherSessions: others } : {}),
     });
+    if (othersKey) g.__pacedmindOthersSent = othersKey;
     g.__pacedmindRowName = pushName ? cleanDeviceName(d.name) : me.name;
     g.__pacedmindFlowsSent = me.flowsOn.join(",");
     g.__pacedmindSeen = now;

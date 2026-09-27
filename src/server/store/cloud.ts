@@ -3,12 +3,13 @@ import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { MODE, NotSignedIn, authState, supabase } from "../supabase";
 import { removeImageFiles, type StoredImage } from "../attachments";
+import { repoIdentity } from "../git-remote";
 import {
   deviceConfig, flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, expandOccurrences, linksOf, loginOf, pictureHash, snapshotOf, strings,
+  deriveKey, expandOccurrences, linksOf, loginOf, otherSessionsOf, pictureHash, repoOf, snapshotOf, strings,
   type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -16,9 +17,9 @@ import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
   type AgentId, type AgentTools, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
-  type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type Priority, type Project, type RemoteStart,
-  type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask,
-  type Surface, type Task,
+  type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
+  type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
+  type Subtask, type Surface, type Task,
 } from "@/lib/types";
 
 /*
@@ -130,10 +131,11 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
  * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
  */
-export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null }) {
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
   const values: Row = {};
   if (patch.name?.trim()) values.name = patch.name.trim();
   if (patch.color) values.color = patch.color;
+  if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
   if (values.icon) values.picture = null;
@@ -160,7 +162,7 @@ export async function deleteProject(id: string) {
 
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
-  folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env),
+  folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env), repo: repoOf(r.repo),
   agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id), flowOn: MODE === "desktop" && flowArmed(String(r.id)),
   sort: Number(r.sort),
 });
@@ -187,10 +189,11 @@ export async function createProject(input: {
 }): Promise<Project> {
   const db = await accountDb();
   const last = many(await db.from("projects").select("sort").order("sort", { ascending: false }).limit(1));
+  const repo = input.folder && MODE === "desktop" ? repoIdentity(input.folder) : null;
   const r = one(await db.from("projects").insert({
     area_id: input.areaId, name: input.name.trim(), start_date: toDateStr(new Date()), target_date: input.targetDate ?? null,
     device_id: input.deviceId && isUuid(input.deviceId) ? input.deviceId : null,
-    agent: input.agent ?? null, sort: Number(last[0]?.sort ?? 0) + 1, color: input.color ?? null,
+    agent: input.agent ?? null, sort: Number(last[0]?.sort ?? 0) + 1, color: input.color ?? null, ...(repo ? { repo } : {}),
   }).select().single());
   if (input.folder && MODE === "desktop") setProjectFolder(String(r!.id), input.folder);
   return toProject(r!);
@@ -225,9 +228,48 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
   }
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, PROJECT_COLS);
+  // The repository of a folder set here, for the other computers; a folder outside one keeps what another computer saw.
+  const found = patch.folder ? repoIdentity(patch.folder) : null;
+  if (found) values.repo = found;
   if (!Object.keys(values).length) return;
   const db = await accountDb();
   check(await db.from("projects").update(values).eq("id", id));
+}
+
+/** Records the repository a project's folder on this computer is in (project-links.ts), for the other computers. */
+export async function setProjectRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (!value || !isUuid(id)) return;
+  const db = await accountDb();
+  check(await db.from("projects").update({ repo: value }).eq("id", id));
+}
+
+/**
+ * Merges `fromId` into `intoId`: its tasks move there, after the project's own, into its area, and keep their keys;
+ * what `intoId` leaves empty (agent, Codex environment, repository) it takes from `fromId`; projects that started
+ * after `fromId` start after `intoId`; then `fromId` is deleted. This computer's folders are project-links.ts's.
+ */
+export async function mergeProject(fromId: string, intoId: string) {
+  if (!isUuid(fromId) || !isUuid(intoId) || fromId === intoId) return;
+  const [from, into] = await Promise.all([getProject(fromId), getProject(intoId)]);
+  if (!from || !into) return;
+  const db = await accountDb();
+  const last = many(await db.from("tasks").select("sort_order").eq("project_id", intoId).order("sort_order", { ascending: false }).limit(1));
+  const moving = many(await db.from("tasks").select("id, sort_order").eq("project_id", fromId));
+  check(await db.from("tasks").update({ project_id: intoId, area_id: into.areaId, updated_at: nowStamp() }).eq("project_id", fromId));
+  // After the project's own tasks, in their order. There's no "sort_order + n" through the API, so one by one.
+  const after = Number(last[0]?.sort_order ?? 0);
+  for (const batch of chunks(moving, 20)) {
+    await Promise.all(batch.map(async (t) => check(await db.from("tasks").update({ sort_order: Number(t.sort_order) + after }).eq("id", Number(t.id)))));
+  }
+  if (into.afterProjectId === fromId) check(await db.from("projects").update({ after_project_id: null }).eq("id", intoId));
+  check(await db.from("projects").update({ after_project_id: intoId }).eq("after_project_id", fromId).neq("id", intoId));
+  const fill: Row = {};
+  if (!into.agent && from.agent) fill.agent = from.agent;
+  if (!into.codexEnv && from.codexEnv) fill.codex_env = from.codexEnv;
+  if (!into.repo && from.repo) fill.repo = from.repo;
+  if (Object.keys(fill).length) check(await db.from("projects").update(fill).eq("id", intoId));
+  check(await db.from("projects").delete().eq("id", fromId));
 }
 
 /* ---------- tasks ---------- */
@@ -788,7 +830,7 @@ export async function setSettings(patch: Partial<Settings>) {
 
 /* ---------- computers and requests to start sessions ---------- */
 
-const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on";
+const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on, other_sessions";
 
 /**
  * What a computer found of one agent, as the cloud has it: for display only. The launcher uses what this
@@ -813,6 +855,7 @@ const toDevice = (r: Row): Device => {
     createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), checkedAt: s(r.checked_at), revokedAt: s(r.revoked_at),
     isDefault: r.is_default === true, appVersion: s(r.app_version),
     flowsOn: Array.isArray(r.flows_on) ? r.flows_on.filter(isUuidValue) : [],
+    otherSessions: otherSessionsOf(r.other_sessions),
   };
 };
 
@@ -891,9 +934,10 @@ export async function revokeDevice(id: string) {
  * and the projects whose flow is on here. Values in the wrong shape are left out rather than failing the rest.
  */
 export async function updateDeviceRow(id: string, patch: {
-  name?: string; remoteStart?: RemoteStart; lastSeen?: boolean; appVersion?: string; flowsOn?: string[];
+  name?: string; remoteStart?: RemoteStart; lastSeen?: boolean; appVersion?: string; flowsOn?: string[]; otherSessions?: OtherSession[];
 }) {
   const values: Row = {};
+  if (patch.otherSessions) values.other_sessions = otherSessionsOf(patch.otherSessions);
   const name = patch.name === undefined ? "" : cleanDeviceName(patch.name);
   if (name) values.name = name;
   if (patch.remoteStart) values.remote_start = patch.remoteStart;

@@ -5,6 +5,8 @@ import path from "node:path";
 import { dataDir } from "./device";
 import { thisDeviceId } from "./devices";
 import { folderProblem } from "./folders";
+import { mainCheckout, repoIdentity } from "./git-remote";
+import { linkFolder, linkProjects } from "./project-links";
 import * as repo from "./repo";
 import type { AgentId, Project } from "@/lib/types";
 
@@ -29,6 +31,11 @@ export interface FoundProject {
   used: Partial<Record<AgentId, number>>;
   /** The PacedMind project that already has this folder. */
   projectId: string | null;
+  /**
+   * A project you have (made on another computer, usually) that this folder is a copy of: the same repository, or
+   * else the same name, and no folder here yet. Importing the folder gives it to that project instead of making another.
+   */
+  joins: { id: string; name: string } | null;
   /** Worth importing without asking: used in the last months, still there, and not a folder that holds other projects. */
   suggested: boolean;
   /** Why it can't become a project's folder, e.g. it was deleted. */
@@ -46,15 +53,16 @@ function keyOf(folder: string): string {
 }
 
 /**
- * The project a folder belongs to. Sessions in a git worktree belong to the repository it was made from, and a
- * session in a subfolder to the repository around it (the nearest folder up with a .git, below your home folder).
+ * The project a folder belongs to. Sessions in a git worktree belong to the repository it was made from, wherever the
+ * worktree is, and a session in a subfolder to the repository around it (the nearest folder up with a .git, below
+ * your home folder).
  */
 function mainFolder(folder: string): string {
   const m = folder.match(/^(.*?)[\\/]\.(?:claude|codex)[\\/]worktrees[\\/]/i);
   const start = m ? m[1] : folder;
   const stop = keyOf(home);
   for (let dir = start, i = 0; i < 12; i++) {
-    if (fs.existsSync(path.join(dir, ".git"))) return dir;
+    if (fs.existsSync(path.join(dir, ".git"))) return mainCheckout(dir);
     const up = path.dirname(dir);
     if (up === dir || keyOf(up) === stop) break;
     dir = up;
@@ -123,7 +131,7 @@ const mtime = (file: string) => {
 };
 
 /** Where the Claude desktop app keeps its data. */
-function claudeAppDir(): string {
+export function claudeAppDir(): string {
   if (process.platform === "win32") return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "Claude");
   if (process.platform === "darwin") return path.join(home, "Library", "Application Support", "Claude");
   return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "Claude");
@@ -230,14 +238,16 @@ export async function findProjects(): Promise<FoundProject[]> {
     byKey.set(key, entry);
   }
 
+  // Projects from your other computers should know their repositories before folders here are matched to them.
+  await linkProjects().catch((e) => console.error("[organizer] project links failed", e));
   const projects = await repo.listProjects();
   const keys = [...byKey.keys()];
   const now = Date.now();
-  const found = [...byKey.entries()].map(([key, e]): FoundProject => {
+  const lastOf = (f: { used: Partial<Record<AgentId, number>> }) => Math.max(0, ...Object.values(f.used).map((v) => v ?? 0));
+  const found = [...byKey.entries()].map(([key, e]) => {
     const folder = realFolder(e.folder);
     const problem = folderProblem(folder);
     const projectId = projects.find((p) => p.folder && keyOf(p.folder) === key)?.id ?? null;
-    const last = Math.max(0, ...Object.values(e.used).map((v) => v ?? 0));
     // A folder that holds two or more of the others (like a "Projects" folder) isn't a project itself.
     const holds = keys.filter((k) => inside(k, key)).length;
     return {
@@ -246,35 +256,72 @@ export async function findProjects(): Promise<FoundProject[]> {
       sources: [...e.sources].sort(),
       used: e.used,
       projectId,
-      suggested: !problem && !projectId && holds < 2 && now - last < RECENT,
+      joins: null as FoundProject["joins"],
+      suggested: !problem && !projectId && holds < 2 && now - lastOf(e) < RECENT,
       problem,
+      repo: problem ? null : repoIdentity(folder),
+      holds,
     };
-  });
-  const lastOf = (f: FoundProject) => Math.max(0, ...Object.values(f.used).map((v) => v ?? 0));
-  return found.sort((a, b) => lastOf(b) - lastOf(a) || a.name.localeCompare(b.name));
+  }).sort((a, b) => lastOf(b) - lastOf(a) || a.name.localeCompare(b.name));
+
+  // The projects without a folder here, each for one folder at most: the most recently used one of its repository,
+  // else of its name. Another copy of a repository that joins a project isn't worth a project of its own.
+  const plain = (name: string) => name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  const open = projects.filter((p) => !p.folder);
+  const joined = new Set<string>();
+  for (const f of found.filter((x) => !x.projectId && !x.problem && x.holds < 2)) {
+    const free = open.filter((p) => !joined.has(p.id));
+    const match = (f.repo && free.find((p) => p.repo === f.repo))
+      || free.find((p) => plain(p.name) === plain(f.name) && (!p.repo || !f.repo || p.repo === f.repo));
+    if (match) {
+      joined.add(match.id);
+      f.joins = { id: match.id, name: match.name };
+      f.suggested = true;
+    } else if (f.repo && open.some((p) => p.repo === f.repo)) {
+      f.suggested = false;
+    }
+  }
+  return found.map((f): FoundProject => ({
+    folder: f.folder, name: f.name, sources: f.sources, used: f.used, projectId: f.projectId, joins: f.joins, suggested: f.suggested, problem: f.problem,
+  }));
 }
 
 export interface ImportItem {
   folder: string;
   name: string;
   agent: AgentId | null;
+  /** The project the folder joins (FoundProject.joins), instead of becoming a new one. */
+  projectId?: string | null;
 }
 
-/** Makes projects from found folders, in one area, on this computer (their folders are this computer's). Folders that already are a project here are skipped. */
-export async function importProjects(items: ImportItem[], areaId: string): Promise<{ created: Project[]; skipped: string[] }> {
+/**
+ * Makes projects from found folders, in one area, on this computer (their folders are this computer's), or gives a
+ * folder to the project it joins. Folders that already are a project here are skipped, and so is a project that got a
+ * folder here meanwhile.
+ */
+export async function importProjects(items: ImportItem[], areaId: string): Promise<{ created: Project[]; linked: Project[]; skipped: string[] }> {
   const created: Project[] = [];
+  const linked: Project[] = [];
   const skipped: string[] = [];
-  const taken = new Set((await repo.listProjects()).flatMap((p) => (p.folder ? [keyOf(p.folder)] : [])));
+  const projects = await repo.listProjects();
+  const taken = new Set(projects.flatMap((p) => (p.folder ? [keyOf(p.folder)] : [])));
   const deviceId = thisDeviceId();
   for (const item of items) {
     const folder = item.folder.trim();
     const key = keyOf(folder);
-    if (taken.has(key) || folderProblem(folder) || !item.name.trim()) {
-      skipped.push(item.name || folder);
+    const joins = item.projectId ? projects.find((p) => p.id === item.projectId && !p.folder) : undefined;
+    if (taken.has(key) || folderProblem(folder) || (item.projectId ? !joins : !item.name.trim())) {
+      skipped.push(joins?.name || item.name || folder);
       continue;
     }
     taken.add(key);
-    created.push(await repo.createProject({ name: item.name.trim(), areaId, folder, deviceId, agent: item.agent }));
+    if (joins) {
+      await linkFolder(joins, folder);
+      joins.folder = folder;
+      linked.push(joins);
+    } else {
+      created.push(await repo.createProject({ name: item.name.trim(), areaId, folder, deviceId, agent: item.agent }));
+    }
   }
-  return { created, skipped };
+  return { created, linked, skipped };
 }

@@ -1,6 +1,6 @@
 ---
 title: Areas and projects
-description: Create, rename, recolor, move and delete areas and projects, give an area an icon or a picture of your own, and set a project's target date, folder, default agent and flow.
+description: Create, rename, recolor, reorder, move, merge and delete areas and projects, select several at once, keep one project across your computers, give an area an icon or a picture of your own, and set a project's target date, folder, default agent and flow.
 ---
 
 Areas are the top level of the planner. Each project belongs to exactly one area, and a project's tasks belong to its area too.
@@ -81,9 +81,49 @@ Right-click a project in the sidebar or on the **Projects** page, or use its **�
 | **Open flow** | Opens the project in **Flows**. |
 | **Color** | The ten palette colors, plus **Same as** the area to follow the area's color. |
 | **Move to area** | Moves the project, and all its tasks, to another area. |
+| **Merge into…** | Merges the project into another one you pick, after a confirmation. See [Merge projects](#merge-projects). |
 | **Delete project…** | Deletes the project after a confirmation. |
 
 Deleting a project keeps its tasks: they stay in the area without a project. The project's folder, default agent and flow settings are removed.
+
+## Order and select several
+
+Drag an area or a project up or down in the sidebar to put it in your order. A line shows where it lands. Areas move among areas and projects among projects. The order is saved with your data, so the **Projects** page, quick add and the other lists of areas and projects use it too.
+
+To work on several at once, select them in the sidebar:
+
+| Click | Result |
+| --- | --- |
+| <kbd>Ctrl</kbd>-click, on macOS <kbd>⌘</kbd>-click | Adds the area or project to the selection, or takes it out. The one whose page is open counts as selected. |
+| <kbd>Shift</kbd>-click | Selects every row from the last one clicked to this one. |
+| A click without a key | Opens the page and ends the selection, as do <kbd>Esc</kbd> and a click outside the sidebar. |
+
+A selection holds areas or projects, not both. Dragging a selected row moves the whole selection, in its order, to where it's dropped. Right-clicking a selected row, or its **…** button, opens the menu for the selection:
+
+| Item | Result |
+| --- | --- |
+| **Color** | Gives them all the same color. For projects, **Same as their areas** makes each follow its area's color. |
+| **Move to area** | Projects only: moves them, and all their tasks, to another area. |
+| **Merge into…** | Projects only: lists the selected projects; pick the one to keep, and the others merge into it. See [Merge projects](#merge-projects). |
+| **Delete … areas…** or **Delete … projects…** | Deletes them after a confirmation that names them. Their tasks are kept, as when deleting one. |
+
+## Projects on several computers
+
+When your data is on more than one computer (see [Accounts and Cloud](/accounts-and-cloud)), a project is the same project on each of them. Its folder is each computer's own: on each, the folder where that computer's copy of the work is, usually a clone of the same git repository.
+
+Each computer notes which git repository a project's folder holds, as the address of its remote without the user or any password in it, such as `github.com/owner/name`, and with the folder's place inside the repository when that isn't its root. When another computer brings its projects over, a folder of the same repository joins that project instead of becoming a second one; a folder that isn't a repository joins a project of the same name. See [Import projects](/settings#import-projects). A project that ran its sessions only on the computer it was brought over on runs them on both once another computer's folder joins it: where you start them.
+
+On macOS, PacedMind doesn't read the repository of a folder in Desktop, Documents or Downloads, in iCloud Drive or another cloud drive: macOS would first ask whether it may. Such a folder joins a project by its name.
+
+### Merge projects
+
+Two projects for the same work, such as the ones two computers made before they knew of each other, become one with **Merge into…**, from the project menu or from the menu of several selected projects. The confirmation says how many tasks move.
+
+* The tasks move to the project that's kept, after its own tasks and into its area, and keep their keys. Their sessions and reports stay with them.
+* Where the kept project has no default agent, Codex environment or repository, it takes the merged project's. A project that started after the merged one starts after the kept one.
+* On this computer, the kept project gets the merged project's folder when it has none. Your other computers do the same by themselves within a minute, for a folder of the same repository.
+* Projects that ran their sessions on different computers merge into one that runs them where you start them.
+* The merged projects are deleted, and PacedMind opens the kept one.
 
 ### The project page
 

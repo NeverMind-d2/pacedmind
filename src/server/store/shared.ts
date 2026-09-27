@@ -4,8 +4,8 @@ import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequestKind, LaunchRequestStatus, Priority, ReportCriterion,
-  ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
+  AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
+  OtherSessionState, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
 } from "@/lib/types";
 
 /*
@@ -98,6 +98,46 @@ export function codexEnvProblem(value: string): string | null {
 }
 
 /** "Done when" items without blanks or repeats, as many and as long as the database keeps. */
+/**
+ * A project's repository, the same on every computer (git-remote.ts): its remote as host/path, lowercase, and after
+ * "#" the project's folder inside it when that isn't the repository's root. The database holds it to the same shape.
+ */
+export const REPO = /^[a-z0-9][a-z0-9.-]*(\/[a-z0-9._~-]+)+(#[a-z0-9._ ~-]+(\/[a-z0-9._ ~-]+)*)?$/;
+export const repoOf = (v: unknown): string | null => (typeof v === "string" && v.length <= 300 && REPO.test(v) ? v : null);
+
+const HARNESSES = new Set<string>(["claude-cli", "claude-app", "codex-cli", "codex-app"]);
+const OTHER_STATES = new Set<string>(["working", "waiting", "idle"]);
+/** How many sessions a computer reports that PacedMind didn't start (other-sessions.ts); the database holds it to that too. */
+export const OTHER_SESSIONS_MAX = 30;
+
+/** Text on one line, without control characters, at most `max` long. */
+export const oneLine = (v: unknown, max: number): string =>
+  typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
+
+const isoOf = (v: unknown): string | null => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : null);
+
+/**
+ * The sessions a computer found that PacedMind didn't start, held to their shape. What's in the cloud another computer
+ * wrote, so every reader keeps only these fields, as plain short text.
+ */
+export function otherSessionsOf(v: unknown): OtherSession[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, OTHER_SESSIONS_MAX).flatMap((x): OtherSession[] => {
+    if (!x || typeof x !== "object") return [];
+    const r = x as Record<string, unknown>;
+    const ref = typeof r.ref === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(r.ref) ? r.ref : null;
+    const startedAt = isoOf(r.startedAt);
+    const activeAt = isoOf(r.activeAt);
+    if (typeof r.harness !== "string" || !HARNESSES.has(r.harness) || typeof r.state !== "string" || !OTHER_STATES.has(r.state)) return [];
+    if (!ref || !startedAt || !activeAt) return [];
+    const projectId = typeof r.projectId === "string" && /^[A-Za-z0-9-]{1,80}$/.test(r.projectId) ? r.projectId : null;
+    return [{
+      harness: r.harness as Harness, ref, title: oneLine(r.title, 100), place: oneLine(r.place, 80), projectId,
+      state: r.state as OtherSessionState, startedAt, activeAt,
+    }];
+  });
+}
+
 export const cleanDoneWhen = (items: string[]) =>
   [...new Set(items.map((x) => x.replace(/\s+/g, " ").trim().slice(0, 400)).filter(Boolean))].slice(0, 50);
 
