@@ -19,6 +19,17 @@ export type QuickAddDefaults = {
   projectId?: string | null; areaId?: string | null; plannedDate?: string | null; mode?: "task" | "activity"; start?: string | null;
 };
 
+// The project a page shows when its address doesn't say which (Flows and Roadmap pick one), while that page is open.
+let shownProject: string | null = null;
+
+/** Tells quick add opened without a place (C, the pen button, the command menu) which project this page shows. */
+export function useQuickAddProject(id: string | null) {
+  useEffect(() => {
+    shownProject = id;
+    return () => { if (shownProject === id) shownProject = null; };
+  }, [id]);
+}
+
 const HIGHLIGHT: Record<string, string> = {
   date: "bg-accent/20 text-accent-fg",
   priority: "bg-accent/20 text-accent-fg",
@@ -46,14 +57,16 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const path = usePathname();
 
   useEffect(() => {
-    // Opened without a place (C, the pen button, the command menu) on a project's or an area's page, a task goes there.
+    // Opened without a place (C, the pen button, the command menu) on a project's or an area's page, or on a page that
+    // shows one project (Flows, Roadmap), a task goes there.
     const [, page, id] = path.split("/");
-    const here: QuickAddDefaults =
+    const here = (): QuickAddDefaults =>
       page === "project" && projects.some((p) => p.id === id) ? { projectId: id }
       : page === "area" && areas.some((a) => a.id === id) ? { areaId: id }
+      : shownProject && projects.some((p) => p.id === shownProject) ? { projectId: shownProject }
       : {};
     const show = (e: Event) => {
-      const d = ((e as CustomEvent).detail as QuickAddDefaults | null) ?? here;
+      const d = ((e as CustomEvent).detail as QuickAddDefaults | null) ?? here();
       setDefaults(d);
       setMode(d.mode ?? "task");
       setOpen(true);
@@ -63,7 +76,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
       const typing = el.closest("input, textarea, select, [contenteditable=true]");
       if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
-        setDefaults(here);
+        setDefaults(here());
         setMode("task");
         setOpen(true);
       }
