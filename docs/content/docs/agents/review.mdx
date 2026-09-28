@@ -35,6 +35,7 @@ The report shows in the task's details, at the top of the panel, and in **Sessio
 | Images | Screenshots, or other images that show the result. |
 | **Questions for you** | Decisions or answers the agent needs from you. |
 | **How to check it** | Steps to check the result: a command to run, a page to open, what to look for. |
+| **Files changed** | Not from the agent: what PacedMind saw change in git in the session's folder since the session started, when the agent handed the task back. See [Files changed](#files-changed). |
 | **Details** | Anything longer: what the agent did and why, trade-offs, test results, findings. Long details are cut short, with **Show all**. |
 | Links and follow-ups | Pull requests, commits, previews or documents, and the tasks the agent created for work outside this one. A follow-up opens its task. |
 
@@ -43,6 +44,24 @@ An item added to the **Done when** list, or reworded, after the report shows as 
 Select an image to open it in the viewer. <kbd>←</kbd> and <kbd>→</kbd> move between the images, a click on the image shows it at its actual size, **Open** opens it on its own in the browser, and <kbd>Esc</kbd> closes the viewer. Images the agent attaches while it's still working show under **Images so far**, and join its report when it hands the task back. PacedMind keeps its own copy of each image in its data folder. See [Where your data lives](/getting-started/data).
 
 Every hand-back adds a report. With more than one, the arrows next to *Report 2 of 2* page back to the earlier ones.
+
+### Files changed
+
+The report says what the agent did; **Files changed** shows what actually changed, so you can compare the two. When a session starts on this computer in a folder that's in a git repository, PacedMind notes the commit it's on, whether it has changes that aren't committed, and which files git doesn't track. When the agent hands the task back, PacedMind compares the folder with that and shows:
+
+* a count, such as *since the session started · 3 files · +120 −14 · 2 commits*;
+* the commits made since, newest first;
+* each changed file with its lines added and removed, marked **A** (added), **M** (changed), **D** (deleted), **R** (renamed, with its old path) or **N** (new, not tracked by git); *binary* for a file without lines. Up to 8 show, with **Show all … files**;
+* **Show the diff**: the full diff, changes that aren't committed included, and new files git doesn't track. Added lines are raised, removed ones dimmed.
+
+*Nothing changed in git since the session started.* means just that, whatever the report says. When the folder already had changes that weren't committed at the start, the report says so: they count too. Files git didn't track that were already there, unchanged, are left out. Every report of a session compares with the session's start, also after **Request changes**; a session that continues another in the same terminal starts where that one's folder stood when it handed back.
+
+Only the summary goes with the report, to your other computers and the web app. The full diff stays in PacedMind's data folder on the computer the session ran on, up to 1 MB (*The diff was longer than PacedMind keeps (1 MB), so it's cut short.*); elsewhere, **Show the diff** says *The diff itself stays on the computer the session ran on.*
+
+There's no **Files changed** for sessions in the cloud or started outside PacedMind, for a folder that isn't in a git repository, or for sessions that started before this version. It says why when PacedMind couldn't look:
+
+* *No diff: PacedMind doesn't read folders in Desktop, Documents, Downloads or a cloud drive, where macOS asks first.* Move the project to another folder, such as one in your home folder, to get diffs.
+* *No diff: git wasn't there to compare the folder with.* Install git: on macOS, Apple's command line tools (`xcode-select --install`) or Homebrew's git.
 
 A session without a report shows the agent's note instead, if it left one. That's the case for sessions marked finished with **Mark finished**, for Codex cloud tasks, and for hand-backs from before reports existed.
 

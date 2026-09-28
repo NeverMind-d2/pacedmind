@@ -6,7 +6,7 @@ import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
   AskKind, PushSubscriptionInput, AgentExtras, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
   OtherSessionState, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
-  SessionUsage, TokenCounts,
+  ReportDiff, SessionUsage, TokenCounts,
 } from "@/lib/types";
 
 /*
@@ -108,6 +108,8 @@ export interface ReportInput {
   followUps?: string[];
   /** Defaults to now. */
   createdAt?: string;
+  /** What changed in git since the session started (diff.ts). */
+  diff?: ReportDiff | null;
 }
 
 /**
@@ -330,6 +332,43 @@ export function usageOf(v: unknown): SessionUsage | null {
   const at = typeof u.at === "string" && /^\d{4}-\d\d-\d\dT[\d:.]{8,12}Z$/.test(u.at) ? u.at : null;
   const amount = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(x, 1e9) : 0);
   return at ? { conversations, costUsd: amount(u.costUsd), activeSeconds: amount(u.activeSeconds), models, at } : null;
+}
+
+const DIFF_STATUSES = ["added", "modified", "deleted", "renamed", "untracked"] as const;
+const SHORT_SHA = /^[0-9a-f]{4,64}$/;
+
+/**
+ * A report's diff as a store keeps it (JSON, maybe from the cloud), checked: abbreviated commits, plain texts cut to
+ * length, whole counts, at most 30 commits and 200 files, and a patch id in the shape diff.ts makes them.
+ */
+export function diffOf(v: unknown): ReportDiff | null {
+  const o = typeof v === "string" ? (() => { try { return JSON.parse(v) as unknown; } catch { return null; } })() : v;
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  const d = o as Record<string, unknown>;
+  const count = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(Math.round(x), 1e9) : 0);
+  const lines = (x: unknown) => (x === null ? null : count(x));
+  const text = (x: unknown, max: number) => (typeof x === "string" ? x.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, max) : "");
+  const skipped = d.skipped === "asks" || d.skipped === "git" ? d.skipped : null;
+  const sha = (x: unknown) => (typeof x === "string" && SHORT_SHA.test(x) ? x : "");
+  const commits = (Array.isArray(d.commits) ? d.commits : []).slice(0, 30).flatMap((c) => {
+    const x = c && typeof c === "object" ? (c as Record<string, unknown>) : null;
+    return x && sha(x.sha) ? [{ sha: sha(x.sha), subject: text(x.subject, 200) }] : [];
+  });
+  const files = (Array.isArray(d.files) ? d.files : []).slice(0, 200).flatMap((f) => {
+    const x = f && typeof f === "object" ? (f as Record<string, unknown>) : null;
+    const status = DIFF_STATUSES.find((st) => st === x?.status);
+    const path = x ? text(x.path, 500) : "";
+    if (!x || !status || !path) return [];
+    const from = text(x.from, 500);
+    return [{ path, status, added: lines(x.added), removed: lines(x.removed), ...(from ? { from } : {}) }];
+  });
+  if (!skipped && !sha(d.base)) return null;
+  return {
+    base: sha(d.base), head: sha(d.head), commits, moreCommits: count(d.moreCommits), files, moreFiles: count(d.moreFiles),
+    added: count(d.added), removed: count(d.removed), dirtyAtStart: d.dirtyAtStart === true,
+    patchId: typeof d.patchId === "string" && /^[0-9a-f]{16}$/.test(d.patchId) ? d.patchId : null,
+    truncated: d.truncated === true, skipped,
+  };
 }
 
 /* ---------- settings ---------- */

@@ -114,6 +114,10 @@ How PacedMind hears it depends on the agent:
 * **Codex in a terminal**: the hooks PacedMind gives the session report when its turn ends, when it asks for your permission, when you send it a message, and, while it waits for your permission, when it runs the tool. Codex runs them once you've trusted them: the first time, it asks *Hooks need review* in its terminal; choose **Trust all and continue**. They're the same in every session, so it asks once per computer. Until then, and with a Codex older than 0.150, only the end of a turn shows (its `notify` program), and PacedMind hears it went on when it next calls PacedMind. Codex has no hook for a question it asks in its terminal.
 * **Desktop apps** have no such hooks: only the questions the agent asks with `ask_user` or `report_progress` show there. Sessions in **the cloud** can't reach PacedMind.
 
+## What changed in git
+
+When a session starts on this computer, in a terminal or a desktop app, in a folder that's in a git repository, PacedMind notes where the folder stands: its commit, whether it has changes that aren't committed, and the files git doesn't track. When the agent hands the task back with `finish_task`, PacedMind compares the folder with that and adds what changed to the report, under **Files changed**. See [Files changed](/agents/review#files-changed).
+
 ## What it used
 
 A session PacedMind starts in a terminal reports what its agent used: the tokens it read and wrote, and how long it worked. Claude Code also reports what those tokens cost at API prices. It shows
