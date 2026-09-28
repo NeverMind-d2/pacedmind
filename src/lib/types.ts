@@ -253,6 +253,39 @@ export interface Report {
   /** What the user asked to change after reading this report; the agent gets it through start_task. */
   changes: string | null;
   changesAt: string | null;
+  /** What changed in git in the session's folder since the session started, as PacedMind saw it at the hand-back. */
+  diff: ReportDiff | null;
+}
+
+/** How a file changed since a session started: in git's terms, or a new file git doesn't track. */
+export type DiffFileStatus = "added" | "modified" | "deleted" | "renamed" | "untracked";
+
+/**
+ * What changed in git in a session's folder between the session's start and its hand-back (src/server/diff.ts): the
+ * commits made since, and every changed file with its lines added and removed, counting what isn't committed yet and
+ * new files git doesn't track. The full diff stays on the computer the session ran on (`patchId`, /api/diffs/<id>).
+ * `skipped` says why there's none, when PacedMind couldn't look.
+ */
+export interface ReportDiff {
+  /** The commits the session started from and ended on, abbreviated. */
+  base: string;
+  head: string;
+  /** Commits made since the start, newest first; `moreCommits` counts the ones left out. */
+  commits: { sha: string; subject: string }[];
+  moreCommits: number;
+  /** `added` and `removed` are null for a binary file; `from` is a renamed file's old path. */
+  files: { path: string; status: DiffFileStatus; added: number | null; removed: number | null; from?: string }[];
+  moreFiles: number;
+  added: number;
+  removed: number;
+  /** The folder had changes that weren't committed when the session started: they show here too. */
+  dirtyAtStart: boolean;
+  /** The full diff's file on the computer the session ran on; null when there was nothing to keep. */
+  patchId: string | null;
+  /** The full diff was longer than PacedMind keeps, so it's cut short. */
+  truncated: boolean;
+  /** Why there's no diff: the folder is where macOS asks before PacedMind reads it, or git isn't there or failed. */
+  skipped: "asks" | "git" | null;
 }
 
 export interface FlowEdge {

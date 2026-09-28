@@ -14,7 +14,7 @@ import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
   AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isAnswers,
-  type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task,
+  type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task, type ReportDiff
 } from "@/lib/types";
 import { NO_USE, addUse, agentUseLine, hasUse, sessionUse } from "@/lib/usage";
 
@@ -312,6 +312,21 @@ export function reportCounts(r: Report): string {
 }
 
 /** A report the way agents and assistants read it. */
+/** What changed in git since the session started, as PacedMind saw it at the hand-back (diff.ts). */
+function diffText(d: ReportDiff): string {
+  if (d.skipped) return `Files changed: not known (${d.skipped === "asks" ? "PacedMind doesn't read this folder on macOS" : "git wasn't there"}).`;
+  const files = d.files.length + d.moreFiles;
+  const commits = d.commits.length + d.moreCommits;
+  if (!files && !commits) return "Files changed since the session started (from git): none.";
+  return [
+    `Files changed since the session started (from git): ${files} file${files === 1 ? "" : "s"}, +${d.added} −${d.removed}` +
+      `${commits ? `, ${commits} commit${commits === 1 ? "" : "s"}` : ""}${d.dirtyAtStart ? " (the folder had uncommitted changes at the start, counted too)" : ""}`,
+    ...d.commits.slice(0, 10).map((c) => `- commit ${c.sha} ${c.subject}`),
+    ...d.files.slice(0, 30).map((f) => `- ${f.status} ${f.from ? `${f.from} → ` : ""}${f.path}${f.added === null ? " (binary)" : ` +${f.added} −${f.removed ?? 0}`}`),
+    d.files.length > 30 || d.moreFiles ? `- and ${files - Math.min(30, d.files.length)} more files` : null,
+  ].filter((x) => x !== null).join("\n");
+}
+
 export function reportText(r: Report, heading = "Report"): string {
   const outcome = r.outcome === "done" ? "done" : r.outcome === "partial" ? "partly done" : "blocked, needs the user";
   return [
@@ -322,6 +337,7 @@ export function reportText(r: Report, heading = "Report"): string {
       : null,
     r.images.length ? `Images:\n${r.images.map((a) => `- ${imageLine(a)}`).join("\n")}` : null,
     r.verify.length ? `How to check:\n${r.verify.map((v, i) => `${i + 1}. ${v}`).join("\n")}` : null,
+    r.diff ? diffText(r.diff) : null,
     r.questions.length ? `Questions for the user:\n${r.questions.map((q) => `- ${q}`).join("\n")}` : null,
     r.links.length ? `Links: ${r.links.map((l) => (l.label === l.url ? l.url : `${l.label} (${l.url})`)).join(", ")}` : null,
     r.followUps.length ? `Follow-ups: ${r.followUps.map((f) => (f.title ? `${f.key} ${f.title}` : f.key)).join(", ")}` : null,

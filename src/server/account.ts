@@ -12,7 +12,7 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
-import { SETTING_KEYS, areaPictureOf, deriveKey, usageOf } from "./store/shared";
+import { SETTING_KEYS, areaPictureOf, deriveKey, diffOf, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
@@ -409,6 +409,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         criteria: criteria(r.criteria), verify: texts(r.verify, 2000), questions: texts(r.questions, 2000), links: links(r.links),
         follow_ups: texts(r.follow_ups, 40).filter((k) => KEY.test(k)), created_at: match(r.created_at, STAMP) ?? now,
         changes: clip(r.changes, 20000) || null, changes_at: clip(r.changes, 20000) ? match(r.changes_at, STAMP) : null,
+        diff: diffOf(r.diff),
       }).select("id").single()) as Row;
       reportId.set(Number(r.id), Number(row.id));
     }
@@ -586,11 +587,12 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     for (const e of sessionEvents) if (kept.has(String(e.session_id))) insEv.run(String(e.session_id), String(e.at), String(e.kind), String(e.text ?? ""));
 
     const insReport = conn.prepare(`INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links,
-      follow_ups, created_at, changes, changes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      follow_ups, created_at, changes, changes_at, diff) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const r of reports) {
       if (!kept.has(String(r.session_id)) || !task(r.task_id)) continue;
       const row = insReport.run(String(r.session_id), task(r.task_id), String(r.outcome), String(r.summary), String(r.details ?? ""), json(r.criteria),
-        json(r.verify), json(r.questions), json(r.links), json(r.follow_ups), String(r.created_at), s(r.changes), s(r.changes_at));
+        json(r.verify), json(r.questions), json(r.links), json(r.follow_ups), String(r.created_at), s(r.changes), s(r.changes_at),
+        diffOf(r.diff) ? JSON.stringify(diffOf(r.diff)) : null);
       reportId.set(Number(r.id), Number(row.lastInsertRowid));
     }
     // Only the images whose files are on this computer.

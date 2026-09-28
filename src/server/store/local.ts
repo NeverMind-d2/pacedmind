@@ -1,6 +1,7 @@
 import "server-only";
 import crypto from "node:crypto";
 import { removeImageFiles, type StoredImage } from "../attachments";
+import { removeDiffFiles } from "../diff";
 import {
   flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
@@ -9,7 +10,7 @@ import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
   linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
-  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf,
+  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
@@ -344,11 +345,14 @@ export async function updateTask(id: number, patch: TaskPatch) {
   update("tasks", id, values);
 }
 
-/** Deletes a task with its sub-tasks, sessions, reports and images. */
+/** Deletes a task with its sub-tasks, sessions, reports, images and diffs. */
 export async function deleteTask(id: number) {
   const files = all("SELECT file FROM attachments WHERE task_id = ?", id).map((r) => String(r.file));
+  const sessions = all("SELECT id FROM sessions WHERE task_id = ?", id).map((r) => String(r.id));
+  const patches = all("SELECT diff FROM reports WHERE task_id = ? AND diff IS NOT NULL", id).map((r) => diffOf(r.diff)?.patchId);
   run("DELETE FROM tasks WHERE id = ?", id);
   removeImageFiles(files);
+  removeDiffFiles(sessions, patches);
   forgetTask("local", id);
 }
 
@@ -545,11 +549,11 @@ export async function pendingImages(sessionIds: string[]): Promise<Map<string, A
 export async function createReport(input: ReportInput): Promise<number> {
   return tx(() => {
     const r = run(
-      `INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links, follow_ups, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links, follow_ups, created_at, diff)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       input.sessionId, input.taskId, input.outcome, input.summary.trim(), (input.details ?? "").trim(), JSON.stringify(input.criteria ?? []),
       JSON.stringify(input.verify ?? []), JSON.stringify(input.questions ?? []), JSON.stringify(input.links ?? []),
-      JSON.stringify(input.followUps ?? []), input.createdAt ?? nowStamp(),
+      JSON.stringify(input.followUps ?? []), input.createdAt ?? nowStamp(), input.diff ? JSON.stringify(input.diff) : null,
     );
     const id = Number(r.lastInsertRowid);
     run("UPDATE attachments SET report_id = ? WHERE session_id = ? AND report_id IS NULL", id, input.sessionId);
@@ -579,6 +583,7 @@ function toReports(rows: Row[]): Report[] {
     images: images.filter((a) => a.reportId === Number(r.id)),
     changes: s(r.changes),
     changesAt: s(r.changes_at),
+    diff: diffOf(r.diff),
   }));
 }
 

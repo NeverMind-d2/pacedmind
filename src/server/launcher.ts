@@ -13,6 +13,7 @@ import * as repo from "./repo";
 import { MODE } from "./supabase";
 import { activeDevice } from "./scope";
 import { dataDir, deviceConfig, issueSessionToken, projectFolder, projectServers } from "./device";
+import { noteStart } from "./diff";
 import { TELEMETRY_VAR, claudeServers, claudeTelemetrySet, codexServersOff, codexTelemetrySet } from "./extras";
 import { HOST_SESSION_VARS, agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
@@ -689,6 +690,8 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   // Codex cloud runs out of sight and asks nothing; everything else starts the agent in the folder here.
   if (!(session.surface === "cloud" && agent === "codex")) trustAhead(agent, folder);
   const trust = session.surface !== "desktop" && asksTrust(agent, folder);
+  // Where its folder stands, for the changes its report shows (diff.ts); the cloud works on a copy elsewhere.
+  if (session.surface !== "cloud") await noteStart(session.id, folder);
   let failed: string | null = null;
   if (session.surface === "desktop") {
     failed = openUrl(desktopLink(agent, folder, kickoffPrompt(task, session.id)));

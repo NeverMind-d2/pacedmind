@@ -20,7 +20,7 @@ const ASKS = process.platform === "darwin"
   ? ["Desktop", "Documents", "Downloads", path.join("Library", "Mobile Documents"), path.join("Library", "CloudStorage")]
     .map((d) => path.join(os.homedir(), d).toLowerCase())
   : [];
-const asks = (file: string) => {
+export const asks = (file: string) => {
   const key = path.resolve(file).toLowerCase();
   return ASKS.some((d) => key === d || key.startsWith(d + path.sep));
 };

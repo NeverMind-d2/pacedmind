@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { MODE, NotSignedIn, authState, supabase } from "../supabase";
 import { removeImageFiles, type StoredImage } from "../attachments";
+import { removeDiffFiles } from "../diff";
 import { repoIdentity } from "../git-remote";
 import {
   deviceConfig, flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
@@ -11,7 +12,7 @@ import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
   deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
-  type TaskFilter, type TaskInput, type TaskPatch, usageOf,
+  type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
@@ -390,9 +391,13 @@ export async function updateTask(id: number, patch: TaskPatch) {
 export async function deleteTask(id: number) {
   const db = await accountDb();
   const files = await localImageFiles(id);
+  // Its sessions' starting points and its reports' diffs on this computer go too (diff.ts).
+  const sessions = many(await db.from("sessions").select("id").eq("task_id", id)).map((r) => String(r.id));
+  const patches = many(await db.from("reports").select("diff").eq("task_id", id).not("diff", "is", null)).map((r) => diffOf(r.diff)?.patchId);
   check(await db.from("tasks").delete().eq("id", id));
   if (MODE === "desktop") {
     removeImageFiles(files);
+    removeDiffFiles(sessions, patches);
     forgetTask("cloud", id);
   }
 }
@@ -642,7 +647,7 @@ export async function createReport(input: ReportInput): Promise<number> {
   const r = one(await db.from("reports").insert({
     session_id: input.sessionId, task_id: input.taskId, outcome: input.outcome, summary: input.summary.trim(),
     details: (input.details ?? "").trim(), criteria: input.criteria ?? [], verify: input.verify ?? [], questions: input.questions ?? [],
-    links: input.links ?? [], follow_ups: input.followUps ?? [], created_at: input.createdAt ?? nowStamp(),
+    links: input.links ?? [], follow_ups: input.followUps ?? [], created_at: input.createdAt ?? nowStamp(), diff: input.diff ?? null,
   }).select("id").single());
   const id = Number(r!.id);
   check(await db.from("attachments").update({ report_id: id }).eq("session_id", input.sessionId).is("report_id", null));
@@ -677,6 +682,7 @@ async function toReports(rows: Row[]): Promise<Report[]> {
     images: images.filter((a) => a.reportId === Number(r.id)),
     changes: s(r.changes),
     changesAt: s(r.changes_at),
+    diff: diffOf(r.diff),
   }));
 }
 

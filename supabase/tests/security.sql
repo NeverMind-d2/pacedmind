@@ -282,6 +282,21 @@ begin
     out := out || '17w FAIL a usage that is not an object accepted' || E'\n';
     reset role;
   exception when others then out := out || '17w usage that is not an object rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  -- 17x-y. a report's diff: a small JSON object, nothing else
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.reports (session_id, task_id, summary, created_at, diff) values ('0123456789abcdef', tid, 'With a diff', '2026-09-25T12:00:00',
+      '{"base": "abc1234", "head": "def5678", "commits": [], "files": [{"path": "a.ts", "status": "modified", "added": 3, "removed": 1}], "added": 3, "removed": 1}');
+    select count(*) into n from public.reports where diff is not null; out := out || '17x report diff saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '17x ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.reports (session_id, task_id, summary, created_at, diff)
+      values ('0123456789abcdef', tid, 'Too big', '2026-09-25T12:00:00', jsonb_build_object('x', repeat('a', 100001)));
+    out := out || '17y FAIL an oversized diff accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17y oversized diff rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb,
       'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);
