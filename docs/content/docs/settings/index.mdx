@@ -13,7 +13,7 @@ In the desktop app, without an account, the menu has these pages:
 | **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)** |
 | **This computer** | **[General](#general)**, **[Sessions](#sessions)**, **[Projects](#projects)**, **[MCP server](#mcp-server)** |
 
-Signed in to PacedMind Cloud, the menu adds **[Security](#security)** after **Account** and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, and **Projects**, with each project's default agent only (*Folders and flows are set in the desktop app, on the computer where the sessions run.*). See [Accounts and Cloud](/accounts-and-cloud).
+Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on) and **[Security](#security)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, and **Projects**, with each project's default agent only (*Folders and flows are set in the desktop app, on the computer where the sessions run.*). See [Accounts and Cloud](/accounts-and-cloud).
 
 ## Account
 
@@ -22,6 +22,12 @@ Signed in to PacedMind Cloud, the menu adds **[Security](#security)** after **Ac
 Without an account, the page has one section, **PacedMind Cloud**. Its **Account** row reads *Not signed in*, and **Sign in** opens the sign-in screen. The note below says: *Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.* See [Accounts and Cloud](/accounts-and-cloud).
 
 Signed in, the page shows who you're signed in as, with **Sign out**, and **Sign out all** for every browser and computer, this one too. A **Computers** section counts the computers signed in to the account and those online, names the default one, and has **Open Computers**, which opens the **Computers** page. **Delete account** deletes the account and everything in it, after you type your email and a two-factor code.
+
+## Plan
+
+*Your PacedMind Cloud trial or subscription, and paying for it.* Only when signed in, once paid plans are on.
+
+The **Plan** row says where the account stands, such as *Free trial, 12 days left* or *Cloud, paid monthly*. Before subscribing, **Prices for** picks the country whose price to show, and **Pay** chooses **Monthly** or **Yearly**, with the price, and **Subscribe**. After subscribing, **Billing** has **Manage billing**, which opens Stripe's page for the card, invoices and cancelling, and while paying monthly or yearly, **Switch to yearly** or **Switch to monthly**. Payments go through Stripe: PacedMind never sees your card.
 
 ## Security
 
@@ -44,7 +50,7 @@ The note says where the data is and counts the sessions recorded so far, such as
 
 Both resets replace all areas, projects, tasks, activities and sessions, and can't be undone. Settings, including the work hours and the MCP token, stay. See [Where your data lives](/getting-started/data#reset).
 
-Signed in, the page resets the account's data instead. In the desktop app, while this computer still keeps tasks or projects from before you signed in, a **This computer** row counts them, and **Move to account** moves them into the account.
+Signed in, the page resets the account's data instead. In the desktop app, while this computer still keeps tasks or projects from before you signed in, a **This computer** row counts them, and **Move to account** moves them into the account. **Your account** → **Move to this computer** copies everything in the account to this computer and signs out, so PacedMind keeps working without an account.
 
 ## Appearance
 

@@ -6,6 +6,11 @@ export function formatPlanPrice(market: Market) {
   return new Intl.NumberFormat(market.locale, { style: "currency", currency: market.currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(market.amount);
 }
 
+/** Cloud's yearly price: prices.json's yearlyMonths times the monthly one, as scripts/stripe-prices.mjs charges it. */
+export function yearlyMarket(market: Market, yearlyMonths: number): Market {
+  return { ...market, amount: Math.round(market.amount * yearlyMonths * 100) / 100 };
+}
+
 // Time zones of the countries in prices.json. The time zone says where someone is more reliably
 // than the browser language, which is often English wherever they live.
 const ZONES: Record<string, string> = {

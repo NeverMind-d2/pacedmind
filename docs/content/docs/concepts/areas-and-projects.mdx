@@ -9,7 +9,7 @@ Areas are the top level of the planner. Each project belongs to exactly one area
 
 An area has a name, a color, an optional icon and a **key**. The key is three letters made from the name's letters A to Z: usually the first letter and the next two consonants, such as **WRK** for Work and **HLT** for Health. A name of three letters or fewer keeps them (**DEV** for Dev), and a name without enough consonants uses its first three letters (**HOM** for Home). If the key is already taken, a number replaces its last letter, such as **WR2**.
 
-The key starts the key of every task in the area (WRK-1, WRK-2, …). It never changes, not even when the area is renamed, so existing task keys stay valid.
+The key starts the key of every task in the area (WRK-1, WRK-2, …). Renaming the area gives it the key of its new name, such as **JOB** when Work becomes Job, and a name that still makes the same key keeps it. Tasks already in the area keep their keys (WRK-12 stays WRK-12); new tasks get the new key (JOB-1).
 
 ### Create an area
 

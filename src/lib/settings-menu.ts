@@ -1,6 +1,6 @@
 /** Settings' pages, each at /settings/<id> (src/app/(app)/settings/[section]). */
 export type SettingsSection =
-  | "account" | "security" | "data"
+  | "account" | "plan" | "security" | "data"
   | "appearance" | "notifications" | "planning"
   | "computer" | "sessions" | "projects" | "mcp";
 
@@ -18,10 +18,10 @@ export interface SettingsGroup {
 }
 
 /**
- * What Settings has, in its menu's order: the account's pages when signed in, this computer's in the desktop app
- * (the web app has no computer of its own: its agents run on the desktop app's).
+ * What Settings has, in its menu's order: the account's pages when signed in (Plan once billing is on), this
+ * computer's in the desktop app (the web app has no computer of its own: its agents run on the desktop app's).
  */
-export function settingsMenu({ account, desktop }: { account: boolean; desktop: boolean }): SettingsGroup[] {
+export function settingsMenu({ account, plan, desktop }: { account: boolean; plan: boolean; desktop: boolean }): SettingsGroup[] {
   const page = (id: SettingsSection, label: string, hint: string): SettingsPage => ({ id, label, hint });
   return [
     {
@@ -30,8 +30,9 @@ export function settingsMenu({ account, desktop }: { account: boolean; desktop: 
         account
           ? page("account", "Account", "Who you're signed in as, and the computers signed in to your account.")
           : page("account", "Account", "Use PacedMind on your other computers and in the browser too."),
+        ...(account && plan ? [page("plan", "Plan", "Your PacedMind Cloud trial or subscription, and paying for it.")] : []),
         ...(account ? [page("security", "Security", "Two-factor sign-in and your password.")] : []),
-        page("data", "Data", account ? "What your account holds, and starting over." : "What this computer keeps, and starting over."),
+        page("data", "Data", account ? "What your account holds, moving it, and starting over." : "What this computer keeps, and starting over."),
       ],
     },
     {
@@ -62,7 +63,10 @@ export function settingsMenu({ account, desktop }: { account: boolean; desktop: 
   ];
 }
 
-/** The pages old links named by their anchor on the single Settings page (/settings#connect). */
+/**
+ * The pages old links named by their anchor on the single Settings page (/settings#connect); the others' anchors
+ * were their ids (#plan, #data).
+ */
 export const OLD_ANCHORS: Record<string, SettingsSection> = {
   devices: "account",
   "this-computer": "computer",

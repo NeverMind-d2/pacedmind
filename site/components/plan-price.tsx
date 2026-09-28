@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { formatPlanPrice, guessCountry, type Market } from "@/lib/markets";
+import { formatPlanPrice, guessCountry, yearlyMarket, type Market } from "@/lib/markets";
 
 // The country the prices are shown for, shared by the picker and every plan's price. The static HTML
 // shows the fallback country; the browser switches to its own before anyone scrolls down this far.
@@ -24,14 +24,17 @@ function useMarket(markets: Market[], fallback: string) {
   return find(country) ?? find(fallback)!;
 }
 
-/** Cloud's monthly price in the chosen country. */
-export function PlanPrice({ markets, fallback }: { markets: Market[]; fallback: string }) {
+/** Cloud's monthly price in the chosen country, and the yearly one (prices.json's yearlyMonths times it). */
+export function PlanPrice({ markets, fallback, yearlyMonths }: { markets: Market[]; fallback: string; yearlyMonths: number }) {
   const market = useMarket(markets, fallback);
   return (
-    <p className="flex items-baseline gap-2 text-ink">
-      <span className="text-[46px] leading-none font-light tabular-nums">{formatPlanPrice(market)}</span>
-      <span className="text-[16px] text-mut">/ month</span>
-    </p>
+    <>
+      <p className="flex items-baseline gap-2 text-ink">
+        <span className="text-[46px] leading-none font-light tabular-nums">{formatPlanPrice(market)}</span>
+        <span className="text-[16px] text-mut">/ month</span>
+      </p>
+      <p className="mt-3 text-[16px] text-mut">or <span className="tabular-nums">{formatPlanPrice(yearlyMarket(market, yearlyMonths))}</span> a year</p>
+    </>
   );
 }
 

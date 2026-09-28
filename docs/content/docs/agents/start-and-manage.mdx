@@ -125,16 +125,28 @@ Besides PacedMind's MCP server, a session gets what Claude Code or Codex has on 
 
 Only names are shown. A server's command, address, headers and keys stay in the agents' files, and PacedMind's own `pacedmind` server isn't listed, since every session has it, nor is an entry under its earlier name, `organizer`.
 
+### What a session actually has
+
+What the settings files name isn't always what a session gets: a server can fail to start or wait for you to sign in, the account Claude Code is signed in to adds its claude.ai connectors, and plugins add servers of their own. For a Claude Code session PacedMind started in a terminal, PacedMind reads what the session has from Claude Code's own record of it, the session's transcript, rather than from what the agent says, which can be wrong: an agent told a server failed can still list it.
+
+* When the agent calls `start_task`, PacedMind records the MCP servers the session has tools from, such as *Claude Code says it runs as …, with the MCP servers github; the claude.ai connectors Gmail, Linear; the servers of its plugins episodic-memory*.
+* When a server gave it no tools, PacedMind records *Not available to Claude Code:* and each one with why: *needs you to sign in (/mcp in its terminal)*, *didn't start* with Claude Code's error code, such as *(ENOENT)*, or *hasn't connected yet*. **Sessions** shows it as **Not available**.
+* A server still connecting is looked at again 30 seconds later, and while one is missing, again at the end of each of the agent's turns. Once they're all there, PacedMind records *All its MCP servers are available to Claude Code now*, and **Not available** goes away: for example after you sign in with `/mcp` in the session's terminal.
+
+Claude Code writes that record while it loads MCP tools on demand, its default. Codex's session records don't say how its servers are, so a Codex session, and a session in a desktop app, shows the servers its agent says it has.
+
+The claude.ai connectors come from the Claude account Claude Code is signed in to on that computer, which no settings file names, so they can differ from computer to computer. **Computers** shows them for each computer as *claude.ai connectors* and their names, from the last session PacedMind started there that got all its servers (one of a project that picks its servers gets none of them).
+
 ### Choose a project's MCP servers
 
 Each project in **Settings → Projects** says which MCP servers its sessions get on this computer: *MCP servers for its sessions: all they have here*, *only* and their names, or *none besides PacedMind*. **Change** opens the choice, and **Done** closes it:
 
 * **All of them**, the default: *Sessions get every MCP server Claude Code and Codex have in this folder, as when you start them yourself.*
-* **Only these**: a switch for each server Claude Code or Codex has for the project's folder, with the agents that have it. *Claude Code gets only these, and none from plugins; Codex has the others switched off. PacedMind's own server always stays.*
+* **Only these**: a switch for each server Claude Code or Codex has for the project's folder, with the agents that have it. *Claude Code gets only these, and none from plugins or its claude.ai account; Codex has the others switched off. PacedMind's own server always stays.*
 
 The servers to choose from are, for Claude Code, yours for all projects, the ones it keeps for this folder only, and the ones in the folder's `.mcp.json` that you allowed there; for Codex, the ones in `~/.codex/config.toml` and in the folder's `.codex/config.toml`. The choice is this computer's, like the project's folder, and applies to the terminal sessions PacedMind starts, resumes or sends back from then on. For Claude Code, PacedMind copies the chosen servers' settings into the session's own MCP configuration. Sessions in the desktop apps and the cloud get what the app or the cloud has.
 
-**Sessions** shows what a session ran with: **Client**, the name and version its MCP client gave when it connected to PacedMind, such as *Claude Code 2.1.278*, and **Agent says**, the model and MCP servers the agent reported with `start_task`. See [Session details](/views/sessions#session-details).
+**Sessions** shows what a session ran with: **Client**, the name and version its MCP client gave when it connected to PacedMind, such as *Claude Code 2.1.278*, **Agent says**, the model the agent reported with `start_task` and the MCP servers the session has, and **Not available**, the ones it should have but hasn't. See [Session details](/views/sessions#session-details).
 
 ## Resume a session
 

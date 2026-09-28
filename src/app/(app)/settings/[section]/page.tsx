@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import {
-  AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanningSettings,
-  ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
+  AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
+  PlanningSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
 } from "@/components/views/settings";
 import * as repo from "@/server/repo";
 import { legacySummary } from "@/server/account";
+import { readPlan } from "@/server/billing";
 import { thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
 import { deviceConfig, projectServers } from "@/server/device";
@@ -39,9 +40,9 @@ function deviceSettings(): DeviceSettings {
 /** A Settings page, reading only what it shows. The menu (settingsMenu) says which pages there are here. */
 export default async function SettingsSectionPage(props: PageProps<"/settings/[section]">) {
   const { section } = await props.params;
-  const state = await authState();
+  const [state, plan] = await Promise.all([authState(), readPlan()]);
   const desktop = MODE === "desktop";
-  const page = settingsMenu({ account: !!state, desktop }).flatMap((g) => g.pages).find((p) => p.id === section);
+  const page = settingsMenu({ account: !!state, plan: !!plan?.enforced, desktop }).flatMap((g) => g.pages).find((p) => p.id === section);
   // Not a page here (signed out since, or the web app): the menu opens its first.
   if (!page) redirect("/settings");
   return <SettingsContent title={page.label} hint={page.hint}>{await body(page.id, state, desktop)}</SettingsContent>;
@@ -57,11 +58,15 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
       const devices = [...here, ...all.filter((x) => !x.revokedAt && x.id !== me?.id)];
       return <AccountSettings account={accountView(state)} devices={devices} thisDeviceId={here.length ? me!.id : null} />;
     }
+    case "plan": {
+      const plan = await readPlan();
+      return plan && <PlanSettings plan={plan} />;
+    }
     case "security":
       return state && <SecuritySettings account={accountView(state)} />;
     case "data": {
       const [legacy, sessions] = await Promise.all([state && desktop ? legacySummary() : null, repo.listSessions()]);
-      return <DataSettings account={!!state} legacy={legacy} sessionsCount={sessions.length} />;
+      return <DataSettings account={!!state} desktop={desktop} legacy={legacy} sessionsCount={sessions.length} />;
     }
     case "appearance":
       return <AppearanceSettings />;

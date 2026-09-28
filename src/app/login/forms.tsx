@@ -65,9 +65,12 @@ function useRun(initial: Note = null) {
 
 type Mode = "signin" | "signup" | "reset";
 
-/** `confirmed`: an email link confirmed the address but couldn't sign in here (opened in another browser). */
-export function LoginForm({ initialError, confirmed }: { initialError: string | null; confirmed?: boolean }) {
-  const [mode, setMode] = useState<Mode>("signin");
+/**
+ * `confirmed`: an email link confirmed the address but couldn't sign in here (opened in another browser). `create`:
+ * opens on creating an account (the site's Cloud button links to /login?create=1).
+ */
+export function LoginForm({ initialError, confirmed, create }: { initialError: string | null; confirmed?: boolean; create?: boolean }) {
+  const [mode, setMode] = useState<Mode>(create ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");

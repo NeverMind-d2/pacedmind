@@ -1,6 +1,7 @@
 import "server-only";
 import * as repo from "./repo";
 import { answeredInTerminal, holdsPermission } from "./asks";
+import { recheckSessionMcp, watchesMcp } from "./session-mcp";
 import { knownAttention, noteSessionEvent } from "./attention";
 import { attentionOf, type AttentionKind } from "@/lib/dates";
 import { AGENT_LABEL, isLiveSession, type Session } from "@/lib/types";
@@ -96,6 +97,8 @@ export async function recordSignal(o: { sessionId: string; hookedId: string; kin
   }
   const s = await hookSession(o.sessionId, o.hookedId, o.cli);
   if (!s) return;
+  // Its turn ended while an MCP server was missing: signing in through /mcp may have brought it.
+  if (o.kind === "stop" && watchesMcp(s.id)) await recheckSessionMcp(s.id).catch(() => {});
   const e = eventFor(o.kind, o.payload, await attentionNow(s.id), AGENT_LABEL[s.agent]);
   if (!e) return;
   const n = counts().get(s.id) ?? 0;

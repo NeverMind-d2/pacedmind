@@ -14,7 +14,7 @@ A session that PacedMind started gets a smaller set: the read tools, `create_tas
 
 - `list_areas` (read): id, key, color, icon (when set, or *its own picture* for an area with an uploaded one) and counts.
 - `create_area`: a name, an optional color (palette name or hex) and an optional icon (one of the names the tool lists). The key is made from the name.
-- `update_area`: rename, recolor, or change the icon (`none` shows the dot again). The key doesn't change. An icon replaces the area's own picture; pictures (such as a company logo) are uploaded in the app only.
+- `update_area`: rename, recolor, or change the icon (`none` shows the dot again). A new name gives the area the key made from it, for its new tasks; existing task keys don't change. An icon replaces the area's own picture; pictures (such as a company logo) are uploaded in the app only.
 - `delete_area`: deletes the area and its projects; their tasks go to the Inbox. Ask first.
 
 ## Projects

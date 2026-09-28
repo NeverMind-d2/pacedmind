@@ -5,6 +5,7 @@ import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
 import { codeFreshUntil } from "@/server/step-up";
 import { askedHere } from "@/server/asks";
+import { readPlan } from "@/server/billing";
 import { attentionOf } from "@/lib/dates";
 import { LIVE_STATUSES, type AskView, type LaunchRequestView } from "@/lib/types";
 
@@ -26,7 +27,8 @@ const RECENT_MS = 30 * 60_000;
  * for your permission or asked you a question: attentionOf), with the event that says so; `requests`, the account's requests to its computers from the last half hour, newest first (for
  * "Waiting for X", "Started on X", "Refused by X"; empty without an account), and `codeFreshUntil`, until when (ms
  * since the epoch) a request may skip asking for a two-factor code because one was entered in this session (a hint:
- * the database decides).
+ * the database decides); `plan`, the account's PacedMind Cloud plan once billing is on (its state, whether it may still
+ * write, when its trial ends), else null.
  */
 export async function GET() {
   const noStore = { headers: { "Cache-Control": "no-store" } };
@@ -34,11 +36,11 @@ export async function GET() {
   // Without an account, the desktop app shows this computer's own data; signing in counts as a change.
   const step = state || MODE === "web" ? nextStep(state) : null;
   if (step) {
-    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false }, noStore);
+    return Response.json({ version: `${boot}-${step}`, waiting: [], attention: [], asks: [], approvals: [], requests: [], codeFreshUntil: null, signedIn: false, plan: null }, noStore);
   }
-  const [version, finished, live, tasks, recent] = await Promise.all([
+  const [version, finished, live, tasks, recent, plan] = await Promise.all([
     repo.stateVersion(), repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listTasks(),
-    repo.listLaunchRequests({ since: new Date(Date.now() - RECENT_MS).toISOString(), limit: 50 }),
+    repo.listLaunchRequests({ since: new Date(Date.now() - RECENT_MS).toISOString(), limit: 50 }), readPlan(),
   ]);
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const briefs = await repo.reportBriefs(finished.map((s) => s.id));
@@ -87,6 +89,7 @@ export async function GET() {
       requests,
       codeFreshUntil: state ? codeFreshUntil(state) : null,
       signedIn: !!state,
+      plan: plan?.enforced ? { state: plan.state, writable: plan.writable, trialEndsAt: plan.trialEndsAt } : null,
     },
     noStore,
   );

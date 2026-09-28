@@ -8,7 +8,7 @@ import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
-  linksOf, pictureHash, repoOf, snapshotOf, strings,
+  linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -94,11 +94,18 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
 
 /**
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
- * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
+ * new key (`renamedKey`), which only its new tasks get.
  */
 export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
   const values: Record<string, Value> = {};
-  if (patch.name?.trim()) values.name = patch.name.trim();
+  const name = patch.name?.trim();
+  if (name) {
+    values.name = name;
+    const areas = areasNow();
+    const current = areas.find((a) => a.id === id);
+    if (current) values.key = renamedKey(name, current.key, new Set(areas.filter((a) => a.id !== id).map((a) => a.key)));
+  }
   if (patch.color) values.color = patch.color;
   if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);

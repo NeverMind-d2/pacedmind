@@ -1,6 +1,6 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
-import { formatPlanPrice } from "@/lib/markets";
+import { formatPlanPrice, yearlyMarket } from "@/lib/markets";
 import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, FLOW, NAME, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
 
 /**
@@ -120,13 +120,13 @@ ${PRICING.title} ${PRICING.subtitle} ${PRICING.plans}
 
 ${list(ONE_DEVICE)}
 
-### Cloud: coming soon
+### Cloud${SITE.cloudOpen ? "" : ": coming soon"}
 
 ${list(CLOUD)}
 
-Cloud's monthly price in each country, as of ${prices.checkedOn}:
+Cloud's price in each country, monthly and yearly (${prices.yearlyMonths} months' worth), as of ${prices.checkedOn}:
 
-${list(markets.map((market) => `${market.name}: ${formatPlanPrice(market)} (${market.currency})`))}
+${list(markets.map((market) => `${market.name}: ${formatPlanPrice(market)} a month, ${formatPlanPrice(yearlyMarket(market, prices.yearlyMonths))} a year (${market.currency})`))}
 
 ## Frequently asked questions
 

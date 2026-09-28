@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
-  connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
-  setProjectServersAction, updateProjectAction, updateSettingsAction,
+  connectAgentAction, createProjectAction, importLegacyAction, manageBillingAction, moveToThisComputerAction, resetDataAction, rotateMcpTokenAction, subscribeAction,
+  updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
 } from "@/app/auth/actions";
+import {
+  FALLBACK_MARKET, MARKETS, YEARLY_MONTHS, daysLeft, marketOf, planPrice, type BillingPeriod, type Plan,
+} from "@/lib/billing";
 import { projectColor } from "@/lib/colors";
+import { toDateStr } from "@/lib/dates";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
@@ -18,6 +22,8 @@ import {
   type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type FolderExtras, type Project, type ProjectAgentsView,
   type RemoteStart, type Settings,
 } from "@/lib/types";
+import { guessCountry } from "../../../site/lib/markets";
+import { useOpenBilling } from "../billing";
 import { AgentIcon, AreaMark, Icon, type IconName } from "../icons";
 import { ImportProjects } from "../import-projects";
 import { PushSettings, type PushDevice } from "../push-settings";
@@ -92,7 +98,7 @@ function ProjectAgents({ name, view, onServers }: { name: string; view: ProjectA
           <span className="text-[11.5px]">
             {chosen === null
               ? "Sessions get every MCP server Claude Code and Codex have in this folder, as when you start them yourself."
-              : "Claude Code gets only these, and none from plugins; Codex has the others switched off. PacedMind's own server always stays."}
+              : "Claude Code gets only these, and none from plugins or its claude.ai account; Codex has the others switched off. PacedMind's own server always stays."}
           </span>
         </div>
       )}
@@ -160,14 +166,15 @@ function ComputersLink() {
 }
 
 const PAGE_ICON: Record<SettingsSection, IconName> = {
-  account: "user", security: "shield", data: "database",
+  account: "user", plan: "creditCard", security: "shield", data: "database",
   appearance: "palette", notifications: "bell", planning: "calendar",
   computer: "laptop", sessions: "terminal", projects: "folder", mcp: "plug",
 };
 
 /**
  * Settings' frame: the menu of its pages (a row above the page on narrow screens) and the page picked there.
- * /settings alone opens the first page, or the one an old link's anchor names (/settings#connect).
+ * /settings alone opens the first page, the one an old link's anchor names (/settings#connect), or Plan when
+ * Stripe's pages send people back (/settings?billing=done, supabase/functions/_shared/billing.ts).
  */
 export function SettingsShell({ menu, children }: { menu: SettingsGroup[]; children: ReactNode }) {
   const current = useSelectedLayoutSegment();
@@ -177,7 +184,7 @@ export function SettingsShell({ menu, children }: { menu: SettingsGroup[]; child
     if (current) return;
     const ids: string[] = menu.flatMap((g) => g.pages.map((p) => p.id));
     const anchor = window.location.hash.slice(1);
-    const want = OLD_ANCHORS[anchor] ?? anchor;
+    const want = new URLSearchParams(window.location.search).has("billing") ? "plan" : OLD_ANCHORS[anchor] ?? anchor;
     router.replace(`/settings/${ids.includes(want) ? want : ids[0]}`);
   }, [current, menu, router]);
   // In the row on narrow screens, the page picked may be out of sight.
@@ -302,6 +309,68 @@ export function AccountSettings({ account, devices, thisDeviceId }: {
   </>;
 }
 
+const noSubscribe = () => () => {};
+/** The country whose price to show: the time zone's, as on the site, else the fallback's. */
+const guessedMarket = () => {
+  const code = guessCountry();
+  return code && MARKETS.some((m) => m.code === code) ? code : FALLBACK_MARKET;
+};
+const day = (iso: string | null) => (iso ? toDateStr(new Date(iso)) : "");
+
+/** Settings → Plan: the trial or subscription, subscribing at a country's price, and Stripe's page for the rest. */
+export function PlanSettings({ plan }: { plan: Plan }) {
+  const { open, pending } = useOpenBilling();
+  const guessed = useSyncExternalStore(noSubscribe, guessedMarket, () => FALLBACK_MARKET);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [period, setPeriod] = useState<BillingPeriod>(plan.period ?? "month");
+  const market = marketOf(picked ?? plan.market ?? guessed);
+  const subscribed = plan.state === "active" || plan.state === "past_due" || plan.state === "canceling";
+  const days = daysLeft(plan.trialEndsAt);
+  const other: BillingPeriod = plan.period === "year" ? "month" : "year";
+  const status: Record<Plan["state"], string> = {
+    trial: days === 0 ? "Free trial, ends today" : `Free trial, ${days === 1 ? "1 day" : `${days} days`} left (until ${day(plan.trialEndsAt)})`,
+    active: `Cloud, paid ${plan.period === "year" ? "yearly" : "monthly"}${plan.periodEnd ? `, renews ${day(plan.periodEnd)}` : ""}`,
+    canceling: `Cloud until ${day(plan.periodEnd)}, then read-only`,
+    past_due: "The last payment didn't go through; the card is tried again",
+    lapsed: "Read-only: subscribe to keep working in Cloud",
+    comped: "Cloud, included with your account",
+  };
+  return (
+    <Section
+      note={`Cloud keeps your tasks, plans and sessions on all your computers and in the browser. A year costs ${YEARLY_MONTHS} months' worth. Payments go through Stripe: PacedMind never sees your card.`}>
+      <Row label="Plan">
+        <span className="flex-1 text-[12.5px] text-fg2" suppressHydrationWarning>{status[plan.state]}</span>
+      </Row>
+      {!subscribed && plan.state !== "comped" && <>
+        <Row label="Prices for">
+          <Menu width={220}
+            trigger={<button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2">{market.name}<Icon name="chevronDown" size={11} /></button>}
+            items={MARKETS.map((m) => ({ value: m.code, label: m.name }))}
+            onSelect={(code) => setPicked(code)} />
+        </Row>
+        <Row label="Pay">
+          <Segmented value={period} onChange={setPeriod} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }]} />
+          <span className="flex-1 whitespace-nowrap text-[12.5px] text-fg2">{planPrice(market, period)} a {period}</span>
+          <Button variant="primary" disabled={pending} onClick={() => open(() => subscribeAction(market.code, period))}>Subscribe</Button>
+        </Row>
+      </>}
+      {(subscribed || plan.customer) && plan.state !== "comped" && (
+        <Row label="Billing">
+          {plan.state === "active" && (
+            <Button size="sm" disabled={pending}
+              onClick={() => confirm(`Pay ${other === "year" ? "yearly" : "monthly"} from now on? What's left of this period counts toward the new one.`)
+                && open(() => subscribeAction(plan.market ?? market.code, other))}>
+              Switch to {other === "year" ? "yearly" : "monthly"}
+            </Button>
+          )}
+          <span className="flex-1" />
+          <Button size="sm" disabled={pending} onClick={() => open(() => manageBillingAction())}>Manage billing</Button>
+        </Row>
+      )}
+    </Section>
+  );
+}
+
 /** Settings → Security: the account's authenticators and its password. */
 export function SecuritySettings({ account }: { account: AccountView }) {
   const { run, pending } = useAction();
@@ -363,9 +432,10 @@ export function SecuritySettings({ account }: { account: AccountView }) {
   </>;
 }
 
-/** Settings → Data: where the data is, moving this computer's into the account, starting over. */
-export function DataSettings({ account, legacy, sessionsCount }: {
+/** Settings → Data: where the data is, moving it between this computer and the account, starting over. */
+export function DataSettings({ account, desktop, legacy, sessionsCount }: {
   account: boolean;
+  desktop: boolean;
   /** What this computer's own data holds, to move into the signed-in account; null without an account. */
   legacy: { file: string; areas: number; projects: number; tasks: number } | null;
   sessionsCount: number;
@@ -382,6 +452,13 @@ export function DataSettings({ account, legacy, sessionsCount }: {
           </span>
           <Button onClick={() => confirm("Move them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer. A copy stays on this computer, without its flows.")
             && run(() => importLegacyAction())}>Move to account</Button>
+        </Row>
+      )}
+      {account && desktop && (
+        <Row label="Your account">
+          <span className="flex-1 text-[12.5px] text-fg3">Keep it on this computer, without an account</span>
+          <Button onClick={() => confirm("Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there, and flows are off until you switch them on. Your account keeps its data until you delete it.")
+            && run(() => moveToThisComputerAction())}>Move to this computer</Button>
         </Row>
       )}
       <Row label="Reset">
