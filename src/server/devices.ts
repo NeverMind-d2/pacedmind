@@ -35,6 +35,8 @@ const g = globalThis as unknown as {
   __pacedmindModelChecks?: Partial<Record<AgentId, Promise<ModelCatalog>>>;
   /** The computer id the latest tools were saved for. */
   __pacedmindToolsSaved?: string;
+  /** The CLI inside the Codex app's package on Windows, where desktopApps last found the app. */
+  __pacedmindCodexAppCli?: string | null;
 };
 
 /** This computer's id in the account's list, once registered (null before that, and in the web app). */
@@ -146,11 +148,18 @@ async function cliVersion(agent: AgentId, command: string): Promise<AgentTools["
   }
   // The default command didn't answer: look where the installers put it.
   if (command.trim() !== agent) return null;
-  for (const place of cliPlaces(agent).filter((p) => QUOTABLE_PATH.test(p) && fs.existsSync(p))) {
-    const version = versionOf(await runCommand(`"${place}" --version`, 15_000));
+  const versionAt = async (place: string) =>
+    QUOTABLE_PATH.test(place) && fs.existsSync(place) ? versionOf(await runCommand(`"${place}" --version`, 15_000)) : null;
+  for (const place of cliPlaces(agent)) {
+    const version = await versionAt(place);
     if (version) return { version, path: place };
   }
-  return null;
+  // On Windows the Codex app carries the CLI in its package, whose folder names its version: an update moves it.
+  if (process.platform !== "win32" || agent !== "codex" || !g.__pacedmindCodexAppCli) return null;
+  if (!fs.existsSync(g.__pacedmindCodexAppCli)) await desktopApps();
+  const app = g.__pacedmindCodexAppCli;
+  const version = app ? await versionAt(app) : null;
+  return app && version ? { version, path: app } : null;
 }
 
 /** The command line that runs an agent's CLI here with `args`, as the check found it; null when there's none to run plainly. */
@@ -230,20 +239,28 @@ export function cliBinary(agent: AgentId): string {
   return found && QUOTABLE_PATH.test(found) ? `"${found}"` : agent;
 }
 
-/** Installed desktop apps by agent, with their versions when the system tells them. */
+/**
+ * Installed desktop apps by agent, with their versions when the system tells them. On Windows it also notes where the
+ * Codex app keeps its CLI, for cliVersion.
+ */
 async function desktopApps(): Promise<Record<AgentId, AgentTools["app"]>> {
   const found: Record<AgentId, AgentTools["app"]> = { claude: null, codex: null };
   if (process.platform === "win32") {
     // Both apps install as MSIX packages; older Claude installs live in AppData\Local\AnthropicClaude.
     const out = await runFile("powershell.exe", [
       "-NoProfile", "-NonInteractive", "-Command",
-      "Get-AppxPackage | Where-Object { $_.Name -in @('Claude', 'OpenAI.Codex') } | ForEach-Object { \"$($_.Name)=$($_.Version)\" }",
+      "Get-AppxPackage | Where-Object { $_.Name -in @('Claude', 'OpenAI.Codex') } | ForEach-Object { \"$($_.Name)|$($_.Version)|$($_.InstallLocation)\" }",
     ], 20_000);
+    let codexCli: string | null = null;
     for (const line of (out ?? "").split(/\r?\n/)) {
-      const [name, version] = line.trim().split("=");
+      const [name, version, dir] = line.trim().split("|");
       if (name === "Claude") found.claude = { version: version || null };
-      if (name === "OpenAI.Codex") found.codex = { version: version || null };
+      if (name === "OpenAI.Codex") {
+        found.codex = { version: version || null };
+        if (dir && path.isAbsolute(dir)) codexCli = path.join(dir, "app", "resources", "codex.exe");
+      }
     }
+    if (out !== null) g.__pacedmindCodexAppCli = codexCli;
     const local = process.env.LOCALAPPDATA ?? path.join(home, "AppData", "Local");
     if (!found.claude && fs.existsSync(path.join(local, "AnthropicClaude", "claude.exe"))) found.claude = { version: null };
     return found;
@@ -338,8 +355,11 @@ export function mcpLinks(url: string, signedIn: boolean): Record<AgentId, McpLin
 export function checkThisDevice(url: string): Promise<Device["agents"]> {
   g.__pacedmindCheck ??= (async () => {
     const d = deviceConfig();
+    // Codex's CLI after the apps: on Windows it can be the one inside the Codex app.
+    const looking = desktopApps();
     const [claude, codex, apps, signedIn] = await Promise.all([
-      cliVersion("claude", agentCommandFor("claude")), cliVersion("codex", agentCommandFor("codex")), desktopApps(), usesCloud().catch(() => false),
+      cliVersion("claude", agentCommandFor("claude")), looking.then(() => cliVersion("codex", agentCommandFor("codex"))), looking,
+      usesCloud().catch(() => false),
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
     const [claudeModels, codexModels] = await Promise.all([
