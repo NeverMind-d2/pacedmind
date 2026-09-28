@@ -355,7 +355,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           {/* Folders are this computer's: the desktop app sets them, for the sessions that run here. */}
           {agent && ctx.desktop && (
             <Prop label="Folder">
-              <FolderProp task={task} projectFolder={project?.folder ?? null} onSave={(folder) => save({ folder })} />
+              <FolderProp task={task} inheritedFolder={project?.folder ?? area?.folder ?? null}
+                inheritedFrom={project?.folder ? "project's" : "area's"} onSave={(folder) => save({ folder })} />
             </Prop>
           )}
           {/* What its agent needs from the computer its session runs on: PacedMind offers one that has it. */}
@@ -445,20 +446,22 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   );
 }
 
-/** The folder a task's sessions work in: its own, or its project's. Click to type one; empty goes back to the project's. */
-function FolderProp({ task, projectFolder, onSave }: { task: Task; projectFolder: string | null; onSave: (folder: string | null) => void }) {
+/** A task can override its project's or area's workspace; clearing it restores inheritance. */
+function FolderProp({ task, inheritedFolder, inheritedFrom, onSave }: {
+  task: Task; inheritedFolder: string | null; inheritedFrom: string; onSave: (folder: string | null) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.folder ?? "");
-  const shown = task.folder ?? projectFolder;
+  const shown = task.folder ?? inheritedFolder;
   const save = () => {
     setEditing(false);
     const next = draft.trim() || null;
-    const own = next && next !== projectFolder ? next : null;
+    const own = next && next !== inheritedFolder ? next : null;
     if (own !== task.folder) onSave(own);
   };
   if (editing) {
     return (
-      <input autoFocus value={draft} aria-label="Folder for this task" placeholder={projectFolder ?? "C:\\path\\to\\folder"}
+      <input autoFocus value={draft} aria-label="Folder for this task" placeholder={inheritedFolder ?? "Absolute folder path"}
         onChange={(e) => setDraft(e.target.value)} onBlur={save}
         onKeyDown={(e) => {
           if (e.key === "Enter") save();
@@ -474,7 +477,7 @@ function FolderProp({ task, projectFolder, onSave }: { task: Task; projectFolder
       <span className={cx("min-w-0 truncate font-mono text-[11.5px]", !shown && "font-sans text-[12.5px] text-mut2")}>
         {shown ?? "PacedMind workspace"}
       </span>
-      <span className="shrink-0 text-[11.5px] text-mut2">{task.folder ? "own" : shown ? "project's" : ""}</span>
+      <span className="shrink-0 text-[11.5px] text-mut2">{task.folder ? "own" : shown ? inheritedFrom : ""}</span>
     </button>
   );
 }

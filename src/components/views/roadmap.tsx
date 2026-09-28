@@ -10,11 +10,11 @@ import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, parseLocal } from "@/lib/dates";
 import { AGENT_LABEL, type AgentId, type Area, type Project, type Session, type Task, type TaskContext } from "@/lib/types";
 import type { ProjectStats, StateTone, TaskState } from "@/server/timeline";
-import { Diamond, Icon, StatusIcon } from "@/components/icons";
+import { AreaMark, Diamond, Icon, StatusIcon } from "@/components/icons";
 import { TaskDetail } from "@/components/task-detail";
 import { useQuickAddProject } from "@/components/quick-add";
 import { openAdd } from "@/components/task-list";
-import { Button, Menu, Switch, cx, useAction } from "@/components/ui";
+import { Button, Dot, Menu, Switch, cx, useAction } from "@/components/ui";
 import { dayPos, tint, useWidth } from "./timeline";
 
 export interface RoadmapItem {
@@ -67,8 +67,9 @@ function AgentChip({ agent }: { agent: AgentId }) {
 
 /* ---------- project timeline ---------- */
 
-function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId }: {
+function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, selectedId }: {
   from: string; days: number; now: string; projects: Project[]; colorOf: (p: Project) => string;
+  markOf: (p: Project) => ReactNode;
   stats: Record<string, ProjectStats>; selectedId: string | null;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>(LEFT + 950);
@@ -145,7 +146,7 @@ function ProjectTimeline({ from, days, now, projects, colorOf, stats, selectedId
                 className={cx("group flex border-b border-hover", selected ? "bg-sel" : "hover:bg-hover")} style={{ height: ROW }}>
                 <div className={cx("sticky left-0 z-10 flex shrink-0 items-center gap-[9px] border-r border-line pl-5 pr-3", selected ? "bg-sel" : "bg-panel group-hover:bg-hover")}
                   style={{ width: LEFT }}>
-                  <Diamond color={color} />
+                  {markOf(p)}
                   <span className="min-w-0 flex-1 truncate text-fg">{p.name}</span>
                   {p.agent && <AgentChip agent={p.agent} />}
                 </div>
@@ -208,8 +209,9 @@ const STRIP = 32;
  * A phone has no room for the names beside the weeks, so each project is a row with its name over a bar across the
  * same weeks, and the chosen project opens under its row (`children`: its tasks and settings).
  */
-function PhoneProjects({ from, days, now, projects, colorOf, stats, selectedId, children }: {
+function PhoneProjects({ from, days, now, projects, colorOf, markOf, stats, selectedId, children }: {
   from: string; days: number; now: string; projects: Project[]; colorOf: (p: Project) => string;
+  markOf: (p: Project) => ReactNode;
   stats: Record<string, ProjectStats>; selectedId: string; children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -266,7 +268,7 @@ function PhoneProjects({ from, days, now, projects, colorOf, stats, selectedId, 
             <Link href={`/roadmap?p=${encodeURIComponent(p.id)}`} scroll={false} aria-current={selected ? "true" : undefined}
               className={cx("grid grid-cols-[minmax(0,1fr)_44px] items-center gap-x-2 gap-y-2 border-b border-hover px-4 py-2.5", selected ? "bg-sel" : "hover:bg-hover")}>
               <span className="col-span-2 flex min-w-0 items-center gap-2">
-                <Diamond color={color} />
+                {markOf(p)}
                 <span className="min-w-0 flex-1 truncate text-fg">{p.name}</span>
                 {p.agent && <AgentChip agent={p.agent} />}
                 <span className="max-w-[55%] shrink-0 truncate text-[12px] text-mut2">{after && !waiting ? `${label}, after ${after.name}` : label}</span>
@@ -477,7 +479,7 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-type SettingsProps = { project: Project; projects: Project[]; colorOf: (p: Project) => string; terminal: string };
+type SettingsProps = { project: Project; projects: Project[]; markOf: (p: Project) => ReactNode; terminal: string };
 
 function SessionPanel(props: SettingsProps) {
   return (
@@ -507,7 +509,7 @@ function PhoneSessionSettings(props: SettingsProps) {
   );
 }
 
-function SessionSettings({ project, projects, colorOf, terminal }: SettingsProps) {
+function SessionSettings({ project, projects, markOf, terminal }: SettingsProps) {
   const { run } = useAction();
   const [folder, setFolder] = useState(project.folder ?? "");
   const byId = new Map(projects.map((p) => [p.id, p]));
@@ -525,7 +527,7 @@ function SessionSettings({ project, projects, colorOf, terminal }: SettingsProps
   const next = projects.filter((p) => p.afterProjectId === project.id);
   const agent: AgentId = project.agent ?? "claude";
   const save = (patch: Partial<Omit<Project, "id">>) => run(() => updateProjectAction(project.id, patch));
-  const item = (p: Project) => ({ value: p.id as string | null, label: p.name, icon: <Diamond color={colorOf(p)} size={10} /> });
+  const item = (p: Project) => ({ value: p.id as string | null, label: p.name, icon: markOf(p) });
 
   return (
     <>
@@ -548,7 +550,7 @@ function SessionSettings({ project, projects, colorOf, terminal }: SettingsProps
           <span className="truncate px-2 text-fg2">{terminal}</span>
         </Setting>
         <Setting label="Folder">
-          <input value={folder} aria-label="Folder" placeholder="A new folder per task" spellCheck={false}
+          <input value={folder} aria-label="Folder" placeholder="Area workspace, or a new folder per task" spellCheck={false}
             ref={(el) => { if (el && document.activeElement !== el) el.scrollLeft = el.scrollWidth; }}
             onChange={(e) => setFolder(e.target.value)}
             onBlur={(e) => {
@@ -565,7 +567,7 @@ function SessionSettings({ project, projects, colorOf, terminal }: SettingsProps
         <Setting label="Starts after">
           <Menu className="min-w-0" width={240}
             trigger={<button type="button" className={cx(pv, !startsAfter && "text-mut2")}>
-              {startsAfter && <Diamond color={colorOf(startsAfter)} size={10} />}
+              {startsAfter && markOf(startsAfter)}
               <span className="truncate">{startsAfter?.name ?? "Nothing, starts any time"}</span>
             </button>}
             items={[{ value: null as string | null, label: "Nothing, starts any time" }, ...others.filter((p) => !waitsFor(p, project.id)).map(item)]}
@@ -615,6 +617,14 @@ export function Roadmap(props: {
   const project = projects.find((p) => p.id === props.selectedId) ?? null;
   useQuickAddProject(project?.id ?? null);
   const colorOf = (p: Project) => projectColor(p, areas);
+  const markOf = (p: Project) => {
+    const area = areas.find((a) => a.id === p.areaId);
+    return (
+      <span className="flex size-4 shrink-0 items-center justify-center">
+        {area ? <AreaMark area={area} /> : <Dot color={colorOf(p)} size={7} />}
+      </span>
+    );
+  };
   const selected = sel ? items.find((it) => it.task.key === sel)?.task ?? null : null;
 
   useEffect(() => {
@@ -660,21 +670,21 @@ export function Roadmap(props: {
           <Menu align="right" width={240} className="max-md:hidden"
             trigger={<button type="button" aria-label="Project"
               className="flex h-7 max-w-[240px] items-center gap-2 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
-              <Diamond color={colorOf(project)} size={10} />
+              {markOf(project)}
               <span className="truncate">{project.name}</span>
               <Icon name="chevronDown" size={12} className="shrink-0 text-mut2" />
             </button>}
-            items={projects.map((p) => ({ value: p.id, label: p.name, icon: <Diamond color={colorOf(p)} size={10} />, hint: areas.find((a) => a.id === p.areaId)?.name }))}
+            items={projects.map((p) => ({ value: p.id, label: p.name, icon: markOf(p), hint: areas.find((a) => a.id === p.areaId)?.name }))}
             onSelect={(id) => router.push(`/roadmap?p=${encodeURIComponent(id)}`, { scroll: false })} />
         )}
       </div>
 
       {project ? (
         <>
-          <ProjectTimeline from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} stats={stats} selectedId={project.id} />
-          <PhoneProjects from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} stats={stats} selectedId={project.id}>
+          <ProjectTimeline from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} markOf={markOf} stats={stats} selectedId={project.id} />
+          <PhoneProjects from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} markOf={markOf} stats={stats} selectedId={project.id}>
             <PhoneTasks project={project} items={items} next={next} stats={stats} onSelect={setSel} />
-            <PhoneSessionSettings project={project} projects={projects} colorOf={colorOf} terminal={props.terminal} />
+            <PhoneSessionSettings project={project} projects={projects} markOf={markOf} terminal={props.terminal} />
           </PhoneProjects>
           {/* On a phone only a task's details show from here, over the whole page. */}
           <div className="flex min-h-0 flex-1 max-md:contents">
@@ -683,7 +693,7 @@ export function Roadmap(props: {
             {selected ? (
               <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />
             ) : (
-              <SessionPanel key={`${project.id}:${project.folder ?? ""}`} project={project} projects={projects} colorOf={colorOf} terminal={props.terminal} />
+              <SessionPanel key={`${project.id}:${project.folder ?? ""}`} project={project} projects={projects} markOf={markOf} terminal={props.terminal} />
             )}
           </div>
         </>

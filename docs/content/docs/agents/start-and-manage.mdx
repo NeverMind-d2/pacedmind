@@ -45,19 +45,21 @@ A cloud session works on a copy of a repository. Claude Code on the web uses the
 
 ## Where a session works
 
-A session works in the task's **own folder**, set with **Folder** in the task's details or in the flow editor, else in its **project's folder**, set in **Settings → Projects** or in the **Roadmap**'s session panel. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
+A session uses the first folder set in this order: the task's **own folder**, its **project's folder**, then its **area's workspace**. Set the task's **Folder** in its details or the flow editor, the project's folder in **Settings → Projects** or the **Roadmap** panel, and the area's workspace from **… → Workspace…** on the area or **Settings → Projects → Area workspaces**. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
+
+To keep an area's Codex sessions in an existing Codex project, choose that project's folder as the area's workspace, then select **Save workspace**. Tasks and projects without their own folder inherit it, so they share one workspace. This is saved only on this computer. Changing it pauses flows in projects that inherit it; switch those flows on again after checking the folder.
 
 The folder must be an absolute path to an existing folder, without the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`. Otherwise the start is refused, before any session is recorded, with a message such as:
 
-* *Can't use the folder C:\code\app: That folder doesn't exist. Change it in Settings.*
-* *… Use an absolute path, like C:\Users\Anna\code\my-app. Change it in Settings.* The example is a `code` folder in your own home folder, such as `/Users/anna/code/my-app` on macOS.
-* *… That path is a file, not a folder. Change it in Settings.*
-* *… The path contains characters that can't be passed to a terminal safely*, with the list of characters, *Change it in Settings.*
-* On macOS: *… The path contains a backslash, which can't be passed to a terminal safely. Change it in Settings.*
+* *Can't use the folder C:\code\app: That folder doesn't exist. Change it in Settings → Projects.*
+* *… Use an absolute path, like C:\Users\Anna\code\my-app. Change it in Settings → Projects.* The example is a `code` folder in your own home folder, such as `/Users/anna/code/my-app` on macOS.
+* *… That path is a file, not a folder. Change it in Settings → Projects.*
+* *… The path contains characters that can't be passed to a terminal safely*, with the list of characters, *Change it in Settings → Projects.*
+* On macOS: *… The path contains a backslash, which can't be passed to a terminal safely. Change it in Settings → Projects.*
 
 For a task's own folder, the message ends with *Change it in the task's details.* instead.
 
-A task with neither its own folder nor a project folder gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The **Flows** panel shows it as *PacedMind workspace*.
+A task without a task folder, project folder or area workspace gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The **Flows** panel shows it as *PacedMind workspace*. A configured folder that no longer exists is reported as an error; the session does not silently switch to a scratch folder.
 
 ### Trusting the folder
 

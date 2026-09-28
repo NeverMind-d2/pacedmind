@@ -28,6 +28,8 @@ export interface DeviceConfig {
   codexCommand: string;
   /** Project id → the folder its sessions run in. */
   folders: Record<string, string>;
+  /** Area id → default workspace on this computer, inherited by tasks and projects without their own folder. */
+  areaFolders: Record<string, string>;
   /**
    * Task → its own folder (a workspace), for tasks that don't run in their project's folder. Keyed by
    * taskFolderKey: the account's tasks and this computer's own (the free plan's) are numbered separately.
@@ -46,7 +48,7 @@ export interface DeviceConfig {
    * starts sessions by itself along these; anything added elsewhere (an agent, the web app, another
    * computer) asks you first.
    */
-  confirmed: Record<string, { edges: string[]; after: string | null }>;
+  confirmed: Record<string, { edges: string[]; after: string | null; areaId?: string | null }>;
   remoteStart: RemoteStart;
   /**
    * Whether the launcher answers Claude Code's and Codex's question whether you trust a session's folder before the
@@ -109,6 +111,7 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     claudeCommand: keep?.claudeCommand ?? "claude",
     codexCommand: keep?.codexCommand ?? "codex",
     folders: {},
+    areaFolders: {},
     taskFolders: {},
     armed: [],
     servers: {},
@@ -181,6 +184,34 @@ export function agentCommandFor(agent: AgentId): string {
 export const projectFolder = (projectId: string | null | undefined): string | null =>
   (projectId && deviceConfig().folders[projectId]) || null;
 
+export const areaFolder = (areaId: string | null | undefined): string | null =>
+  (areaId && deviceConfig().areaFolders?.[areaId]) || null;
+
+/** Changes an area's workspace and pauses the flows whose projects inherit it. Only the local window sets it. */
+export function setAreaFolder(areaId: string, folder: string | null, inheritingProjects: string[] = []): string | null {
+  const d = deviceConfig();
+  if (folder) {
+    const problem = folderProblem(folder);
+    if (problem) return problem;
+  }
+  if (areaFolder(areaId) === folder) return null;
+  const areaFolders = { ...d.areaFolders };
+  if (folder) areaFolders[areaId] = folder;
+  else delete areaFolders[areaId];
+  const paused = new Set(inheritingProjects);
+  const confirmed = Object.fromEntries(Object.entries(d.confirmed ?? {}).filter(([id]) => !paused.has(id)));
+  save({ ...d, areaFolders, armed: d.armed.filter((id) => !paused.has(id)), confirmed });
+  return null;
+}
+
+export function forgetArea(areaId: string) {
+  const d = deviceConfig();
+  if (!d.areaFolders?.[areaId]) return;
+  const areaFolders = { ...d.areaFolders };
+  delete areaFolders[areaId];
+  save({ ...d, areaFolders });
+}
+
 /** Sets or clears where a project's sessions run on this computer. Returns why it can't, or null. */
 export function setProjectFolder(projectId: string, folder: string | null): string | null {
   const d = deviceConfig();
@@ -240,15 +271,17 @@ export function forgetTask(scope: TaskScope, taskId: number) {
  * Forgets the folders, flow switches and MCP servers of these projects, and every task folder of `scope`: after the
  * account's data or this computer's own was started over, or this computer's was moved to Cloud.
  */
-export function forgetAll(scope: TaskScope, projectIds: string[]) {
+export function forgetAll(scope: TaskScope, projectIds: string[], areaIds: string[]) {
   const d = deviceConfig();
   const gone = new Set(projectIds);
+  const goneAreas = new Set(areaIds);
+  const areaFolders = Object.fromEntries(Object.entries(d.areaFolders ?? {}).filter(([id]) => !goneAreas.has(id)));
   const local = (key: string) => key.startsWith("local:");
   const folders = Object.fromEntries(Object.entries(d.folders).filter(([id]) => !gone.has(id)));
   const taskFolders = Object.fromEntries(Object.entries(d.taskFolders ?? {}).filter(([key]) => local(key) !== (scope === "local")));
   const confirmed = Object.fromEntries(Object.entries(d.confirmed ?? {}).filter(([id]) => !gone.has(id)));
   const servers = Object.fromEntries(Object.entries(d.servers ?? {}).filter(([id]) => !gone.has(id)));
-  save({ ...d, folders, taskFolders, armed: d.armed.filter((id) => !gone.has(id)), confirmed, servers });
+  save({ ...d, folders, areaFolders, taskFolders, armed: d.armed.filter((id) => !gone.has(id)), confirmed, servers });
 }
 
 export const flowArmed = (projectId: string | null | undefined) => !!projectId && deviceConfig().armed.includes(projectId);
@@ -257,7 +290,7 @@ export const flowArmed = (projectId: string | null | undefined) => !!projectId &
  * Switches a project's flow on (with its connections as they are now, `snapshot`) or off. Only the desktop
  * window calls this: MCP and the web app can't switch flows.
  */
-export function setFlowArmed(projectId: string, on: boolean, snapshot?: { edges: string[]; after: string | null }) {
+export function setFlowArmed(projectId: string, on: boolean, snapshot?: { edges: string[]; after: string | null; areaId?: string | null }) {
   const d = deviceConfig();
   const armed = d.armed.filter((id) => id !== projectId);
   const confirmed = { ...(d.confirmed ?? {}) };
@@ -270,13 +303,13 @@ export function setFlowArmed(projectId: string, on: boolean, snapshot?: { edges:
 }
 
 /** The flow's connections as you confirmed them on this computer, or null when its flow is off. */
-export function confirmedFlow(projectId: string | null | undefined): { edges: string[]; after: string | null } | null {
+export function confirmedFlow(projectId: string | null | undefined): { edges: string[]; after: string | null; areaId?: string | null } | null {
   if (!projectId || !flowArmed(projectId)) return null;
   return deviceConfig().confirmed?.[projectId] ?? { edges: [], after: null };
 }
 
 /** Records a flow's connections again after you changed them in this window (only while it's on). */
-export function reconfirmFlow(projectId: string, snapshot: { edges: string[]; after: string | null }) {
+export function reconfirmFlow(projectId: string, snapshot: { edges: string[]; after: string | null; areaId?: string | null }) {
   const d = deviceConfig();
   if (!d.armed.includes(projectId)) return;
   save({ ...d, confirmed: { ...(d.confirmed ?? {}), [projectId]: snapshot } });

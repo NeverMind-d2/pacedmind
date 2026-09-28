@@ -47,6 +47,8 @@ export type RemoteStart = "off" | "ask" | "auto";
 
 export interface Area {
   id: string;
+  /** Default workspace on this computer only; tasks and projects can override it. */
+  folder: string | null;
   name: string;
   key: string;
   color: string;
@@ -124,7 +126,7 @@ export interface Task {
   runIn: Surface | null;
   /** The computer its sessions run on; null means the project's computer. */
   deviceId: string | null;
-  /** Its own working folder on this computer (a workspace); set in the desktop app, never stored in the cloud. Null means the project's folder. */
+  /** Its own working folder on this computer; null inherits the project's, then the area's workspace. Never stored in the cloud. */
   folder: string | null;
   sortOrder: number;
   flowX: number | null;

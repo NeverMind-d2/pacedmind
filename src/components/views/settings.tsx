@@ -27,6 +27,7 @@ import { guessCountry } from "../../../site/lib/markets";
 import { useOpenBilling } from "../billing";
 import { AgentIcon, AreaMark, Icon, type IconName } from "../icons";
 import { ImportProjects } from "../import-projects";
+import { AreaWorkspace } from "../area-workspace";
 import { PushSettings, type PushDevice } from "../push-settings";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -631,10 +632,15 @@ export function ProjectSettings({ projects, areas, desktop, agents, platform }: 
   const defaultArea = areas.find((a) => a.key === "DEV")?.id ?? areas[0]?.id ?? "";
   const [newProject, setNewProject] = useState({ name: "", areaId: defaultArea, folder: "", agent: "claude" as AgentId | null });
   return <>
+    {desktop && <Section title="Area workspaces" note="Connect an area to an existing Codex or Claude project by choosing its folder on this computer. Tasks and projects without their own folder inherit it.">
+      {areas.map((area) => <div key={`${area.id}:${area.folder ?? ""}`} className="border-b border-line px-3.5 py-3 last:border-b-0">
+        <AreaWorkspace area={area} projects={projects} compact />
+      </div>)}
+    </Section>}
     <Section
       action={desktop && <Button size="sm" variant="ghost" onClick={() => setImporting(true)}><Icon name="download" size={12} />Import from Claude and Codex</Button>}
       note={desktop
-        ? "A session works in its task's own folder on this computer, else its project's; without either it gets a scratch folder. A flow only starts sessions by itself when it's on here. Changing a folder turns the flow off."
+        ? "A session uses its task's folder, then its project's, then its area's workspace. Without any of these it gets a scratch folder. Changing an inherited workspace pauses the affected flows."
         : "Folders and flows are set in the desktop app, on the computer where the sessions run."}>
       {projects.map((p) => (
         <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
@@ -651,7 +657,7 @@ export function ProjectSettings({ projects, areas, desktop, agents, platform }: 
             </>}
           </div>
           {desktop && (
-            <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder={platform === "win32" ? "C:\\path\\to\\repo" : "/path/to/repo"} aria-label={`Folder for ${p.name}`}
+            <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder={areas.find((a) => a.id === p.areaId)?.folder ?? (platform === "win32" ? "C:\\path\\to\\repo" : "/path/to/repo")} aria-label={`Folder for ${p.name}`}
               onBlur={(e) => (e.target.value.trim() || null) !== p.folder && run(() => updateProjectAction(p.id, { folder: e.target.value.trim() || null }), "Folder saved")} />
           )}
           {desktop && agents?.[p.id] && (

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { guardAction } from "@/server/guard";
 import { MODE, supabase } from "@/server/supabase";
+import { isLoopbackCallback } from "@/lib/oauth-callback";
 
 /*
  * Approving or refusing an agent's sign-in to PacedMind Cloud's MCP server (the hosted app). An approval is the
@@ -11,6 +12,7 @@ import { MODE, supabase } from "@/server/supabase";
  */
 
 type Result = { ok: false; error: string } | { ok: true; message: string };
+type Approval = { ok: false; error: string } | { ok: true; url: string; login: string; local: boolean };
 
 const REQUEST = /^[A-Za-z0-9_-]{1,200}$/;
 const UNSAFE_SCHEMES = new Set(["javascript:", "data:", "vbscript:", "file:", "blob:"]);
@@ -35,14 +37,15 @@ const explain = (message: string) =>
  * Allows the agent's sign-in `id`. `held`: the address Supabase gave when it approved by itself (the agent was
  * allowed before), which the page kept until you chose.
  */
-export async function approveAgentAction(id: string, held: string | null): Promise<Result> {
+export async function approveAgentAction(id: string, held: string | null): Promise<Approval> {
   if (MODE !== "web" || !REQUEST.test(id)) return { ok: false, error: "That sign-in request isn't valid." };
   await guardAction();
   const db = await supabase();
   const { data, error } = await db.rpc("approve_agent_login", { request_id: id });
   if (error) return { ok: false, error: explain(error.message) };
-  const redirectUri = (data as { redirect_uri?: unknown } | null)?.redirect_uri;
-  if (typeof redirectUri !== "string") return { ok: false, error: "That sign-in request has expired. Start connecting the agent again." };
+  const approval = data as { redirect_uri?: unknown; login?: unknown } | null;
+  const redirectUri = approval?.redirect_uri;
+  if (typeof redirectUri !== "string" || typeof approval?.login !== "string") return { ok: false, error: "That sign-in request has expired. Start connecting the agent again." };
   let to = held;
   if (!to) {
     const approved = await db.auth.oauth.approveAuthorization(id, { skipBrowserRedirect: true });
@@ -50,7 +53,20 @@ export async function approveAgentAction(id: string, held: string | null): Promi
     to = approved.data.redirect_url;
   }
   if (!backToClient(to, redirectUri)) return { ok: false, error: "That agent's address doesn't match its request. Start connecting it again." };
-  redirect(to);
+  // The browser delivers the validated callback. A local agent finishes in a temporary window, while this page
+  // waits for the database to confirm this exact approval. Never treat merely issuing a code as connected.
+  return { ok: true, url: to, login: approval.login, local: isLoopbackCallback(to) };
+}
+
+/** Confirms only this approval, after the agent exchanged its code and its sign-in was bound to it. */
+export async function agentConnectionAction(login: string): Promise<"waiting" | "connected" | "ended"> {
+  await guardAction();
+  if (MODE !== "web" || !/^[0-9a-f-]{36}$/i.test(login)) return "ended";
+  const db = await supabase();
+  const { data, error } = await db.rpc("connected_agents");
+  if (error) throw new Error("PacedMind couldn't check the connection. Try again.");
+  const entry = (data as { id: string; claimed_at: string | null }[] | null)?.find((item) => item.id === login);
+  return entry ? (entry.claimed_at ? "connected" : "waiting") : "ended";
 }
 
 /** Refuses the agent's sign-in `id`; the agent hears so, unless Supabase already approved it by itself (`held`). */

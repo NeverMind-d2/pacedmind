@@ -64,7 +64,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <AppHeader email={user?.email ?? null} />
       {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
+        <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} desktop={MODE === "desktop"} />
         {/* On a phone the sidebar is a panel over the page, and the page takes the whole width. */}
         <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel max-md:m-0 max-md:rounded-none max-md:border-x-0 max-md:border-b-0">{children}</main>
       </div>

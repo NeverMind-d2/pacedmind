@@ -4,7 +4,7 @@ import Link from "next/link";
 import {
   useEffect, useLayoutEffect, useOptimistic, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode,
 } from "react";
-import { format, getDaysInMonth, getISOWeek } from "date-fns";
+import { format, getDaysInMonth } from "date-fns";
 import { deleteEdgeAction, linkTasksAction, updateTaskAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, minutesOf, parseLocal, timeOf, toStamp } from "@/lib/dates";
@@ -550,7 +550,7 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
   );
 }
 
-/* ---------- header with weeks and days ---------- */
+/* ---------- header with months and days ---------- */
 
 function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
   const out: ReactNode[] = [];
@@ -586,10 +586,10 @@ function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
       }
       continue;
     }
-    if (i % 7 === 0) {
+    if (d.getDate() === 1) {
       out.push(
-        <span key={`w${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: x0 }}>
-          Week {getISOWeek(d)} · {format(d, "d MMM")}
+        <span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: x0 }}>
+          {format(d, "MMMM")}
         </span>,
       );
     }

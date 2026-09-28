@@ -6,12 +6,12 @@ import { useEffect, useOptimistic, useRef, useState, type DragEvent, type MouseE
 import {
   createAreaAction, createProjectAction, reorderAreasAction, reorderProjectsAction, updateAreaAction, updateProjectAction,
 } from "@/app/actions";
-import { FALLBACK_COLOR, nextColor, projectColor } from "@/lib/colors";
+import { nextColor, projectColor } from "@/lib/colors";
 import { fmtShort } from "@/lib/dates";
 import type { Area, Project, Usage } from "@/lib/types";
 import { AreaMenu, AreasMenu, InlineName, MoreButton, ProjectMenu, ProjectsMenu, type OpenMenu } from "./entity-menu";
-import { AreaIconSvg, AreaMark, AreaPicture, Icon, ProgressRing, type IconName } from "./icons";
-import { Popover, PopoverItem, PopoverLabel, anchorOf, type Anchor } from "./popover";
+import { AreaIconSvg, AreaPicture, Icon, ProgressRing, type IconName } from "./icons";
+import { anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
 import { ThemeToggle } from "./theme";
 
@@ -80,10 +80,11 @@ function moveIds(ids: string[], moving: string[], at: DropAt): string[] {
  * no long-press menu), so there the "…" always shows, beside the key or date. Ctrl-click (⌘-click on a Mac) and
  * Shift-click select the row instead of opening it; dragging it moves it in the list.
  */
-function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, onClose, onSelect, drag, children, trailing }: {
+function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, onClose, onSelect, drag, children, trailing, group }: {
   href: string; active: boolean; open: boolean; selected: boolean; dragged: boolean; drop: "before" | "after" | null; label: string;
   onMenu: (a: Anchor) => void; onClose: () => void; onSelect: (range: boolean) => void; drag: RowDrag;
   children: ReactNode; trailing?: ReactNode;
+  group?: { expanded: boolean; onToggle: () => void; onAdd: () => void };
 }) {
   const onContextMenu = (e: MouseEvent) => { e.preventDefault(); onMenu({ x: e.clientX, y: e.clientY }); };
   // With Ctrl, ⌘ or Shift the browser would open the page in a new tab or window.
@@ -93,13 +94,22 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
     onSelect(e.shiftKey);
   };
   return (
-    <div className={cx("group relative", dragged && "opacity-40")} onContextMenu={onContextMenu} draggable {...drag}>
-      <Link href={href} draggable={false} onClick={onClick}
-        className={cx(item, active && "bg-sel text-strong", open && "bg-hover", selected && "bg-accent/[0.17] text-strong hover:bg-accent/[0.22]")}>
+    <div className={cx("group relative", group && "flex items-center", dragged && "opacity-40")} onContextMenu={onContextMenu} draggable {...drag}>
+      {group && <button type="button" aria-label={`${group.expanded ? "Collapse" : "Expand"} ${label}`} aria-expanded={group.expanded}
+        onClick={group.onToggle} className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2">
+        <Icon name={group.expanded ? "chevronDown" : "chevronRight"} size={12} />
+      </button>}
+      <Link href={href} draggable={false} onClick={onClick} title={group ? `${label} · Drag to reorder area` : label}
+        className={cx(item, group && "min-w-0 flex-1 gap-2 px-1 text-[12px] font-medium", active && "bg-sel text-strong", open && "bg-hover", selected && "bg-accent/[0.17] text-strong hover:bg-accent/[0.22]")}>
         {children}
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 pointer-coarse:mr-7 pointer-coarse:opacity-100", open && "opacity-0")}>{trailing}</span>}
       </Link>
-      <MoreButton label={`${label} options`} open={open} onOpen={onMenu} onClose={onClose} className="absolute right-1 top-[3px] pointer-coarse:opacity-100" />
+      {group && <button type="button" aria-label={`New project in ${label}`} title={`New project in ${label}`} onClick={group.onAdd}
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2">
+        <Icon name="plus" size={13} />
+      </button>}
+      <MoreButton label={`${label} options`} open={open} onOpen={onMenu} onClose={onClose}
+        className={cx(!group && "absolute right-1 top-[3px]", "pointer-coarse:opacity-100")} />
       {drop && <span aria-hidden className={cx("pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-accent", drop === "before" ? "-top-px" : "-bottom-px")} />}
     </div>
   );
@@ -107,11 +117,12 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
 
 type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 
-export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage }: {
+export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage, desktop }: {
   areas: Area[];
   projects: Project[];
   counts: { inbox: number; today: number; sessions: number };
   usage: Usage;
+  desktop: boolean;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -127,7 +138,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   const [dropAt, setDropAt] = useState<DropAt | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(null);
-  const [pickArea, setPickArea] = useState<Anchor | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   // On a phone the sidebar is a panel over the page, opened from the header's menu button (app-header.tsx).
   const [drawer, setDrawer] = useState(false);
   const nav = useRef<HTMLElement>(null);
@@ -160,7 +171,9 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
     return () => document.removeEventListener("pointerdown", onDown);
   }, [selection]);
 
-  const idsOf = (kind: Kind) => (kind === "area" ? areas : projects).map((x) => x.id);
+  // Selection follows the visible hierarchy, including the saved order within each area.
+  const idsOf = (kind: Kind) => kind === "area" ? areas.map((a) => a.id)
+    : areas.flatMap((a) => collapsed[a.id] ? [] : projects.filter((p) => p.areaId === a.id).map((p) => p.id));
   const isSelected = (kind: Kind, id: string) => selection?.kind === kind && selection.ids.includes(id);
 
   /** Ctrl-click (⌘-click) adds the row to the selection or takes it out; Shift-click selects a run of rows. */
@@ -193,6 +206,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
 
   const rowDrag = (kind: Kind, id: string): RowDrag => ({
     onDragStart: (e) => {
+      e.stopPropagation();
       // A selected row takes the whole selection along, in list order; any other row goes on its own.
       const together = isSelected(kind, id);
       const moving = together ? idsOf(kind).filter((x) => selection!.ids.includes(x)) : [id];
@@ -207,6 +221,14 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
     },
     onDragOver: (e) => {
       if (drag?.kind !== kind) return;
+      e.stopPropagation();
+      // Reordering a project stays within its area. Moving to another area is explicit in its menu.
+      if (kind === "project" && !drag.ids.every((x) => projects.find((p) => p.id === x)?.areaId === projects.find((p) => p.id === id)?.areaId)) {
+        setDropAt(null);
+        return;
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
       const r = e.currentTarget.getBoundingClientRect();
       const at = drag.ids.includes(id) ? null : { id, after: e.clientY > r.top + r.height / 2 };
       setDropAt((d) => (d?.id === at?.id && d?.after === at?.after ? d : at));
@@ -215,9 +237,14 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   });
 
   /** The list takes the drop, so a row dropped in the gap between two rows still lands where its line shows. */
-  const listDrop = (kind: Kind) => ({
+  const listDrop = (kind: Kind, areaId?: string) => ({
     onDragOver: (e: DragEvent) => {
       if (drag?.kind !== kind) return;
+      e.stopPropagation();
+      if (kind === "project" && !drag.ids.every((id) => projects.find((p) => p.id === id)?.areaId === areaId)) {
+        setDropAt(null);
+        return;
+      }
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
     },
@@ -226,18 +253,18 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
     },
     onDrop: (e: DragEvent) => {
       if (drag?.kind !== kind) return;
+      e.stopPropagation();
       e.preventDefault();
       setDrag(null);
       setDropAt(null);
       if (!dropAt) return;
-      const before = idsOf(kind);
+      if (kind === "project" && !drag.ids.every((id) => projects.find((p) => p.id === id)?.areaId === areaId)) return;
+      const before = kind === "area" ? idsOf(kind) : projects.map((p) => p.id);
+      if (!before.includes(dropAt.id)) return;
       const ids = moveIds(before, drag.ids, dropAt);
       if (ids.join("\n") === before.join("\n")) return;
       if (kind === "area") {
-        run(() => {
-          showAreas(ids.map((id) => areas.find((a) => a.id === id)!));
-          return reorderAreasAction(ids);
-        });
+        saveAreaOrder(ids);
       } else {
         run(() => {
           showProjects(ids.map((id) => projects.find((p) => p.id === id)!));
@@ -258,10 +285,21 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
     drag: rowDrag(kind, id),
   });
 
-  const newProject = (anchor?: Anchor) => {
-    if (!areas.length) setDraft({ kind: "area" });
-    else if (areas.length === 1 || !anchor) setDraft({ kind: "project", areaId: areas[0].id });
-    else setPickArea(anchor);
+  const saveAreaOrder = (ids: string[]) => {
+    run(() => {
+      showAreas(ids.map((id) => areas.find((a) => a.id === id)!));
+      return reorderAreasAction(ids);
+    });
+  };
+  const moveArea = (id: string, direction: -1 | 1) => {
+    const ids = idsOf("area");
+    const i = ids.indexOf(id);
+    if (i < 0 || i + direction < 0 || i + direction >= ids.length) return;
+    saveAreaOrder(moveIds(ids, [id], { id: ids[i + direction], after: direction === 1 }));
+  };
+  const newProject = (areaId: string) => {
+    setCollapsed((c) => ({ ...c, [areaId]: false }));
+    setDraft({ kind: "project", areaId });
   };
   const createArea = (name: string) => {
     setDraft(null);
@@ -278,7 +316,6 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
 
   const menuArea = menu?.kind === "area" ? areas.find((a) => a.id === menu.id) : undefined;
   const menuProject = menu?.kind === "project" ? projects.find((p) => p.id === menu.id) : undefined;
-  const draftArea = draft?.kind === "project" ? areas.find((a) => a.id === draft.areaId) : undefined;
 
   return (
     <>
@@ -318,22 +355,58 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         </div>
 
         <div className="flex flex-col gap-px" {...listDrop("area")}>
-          <SectionHeader label="Areas" addLabel="New area" onAdd={() => setDraft({ kind: "area" })} />
-          {areas.map((a) =>
-            renaming === `area:${a.id}` ? (
-              <div key={a.id} className={editing}>
-                <AreaDot area={a} />
-                <InlineName initial={a.name} placeholder="Area name" onCancel={() => setRenaming(null)}
-                  onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
-              </div>
-            ) : (
-              <MenuRow key={a.id} href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name} {...rowState("area", a.id)}
-                trailing={<span className="font-mono text-[10.5px] text-mut2">{a.key}</span>}>
-                <AreaDot area={a} />
-                <span className="flex-1 truncate">{a.name}</span>
-              </MenuRow>
-            ),
-          )}
+          <SectionHeader label="Areas & projects" addLabel="New area" onAdd={() => setDraft({ kind: "area" })} />
+          {areas.map((a, index) => {
+            const list = projects.filter((p) => p.areaId === a.id);
+            const shut = collapsed[a.id];
+            const state = rowState("area", a.id);
+            return (
+              <section key={a.id} aria-label={`${a.name} projects`}
+                className={cx("relative pb-1", index > 0 && "mt-1 border-t border-line pt-2", state.dragged && "opacity-40")}
+                onDragOver={state.drag.onDragOver}>
+                {renaming === `area:${a.id}` ? (
+                  <div className={cx(editing, "pl-6")}>
+                    <AreaDot area={a} />
+                    <InlineName initial={a.name} placeholder="Area name" onCancel={() => setRenaming(null)}
+                      onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
+                  </div>
+                ) : (
+                  <MenuRow href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name} {...state} drop={null} dragged={false}
+                    group={{ expanded: !shut, onToggle: () => setCollapsed((c) => ({ ...c, [a.id]: !shut })), onAdd: () => newProject(a.id) }}>
+                    <AreaDot area={a} />
+                    <span className="flex-1 truncate">{a.name}</span>
+                  </MenuRow>
+                )}
+                {!shut && <div className="ml-7 flex flex-col gap-px border-l border-line pl-2" {...listDrop("project", a.id)}>
+                  {list.map((p) => renaming === `project:${p.id}` ? (
+                    <div key={p.id} className={editing}>
+                      <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
+                      <InlineName initial={p.name} placeholder="Project name" onCancel={() => setRenaming(null)}
+                        onSave={(name) => { setRenaming(null); run(() => updateProjectAction(p.id, { name })); }} />
+                    </div>
+                  ) : (
+                    <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)}
+                      trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate)}</span>}>
+                      <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
+                      <span className="flex-1 truncate">{p.name}</span>
+                    </MenuRow>
+                  ))}
+                  {draft?.kind === "project" && draft.areaId === a.id ? (
+                    <div className={editing}>
+                      <ProgressRing pct={0} color={a.color} size={16} />
+                      <InlineName initial="" placeholder={`Project in ${a.name}`} onCancel={() => setDraft(null)}
+                        onSave={(name) => createProject(name, a.id)} />
+                    </div>
+                  ) : !list.length && (
+                    <button type="button" onClick={() => newProject(a.id)} className={cx(item, "text-[12px] text-mut2")}>
+                      <Icon name="plus" size={13} />New project
+                    </button>
+                  )}
+                </div>}
+                {state.drop && <span aria-hidden className={cx("pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-accent", state.drop === "before" ? "-top-px" : "-bottom-px")} />}
+              </section>
+            );
+          })}
           {draft?.kind === "area" ? (
             <div className={editing}>
               <AreaDot area={{ id: "new", color: nextColor(areas.map((a) => a.color)), icon: null, picture: null }} />
@@ -342,36 +415,6 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
           ) : !areas.length && (
             <button type="button" onClick={() => setDraft({ kind: "area" })} className={cx(item, "text-mut")}>
               <Icon name="plus" size={14} />New area
-            </button>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-px" {...listDrop("project")}>
-          <SectionHeader label="Projects" addLabel="New project" onAdd={newProject} />
-          {projects.map((p) =>
-            renaming === `project:${p.id}` ? (
-              <div key={p.id} className={editing}>
-                <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
-                <InlineName initial={p.name} placeholder="Project name" onCancel={() => setRenaming(null)}
-                  onSave={(name) => { setRenaming(null); run(() => updateProjectAction(p.id, { name })); }} />
-              </div>
-            ) : (
-              <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)}
-                trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate)}</span>}>
-                <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
-                <span className="flex-1 truncate">{p.name}</span>
-              </MenuRow>
-            ),
-          )}
-          {draft?.kind === "project" ? (
-            <div className={editing}>
-              <ProgressRing pct={0} color={draftArea?.color ?? FALLBACK_COLOR} size={16} />
-              <InlineName initial="" placeholder={`Project in ${draftArea?.name ?? "area"}`} onCancel={() => setDraft(null)}
-                onSave={(name) => createProject(name, draft.areaId)} />
-            </div>
-          ) : !projects.length && (
-            <button type="button" onClick={(e) => newProject(anchorOf(e.currentTarget))} className={cx(item, "text-mut")}>
-              <Icon name="plus" size={14} />New project
             </button>
           )}
         </div>
@@ -386,8 +429,10 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         </div>
 
         {menuArea && menu && (
-          <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} onClose={closeMenu}
-            onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => setDraft({ kind: "project", areaId: menuArea.id })} />
+          <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} projects={projects} onClose={closeMenu}
+            onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => newProject(menuArea.id)}
+            onMoveUp={areas[0]?.id !== menuArea.id ? () => moveArea(menuArea.id, -1) : undefined}
+            onMoveDown={areas.at(-1)?.id !== menuArea.id ? () => moveArea(menuArea.id, 1) : undefined} />
         )}
         {bulk?.kind === "area" && (
           <AreasMenu areas={areas.filter((a) => bulk.ids.includes(a.id))} anchor={bulk.anchor} usage={usage} onClose={closeMenu}
@@ -400,17 +445,6 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         {menuProject && menu && (
           <ProjectMenu project={menuProject} projects={projects} areas={areas} anchor={menu.anchor} usage={usage} onClose={closeMenu}
             onRename={() => setRenaming(`project:${menuProject.id}`)} />
-        )}
-        {pickArea && (
-          <Popover anchor={pickArea} onClose={() => setPickArea(null)} width={200}>
-            <PopoverLabel>New project in</PopoverLabel>
-            {areas.map((a) => (
-              <PopoverItem key={a.id} icon={<AreaMark area={a} dot={8} />}
-                onClick={() => { setPickArea(null); setDraft({ kind: "project", areaId: a.id }); }}>
-                {a.name}
-              </PopoverItem>
-            ))}
-          </Popover>
         )}
       </nav>
     </>

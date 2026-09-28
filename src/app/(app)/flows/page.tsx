@@ -90,7 +90,8 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
     const agent = agentOf(t, project.agent);
     return agent ? [{
       id: t.id, key: t.key, title: t.title, status: t.status, agent,
-      runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? fallback, folder: t.folder ?? project.folder, ownFolder: !!t.folder,
+      runIn: t.runIn, deviceId: t.deviceId ?? project.deviceId ?? fallback,
+      folder: t.folder ?? project.folder ?? areas.find((a) => a.id === project.areaId)?.folder ?? null, ownFolder: !!t.folder,
       flowX: t.flowX, flowY: t.flowY, sortOrder: t.sortOrder, completedAt: t.completedAt, held: held.get(t.id) ?? null,
     }] : [];
   });
@@ -100,7 +101,9 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
     <FlowView
       key={project.id}
       project={{
-        id: project.id, name: project.name, flowOn: project.flowOn, folder: project.folder, color: projectColor(project, areas),
+        id: project.id, name: project.name, flowOn: project.flowOn,
+        folder: project.folder ?? areas.find((a) => a.id === project.areaId)?.folder ?? null,
+        folderSource: project.folder ? "Project's" : "Area's", color: projectColor(project, areas),
         codexEnv: project.codexEnv,
       }}
       projects={projects.map((p) => ({ id: p.id, name: p.name, color: projectColor(p, areas), inFlow: inFlow(p.id) }))}
