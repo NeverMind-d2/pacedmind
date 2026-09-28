@@ -273,6 +273,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
+        {mode === "task" && <h3 className="px-5 pb-2 text-[12px] font-medium text-fg2">General</h3>}
         <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
           {mode === "task" ? (
             <>
@@ -312,8 +313,9 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
-        {/* Who does it and, for an agent, where its sessions run. */}
-        {mode === "task" && <section aria-label="Done by" className="-mt-1.5 px-5 pb-3.5">
+        {/* Who does it and, for an agent, where its sessions run: a section of its own, apart from the general fields. */}
+        {mode === "task" && <section aria-label={agent ? "Agent" : "Done by"} className="mx-5 mb-3.5 border-t border-line pt-3">
+          <h3 className="pb-2 text-[12px] font-medium text-fg2">{agent ? "Agent" : "Done by"}</h3>
           <div className="flex flex-wrap gap-1.5">
             <Menu width={260}
               trigger={<button type="button" aria-label={`Done by: ${doerLabel}`} title={doer ? undefined : "The project's default"} className={chip}>
