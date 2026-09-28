@@ -8,7 +8,8 @@
 // The key is STRIPE_SECRET_KEY in the env file (the one scripts/stripe-setup.mjs uses), or in the environment.
 // A live key (sk_live_, rk_live_) also needs --live. A price in Stripe can't change its amount: a new one takes over
 // the lookup key (transfer_lookup_key) and the old one is archived. Subscriptions keep the price they were bought at.
-// The product has no tax code of its own: set the account's default (software as a service) in Stripe Tax.
+// The product is taxed as software as a service for personal use (TAX_CODE), as Cloud is sold to people, like a music
+// subscription; business customers give their VAT ID at checkout.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +25,8 @@ const fromFile = envFile && fs.existsSync(envFile)
   : undefined;
 const key = fromFile ?? process.env.STRIPE_SECRET_KEY ?? "";
 const PRODUCT = "pacedmind_cloud";
+// Stripe Tax: "Software as a service (SaaS) - personal use".
+const TAX_CODE = "txcd_10103000";
 // Currencies Stripe counts in whole units; every other one here is in hundredths.
 const ZERO_DECIMAL = new Set(["JPY"]);
 
@@ -74,8 +77,11 @@ try {
   if (error.status !== 404) throw error;
 }
 if (!product) {
-  console.log(`+ product ${PRODUCT} (PacedMind Cloud)`);
-  if (write) product = await stripe("POST", "products", { id: PRODUCT, name: "PacedMind Cloud" });
+  console.log(`+ product ${PRODUCT} (PacedMind Cloud, tax code ${TAX_CODE})`);
+  if (write) product = await stripe("POST", "products", { id: PRODUCT, name: "PacedMind Cloud", tax_code: TAX_CODE });
+} else if ((typeof product.tax_code === "string" ? product.tax_code : product.tax_code?.id) !== TAX_CODE) {
+  console.log(`~ product ${PRODUCT}: tax code ${TAX_CODE}`);
+  if (write) await stripe("POST", `products/${PRODUCT}`, { tax_code: TAX_CODE });
 }
 
 // Stripe takes at most 10 lookup keys per request.
