@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 /*
- * The small part of Markdown that agents write in reports: headings, paragraphs, lists, quotes, code and
- * tables (shown as they are), with `code`, **bold**, *italic* and links inline. It builds React elements,
- * never HTML, and only http(s) addresses become links.
+ * The small part of Markdown that agents write in reports and that tasks' descriptions use: headings, paragraphs,
+ * lists, quotes, code and tables (shown as they are), with `code`, **bold**, *italic* and links inline. It builds React
+ * elements, never HTML, and only http(s) addresses become links.
  */
 
 type Block =
-  | { kind: "p" | "quote"; text: string }
+  | { kind: "p" | "quote"; text: string; lines?: string[] }
   | { kind: "h"; text: string }
   | { kind: "ul" | "ol"; items: { text: string; depth: number }[] }
   | { kind: "pre"; text: string };
@@ -62,7 +62,7 @@ function blocks(src: string): Block[] {
     }
     const para: string[] = [];
     for (; i < lines.length && lines[i].trim() && !startsBlock(lines[i]); i++) para.push(lines[i].trim());
-    out.push({ kind: "p", text: para.join(" ") });
+    out.push({ kind: "p", text: para.join(" "), lines: para });
   }
   return out;
 }
@@ -96,16 +96,20 @@ export function InlineMarkdown({ text }: { text: string }) {
   return <>{inline(text)}</>;
 }
 
-export function Markdown({ text, className }: { text: string; className?: string }) {
+/**
+ * `breaks` keeps a paragraph's line breaks as they were typed, as in a GitHub issue: for texts people write, like a
+ * task's description. `className` replaces the size and color of the text.
+ */
+export function Markdown({ text, className, breaks = false }: { text: string; className?: string; breaks?: boolean }) {
   // On a phone, a word longer than the line breaks; code and tables keep their lines and scroll sideways.
   return (
-    <div className={`flex flex-col gap-2 text-[12.5px] leading-relaxed text-mut max-md:wrap-break-word ${className ?? ""}`}>
+    <div className={`flex flex-col gap-2 leading-relaxed max-md:wrap-break-word ${className ?? "text-[12.5px] text-mut"}`}>
       {blocks(text).map((b, i) => {
         switch (b.kind) {
           case "h":
             return <p key={i} className="pt-1 font-medium text-fg2">{inline(b.text)}</p>;
           case "p":
-            return <p key={i}>{inline(b.text)}</p>;
+            return <p key={i}>{breaks && b.lines ? b.lines.map((l, k) => <span key={k}>{k > 0 && <br />}{inline(l)}</span>) : inline(b.text)}</p>;
           case "quote":
             return <p key={i} className="border-l-2 border-line-strong pl-3 text-mut2">{inline(b.text)}</p>;
           case "pre":

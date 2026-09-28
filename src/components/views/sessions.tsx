@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { attachSessionAction, closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
+import { attachSessionAction, closeSessionAction, finishSessionAction, markSessionDoneAction, reopenSessionAction, requestChangesAction } from "@/app/actions";
+import { useExecution } from "@/components/execution-context";
 import { Popover, PopoverItem, anchorOf, type Anchor } from "@/components/popover";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "@/components/remote-start";
 import { AskCard } from "@/components/ask-card";
@@ -13,9 +14,9 @@ import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { attentionOf, attentionWords, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, mcpProblemsOf, waitingInTerminal } from "@/lib/dates";
-import { fmtSpan, fmtUsd, sessionTokens, tokenTotal, tokensLine } from "@/lib/usage";
+import { fmtSpan, sessionTokens, tokenTotal, tokensLine } from "@/lib/usage";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, REOPEN_CONFIRM, TRUST_WAITING, harnessAgent,
   type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type SessionUsage, type Surface,
 } from "@/lib/types";
 
@@ -550,6 +551,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   // none of its own), so one of those is elsewhere: its buttons ask it through the "Run on a computer" sheet.
   const { computers } = useLaunchState();
   const elsewhere = !!s.deviceId && computers.some((d) => d.id === s.deviceId);
+  const { desktop } = useExecution();
   const on = s.device ?? "its computer";
   const ref = { id: s.id, taskId: s.task?.id ?? 0, agent: s.agent, surface: s.surface, cliSessionId: s.cliSessionId };
   const worked = workedFor(s, now);
@@ -572,7 +574,6 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
     const tokens = sessionTokens(s.usage);
     if (s.usage.activeSeconds) props.push(["Working", fmtSpan(s.usage.activeSeconds * 1000), false]);
     if (tokenTotal(tokens)) props.push(["Tokens", tokensLine(tokens), false]);
-    if (s.usage.costUsd) props.push(["API price", `${fmtUsd(s.usage.costUsd)}, what these tokens cost through the API`, false]);
     if (s.usage.models[0]) props.push(["Model", s.usage.models.join(", "), true]);
   }
   // What it runs in, as its MCP client said when it connected, and what the agent says it runs with (start_task).
@@ -699,6 +700,13 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
             <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))} className="min-w-0 max-w-full">
               <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" />
               <span className="truncate">{elsewhere ? `Resume on ${on}` : "Resume in terminal"}</span>
+            </Button>
+          )}
+          {/* Its terminal is gone (or its agent lost PacedMind and you closed it): the conversation goes on in a new one. */}
+          {active && s.surface === "terminal" && desktop && !elsewhere && (
+            <Button disabled={pending} title="When its terminal is gone: the conversation goes on in a new one"
+              onClick={() => confirm(REOPEN_CONFIRM) && run(() => reopenSessionAction(s.id))} className="min-w-0 max-w-full">
+              <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" /><span className="truncate">Reopen in terminal</span>
             </Button>
           )}
           {s.surface === "terminal" && s.agent === "claude" && s.cliSessionId && s.status !== "failed" && (

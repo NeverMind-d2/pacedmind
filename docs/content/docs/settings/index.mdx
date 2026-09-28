@@ -133,7 +133,7 @@ Signed in, **Answer from elsewhere** decides where you answer what agents in ses
 
 *Area workspaces and each project's folder, flow, agent and MCP servers on this computer.*
 
-In the desktop app, **Area workspaces** sets a default folder for each area on this computer. Choose an existing Codex or Claude project's folder to keep its tasks together in that workspace, then select **Save workspace**. Clear the field to remove the default. A session uses its task's folder, then its project's, then its area's workspace; without any of them it gets a scratch folder. Changing an area's workspace pauses flows in projects that inherit it. A workspace in a git repository shows the repository next to its name, and on your other computers the area's picker offers their copy of it first. See [Areas and projects](/concepts/areas-and-projects).
+In the desktop app, **Area workspaces** sets a default folder for each area on this computer. Click an area's folder to choose one in the system's folder dialog, such as an existing Codex or Claude project's folder, to keep its tasks together in that workspace. It's saved at once, and **×** removes it. A session uses its task's folder, then its project's, then its area's workspace; without any of them PacedMind makes an empty folder for the task (*PacedMind's folder per task*). Changing an area's workspace pauses flows in projects that inherit it. A workspace in a git repository shows the repository next to its name, and on your other computers the area's field offers their copy of it (*Found here:* and the folder, with **Use**). See [Areas and projects](/concepts/areas-and-projects#on-this-computer).
 
 **Import from Claude and Codex**, above the list, brings the folders you work in with Claude Code and Codex over as projects. See [Import projects](#import-projects).
 
@@ -142,7 +142,7 @@ One row per project, with:
 * the project's color and name;
 * its default agent: **No agent**, **Claude Code** or **Codex**;
 * **Flow**: whether its flow starts sessions on its own (*Flow on* or *Flow paused*). Switching it on also starts the tasks that are already ready (*Started DEV-24*);
-* its folder, such as `C:\path\to\repo` or `/path/to/repo`, saved when the field loses focus (*Folder saved*);
+* its folder: click it to choose one in the system's folder dialog (*Folder saved*), and **×** removes it. Without one it shows the area's workspace (*area's*) or *PacedMind's folder per task*. When PacedMind found a copy of the project on this computer, *Found here:* and the folder follow, with **Use**;
 * what Claude Code and Codex get in that folder on top of what they have everywhere (below);
 * *MCP servers for its sessions:* *all they have here*, *only* and the chosen servers, or *none besides PacedMind*, with **Change**. **Change** offers **All of them** and **Only these**, with a switch for each server under **Only these**. Each change is saved at once (*Saved*), and **Done** closes the choice. See [Choose a project's MCP servers](/agents/start-and-manage#choose-a-projects-mcp-servers).
 
@@ -160,9 +160,9 @@ What the agents get in a project's folder is read from the folder's own files an
 
 What they have in every folder shows on the **Computers** page. See [Other MCP servers, plugins and skills](/agents/start-and-manage#other-mcp-servers-plugins-and-skills).
 
-**New project** at the bottom adds a project with a name, an area and an optional folder (*Folder (optional)*), with **Add project**. Projects added here get Claude Code as their default agent.
+**New project** at the bottom adds a project with a name, an area and an optional folder (*Folder (optional)*, chosen in the folder dialog), with **Add project**. Projects added here get Claude Code as their default agent.
 
-The folder isn't checked when it's saved. When a session starts, it must be an absolute path to an existing folder, or the start is refused with *Can't use the folder …* and the reason. See [Areas and projects](/concepts/areas-and-projects#project-folders).
+A folder is checked when it's saved: one that doesn't exist, or whose path a terminal can't take, is refused with *Can't use the folder …* and the reason. A folder that goes away later stops sessions from starting there, with the same message. See [Areas and projects](/concepts/areas-and-projects#project-folders).
 
 ### Import projects
 

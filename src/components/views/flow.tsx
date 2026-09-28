@@ -21,6 +21,7 @@ import {
 import { useQuickAddProject } from "@/components/quick-add";
 import { startSessionOrAsk } from "@/components/remote-start";
 import { RequestStatus } from "@/components/request-status";
+import { folderDialog } from "@/components/folder-field";
 import { addToFlowAction, setAgentsAction, setRunAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
 import { AgentIcon, Icon, StatusIcon, SurfaceIcon } from "@/components/icons";
 import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast, type MenuItem } from "@/components/ui";
@@ -1404,14 +1405,29 @@ function runChoice(agent: AgentId, surface: Surface, device: FlowDevice | undefi
   };
 }
 
-/** A task's folder: its own or the project's. Click to type another; empty goes back to the project's. */
+/**
+ * A task's folder: its own or the project's. Click to choose another in the system's folder dialog (a browser types it
+ * instead); the project's, or none, goes back to the project's.
+ */
 function FolderField({ task, projectFolder, folderSource, onSave }: { task: FlowTask; projectFolder: string | null; folderSource: string; onSave: (folder: string | null) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.folder ?? "");
+  const own = task.ownFolder ? task.folder : null;
   const save = () => {
     setEditing(false);
     const next = draft.trim() || null;
-    if (next !== (task.ownFolder ? task.folder : null) && !(next === projectFolder && !task.ownFolder)) onSave(next);
+    if (next !== own && !(next === projectFolder && !task.ownFolder)) onSave(next);
+  };
+  const choose = async () => {
+    const dialog = folderDialog();
+    if (!dialog) {
+      setDraft(task.folder ?? "");
+      setEditing(true);
+      return;
+    }
+    const picked = await dialog(task.folder ?? projectFolder);
+    const next = picked === projectFolder ? null : picked;
+    if (picked && next !== own) onSave(next);
   };
   if (editing) {
     return (
@@ -1426,10 +1442,10 @@ function FolderField({ task, projectFolder, folderSource, onSave }: { task: Flow
   }
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <button type="button" onClick={() => { setDraft(task.folder ?? ""); setEditing(true); }}
-        title={`${task.folder ?? `No folder: sessions run in PacedMind's workspaces/${task.key.toLowerCase()}`}\nClick to give this task its own folder`}
-        className="min-w-0 truncate rounded px-0.5 text-left font-mono text-[11.5px] text-fg3 hover:bg-hover hover:text-strong">
-        {task.folder ? shortPath(task.folder) : "PacedMind workspace"}
+      <button type="button" onClick={choose}
+        title={`${task.folder ?? `No folder of its own: PacedMind makes one for it (workspaces/${task.key.toLowerCase()} in its data folder)`}\nClick to choose a folder for this task`}
+        className={cx("min-w-0 truncate rounded px-0.5 text-left text-[11.5px] text-fg3 hover:bg-hover hover:text-strong", task.folder && "font-mono")}>
+        {task.folder ? shortPath(task.folder) : "PacedMind's folder"}
       </button>
       {task.ownFolder
         ? <button type="button" onClick={() => onSave(null)} title="Use the default workspace again" className="shrink-0 text-[11.5px] text-mut2 hover:text-fg2">Own · reset</button>

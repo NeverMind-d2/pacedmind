@@ -41,6 +41,8 @@ export interface FoundProject {
   suggested: boolean;
   /** Why it can't become a project's folder, e.g. it was deleted. */
   problem: string | null;
+  /** The repository it holds (git-remote.ts), or null. */
+  repo: string | null;
 }
 
 const home = os.homedir();
@@ -48,7 +50,7 @@ const DAY = 86_400_000;
 const RECENT = 120 * DAY;
 
 /** Comparable form of a folder: resolved, no trailing separator, letter case ignored where the file system does. */
-function keyOf(folder: string): string {
+export function keyOf(folder: string): string {
   const p = path.resolve(folder).replace(/[\\/]+$/, "");
   return process.platform === "linux" ? p : p.toLowerCase();
 }
@@ -71,7 +73,7 @@ function mainFolder(folder: string): string {
   return start;
 }
 
-const inside = (key: string, parent: string) => key.startsWith(parent + path.sep);
+export const inside = (key: string, parent: string) => key.startsWith(parent + path.sep);
 
 /** Folders that aren't projects: your home and its standard folders, temporary and scratch folders, the tools' own. */
 function isScratch(folder: string): boolean {
@@ -220,8 +222,11 @@ function realFolder(folder: string): string {
   }
 }
 
-/** Projects worth bringing over from Claude Code and Codex on this computer, most recently used first. */
-export async function findProjects(): Promise<FoundProject[]> {
+/**
+ * Projects worth bringing over from Claude Code and Codex on this computer, most recently used first. `link` first
+ * brings the projects' repositories up to date (linkProjects), which the background loop does every minute anyway.
+ */
+export async function findProjects({ link = true } = {}): Promise<FoundProject[]> {
   const hits = [...codexAppHits(), ...claudeAppHits(), ...claudeCliHits(), ...codexCliHits()];
   const byKey = new Map<string, { folder: string; name?: string; sources: Set<ImportSource>; used: Partial<Record<AgentId, number>> }>();
   for (const h of hits) {
@@ -240,7 +245,7 @@ export async function findProjects(): Promise<FoundProject[]> {
   }
 
   // Projects from your other computers should know their repositories before folders here are matched to them.
-  await linkProjects().catch((e) => console.error("[organizer] project links failed", e));
+  if (link) await linkProjects().catch((e) => console.error("[organizer] project links failed", e));
   const projects = await repo.listProjects();
   const keys = [...byKey.keys()];
   const now = Date.now();
@@ -284,6 +289,7 @@ export async function findProjects(): Promise<FoundProject[]> {
   }
   return found.map((f): FoundProject => ({
     folder: f.folder, name: f.name, sources: f.sources, used: f.used, projectId: f.projectId, joins: f.joins, suggested: f.suggested, problem: f.problem,
+    repo: f.repo,
   }));
 }
 

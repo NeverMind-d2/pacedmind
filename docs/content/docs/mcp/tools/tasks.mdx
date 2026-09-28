@@ -30,7 +30,7 @@ Returns the number of matches and one line per task. When there are more than th
 
 **Read-only. Allowed without asking.**
 
-Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), what its sessions' agents used once they reported it (*Agents used: 262k tokens · $0.31 at API prices · 1 min working · 1 session*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
+Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), what its sessions' agents used once they reported it (*Agents used: 262k tokens · 1 min working · 1 session*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -92,7 +92,7 @@ Adds a task. Without `project` and `area`, it goes to the Inbox.
 | `title` | string | yes | A short, concrete action. |
 | `project` | string | no | The project. Its area comes with it. |
 | `area` | string | no | The area, when there's no project. |
-| `description` | string | no | Why it matters, context, constraints, links. Plain text or Markdown. |
+| `description` | string | no | Why it matters, context, constraints, links, in Markdown, which the app shows formatted. |
 | `done_when` | string list | no | What must be true when the task is finished, one checkable outcome per item, such as "/reports has a Download CSV button" or "A screenshot of the new page". Up to 20 items; blank and repeated items are left out. Agents answer each item when they hand the task back. See [Done when](/concepts/tasks#done-when). |
 | `needs` | string list | no | What its agent needs from the computer its session runs on: MCP servers or claude.ai connectors by name, such as `["supabase", "Gmail"]`. Up to 10; repeated names, a `claude.ai ` prefix and names with other characters than letters, digits, spaces and `_ . @ : + -` are left out. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
 | `status` | status | no | Defaults to `todo`. |

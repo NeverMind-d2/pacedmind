@@ -17,7 +17,7 @@ The top line shows where the task lives: its area (or **Inbox**), its project (o
 ## Title and description
 
 * **Title**: click to edit. <kbd>Enter</kbd> or clicking elsewhere saves it.
-* **Description**: *Add description…*. Saved when the cursor leaves the field. Plain text; agents often write Markdown here.
+* **Description**: *Add description…*. It's Markdown and shows formatted: headings, lists, quotes, code blocks, bold and italic text, inline code and links to web pages, with line breaks kept as you typed them. Click it (or press <kbd>Enter</kbd> on it) to edit its text; it's saved when the cursor leaves the field. A long description shows its start, with **Show more**.
 
 ## Done when
 
@@ -55,14 +55,14 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 | **Area** | **Inbox, no area**, or an area. |
 | **Project** | *Add to project*: **No project**, or a project. Choosing a project also sets the area. |
 | **Done by** | **You**, **Claude Code**, **Codex**, or the project default, each with its icon or the agent's mark. See [Who does a task](/concepts/done-by). |
-| **Folder** | For a task an agent does: the folder its sessions work in, the task's own (*own*) or the project's (*project's*), or *PacedMind workspace*. Click it to give the task its own folder, and leave it empty to go back to the project's. |
+| **Folder** | For a task an agent does, in the desktop app: the folder its sessions work in, the task's own (*own*), the project's (*project's*) or the area's workspace (*area's*). Without any of them it reads *PacedMind's folder for this task*: an empty folder PacedMind makes for it in its data folder (hover over it for where). Click it to choose a folder in the system's folder dialog; **×** goes back to the project's or area's folder. When the project (or, outside projects, the area) has no folder on this computer but PacedMind found a copy of it here, *Found here:* and that folder follow, with **Use**, which makes it the project's folder here (see [Areas and projects](/concepts/areas-and-projects#on-this-computer)). |
 | **Computer** | With more than one computer: the one its sessions go to, marked *project* or *auto* when the task doesn't choose one. **Automatic**, or a computer. |
 | **Run in** | Automatic, a terminal, the agent's desktop app, or its cloud. |
 | **Model** | For terminal sessions: *Default*, or the chosen model with its **Thinking** and **Speed**. **Refresh list** checks the models again. See [Model, thinking and speed](/tasks/quick-add#model-thinking-and-speed). Changes apply when a terminal session next starts or resumes, including when sending changes back. |
 | **Labels** | The labels, and **+ Add**: type a label and press <kbd>Enter</kbd>. Click a label to remove it. |
 | **Needs** | For a task an agent does: *None*, or up to 10 MCP servers or connectors it needs. Open the searchable picker, select or deselect tools, and select **Done** to save the choices together. Each option lists the computers reporting it. Type a custom name and press <kbd>Enter</kbd> to add it. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
 | **Session** | The latest agent session, or a button to start one. See below. |
-| **Usage** | Once an agent reported it: what all the task's sessions used, such as *262k tokens · $0.31 at API prices · 1 min working · 1 session*. Hover over it for what the price means. See [What it used](/agents/lifecycle#what-it-used). |
+| **Usage** | Once an agent reported it: what all the task's sessions used, such as *262k tokens · 1 min working · 1 session*. See [What it used](/agents/lifecycle#what-it-used). |
 
 The date fields open the date picker (see [Dates](/concepts/dates)): type a date, take a suggestion or pick a day on the calendar. **Plan for a day** closes once a day is picked; **Due date** stays open for its time: pick one, or **Done** for none. **Clear** appears once a date is set.
 
@@ -144,6 +144,7 @@ The card ends with the session's folder and branch name, and these buttons:
 | Button | When | Result |
 | --- | --- | --- |
 | **Resume in terminal** | A terminal session that isn't running and didn't fail. | Opens a terminal in the session's folder again. Claude Code continues the same conversation. |
+| **Reopen in terminal** | A running terminal session on this computer. | For one whose terminal is gone: asks *Reopen this session in a new terminal? Do it when its terminal is gone. If it's still open, close it first: two terminals on one conversation get in each other's way.*, then continues the conversation in a new terminal. See [Resume a session](/agents/start-and-manage#resume-a-session). |
 | **Open the Claude app** or **Open the Codex app** | A session in a desktop app. | Brings the app forward. |
 | **Open in the cloud** | A cloud session with a link. | Opens it in the browser. |
 | **Request changes** | A terminal session on this computer whose agent handed the task back, finished or done after you marked the task done, with the task's latest report. Not for a task that is yours, or while another session of it runs. | Opens a box to write what should change, and sends it to the agent. See [Request changes](#request-changes). |

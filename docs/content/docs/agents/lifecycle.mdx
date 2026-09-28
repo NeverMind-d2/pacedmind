@@ -120,19 +120,19 @@ When a session starts on this computer, in a terminal or a desktop app, in a fol
 
 ## What it used
 
-A session PacedMind starts in a terminal reports what its agent used: the tokens it read and wrote, and how long it worked. Claude Code also reports what those tokens cost at API prices. It shows
+A session PacedMind starts in a terminal reports what its agent used: the tokens it read and wrote, and how long it worked. It shows
 
-* in **Sessions**, in the session's details: **Working**, **Tokens**, **API price** and **Model**. See [Session details](/views/sessions#session-details);
-* in the task's details, as **Usage**, for all the task's sessions: *262k tokens · $0.31 at API prices · 1 min working · 1 session*;
-* in a project's header, for all its tasks: *agents: 1.2M tokens, $3.40 at API prices*;
+* in **Sessions**, in the session's details: **Working**, **Tokens** and **Model**. See [Session details](/views/sessions#session-details);
+* in the task's details, as **Usage**, for all the task's sessions: *262k tokens · 1 min working · 1 session*;
+* in a project's header, for all its tasks: *agents: 1.2M tokens*;
 * to agents, in `list_sessions` (*used …*) and `get_task` (*Agents used: …*).
 
-Tokens count everything the agent read and wrote, most of it read again from its cache, which costs far less. On a plan (Pro, Max, ChatGPT), the API price is what the same tokens would cost through the API, not what you pay.
+Tokens count everything the agent read and wrote, most of it read again from its cache.
 
 The agents send these numbers themselves, as usage metrics (OpenTelemetry), to PacedMind on your computer every 30 seconds and when they exit, with the session's own token. PacedMind keeps only the numbers and the model's name: what else the metrics carry, such as the account's email, is dropped as it arrives. No messages are sent, yours or the agent's.
 
-* **Claude Code** reports tokens, the API price, its working time and the model.
-* **Codex 0.150 and later** reports tokens, its working time and the model. Codex doesn't price them.
+* **Claude Code** reports tokens, its working time and the model.
+* **Codex 0.150 and later** reports tokens, its working time and the model.
 * **Desktop apps and the cloud** report nothing, and neither does a session started outside PacedMind.
 * **When you send Claude Code's or Codex's telemetry somewhere yourself**, in its settings (Claude Code's `settings.json`, its managed settings, or Codex's `config.toml`) or in PacedMind's environment, PacedMind leaves it as it is, and those sessions report nothing.
 
@@ -200,6 +200,7 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Terminal closed* | Claude Code's terminal closed after the agent finished. |
 | *Started outside PacedMind* | An agent PacedMind didn't start reported on the task. |
 | *Reopened in a terminal* | You selected **Resume in terminal**. |
+| *Reopened in a new terminal* | You selected **Reopen in terminal** for a running session whose terminal was gone. |
 | *You asked for changes:* and the start of your text | You selected **Request changes**. |
 | *You answered its questions:* and the start of your answers | You selected **Answer its question** or **Answer its questions**. |
 | *Opened in the Claude app* | You selected **Continue in Claude app** or **Open the Claude app**. |

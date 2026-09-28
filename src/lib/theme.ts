@@ -7,6 +7,8 @@ declare global {
     pacedMindDesktop?: {
       initialTheme: Theme;
       setTheme: (theme: Theme) => void;
+      /** The system's folder dialog (desktop/preload.cjs); missing in a browser and in apps built before it. */
+      pickFolder?: (near?: string | null) => Promise<string | null>;
     };
   }
 }

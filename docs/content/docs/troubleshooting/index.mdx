@@ -91,7 +91,11 @@ If the session can't recover, select **Close session** and start a new one.
 
 ### A session stays "running" after its terminal closed
 
-Claude Code reports its exit to PacedMind, and so does Codex, through its hooks or once it exits in its terminal. A session whose terminal was killed while the agent ran, or a Codex session whose window was closed before its hooks were trusted, stays running in PacedMind. Select **Close session** in the task's details or in **Sessions**. The task goes back to **Todo** if it was in progress.
+Claude Code reports its exit to PacedMind, and so does Codex, through its hooks or once it exits in its terminal. A session whose terminal was killed while the agent ran, or a Codex session whose window was closed before its hooks were trusted, stays running in PacedMind. To go on with it, select **Reopen in terminal** in the task's details or in **Sessions**: the conversation continues in a new terminal. To drop it, select **Close session**; the task goes back to **Todo** if it was in progress.
+
+### The agent lost PacedMind
+
+While PacedMind is closed or restarting, such as during an update, a running agent can't reach it: it can't report or hand the task back, and may say so in its terminal. Once PacedMind runs again, tell the agent in its terminal to go on; if it still can't reach PacedMind, type `/mcp` there (Claude Code) and reconnect `pacedmind`. Or exit the agent and select **Reopen in terminal**, which continues the conversation in a new terminal with a fresh connection.
 
 Sessions in a desktop app or the cloud don't report closing either. Select **Mark finished** when their work is done, or **Close session** to drop them.
 
@@ -145,7 +149,7 @@ PacedMind hears that an agent waits for you only from sessions it started in a t
 Only sessions PacedMind started in a terminal report what their agent used, and only once the agent has: every 30 seconds while it works, and when it exits. See [What it used](/agents/lifecycle#what-it-used).
 
 * **Sessions in a desktop app or the cloud**, and sessions started outside PacedMind, report nothing.
-* **Codex older than 0.150** reports nothing. Codex never reports a price.
+* **Codex older than 0.150** reports nothing.
 * **Your own telemetry**: when Claude Code's settings, its managed settings, Codex's `config.toml` or PacedMind's environment already send its telemetry somewhere (`CLAUDE_CODE_ENABLE_TELEMETRY`, `OTEL_METRICS_EXPORTER`, `OTEL_EXPORTER_OTLP_…`, or Codex's `metrics_exporter`), PacedMind leaves it alone. The same variables exported in your shell's startup files also take its place.
 * **A session started before this version** of PacedMind reports nothing; its next one does.
 

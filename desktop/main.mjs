@@ -179,6 +179,19 @@ ipcMain.on("pacedmind:set-theme", (event, theme) => {
   if (readState().theme !== theme) writeState({ theme });
 });
 
+// Folders are picked in the system's dialog, over the window, never typed: only for the app's own page.
+ipcMain.handle("pacedmind:pick-folder", async (event, near) => {
+  if (!win || event.sender !== win.webContents || event.senderFrame !== win.webContents.mainFrame) return null;
+  try { if (new URL(event.senderFrame.url).origin !== ORIGIN) return null; } catch { return null; }
+  let defaultPath;
+  try { if (typeof near === "string" && path.isAbsolute(near) && fs.statSync(near).isDirectory()) defaultPath = near; } catch { /* gone */ }
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: "Choose a folder", buttonLabel: "Use this folder", defaultPath,
+    properties: ["openDirectory", "createDirectory", "dontAddToRecent"],
+  });
+  return canceled ? null : filePaths[0] ?? null;
+});
+
 const wordmark = fs.readFileSync(path.join(SERVER_DIR, "public", "brand", "pacedmind-wordmark.png")).toString("base64");
 const loadingArrows = ["back", "forward"].map((direction) => `<button disabled aria-label="Go ${direction}" style="-webkit-app-region:no-drag;display:grid;place-items:center;width:32px;height:32px;padding:0;border:0;background:none;color:inherit;opacity:0.3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(${direction === "back" ? 180 : 0}deg)"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>`).join("");
 const page = (text) =>

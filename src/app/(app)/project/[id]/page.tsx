@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TaskList } from "@/components/task-list";
 import { Icon } from "@/components/icons";
+import { ProjectFolderChip } from "@/components/folder-field";
 import { RepoLink } from "@/components/repo-link";
 import * as repo from "@/server/repo";
 import { groupByStatus, taskContext } from "@/server/views";
@@ -30,11 +31,12 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ projectId: id }}
       headerRight={
-        // On a phone, icons only, like the New task button next to them: the title needs the room.
+        // In a narrow list (a phone, or a task's details open), icons only: the title needs the room.
         <>
+          <ProjectFolderChip project={project} areaFolder={area?.folder ?? null} />
           <RepoLink repo={project.repo ?? area?.repo} />
-          <Link href={`/roadmap?p=${id}`} aria-label="Roadmap" className={link}><Icon name="roadmap" size={13} /><span className="max-sm:hidden">Roadmap</span></Link>
-          <Link href={`/flows?p=${id}`} aria-label="Flow" className={link}><Icon name="flow" size={13} /><span className="max-sm:hidden">Flow</span></Link>
+          <Link href={`/roadmap?p=${id}`} aria-label="Roadmap" className={link}><Icon name="roadmap" size={13} /><span className="@max-xl:hidden">Roadmap</span></Link>
+          <Link href={`/flows?p=${id}`} aria-label="Flow" className={link}><Icon name="flow" size={13} /><span className="@max-xl:hidden">Flow</span></Link>
         </>
       }
       empty={`No tasks in ${project.name} yet`}

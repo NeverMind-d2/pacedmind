@@ -188,7 +188,7 @@ export function ProjectsView({ areas, projects, usage, today, desktop }: {
       )}
 
       {menuArea && menu && (
-        <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} projects={projects} onClose={closeMenu}
+        <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} onClose={closeMenu}
           onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => startProject(menuArea.id)} />
       )}
       {menuProject && menu && (

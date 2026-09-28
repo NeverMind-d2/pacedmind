@@ -726,18 +726,21 @@ async function launch(session: Session, task: Task, folder: string, env: string,
 
 /**
  * Why this computer can't pick a session up again (resumeSession), or null. `to` "desktop" moves a Claude Code
- * conversation from a terminal into the Claude app (for other sessions it shows the agent's app).
+ * conversation from a terminal into the Claude app (for other sessions it shows the agent's app). `reopen`: a running
+ * terminal session goes on in a new terminal, because you said its own is gone (or its agent lost PacedMind and you
+ * closed it).
  */
-export function resumeProblem(session: Session, to?: Surface): string | null {
+export function resumeProblem(session: Session, to?: Surface, reopen = false): string | null {
   if (MODE !== "desktop") return "Resume it from the PacedMind desktop app, which opens terminals on your computer.";
   if (!SESSION_ID.test(session.id)) return "Session not found";
   if (to === "cloud") return "A session can't move into the cloud. Start a new one there instead.";
   // Cloud sessions can be picked up from any computer; the others only where they ran.
   if (session.surface !== "cloud" && session.deviceId && session.deviceId !== thisDeviceId()) return "That session ran on another computer. Resume it there.";
   // Its terminal is still open: a second one on the same conversation would get in its way.
-  if (!to && session.surface === "terminal" && LIVE_STATUSES.includes(session.status)) {
-    return "That session is still running in its terminal. Close it in PacedMind first if its terminal is gone.";
+  if (!to && !reopen && session.surface === "terminal" && LIVE_STATUSES.includes(session.status)) {
+    return "That session is still running in its terminal. If its terminal is gone, reopen it in a new one.";
   }
+  if (reopen && (to || session.surface !== "terminal")) return "Only a session in a terminal reopens in a new one.";
   return null;
 }
 
@@ -756,16 +759,18 @@ function resumeFolder(session: Session, task: Task): { folder?: string; error?: 
 /**
  * Picks a session up again: a terminal session reopens its terminal (Claude resumes the same conversation), a
  * desktop session shows its app, and a cloud session opens in a terminal with `claude --teleport` (Claude) or on
- * the web (Codex). The folder comes from this computer, never from the session's record in the cloud.
+ * the web (Codex). The folder comes from this computer, never from the session's record in the cloud. `reopen` does
+ * it for a running terminal session whose terminal is gone (resumeProblem): its new token replaces the old one, so a
+ * terminal left behind can no longer report on the session.
  */
-export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchResult> {
+export function resumeSession(sessionId: string, to?: Surface, reopen = false): Promise<LaunchResult> {
   return exclusive(async () => {
     if (MODE !== "desktop") return { ok: false, error: "Resume it from the PacedMind desktop app, which opens terminals on your computer." };
     if (!SESSION_ID.test(sessionId)) return { ok: false, error: "Session not found" };
     const device = await activeDevice();
     const session = await repo.getSession(sessionId);
     if (!session) return { ok: false, error: "Session not found" };
-    const problem = resumeProblem(session, to);
+    const problem = resumeProblem(session, to, reopen);
     if (problem) return { ok: false, error: problem };
     const task = await repo.getTask(session.taskId);
     if (!task) return { ok: false, error: "The task is gone" };
@@ -809,7 +814,7 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
       });
       failed = openTerminal(dir, folder, title, a.command, token, device.terminal, a);
       if (failed) await repo.updateSession(session.id, before);
-      text = "Reopened in a terminal";
+      text = LIVE_STATUSES.includes(session.status) ? "Reopened in a new terminal" : "Reopened in a terminal";
     }
     if (failed) return { ok: false, error: failed };
     await repo.addSessionEvent(session.id, "resumed", text);

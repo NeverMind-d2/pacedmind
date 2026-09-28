@@ -18,7 +18,7 @@ import { commandProblem, deviceConfig, rotateOwnerToken, setAreaFolder, setProje
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
-import { mergeProjects } from "@/server/project-links";
+import { linkFolder, mergeProjects } from "@/server/project-links";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
@@ -310,6 +310,24 @@ export async function resumeSessionAction(sessionId: string, surface?: Surface):
 }
 
 /**
+ * Reopens a running terminal session in a new terminal, when its own is gone (closed, crashed, the computer restarted)
+ * or you closed it after its agent lost PacedMind: the conversation goes on there (resumeSession with `reopen`). What the
+ * old terminal still waited for an answer to is withdrawn, since no one there would get it.
+ */
+export async function reopenSessionAction(sessionId: string): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "Reopen it from the PacedMind desktop app on the computer it runs on." };
+  const s = await repo.getSession(sessionId);
+  if (!s) return { ok: false, error: "Session not found" };
+  if (!runsHere(s.deviceId)) return { ok: false, error: "That session runs on another computer. Reopen it there." };
+  const stale = await repo.listAsks({ sessionIds: [sessionId], status: ["pending"] });
+  const r = await resumeSession(sessionId, undefined, true);
+  if (!r.ok) return { ok: false, error: r.error };
+  for (const a of stale) await withdrawHere(a.id).catch(() => {});
+  return done({ ok: true, message: r.message });
+}
+
+/**
  * Asks the computer a session ran on to pick it up again: where it ran, or with `surface` "desktop" a Claude Code
  * conversation moves from its terminal into the Claude app. Needs a fresh code, like requestSessionAction.
  */
@@ -322,7 +340,7 @@ export async function requestResumeAction(sessionId: string, code: string, surfa
   if (!s.deviceId) return { ok: false, error: "This session didn't run on a computer of your account, so it can't be resumed from here." };
   const to = surface === "desktop" ? "desktop" : null;
   if (!to && s.surface === "terminal" && isLiveSession(s)) {
-    return { ok: false, error: "That session is still running in its terminal. Close it in PacedMind first if its terminal is gone." };
+    return { ok: false, error: "That session is still running in its terminal. If its terminal is gone, reopen it in the PacedMind app on its computer." };
   }
   const device = await requestTarget(s.deviceId);
   if (typeof device === "string") return { ok: false, error: device };
@@ -645,6 +663,26 @@ export async function setAreaFolderAction(id: string, folder: string | null): Pr
   return done({ ok: true, message: changed && inheriting.some((p) => p.flowOn)
     ? "Workspace saved. Flows that inherit it are paused; switch them on again to use the new folder."
     : "Workspace saved" });
+}
+
+/**
+ * Gives a project the copy of it found on this computer (folder-hints.ts), as an import does for a folder that joins a
+ * project: its folder here, and a project that only ran on another computer runs on both.
+ */
+export async function linkFoundFolderAction(projectId: string, folder: string): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "Folders are set in the PacedMind desktop app." };
+  if (typeof folder !== "string") return { ok: false, error: "Choose a folder." };
+  const problem = folderProblem(folder);
+  if (problem) return { ok: false, error: `Can't use ${folder}: ${problem}` };
+  const project = await repo.getProject(projectId);
+  if (!project) return { ok: false, error: "Project not found" };
+  try {
+    await linkFolder(project, folder);
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  return done({ ok: true, message: `${project.name} works in ${folder} on this computer` });
 }
 
 /** An area's own picture: a small base64 PNG made by the browser. Null removes it. */

@@ -27,7 +27,7 @@ Right-click an area in the sidebar or on the **Projects** page, or use its **…
 | **Rename** | Edits the name in place. <kbd>Enter</kbd> saves, <kbd>Esc</kbd> cancels. |
 | **New project** | Adds a project to this area. |
 | **Open tasks** | Opens the area's task list. |
-| **Workspace…** | In the desktop app, sets the area's default folder on this computer. Tasks and projects without their own folder inherit it. **Save workspace** saves; **No area workspace** removes it. Search existing project folders or enter an absolute folder path. |
+| **Workspace…** | In the desktop app, the area's default folder on this computer: click it to choose a folder in the system's folder dialog. It's saved at once, and **×** removes it. Tasks and projects without their own folder inherit it. Without one it reads *PacedMind's folder per task*: each task gets an empty folder PacedMind makes. |
 | **Color** | Ten muted colors: Blue, Teal, Green, Olive, Sand, Clay, Rose, Violet, Mauve and Gray. |
 | **Icon** | About 330 icons in groups such as Work, Tech, Learning, Health, Home, Travel and Money, drawn in the area's color. **Search icons** finds them by name or meaning, such as *money* or *school*, and <kbd>Enter</kbd> picks the first one found. **Remove** shows the area's dot again. |
 | **Picture** | **Use a picture, such as a logo…** opens a file picker for a picture of your own: PNG, JPEG, WebP, GIF or SVG. **Replace the picture…** picks another, and **Remove** shows the area's dot again. |
@@ -37,7 +37,7 @@ An area's icon or picture replaces its dot in the sidebar, on the **Projects** p
 
 An area's workspace can be the same folder as an existing project in Codex or Claude. Its sessions then use that folder instead of creating one per task. The setting also appears under **Settings → Projects → Area workspaces**, and stays on this computer. A task's own folder takes priority, followed by its project's folder, then its area's workspace.
 
-When the workspace is in a git repository, PacedMind notes which one, as it does for a project's folder: `github.com/owner/name`, shown next to *Workspace for …* as a link to it. Your other computers see it: when an area has no workspace on a computer yet, **Settings → Projects → Area workspaces** there says *On your other computers this workspace holds github.com/owner/name. It's at … here.* and lists that computer's copies of the repository first, found among its projects' folders and the folders you work in with Claude Code and Codex. Pick one and select **Save workspace**; nothing is set without you.
+When the workspace is in a git repository, PacedMind notes which one, as it does for a project's folder: `github.com/owner/name`, shown next to *Workspace for …* as a link to it. Your other computers see it: when an area has no workspace on a computer yet, its workspace field there offers that computer's copy of the repository (*Found here:* and the folder, with **Use**). See [On this computer](#on-this-computer).
 
 A picture is made small on your computer before it's saved, as a square of 64 pixels at most with the whole picture fitted in, so a square one, such as a company's app icon, shows best. It's saved with the area, so it shows on your other computers and in the web app too. Anything but a picture is refused with *Pick a picture: PNG, JPEG, WebP, GIF or SVG.*
 
@@ -47,9 +47,9 @@ Deleting an area also deletes its projects. Their tasks, and the area's own task
 
 Selecting an area in the sidebar opens its task list: every task in the area, including its projects' tasks, grouped by status. The header shows the key and the number of open tasks, and **New task** adds a task to the area. A panel on the right shows the area's details:
 
-* **Workspace** (desktop app): the area's folder on this computer, saved as soon as you choose or type it.
+* **Workspace** (desktop app): the area's folder on this computer. Click it to choose one in the system's folder dialog; it's saved at once. *PacedMind's folder per task* means it has none: each task gets an empty folder PacedMind makes.
 * **Computers**: each one's name and state, and the area's projects that use it. **+** creates a task for one of its agents, with the computer, the agent and where it runs already chosen. **Manage** opens Settings → Computers.
-* **Projects**: the area's projects, and **New task**.
+* **Projects**: the area's projects, each with whether it's on this computer (desktop app): its folder's name, **Found here · Use**, or *Not here*. **New task** adds a task to the area.
 
 **Area details** reopens the panel after closing it; selecting a task shows that task's details instead.
 
@@ -142,7 +142,7 @@ Two projects for the same work, such as the ones two computers made before they 
 
 ### The project page
 
-Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens, $3.40 at API prices*; see [What it used](/agents/lifecycle#what-it-used)), and has **Roadmap** and **Flow** buttons for the project's other views. When PacedMind knows the project's repository, or else its area's, a link such as **github.com/owner/name** opens it; in a narrow window it shows its icon only. An area's page has the same link for its workspace's repository. **New task** adds a task to the project.
+Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens*; see [What it used](/agents/lifecycle#what-it-used)), and has **Roadmap** and **Flow** buttons for the project's other views. In the desktop app, a folder button says whether the project is on this computer: its folder's name (click to choose another), **Found here · Use**, *Area's workspace*, or *Not on this computer* (click to choose its folder). When PacedMind knows the project's repository, or else its area's, a link such as **github.com/owner/name** opens it. An area's page has the same link for its workspace's repository. In a narrow list, such as with a task's details open, these buttons show their icons only. **New task** adds a task to the project.
 
 ## Project folders
 
@@ -152,11 +152,17 @@ A project's folder is where Claude Code or Codex works when PacedMind starts a s
 * an existing folder, not a file;
 * free of the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`, and on macOS of `\`, which can't be passed to a terminal safely.
 
-**Settings → Projects** and the **Roadmap** panel save any text. A folder that breaks these rules shows its problem when a session starts, as *Can't use the folder …* with the reason and *Change it in Settings.* Agents setting a folder over MCP get the same check right away.
+In **Settings → Projects**, the **Roadmap** panel and the project's header, you choose the folder in the system's folder dialog, and it's checked as soon as it's saved. A folder that breaks these rules later, say because it was moved, shows its problem when a session starts, as *Can't use the folder …* with the reason and *Change it in Settings.* Agents setting a folder over MCP get the same check right away.
 
-A task can have a folder of its own, such as a second checkout of the repository, set with **Folder** in its details or in the flow editor. Its sessions then work there instead of in the project's folder. That folder is checked as soon as it's set.
+A task can have a folder of its own, such as a second checkout of the repository, chosen with **Folder** in its details or in the flow editor. Its sessions then work there instead of in the project's folder. That folder is checked as soon as it's set.
 
-Tasks without their own folder, in a project without a folder or outside projects, get a scratch folder per task in PacedMind's data folder. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-works).
+Tasks without their own folder, in a project without a folder or outside projects, get an empty folder per task that PacedMind makes in its data folder (*PacedMind's folder*). See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-works).
+
+### On this computer
+
+A project or area is the account's, but its folder is each computer's own. When one has no folder on this computer, PacedMind looks for a copy of it among the folders you work in with Claude Code and Codex here and your projects' folders: first by its repository (which a computer with its folder noted, such as `github.com/owner/name`, or a folder inside it), else by its name. What it finds shows as *Found here:* with **Use** in the folder fields, **Found here · Use** in an area's details and a project's header; hover over it for the folder and why it matched. Nothing is set until you select **Use**. For a project, that makes the folder its folder here, and a project that only ran on another computer then runs on both, as an [import](/settings#import-projects) does.
+
+The folders come from Claude Code's and Codex's own records on this computer, read again in the background about once a minute, so a folder you haven't worked in with either yet isn't found: choose it with the folder dialog.
 
 ## Projects in sequence
 

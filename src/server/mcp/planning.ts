@@ -72,7 +72,7 @@ const needsSchema = z.array(z.string().max(48)).max(MAX_NEEDS)
   .describe("What its agent needs from the computer its session runs on, by name: MCP servers or claude.ai connectors, e.g. [\"supabase\", \"Gmail\"]. PacedMind offers a computer that has them. Only what differs between computers: a project's own folder brings its servers everywhere");
 
 const newTaskFields = {
-  description: z.string().optional().describe("Details in plain text or Markdown: why it matters, context, constraints, links"),
+  description: z.string().optional().describe("Details in Markdown, which the app shows formatted: why it matters, context, constraints, links. Short paragraphs or a list, `code` for paths and commands"),
   done_when: doneWhenSchema.optional(),
   needs: needsSchema.optional(),
   status: statusSchema.optional().describe("Defaults to todo"),
@@ -509,7 +509,7 @@ export function registerPlanningTools(server: McpServer) {
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
-      description: z.string().optional().describe("Replaces the description"),
+      description: z.string().optional().describe("Replaces the description (Markdown)"),
       append_to_description: z.string().optional().describe("Adds a paragraph at the end of the description"),
       done_when: doneWhenSchema.optional().describe("Replaces the Done when list; [] clears it"),
       needs: needsSchema.optional().describe("Replaces what its agent needs from the computer its session runs on; [] clears it"),

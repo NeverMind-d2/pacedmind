@@ -71,7 +71,8 @@ export function TaskList({
   return (
     <div className="flex min-w-0 flex-1">
       <section aria-label={title} className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
+        {/* A container, so what's in headerRight can shorten to icons when the list is narrow (a task's details open, say). */}
+        <div className="@container flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           {mark ?? <Icon name={icon} className="shrink-0 text-mut" />}
           <h1 className="min-w-0 truncate text-[14px] font-semibold text-strong">{title}</h1>
           {subtitle && <span className="min-w-0 shrink-[3] truncate text-mut2">{subtitle}</span>}

@@ -16,6 +16,7 @@ import { BillingBanner } from "@/components/billing";
 import * as repo from "@/server/repo";
 import { deviceConfig } from "@/server/device";
 import { localTools, mcpLinks, thisDevice } from "@/server/devices";
+import { folderHints } from "@/server/folder-hints";
 import { mcpUrl } from "@/server/launcher";
 import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
@@ -45,6 +46,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const devices = all.filter((d) => d.id !== me);
   const here = MODE === "desktop" ? await thisDevice() : null;
   const executionDevices = [...(here ? [{ ...here, otherSessions: all.find((d) => d.id === here.id)?.otherSessions ?? [] }] : []), ...all.filter((d) => !d.revokedAt && d.id !== here?.id)];
+  // Which projects and areas without a folder here have a copy on this computer (desktop app).
+  const folders = await folderHints(areas, projects);
   const today = todayStr();
   const open = (t: (typeof tasks)[number]) => t.status !== "done" && t.status !== "canceled";
   const counts = {
@@ -63,7 +66,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
   }));
   return (
-    <ExecutionProvider devices={executionDevices} hereId={here?.id ?? null} desktop={MODE === "desktop"}>
+    <ExecutionProvider devices={executionDevices} hereId={here?.id ?? null} desktop={MODE === "desktop"} folders={folders}>
     <div className="flex h-full flex-col">
       <AppHeader email={user?.email ?? null} />
       {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} />}

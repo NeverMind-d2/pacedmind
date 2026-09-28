@@ -1,9 +1,9 @@
 import type { Session, SessionUsage, TokenCounts } from "./types";
 
 /*
- * What agents used, as Claude Code's usage metrics report it (the usage route): tokens per session, what they'd cost at
- * API prices, and how long it worked, summed per task and project with the time their sessions ran. On a plan, the cost
- * is what the same tokens would cost through the API, not what you pay.
+ * What agents used, as their usage metrics report it (the usage route): tokens per session and how long it worked,
+ * summed per task and project with the time their sessions ran. Claude Code also prices the tokens at API rates
+ * (SessionUsage.costUsd); that stays with the session but isn't shown.
  */
 
 export const NO_TOKENS: TokenCounts = { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 };
@@ -45,40 +45,34 @@ export function fmtSpan(ms: number): string {
   return min % 60 ? `${h} h ${min % 60} min` : `${h} h`;
 }
 
-/** "$3.40", "$0.12", "under 1¢". */
-export const fmtUsd = (n: number) => (n < 0.01 ? "under 1¢" : `$${n < 100 ? n.toFixed(2) : Math.round(n)}`);
-
-/** What a task's or a project's sessions used: tokens, their cost at API prices, and how long the agents worked (TaskContext.agentUse). */
+/** What a task's or a project's sessions used: tokens, and how long the agents worked (TaskContext.agentUse). */
 export interface AgentUse {
   sessions: number;
   tokens: number;
-  costUsd: number;
   /** The agents' working time, as they reported it. */
   ms: number;
 }
 
-export const NO_USE: AgentUse = { sessions: 0, tokens: 0, costUsd: 0, ms: 0 };
+export const NO_USE: AgentUse = { sessions: 0, tokens: 0, ms: 0 };
 
 /** What one session used, as its agent reported it. */
 export const sessionUse = (s: Session): AgentUse => ({
-  sessions: 1, tokens: tokenTotal(sessionTokens(s.usage)), costUsd: s.usage?.costUsd ?? 0, ms: (s.usage?.activeSeconds ?? 0) * 1000,
+  sessions: 1, tokens: tokenTotal(sessionTokens(s.usage)), ms: (s.usage?.activeSeconds ?? 0) * 1000,
 });
 
 /** Whether an agent reported anything: sessions it couldn't report from (the apps, the cloud) have nothing to show. */
 export const hasUse = (u: AgentUse | undefined): u is AgentUse => !!u && (u.tokens > 0 || u.ms > 0);
 
-/** "1.2M tokens · $3.40 at API prices · 42 min working"; empty when nothing was reported. */
+/** "1.2M tokens · 42 min working"; empty when nothing was reported. */
 export const usageText = (u: AgentUse) =>
-  [u.tokens ? `${fmtTokens(u.tokens)} tokens` : null, u.costUsd ? `${fmtUsd(u.costUsd)} at API prices` : null, u.ms ? `${fmtSpan(u.ms)} working` : null]
-    .filter(Boolean).join(" · ");
+  [u.tokens ? `${fmtTokens(u.tokens)} tokens` : null, u.ms ? `${fmtSpan(u.ms)} working` : null].filter(Boolean).join(" · ");
 
-/** "1.2M tokens · $3.40 at API prices · 42 min working · 2 sessions". */
+/** "1.2M tokens · 42 min working · 2 sessions". */
 export const agentUseLine = (u: AgentUse) => [usageText(u), `${u.sessions} ${u.sessions === 1 ? "session" : "sessions"}`].filter(Boolean).join(" · ");
 
-/** "agents: 1.2M tokens, $3.40 at API prices", for a header. */
-export const agentUseShort = (u: AgentUse) =>
-  `agents: ${[u.tokens ? `${fmtTokens(u.tokens)} tokens` : null, u.costUsd ? `${fmtUsd(u.costUsd)} at API prices` : null, u.tokens ? null : fmtSpan(u.ms)].filter(Boolean).join(", ")}`;
+/** "agents: 1.2M tokens" (or their working time, without tokens), for a header. */
+export const agentUseShort = (u: AgentUse) => `agents: ${u.tokens ? `${fmtTokens(u.tokens)} tokens` : fmtSpan(u.ms)}`;
 
 export const addUse = (a: AgentUse, b: AgentUse): AgentUse => ({
-  sessions: a.sessions + b.sessions, tokens: a.tokens + b.tokens, costUsd: a.costUsd + b.costUsd, ms: a.ms + b.ms,
+  sessions: a.sessions + b.sessions, tokens: a.tokens + b.tokens, ms: a.ms + b.ms,
 });

@@ -1,18 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { setAreaFolderAction } from "@/app/actions";
+import type { ReactNode } from "react";
+import { linkFoundFolderAction } from "@/app/actions";
 import { projectColor } from "@/lib/colors";
-import { AGENT_LABEL, APP_LABEL, mcpReaches, type Area, type Device, type Project, type Surface } from "@/lib/types";
+import { AGENT_LABEL, APP_LABEL, mcpReaches, type Area, type Device, type FoundFolder, type Project, type Surface } from "@/lib/types";
+import { AreaWorkspace } from "./area-workspace";
 import { deviceState, useExecution } from "./execution-context";
+import { folderName, usePacedMindFolder } from "./folder-field";
 import { AgentIcon, AreaMark, Icon } from "./icons";
-import { Picker } from "./picker";
 import { openAdd } from "./task-list";
-import { Dot, IconButton, Menu, cx, useAction } from "./ui";
+import { Button, Dot, IconButton, Menu, useAction } from "./ui";
 
 export function AreaDetail({ area, projects, onClose }: { area: Area; projects: Project[]; onClose: () => void }) {
-  const { devices, hereId, desktop } = useExecution();
+  const { devices, hereId, desktop, folders } = useExecution();
   const own = projects.filter((p) => p.areaId === area.id);
   return <aside aria-label="Area details" className="flex w-[340px] shrink-0 flex-col border-l border-line max-lg:w-[300px] max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-l-0 max-md:bg-panel">
     <div className="flex h-[52px] shrink-0 items-center gap-2 border-b border-line px-4">
@@ -23,7 +24,7 @@ export function AreaDetail({ area, projects, onClose }: { area: Area; projects: 
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto p-4">
       {/* Folders are this computer's: the desktop app sets them. */}
       {desktop && <Section title="Workspace" note="this computer">
-        <Workspace key={`${area.id}-${area.folder}`} area={area} projects={own} />
+        <AreaWorkspace bare key={`${area.id}-${area.folder}`} area={area} />
       </Section>}
       <Section title="Computers" action={<Link href="/settings/computers" className="text-[12px] text-mut hover:text-fg2">Manage</Link>}>
         {devices.length ? <div className="divide-y divide-line rounded-lg border border-line2">
@@ -33,9 +34,12 @@ export function AreaDetail({ area, projects, onClose }: { area: Area; projects: 
       <Section title="Projects" action={<button type="button" onClick={() => openAdd({ areaId: area.id })} className="flex items-center gap-1 text-[12px] text-mut hover:text-fg2">
         <Icon name="plus" size={12} />New task</button>}>
         {own.length ? <div className="-mx-2">
-          {own.map((p) => <Link key={p.id} href={`/project/${p.id}`} className="flex h-8 items-center gap-2.5 rounded-md px-2 text-[12.5px] text-fg2 hover:bg-hover">
-            <Dot color={projectColor(p, [area])} /><span className="truncate">{p.name}</span>
-          </Link>)}
+          {own.map((p) => <div key={p.id} className="flex h-8 items-center gap-2 rounded-md px-2 hover:bg-hover">
+            <Link href={`/project/${p.id}`} className="flex min-w-0 flex-1 items-center gap-2.5 text-[12.5px] text-fg2">
+              <Dot color={projectColor(p, [area])} /><span className="truncate">{p.name}</span>
+            </Link>
+            {desktop && <Here project={p} found={folders?.projects[p.id] ?? []} />}
+          </div>)}
         </div> : <p className="text-[12px] text-mut2">No projects</p>}
       </Section>
     </div>
@@ -53,32 +57,20 @@ function Section({ title, note, action, children }: { title: string; note?: stri
   </section>;
 }
 
-/** The area's folder on this computer, saved as it's chosen: tasks use it unless their project or they have one. */
-function Workspace({ area, projects }: { area: Area; projects: Project[] }) {
-  const [folder, setFolder] = useState(area.folder ?? "");
-  const { run } = useAction();
-  const folders = [...new Set(projects.map((p) => p.folder).filter((f): f is string => !!f))];
-  const save = (next: string) => {
-    setFolder(next);
-    if ((next.trim() || null) === area.folder) return;
-    run(async () => {
-      const r = await setAreaFolderAction(area.id, next.trim() || null);
-      if (!r.ok) setFolder(area.folder ?? "");
-      return r;
-    });
-  };
-  return <Picker label={`Workspace for ${area.name}`} values={[folder]} custom={(text) => text || null} onChange={([v]) => save(v)}
-    title="Tasks in this area use this folder unless their project or the task has its own"
-    trigger="flex h-8 w-full min-w-0 items-center gap-2 rounded-md border border-ctl bg-input px-2 text-left text-fg2 hover:bg-hover"
-    content={<>
-      <Icon name="folder" size={14} className="shrink-0 text-mut" />
-      <span className={cx("min-w-0 flex-1 truncate", folder ? "font-mono text-[11.5px]" : "text-[12.5px] text-mut2")}>{folder || "No folder"}</span>
-      <Icon name="chevronDown" size={12} className="shrink-0 text-mut2" />
-    </>}
-    options={[
-      { value: "", label: "No folder" }, ...folders.map((f) => ({ value: f, label: f })),
-      ...(folder && !folders.includes(folder) ? [{ value: folder, label: folder }] : []),
-    ]} />;
+/** Whether a project is on this computer: its folder here, a copy found here to use, or neither. */
+function Here({ project, found }: { project: Project; found: FoundFolder[] }) {
+  const { pending, run } = useAction();
+  const ours = usePacedMindFolder();
+  if (project.folder) {
+    return <span title={project.folder} className="flex min-w-0 max-w-[50%] items-center gap-1 text-[11.5px] text-mut2">
+      <Icon name="folder" size={12} className="shrink-0" /><span className="truncate">{ours(project.folder) ? "PacedMind's folder" : folderName(project.folder)}</span>
+    </span>;
+  }
+  if (found.length) {
+    return <Button size="sm" disabled={pending} title={`Found on this computer: ${found[0].folder}`} className="shrink-0"
+      onClick={() => run(() => linkFoundFolderAction(project.id, found[0].folder))}>Found here · Use</Button>;
+  }
+  return <span className="shrink-0 text-[11.5px] text-dim" title="No folder of it on this computer">Not here</span>;
 }
 
 /** One computer: where it stands, which of the area's projects use it, and a new task for one of its agents. */

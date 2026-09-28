@@ -279,7 +279,7 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,
     t.runIn ? `Sessions run in: ${t.runIn === "desktop" ? "the agent's desktop app" : t.runIn === "cloud" ? "the agent's cloud" : "a terminal"}` : null,
     t.needs.length ? `Needs on its computer: ${t.needs.join(", ")}` : null,
-    hasUse(use) ? `Agents used: ${agentUseLine(use)} (the price is what the tokens cost through the API)` : null,
+    hasUse(use) ? `Agents used: ${agentUseLine(use)}` : null,
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",
     t.doneWhen.length ? `\nDone when:\n${t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n")}` : null,
     t.subtasks.length ? `\nSub-tasks:\n${t.subtasks.map((s, i) => `${i + 1}. [${s.done ? "x" : " "}] ${s.title}`).join("\n")}` : null,

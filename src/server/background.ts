@@ -2,6 +2,7 @@ import "server-only";
 import { cloudWritable } from "./billing";
 import { checkCodexCloud } from "./cloud";
 import { checkThisDevice, refreshAgentModels, saveToolsOnce } from "./devices";
+import { refreshFolders } from "./folder-hints";
 import { tick, watchStatuses } from "./flow";
 import { mcpUrl } from "./launcher";
 import { linkProjects } from "./project-links";
@@ -30,6 +31,8 @@ export function startBackground() {
   // Which agents this computer has; again now and then, since tools get installed and updated. Needs no sign-in.
   const check = () => checkThisDevice(mcpUrl()).catch((e) => console.error("[organizer] device check failed", e));
   setTimeout(check, 3_000);
+  // The folders you work in with the agents, so the first page that offers them doesn't wait for the read.
+  setTimeout(() => void refreshFolders(), 1_000);
   setInterval(check, CHECK_EVERY);
 
   /**

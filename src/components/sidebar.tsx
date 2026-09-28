@@ -461,7 +461,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         </div>
 
         {menuArea && menu && (
-          <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} projects={projects} onClose={closeMenu}
+          <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} onClose={closeMenu}
             onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => newProject(menuArea.id)}
             onMoveUp={areas[0]?.id !== menuArea.id ? () => moveArea(menuArea.id, -1) : undefined}
             onMoveDown={areas.at(-1)?.id !== menuArea.id ? () => moveArea(menuArea.id, 1) : undefined} />

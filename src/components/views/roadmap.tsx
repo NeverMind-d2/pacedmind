@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useLayoutEffect, useOptimistic, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { setFlowOnAction, updateProjectAction } from "@/app/actions";
+import { linkFoundFolderAction, setFlowOnAction, updateProjectAction } from "@/app/actions";
 import { reorderTasksAction, setNextProjectAction } from "@/app/(app)/roadmap/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, parseLocal } from "@/lib/dates";
@@ -12,6 +12,8 @@ import { AGENT_LABEL, type AgentId, type Area, type Project, type Session, type 
 import type { ProjectStats, StateTone, TaskState } from "@/server/timeline";
 import { AreaMark, Diamond, Icon, StatusIcon } from "@/components/icons";
 import { TaskDetail } from "@/components/task-detail";
+import { useExecution } from "@/components/execution-context";
+import { FolderField } from "@/components/folder-field";
 import { useQuickAddProject } from "@/components/quick-add";
 import { openAdd } from "@/components/task-list";
 import { Button, Dot, Menu, Switch, cx, useAction } from "@/components/ui";
@@ -479,7 +481,8 @@ function Setting({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-type SettingsProps = { project: Project; projects: Project[]; markOf: (p: Project) => ReactNode; terminal: string };
+/** `areaFolder`: the workspace of the project's area on this computer, which it uses without a folder of its own. */
+type SettingsProps = { project: Project; projects: Project[]; markOf: (p: Project) => ReactNode; terminal: string; areaFolder: string | null };
 
 function SessionPanel(props: SettingsProps) {
   return (
@@ -509,9 +512,9 @@ function PhoneSessionSettings(props: SettingsProps) {
   );
 }
 
-function SessionSettings({ project, projects, markOf, terminal }: SettingsProps) {
+function SessionSettings({ project, projects, markOf, terminal, areaFolder }: SettingsProps) {
   const { run } = useAction();
-  const [folder, setFolder] = useState(project.folder ?? "");
+  const found = useExecution().folders?.projects[project.id] ?? [];
   const byId = new Map(projects.map((p) => [p.id, p]));
   /** Whether `start` waits, directly or through other projects, for `targetId`. */
   const waitsFor = (start: Project, targetId: string) => {
@@ -550,19 +553,13 @@ function SessionSettings({ project, projects, markOf, terminal }: SettingsProps)
           <span className="truncate px-2 text-fg2">{terminal}</span>
         </Setting>
         <Setting label="Folder">
-          <input value={folder} aria-label="Folder" placeholder="Area workspace, or a new folder per task" spellCheck={false}
-            ref={(el) => { if (el && document.activeElement !== el) el.scrollLeft = el.scrollWidth; }}
-            onChange={(e) => setFolder(e.target.value)}
-            onBlur={(e) => {
-              const value = e.currentTarget.value.trim();
-              e.currentTarget.scrollLeft = e.currentTarget.scrollWidth;
-              if (value !== (project.folder ?? "")) save({ folder: value || null });
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-              if (e.key === "Escape") setFolder(project.folder ?? "");
-            }}
-            className="h-7 min-w-0 flex-1 rounded-md bg-transparent px-2 font-mono text-[11.5px] text-fg2 outline-none placeholder:font-sans placeholder:text-[12.5px] placeholder:text-mut2 hover:bg-hover focus:bg-hover" />
+          <div className="min-w-0 flex-1">
+            <FolderField variant="row" label={`Folder for ${project.name}`} value={project.folder} own=""
+              inherited={areaFolder ? { folder: areaFolder, from: "area's" } : null} empty="PacedMind's folder per task"
+              emptyTitle="No folder: PacedMind makes an empty folder for each task, in its data folder"
+              clear={areaFolder ? "Use the area's workspace again" : "Remove its folder"} found={found}
+              onUse={(folder) => run(() => linkFoundFolderAction(project.id, folder))} onChange={(folder) => save({ folder })} />
+          </div>
         </Setting>
         <Setting label="Starts after">
           <Menu className="min-w-0" width={240}
@@ -615,6 +612,7 @@ export function Roadmap(props: {
   const router = useRouter();
   const [sel, setSel] = useState<string | null>(props.initialKey);
   const project = projects.find((p) => p.id === props.selectedId) ?? null;
+  const areaFolder = areas.find((a) => a.id === project?.areaId)?.folder ?? null;
   useQuickAddProject(project?.id ?? null);
   const colorOf = (p: Project) => projectColor(p, areas);
   const markOf = (p: Project) => {
@@ -684,7 +682,7 @@ export function Roadmap(props: {
           <ProjectTimeline from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} markOf={markOf} stats={stats} selectedId={project.id} />
           <PhoneProjects from={from} days={days} now={props.now} projects={projects} colorOf={colorOf} markOf={markOf} stats={stats} selectedId={project.id}>
             <PhoneTasks project={project} items={items} next={next} stats={stats} onSelect={setSel} />
-            <PhoneSessionSettings project={project} projects={projects} markOf={markOf} terminal={props.terminal} />
+            <PhoneSessionSettings project={project} projects={projects} markOf={markOf} terminal={props.terminal} areaFolder={areaFolder} />
           </PhoneProjects>
           {/* On a phone only a task's details show from here, over the whole page. */}
           <div className="flex min-h-0 flex-1 max-md:contents">
@@ -693,7 +691,7 @@ export function Roadmap(props: {
             {selected ? (
               <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />
             ) : (
-              <SessionPanel key={`${project.id}:${project.folder ?? ""}`} project={project} projects={projects} markOf={markOf} terminal={props.terminal} />
+              <SessionPanel key={`${project.id}:${project.folder ?? ""}`} project={project} projects={projects} markOf={markOf} terminal={props.terminal} areaFolder={areaFolder} />
             )}
           </div>
         </>

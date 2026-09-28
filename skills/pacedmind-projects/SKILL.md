@@ -22,7 +22,7 @@ Aim for tasks of roughly 30 minutes to one day of work. Bigger ones hide uncerta
 - Order the tasks the way they'll be done, and let each one leave the project in a working state.
 - Give each task:
   - a verb-first title;
-  - a description with the context: why, constraints, links;
+  - a description with the context: why, constraints, links, in Markdown (short paragraphs or a list, `code` for paths and commands);
   - `done_when`: the outcomes that must be true when it's finished, each one checkable. Agents answer every item when they hand the task back, and the user reviews against them. For work with a visible result, include a screenshot item, such as "A screenshot of /reports with the new button";
   - sub-tasks for its steps;
   - an estimate.

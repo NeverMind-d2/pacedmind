@@ -34,7 +34,7 @@ Start with `get_overview` whenever you need today's date, the ids of areas and p
 A good task is one the user (or an agent) can pick up weeks later without asking questions.
 
 - **Title**: a short, concrete action, verb first: "Send Q4 budget to finance", not "Budget".
-- **Description**: the context that won't be obvious later: why it matters, links and constraints.
+- **Description**: the context that won't be obvious later: why it matters, links and constraints. Write it in Markdown, which PacedMind shows formatted: short paragraphs or a list rather than one block, and `code` for paths, commands and commit ids.
 - **Done when** (`done_when`): what must be true when the task is finished, one checkable outcome per item: "The PDF is in Documents/Car", not "Look into insurance". For work an agent will do, this is its acceptance criteria: the agent answers each item in its report. When the user wants to see the result, say so in an item, such as "A screenshot of the new settings page".
 - **Needs** (`needs`): for agent work that needs an MCP server or claude.ai connector not every one of the user's computers has, such as `Gmail` or `supabase`, name it. PacedMind then offers a computer whose agent has it. Leave it out otherwise.
 - **Sub-tasks**: steps that are worth ticking off. Keep them to a handful. Sub-tasks are how to get there; Done when is where to end up.

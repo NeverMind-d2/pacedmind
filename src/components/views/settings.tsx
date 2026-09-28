@@ -6,7 +6,7 @@ import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   connectAgentAction, createProjectAction, disconnectAgentAction, importLegacyAction, manageBillingAction, moveToThisComputerAction, resetDataAction, rotateMcpTokenAction, subscribeAction,
-  updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
+  linkFoundFolderAction, updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
@@ -29,6 +29,8 @@ import { useOpenBilling } from "../billing";
 import { AgentIcon, AreaMark, Icon, type IconName } from "../icons";
 import { ImportProjects } from "../import-projects";
 import { AreaWorkspace } from "../area-workspace";
+import { useExecution } from "../execution-context";
+import { FolderField } from "../folder-field";
 import { PushSettings, type PushDevice } from "../push-settings";
 import { ThemeSelector } from "../theme";
 import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../ui";
@@ -617,29 +619,29 @@ export function SessionSettings({ device, account, platform }: {
 }
 
 /** Settings → Projects: each project's agent, and in the desktop app its folder, flow and MCP servers here. */
-export function ProjectSettings({ projects, areas, desktop, agents, platform, copies = {} }: {
+export function ProjectSettings({ projects, areas, desktop, agents, copies = {} }: {
   projects: Project[]; areas: Area[];
   desktop: boolean;
   /** This computer's copies of the repositories areas' workspaces hold elsewhere, by repository (Area.repo). */
   copies?: Record<string, string[]>;
   /** By project: what agents get in its folder here and which MCP servers its sessions get; null in the web app. */
   agents: Record<string, ProjectAgentsView> | null;
-  platform: NodeJS.Platform;
 }) {
   const { run } = useAction();
+  const { folders } = useExecution();
   const [importing, setImporting] = useState(false);
   const defaultArea = areas.find((a) => a.key === "DEV")?.id ?? areas[0]?.id ?? "";
   const [newProject, setNewProject] = useState({ name: "", areaId: defaultArea, folder: "", agent: "claude" as AgentId | null });
   return <>
     {desktop && <Section title="Area workspaces" note="Connect an area to an existing Codex or Claude project by choosing its folder on this computer. Tasks and projects without their own folder inherit it.">
       {areas.map((area) => <div key={`${area.id}:${area.folder ?? ""}`} className="border-b border-line px-3.5 py-3 last:border-b-0">
-        <AreaWorkspace area={area} projects={projects} compact found={area.repo ? copies[area.repo] ?? [] : []} />
+        <AreaWorkspace area={area} found={area.repo ? copies[area.repo] ?? [] : []} />
       </div>)}
     </Section>}
     <Section
       action={desktop && <Button size="sm" variant="ghost" onClick={() => setImporting(true)}><Icon name="download" size={12} />Import from Claude and Codex</Button>}
       note={desktop
-        ? "A session uses its task's folder, then its project's, then its area's workspace. Without any of these it gets a scratch folder. Changing an inherited workspace pauses the affected flows."
+        ? "A session uses its task's folder, then its project's, then its area's workspace. Without any of these, PacedMind makes an empty folder for the task. Changing an inherited workspace pauses the affected flows."
         : "Folders and flows are set in the desktop app, on the computer where the sessions run."}>
       {projects.map((p) => (
         <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
@@ -655,10 +657,14 @@ export function ProjectSettings({ projects, areas, desktop, agents, platform, co
               <Switch on={p.flowOn} label={`Flow for ${p.name}`} onChange={(v) => run(() => updateProjectAction(p.id, { flowOn: v }), v ? "Flow on" : "Flow paused")} />
             </>}
           </div>
-          {desktop && (
-            <input className={cx(input, "font-mono text-[11.5px]")} defaultValue={p.folder ?? ""} placeholder={areas.find((a) => a.id === p.areaId)?.folder ?? (platform === "win32" ? "C:\\path\\to\\repo" : "/path/to/repo")} aria-label={`Folder for ${p.name}`}
-              onBlur={(e) => (e.target.value.trim() || null) !== p.folder && run(() => updateProjectAction(p.id, { folder: e.target.value.trim() || null }), "Folder saved")} />
-          )}
+          {desktop && (() => {
+            const areaFolder = areas.find((a) => a.id === p.areaId)?.folder ?? null;
+            return <FolderField label={`Folder for ${p.name}`} value={p.folder} own=""
+              inherited={areaFolder ? { folder: areaFolder, from: "area's" } : null} empty="PacedMind's folder per task" emptyTitle="No folder: PacedMind makes an empty folder for each task, in its data folder"
+              clear={areaFolder ? "Use the area's workspace again" : "Remove its folder"} found={folders?.projects[p.id] ?? []}
+              onUse={(folder) => run(() => linkFoundFolderAction(p.id, folder))}
+              onChange={(folder) => run(() => updateProjectAction(p.id, { folder }), "Folder saved")} />;
+          })()}
           {desktop && agents?.[p.id] && (
             <ProjectAgents name={p.name} view={agents[p.id]} onServers={(names) => run(() => setProjectServersAction(p.id, names), "Saved")} />
           )}
@@ -674,7 +680,8 @@ export function ProjectSettings({ projects, areas, desktop, agents, platform, co
             onSelect={(v) => setNewProject((n) => ({ ...n, areaId: v }))} />
         </div>
         <div className="flex gap-2">
-          {desktop && <input className={cx(input, "font-mono text-[11.5px]")} placeholder="Folder (optional)" value={newProject.folder} onChange={(e) => setNewProject((n) => ({ ...n, folder: e.target.value }))} aria-label="Project folder" />}
+          {desktop && <div className="min-w-0 flex-1"><FolderField label="Project folder" value={newProject.folder || null} own="" empty="Folder (optional)" clear="Remove the folder"
+            onChange={(folder) => setNewProject((n) => ({ ...n, folder: folder ?? "" }))} /></div>}
           <Button onClick={() => {
             run(() => createProjectAction({ ...newProject, folder: newProject.folder.trim() || null }), `Created ${newProject.name}`);
             setNewProject((n) => ({ ...n, name: "", folder: "" }));

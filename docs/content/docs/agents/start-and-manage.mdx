@@ -47,7 +47,7 @@ A cloud session works on a copy of a repository. Claude Code on the web uses the
 
 A session uses the first folder set in this order: the task's **own folder**, its **project's folder**, then its **area's workspace**. Set the task's **Folder** in its details or the flow editor, the project's folder in **Settings → Projects** or the **Roadmap** panel, and the area's workspace from **… → Workspace…** on the area or **Settings → Projects → Area workspaces**. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
 
-To keep an area's Codex sessions in an existing Codex project, choose that project's folder as the area's workspace, then select **Save workspace**. Tasks and projects without their own folder inherit it, so they share one workspace. This is saved only on this computer. Changing it pauses flows in projects that inherit it; switch those flows on again after checking the folder.
+To keep an area's Codex sessions in an existing Codex project, choose that project's folder as the area's workspace; it's saved at once. Tasks and projects without their own folder inherit it, so they share one workspace. This is saved only on this computer. Changing it pauses flows in projects that inherit it; switch those flows on again after checking the folder.
 
 The folder must be an absolute path to an existing folder, without the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`. Otherwise the start is refused, before any session is recorded, with a message such as:
 
@@ -59,7 +59,7 @@ The folder must be an absolute path to an existing folder, without the character
 
 For a task's own folder, the message ends with *Change it in the task's details.* instead.
 
-A task without a task folder, project folder or area workspace gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The **Flows** panel shows it as *PacedMind workspace*. A configured folder that no longer exists is reported as an error; the session does not silently switch to a scratch folder.
+A task without a task folder, project folder or area workspace gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The task's details show it as *PacedMind's folder for this task*, and the **Flows** panel as *PacedMind's folder*. A configured folder that no longer exists is reported as an error; the session does not silently switch to a scratch folder.
 
 ### Trusting the folder
 
@@ -171,6 +171,8 @@ A session in the agent's cloud has the cloud's own servers, so needs aren't chec
 * **Codex** continues the same conversation, once its hooks said which (shown in **Sessions** as **Codex session**); before that, its most recent session in that folder.
 
 PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. A session an agent reported on its own (*Started outside PacedMind*) resumes too, in its folder, or the task's when it has none. PacedMind doesn't know that agent's conversation, so Claude Code starts a new one on the task, which later resumes continue; Codex continues its most recent session in the folder.
+
+A session that still runs in PacedMind but whose terminal is gone (closed, crashed, or the computer restarted), or whose agent lost PacedMind and you closed its terminal, gets **Reopen in terminal** instead, on the computer it runs on. It asks first: *Reopen this session in a new terminal? Do it when its terminal is gone. If it's still open, close it first: two terminals on one conversation get in each other's way.* Then the conversation goes on in a new terminal, the same way, and PacedMind records *Reopened in a new terminal*. The new terminal gets a new access token for the session, so a terminal left behind can't report on it anymore, and a question the old terminal still waited on in PacedMind is withdrawn.
 
 To send finished work back with what should change, use **Request changes** instead, or **Answer its questions** when the agent asked something: it adds what you wrote to the agent's report and reopens the session in a new terminal, in a new conversation, where the agent reads it first. See [Request changes](/agents/review#request-changes).
 

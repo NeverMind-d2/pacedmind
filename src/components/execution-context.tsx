@@ -2,12 +2,13 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { MAX_NEEDS, cleanNeeds, deviceWithNeeds, missingOn, needKey, toolsOn } from "@/lib/needs";
-import { AGENT_LABEL, APP_LABEL, deviceOnline, mcpReaches, surfaceOf, type AgentId, type Device, type Surface } from "@/lib/types";
+import { AGENT_LABEL, APP_LABEL, deviceOnline, mcpReaches, surfaceOf, type AgentId, type Device, type FolderHints, type Surface } from "@/lib/types";
 import { Icon } from "./icons";
 import { Picker } from "./picker";
 
-type ExecutionContext = { devices: Device[]; hereId: string | null; desktop: boolean };
-const Context = createContext<ExecutionContext>({ devices: [], hereId: null, desktop: false });
+/** `folders`: where projects and areas are on this computer (folder-hints.ts); null in the web app. */
+type ExecutionContext = { devices: Device[]; hereId: string | null; desktop: boolean; folders: FolderHints | null };
+const Context = createContext<ExecutionContext>({ devices: [], hereId: null, desktop: false, folders: null });
 export function ExecutionProvider({ children, ...value }: ExecutionContext & { children: ReactNode }) {
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }

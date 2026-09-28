@@ -7,4 +7,8 @@ contextBridge.exposeInMainWorld("pacedMindDesktop", {
   setTheme(theme) {
     if (theme === "dark" || theme === "light") ipcRenderer.send("pacedmind:set-theme", theme);
   },
+  // The system's folder dialog, starting at `near` when it's a folder; the chosen folder, or null when cancelled.
+  pickFolder(near) {
+    return ipcRenderer.invoke("pacedmind:pick-folder", typeof near === "string" ? near : null);
+  },
 });

@@ -79,6 +79,24 @@ export function repoLink(repo: string | null | undefined): { label: string; url:
   return { label: path, url: `https://${path}${tree}` };
 }
 
+/** A folder on this computer that looks like a project's or an area's copy: the same repository, or else its name. */
+export interface FoundFolder {
+  folder: string;
+  repo: string | null;
+  how: "repo" | "name";
+}
+
+/**
+ * Where your projects and areas are on this computer (desktop app, folder-hints.ts): for those without a folder here,
+ * the copies of them found here, and where PacedMind makes a folder for a task that has none.
+ */
+export interface FolderHints {
+  projects: Record<string, FoundFolder[]>;
+  areas: Record<string, FoundFolder[]>;
+  /** PacedMind's own folders for tasks without one are made in here, one per task (task-folder.ts). */
+  workspaces: string;
+}
+
 export interface Project {
   id: string;
   areaId: string;
@@ -212,7 +230,7 @@ export interface TokenCounts {
  */
 export interface SessionUsage {
   conversations: Record<string, TokenCounts>;
-  /** US dollars at API prices, as Claude Code counts them; on a plan, not what you pay. */
+  /** US dollars at API prices, as Claude Code counts them (on a plan, not what you pay). Kept, but not shown. */
   costUsd: number;
   /** Seconds the agent was working (not waiting for you). */
   activeSeconds: number;
@@ -704,6 +722,9 @@ export const isAnswers = (text: string) => text.startsWith(ANSWERS_HEADING);
 export const TRUST_ANSWER = "Yes, I trust this folder";
 export const TRUST_FIRST = `Claude Code first asks whether you trust the folder: choose “${TRUST_ANSWER}” in its terminal.`;
 export const TRUST_WAITING = `Claude Code is asking whether you trust this folder. Choose “${TRUST_ANSWER}” in its terminal.`;
+
+/** What Reopen in terminal asks first (reopenSessionAction): only for a running session whose terminal is gone. */
+export const REOPEN_CONFIRM = "Reopen this session in a new terminal? Do it when its terminal is gone. If it's still open, close it first: two terminals on one conversation get in each other's way.";
 
 /**
  * Where a task's sessions run when the task doesn't say: in a terminal when the agent's CLI is on the device,

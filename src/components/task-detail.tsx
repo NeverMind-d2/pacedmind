@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ComputerPicker, Issues, NeedsPicker, useComputerChoice, useExecutionIssues } from "./execution-context";
+import { ComputerPicker, Issues, NeedsPicker, useComputerChoice, useExecution, useExecutionIssues } from "./execution-context";
+import { FolderField, taskWorkspace } from "./folder-field";
 import { ModelChips, useModelProblem } from "./model-picker";
 import { format } from "date-fns";
 import {
-  addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction, requestChangesAction,
-  toggleSubtaskAction, updateTaskAction,
+  addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, linkFoundFolderAction, markSessionDoneAction,
+  reopenSessionAction, requestChangesAction, setAreaFolderAction, toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
 import { AskCard } from "./ask-card";
@@ -14,13 +15,13 @@ import { RequestStatus, useComputer } from "./request-status";
 import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
 import { agentUseLine, hasUse } from "@/lib/usage";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, REOPEN_CONFIRM, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
   type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
   type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
-import { InlineMarkdown } from "./markdown";
+import { InlineMarkdown, Markdown } from "./markdown";
 import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
 
@@ -101,6 +102,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const agent = agentOf(task, project?.agent);
   const runsOn = task.deviceId ?? project?.deviceId ?? null;
   const chooseComputer = useComputerChoice(task.deviceId);
+  const hints = useExecution().folders;
+  // The folder it uses without its own, and a copy of its project (or area) found here when that has none here.
+  const inheritedFolder = project?.folder ?? area?.folder ?? null;
+  const found = project ? (project.folder ? [] : hints?.projects[project.id] ?? []) : area && !area.folder ? hints?.areas[area.id] ?? [] : [];
   const issues = [
     ...useExecutionIssues(runsOn, agent ?? "claude", task.runIn, task.needs),
     useModelProblem(agent ?? "claude", runsOn, task.needs, task.runIn, task.modelSettings),
@@ -180,9 +185,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             onBlur={() => title.trim() && title !== task.title && save({ title })}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } }}
             className="field-sizing-content resize-none bg-transparent text-[20px] font-semibold leading-snug tracking-[-0.01em] text-strong outline-none" />
-          <textarea aria-label="Description" value={desc} placeholder="Add description…" onChange={(e) => setDesc(e.target.value)}
-            onBlur={() => desc !== task.description && save({ description: desc })}
-            className="field-sizing-content min-h-[44px] resize-none bg-transparent text-[13.5px] leading-relaxed text-mut outline-none placeholder:text-dim" />
+          <Description key={task.id} text={desc} onChange={setDesc} onSave={() => desc !== task.description && save({ description: desc })} />
         </div>
 
         <DoneWhen items={task.doneWhen} answers={report?.criteria ?? null} onChange={(doneWhen) => save({ doneWhen })} />
@@ -230,6 +233,13 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 {!active && session.status !== "failed" && session.surface === "terminal" && (!elsewhere || !!session.deviceId) && (
                   <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(session))}>
                     <Icon name="terminal" size={13} />{elsewhere ? `Resume on ${ranOn}` : "Resume in terminal"}
+                  </Button>
+                )}
+                {/* Its terminal is gone (or its agent lost PacedMind and you closed it): the conversation goes on in a new one. */}
+                {active && session.surface === "terminal" && !elsewhere && (
+                  <Button disabled={pending} title="When its terminal is gone: the conversation goes on in a new one"
+                    onClick={() => confirm(REOPEN_CONFIRM) && run(() => reopenSessionAction(session.id))}>
+                    <Icon name="terminal" size={13} />Reopen in terminal
                   </Button>
                 )}
                 {/* Showing an app's window only helps at that computer. */}
@@ -370,8 +380,14 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           {/* Folders are this computer's: the desktop app sets them, for the sessions that run here. */}
           {agent && ctx.desktop && (
             <Prop label="Folder">
-              <FolderProp task={task} inheritedFolder={project?.folder ?? area?.folder ?? null}
-                inheritedFrom={project?.folder ? "project's" : "area's"} onSave={(folder) => save({ folder })} />
+              <FolderField variant="row" label={`Folder for ${task.key}`} value={task.folder}
+                inherited={inheritedFolder ? { folder: inheritedFolder, from: project?.folder ? "project's" : "area's" } : null}
+                empty="PacedMind's folder for this task"
+                emptyTitle={`No folder of its own: PacedMind makes an empty one for it${hints ? `, ${taskWorkspace(hints.workspaces, task.key)}` : ""}`}
+                clear={inheritedFolder ? `Use the ${project?.folder ? "project's" : "area's"} folder again` : "Remove its folder"}
+                found={found} foundFor={project?.name ?? area?.name}
+                onUse={(folder) => run(() => (project ? linkFoundFolderAction(project.id, folder) : setAreaFolderAction(area!.id, folder)))}
+                onChange={(folder) => save({ folder: folder && folder !== inheritedFolder ? folder : null })} />
             </Prop>
           )}
           {/* What its agent needs from the computer its session runs on: PacedMind offers one that has it. */}
@@ -384,8 +400,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           {(agent || session) && <Prop label="Session">
             {session && session.status !== "failed" ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>
-                <AgentIcon agent={session.agent} size={13} />{AGENT_LABEL[session.agent]}
-                <span className="truncate text-mut2">{session.status === "finished" ? "finished" : session.status} {placeOf(session.agent, session.surface)}</span>
+                <AgentIcon agent={session.agent} size={13} /><span className="shrink-0 whitespace-nowrap">{AGENT_LABEL[session.agent]}</span>
+                <span className="min-w-0 truncate text-mut2">{session.status === "finished" ? "finished" : session.status} {placeOf(session.agent, session.surface)}</span>
               </a>
             ) : !agent ? (
               <span className="px-2 text-mut2">None, this one is yours</span>
@@ -418,7 +434,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           {/* What its sessions used, as their agents reported it. */}
           {hasUse(use) && (
             <Prop label="Usage">
-              <span title="As the agents reported it. The price is what these tokens cost through the API; on a plan, not what you pay."
+              <span title="As the agents reported it"
                 className="flex h-7 items-center truncate px-2 text-fg2">{agentUseLine(use)}</span>
             </Prop>
           )}
@@ -462,40 +478,32 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   );
 }
 
-/** A task can override its project's or area's workspace; clearing it restores inheritance. */
-function FolderProp({ task, inheritedFolder, inheritedFrom, onSave }: {
-  task: Task; inheritedFolder: string | null; inheritedFrom: string; onSave: (folder: string | null) => void;
-}) {
+/**
+ * The task's description, in Markdown: shown formatted, and as the text itself while you edit it (click it, or Enter on
+ * it). A long one shows its start, with Show more.
+ */
+function Description({ text, onChange, onSave }: { text: string; onChange: (text: string) => void; onSave: () => void }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(task.folder ?? "");
-  const shown = task.folder ?? inheritedFolder;
-  const save = () => {
-    setEditing(false);
-    const next = draft.trim() || null;
-    const own = next && next !== inheritedFolder ? next : null;
-    if (own !== task.folder) onSave(own);
-  };
-  if (editing) {
-    return (
-      <input autoFocus value={draft} aria-label="Folder for this task" placeholder={inheritedFolder ?? "Absolute folder path"}
-        onChange={(e) => setDraft(e.target.value)} onBlur={save}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") save();
-          if (e.key === "Escape") { e.stopPropagation(); setDraft(task.folder ?? ""); setEditing(false); }
-        }}
-        className="h-7 w-full rounded-md border border-ctl bg-input px-2 font-mono text-[11.5px] text-fg2 outline-none" />
-    );
+  const [all, setAll] = useState(false);
+  if (editing || !text.trim()) {
+    return <div className="flex flex-col gap-1">
+      <textarea aria-label="Description" value={text} placeholder="Add description…" autoFocus={editing}
+        onFocus={() => setEditing(true)} onChange={(e) => onChange(e.target.value)} onBlur={() => { setEditing(false); onSave(); }}
+        className="field-sizing-content min-h-[44px] resize-none bg-transparent text-[13.5px] leading-relaxed text-fg3 outline-none placeholder:text-dim" />
+      {editing && <span className="self-end text-[11px] text-dim">Markdown</span>}
+    </div>;
   }
-  return (
-    <button type="button" onClick={() => { setDraft(task.folder ?? ""); setEditing(true); }} className={cx(pv, "w-full min-w-0")}
-      title={shown ? `${shown}\nClick to give this task its own folder` : "Click to give this task a folder"}>
-      <Icon name="folder" size={14} className="shrink-0" />
-      <span className={cx("min-w-0 truncate font-mono text-[11.5px]", !shown && "font-sans text-[12.5px] text-mut2")}>
-        {shown ?? "PacedMind workspace"}
-      </span>
-      <span className="shrink-0 text-[11.5px] text-mut2">{task.folder ? "own" : shown ? inheritedFrom : ""}</span>
-    </button>
-  );
+  const long = text.length > 700 || text.split("\n").length > 14;
+  return <div className="flex flex-col gap-1">
+    <div role="button" tabIndex={0} aria-label="Edit the description" title="Click to edit"
+      onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) setEditing(true); }}
+      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditing(true); } }}
+      className={cx("relative -mx-1.5 cursor-text rounded-md px-1.5 py-0.5 outline-none hover:bg-hover/60 focus-visible:bg-hover/60", long && !all && "max-h-[230px] overflow-hidden")}>
+      <Markdown text={text} breaks className="text-[13.5px] text-fg3" />
+      {long && !all && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-panel to-transparent" />}
+    </div>
+    {long && <button type="button" onClick={() => setAll((v) => !v)} className="self-start text-[12px] text-mut2 hover:text-fg2">{all ? "Show less" : "Show more"}</button>}
+  </div>;
 }
 
 /**
