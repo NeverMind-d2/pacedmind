@@ -389,6 +389,19 @@ begin
     out := out || '18l FAIL eleven needs accepted' || E'\n';
     reset role;
   exception when others then out := out || '18l eleven needs rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  -- 18m-n. an area's repository: host/path only, never an address with credentials
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set repo = 'github.com/owner/name' where id = area_a;
+    get diagnostics n = row_count; out := out || '18m area repository saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18m ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.areas set repo = 'https://user:secret@github.com/owner/name' where id = area_a;
+    out := out || '18n FAIL an address with credentials accepted as an area repository' || E'\n';
+    reset role;
+  exception when others then out := out || '18n area repository with credentials rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     update public.devices set agents = '{"claude": {"cli": true}}', checked_at = now() where id = dev;

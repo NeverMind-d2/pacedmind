@@ -44,6 +44,7 @@ export const createProject = via("createProject");
 export const updateProject = via("updateProject");
 export const deleteProject = via("deleteProject");
 export const setProjectRepo = via("setProjectRepo");
+export const setAreaRepo = via("setAreaRepo");
 export const mergeProject = via("mergeProject");
 
 /* ---------- tasks ---------- */

@@ -106,7 +106,7 @@ function chunks<T>(xs: T[], size = 100): T[][] {
 
 const toArea = (r: Row): Area => ({
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
-  picture: pictureHash(r.picture), sort: Number(r.sort), folder: MODE === "desktop" ? areaFolder(String(r.id)) : null,
+  picture: pictureHash(r.picture), sort: Number(r.sort), folder: MODE === "desktop" ? areaFolder(String(r.id)) : null, repo: repoOf(r.repo),
 });
 
 export async function listAreas(): Promise<Area[]> {
@@ -256,6 +256,14 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
 }
 
 /** Records the repository a project's folder on this computer is in (project-links.ts), for the other computers. */
+/** The repository an area's workspace holds (project-links.ts), for your other computers. */
+export async function setAreaRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (!value || !isUuid(id)) return;
+  const db = await accountDb();
+  check(await db.from("areas").update({ repo: value }).eq("id", id));
+}
+
 export async function setProjectRepo(id: string, repo: string) {
   const value = repoOf(repo);
   if (!value || !isUuid(id)) return;

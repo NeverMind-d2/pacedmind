@@ -24,6 +24,7 @@ import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
 import { answerHere, askedHere, withdrawHere } from "@/server/asks";
 import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
+import { repoIdentity } from "@/server/git-remote";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
@@ -622,6 +623,9 @@ export async function setAreaFolderAction(id: string, folder: string | null): Pr
   const changed = area.folder !== next;
   const error = setAreaFolder(id, next, inheriting.map((p) => p.id));
   if (error) return { ok: false, error };
+  // The repository it holds, so your other computers can offer their copy of it.
+  const holds = next ? repoIdentity(next) : null;
+  if (holds && holds !== area.repo) await repo.setAreaRepo(id, holds);
   return done({ ok: true, message: changed && inheriting.some((p) => p.flowOn)
     ? "Workspace saved. Flows that inherit it are paused; switch them on again to use the new folder."
     : "Workspace saved" });

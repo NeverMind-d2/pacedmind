@@ -60,6 +60,23 @@ export interface Area {
    */
   picture: string | null;
   sort: number;
+  /**
+   * The git repository its workspace holds, as host/owner/name (and "#subfolder" inside one), like Project.repo: read
+   * from its workspace on a computer, so your other computers can offer their copy of it. Null until one saw it.
+   */
+  repo: string | null;
+}
+
+/**
+ * A repository's page on the web, from Project.repo or Area.repo: https://host/owner/name, and the subfolder within
+ * it on GitHub. The label is the repository as host/owner/name.
+ */
+export function repoLink(repo: string | null | undefined): { label: string; url: string } | null {
+  if (!repo) return null;
+  const [path, sub] = repo.split("#");
+  if (!/^[a-z0-9][a-z0-9.-]*(\/[a-z0-9._~-]+)+$/.test(path)) return null;
+  const tree = sub && path.startsWith("github.com/") ? `/tree/HEAD/${sub.split("/").map(encodeURIComponent).join("/")}` : "";
+  return { label: path, url: `https://${path}${tree}` };
 }
 
 export interface Project {
