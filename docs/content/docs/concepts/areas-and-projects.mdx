@@ -13,7 +13,7 @@ The key starts the key of every task in the area (WRK-1, WRK-2, …). Renaming t
 
 ### Create an area
 
-* In the sidebar, hover **Areas** and select **+** (**New area**), type the name and press <kbd>Enter</kbd>.
+* In the sidebar, hover **Areas & projects** and select **+** (**New area**), type the name and press <kbd>Enter</kbd>.
 * On the **Projects** page, select **New area**.
 
 A new area gets the first palette color that no other area uses.
@@ -61,7 +61,7 @@ A project's **progress** is the share of its tasks that are done, not counting c
 
 ### Create a project
 
-* In the sidebar, hover **Projects** and select **+** (**New project**). With more than one area, pick the area first (**New project in**).
+* In the sidebar, select **+** beside the area the project belongs to. The name field opens beneath that area's heading, including when the group was collapsed. An empty area also offers **New project** below its heading.
 * From an area's menu, select **New project**.
 * On the **Projects** page, select **New project** and pick the area, or use the **+** on an area's row.
 * In **Settings → Projects**, fill in **New project**: a name, the area and an optional folder, then select **Add project**. Projects added there get Claude Code as their default agent, and Settings stays open.
@@ -88,17 +88,21 @@ Deleting a project keeps its tasks: they stay in the area without a project. The
 
 ## Order and select several
 
-Drag an area or a project up or down in the sidebar to put it in your order. A line shows where it lands. Areas move among areas and projects among projects. The order is saved with your data, so the **Projects** page, quick add and the other lists of areas and projects use it too.
+The sidebar's **Areas & projects** section groups projects beneath their area, with an indented list and a separator between areas. The arrow beside an area collapses or expands its projects; selecting the area's name opens all its tasks.
+
+Drag an area heading up or down to move the whole group. Its **…** menu also offers **Move up** and **Move down** when there is a group in that direction. Drag projects to reorder them within the same area. A line shows where the dragged rows land. To change a project's area, use **Move to area** in its menu.
+
+The order is saved with your data, so the **Projects** page, quick add and the other lists of areas and projects use it too.
 
 To work on several at once, select them in the sidebar:
 
 | Click | Result |
 | --- | --- |
 | <kbd>Ctrl</kbd>-click, on macOS <kbd>⌘</kbd>-click | Adds the area or project to the selection, or takes it out. The one whose page is open counts as selected. |
-| <kbd>Shift</kbd>-click | Selects every row from the last one clicked to this one. |
+| <kbd>Shift</kbd>-click | Selects the visible areas or projects from the last one clicked to this one, in their displayed order. |
 | A click without a key | Opens the page and ends the selection, as do <kbd>Esc</kbd> and a click outside the sidebar. |
 
-A selection holds areas or projects, not both. Dragging a selected row moves the whole selection, in its order, to where it's dropped. Right-clicking a selected row, or its **…** button, opens the menu for the selection:
+A selection holds areas or projects, not both. Dragging a selected row moves the visible selected rows, in their order, to where they're dropped; selected projects must belong to the same area to be reordered together. Right-clicking a selected row, or its **…** button, opens the menu for the selection:
 
 | Item | Result |
 | --- | --- |

@@ -213,8 +213,9 @@ export function MoreButton({ label, open, onOpen, onClose, className }: {
   );
 }
 
-export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject }: {
+export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject, onMoveUp, onMoveDown }: {
   area: Area; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void; onNewProject: () => void;
+  onMoveUp?: () => void; onMoveDown?: () => void;
 }) {
   const { run } = useAction();
   const [confirm, setConfirm] = useState(false);
@@ -234,6 +235,11 @@ export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject 
       <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
       <PopoverItem icon={<Icon name="plus" size={14} />} onClick={() => { onClose(); onNewProject(); }}>New project</PopoverItem>
       <PopoverLink icon={<Icon name="layers" size={14} />} href={`/area/${area.id}`} onClick={onClose}>Open tasks</PopoverLink>
+      {(onMoveUp || onMoveDown) && <>
+        <PopoverSeparator />
+        {onMoveUp && <PopoverItem icon={<Icon name="arrowRight" size={14} className="-rotate-90" />} onClick={() => { onClose(); onMoveUp(); }}>Move up</PopoverItem>}
+        {onMoveDown && <PopoverItem icon={<Icon name="arrowRight" size={14} className="rotate-90" />} onClick={() => { onClose(); onMoveDown(); }}>Move down</PopoverItem>}
+      </>}
       <PopoverSeparator />
       <PopoverLabel>Color</PopoverLabel>
       <ColorSwatches value={area.color} onPick={(c) => run(() => updateAreaAction(area.id, { color: c }))} />
