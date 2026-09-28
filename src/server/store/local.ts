@@ -307,11 +307,11 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, done_when, needs, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
     JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
-    sort, stamp, stamp,
+    input.agent === "human" ? null : input.runIn ?? null, sort, stamp, stamp,
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }

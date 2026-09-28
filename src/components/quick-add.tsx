@@ -6,8 +6,11 @@ import { addMinutes, format } from "date-fns";
 import { createEventAction, createTaskAction } from "@/app/actions";
 import { parseQuickAdd } from "@/lib/parse";
 import { hhmm, parseLocal, timeOf, toDateTimeStr, dateOnly } from "@/lib/dates";
-import { PRIORITY_LABEL, STATUS_LABEL, type Area, type Priority, type Project, type Status } from "@/lib/types";
-import { AreaMark, Icon, PriorityIcon, StatusIcon } from "./icons";
+import {
+  APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf,
+  type Area, type Doer, type Priority, type Project, type Status, type Surface,
+} from "@/lib/types";
+import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
 import { DateField } from "./date-field";
 import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
 
@@ -51,6 +54,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [defaults, setDefaults] = useState<QuickAddDefaults>({});
   const [ov, setOv] = useState<{
     areaId?: string | null; projectId?: string | null; status?: Status; priority?: Priority; due?: string | null; planned?: string | null; weekly?: boolean; duration?: number;
+    agent?: Doer | null; runIn?: Surface | null;
   }>({});
   const input = useRef<HTMLInputElement>(null);
   const { pending, run } = useAction();
@@ -99,6 +103,12 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     : undefined;
   const projectId = ov.projectId !== undefined ? ov.projectId : (projectFromText?.id ?? defaults.projectId ?? null);
   const project = projects.find((p) => p.id === projectId) ?? null;
+  const doer = ov.agent ?? null;
+  const agent = agentOf({ agent: doer }, project?.agent);
+  const runIn = agent ? ov.runIn ?? null : null;
+  const doerLabel = doer ? DOER_LABEL[doer] : `${DOER_LABEL[agent!]} (default)`;
+  const placeLabel = (surface: Surface | null) => !surface ? "Automatic"
+    : surface === "desktop" ? APP_LABEL[agent!] : surface === "cloud" ? CLOUD_LABEL[agent!] : "Terminal";
   const areaId = ov.areaId !== undefined ? ov.areaId : (project?.areaId ?? defaults.areaId ?? null);
   const area = areas.find((a) => a.id === areaId) ?? null;
   const status = ov.status ?? "todo";
@@ -134,6 +144,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         const r = await createTaskAction({
           title, description: desc, areaId, projectId, status, priority, dueDate: due, plannedDate: planned,
           labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined, doneWhen: doneItems,
+          agent: doer, runIn,
         });
         if (r.ok) toast(`Created ${r.key}`);
         return r.ok ? undefined : r;
@@ -199,7 +210,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           </button>
         </div>
 
-        <div className="flex flex-col gap-2 px-5 pt-1.5">
+        <div className="flex flex-col gap-2 px-5 pb-4 pt-1.5">
           <div className="relative overflow-hidden">
             <div aria-hidden className="pointer-events-none absolute inset-0 whitespace-pre text-[18px] font-medium leading-7 text-strong" style={{ transform: `translateX(${-scroll}px)` }}>
               {segments.map((s, i) => <span key={i} className={cx(s.cls, s.cls && "rounded-[3px]")}>{s.text}</span>)}
@@ -245,6 +256,25 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
                 items={[{ value: null as string | null, label: "No project" },
                   ...projects.filter((p) => !areaId || p.areaId === areaId).map((p) => ({ value: p.id as string | null, label: p.name }))]}
                 onSelect={(v) => setOv((o) => ({ ...o, projectId: v, areaId: v ? projects.find((p) => p.id === v)?.areaId ?? o.areaId : o.areaId }))} />
+              <Menu width={260}
+                trigger={<button type="button" aria-label={`Done by: ${doerLabel}`} className={chip}>
+                  {agent ? <AgentIcon agent={agent} size={12} /> : <Icon name="user" size={13} />}Done by: {doerLabel}
+                </button>}
+                items={[
+                  { value: "human" as Doer | null, label: DOER_LABEL.human, icon: <Icon name="user" size={13} />, hint: "Stays out of flows" },
+                  ...(["claude", "codex"] as const).map((a) => ({ value: a as Doer | null, label: DOER_LABEL[a], icon: <AgentIcon agent={a} size={12} /> })),
+                  { value: null, label: project?.agent ? `Project default, ${DOER_LABEL[project.agent]}` : "Default, Claude Code", icon: <Icon name="layers" size={13} /> },
+                ]}
+                onSelect={(v) => setOv((o) => ({ ...o, agent: v, ...(v === "human" ? { runIn: null } : {}) }))} />
+              {agent && <Menu width={280}
+                trigger={<button type="button" aria-label={`Run in: ${placeLabel(runIn)}`} className={chip}>
+                  <SurfaceIcon surface={runIn ?? "terminal"} size={13} />Run in: {placeLabel(runIn)}
+                </button>}
+                items={[
+                  { value: null as Surface | null, label: "Automatic", hint: "Terminal if installed, else the desktop app", icon: <Icon name="laptop" size={13} /> },
+                  ...(["terminal", "desktop", "cloud"] as const).map((s) => ({ value: s as Surface | null, label: placeLabel(s), icon: <SurfaceIcon surface={s} size={13} /> })),
+                ]}
+                onSelect={(v) => setOv((o) => ({ ...o, runIn: v }))} />}
               {parsed.labels.map((l) => (
                 <span key={l} className={cx(chip, found)}><Icon name="tag" size={13} />{l}</span>
               ))}

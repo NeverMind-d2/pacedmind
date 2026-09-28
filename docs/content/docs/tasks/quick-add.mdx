@@ -54,10 +54,14 @@ A time typed without a date goes on the planned day, when there is one: *15:00* 
 | Due date | The date picker: type a date, take a suggestion or pick a day on the calendar, with a time. |
 | **Plan for a day** | The planned date, without a time. Shows *Planned* and the day once set. |
 | Project | **No project**, or a project: those in the chosen area, or all of them when no area is chosen. Choosing a project also chooses its area. |
+| **Done by** | **You**, **Claude Code**, **Codex**, or the project default (Claude Code when the project has no default). Tasks set to **You** stay out of agent flows. |
+| **Run in** | For agents: **Automatic**, **Terminal**, the **Claude app** or **Codex app**, or **Claude Code on the web** or **Codex cloud**. Automatic uses a terminal when the agent's CLI is installed on the computer, otherwise its desktop app when available. Hidden for tasks set to **You**. |
 | Labels | One chip per label typed with `#`. |
 | **Done when** | Shows the **Done when** field under the description, or hides it again while it's empty. Reads *Done when · 2* once the field has two items. |
 
 Chips filled from the title are highlighted. Changing a chip overrides what was typed; the recognized words stay out of the title. An `@word` that matches no project is removed from the title too, without setting a project.
+
+**Done by** and **Run in** are saved with the new task. Creating the task does not start an agent session. Selecting **You** clears the environment choice. **Create more** resets these choices for the next task too.
 
 Once the task has a due date, a priority, a label, a project or an estimate, a line above the buttons summarizes them, for example *due Fri 2 Oct at 10:00, high priority, label finance, in Q4 planning, about 30 min*.
 

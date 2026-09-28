@@ -12,11 +12,11 @@ import {
   AGENT_LABEL, type Area, type FlowEdge, type Project, type Session, type SessionStatus, type Task, type TaskContext,
 } from "@/lib/types";
 import type { DayLoad, TaskState } from "@/server/timeline";
-import { Diamond, Icon, ProgressRing } from "@/components/icons";
+import { AreaMark, Diamond, Icon, ProgressRing } from "@/components/icons";
 import { Popover, PopoverItem, PopoverLabel, type Anchor } from "@/components/popover";
 import type { QuickAddDefaults } from "@/components/quick-add";
 import { TaskDetail } from "@/components/task-detail";
-import { Dot, Segmented, cx, toast, useAction } from "@/components/ui";
+import { Segmented, cx, toast, useAction } from "@/components/ui";
 import { useAddOnClick } from "./calendar-parts";
 
 /* ---------- small helpers, also used by the roadmap ---------- */
@@ -115,7 +115,7 @@ interface Scale {
   today: string;
 }
 
-type AreaRow = { kind: "area"; id: string; y: number; h: number; areaId: string; name: string; color: string | null; open: boolean };
+type AreaRow = { kind: "area"; id: string; y: number; h: number; areaId: string; name: string; area: Area | null; open: boolean };
 type ProjectRow = {
   kind: "proj"; id: string; y: number; h: number; project: Project; color: string; open: boolean;
   done: number; total: number; started: boolean; span: Span | null;
@@ -194,7 +194,7 @@ function buildRows(input: {
   });
 
   add({ kind: "cap", id: "cap", y, h: ROW_H.cap });
-  const groups = [...areas.map((a) => ({ id: a.id, name: a.name, color: a.color as string | null })), { id: "", name: "Inbox", color: null }];
+  const groups = [...areas.map((a) => ({ id: a.id, name: a.name, area: a })), { id: "", name: "Inbox", area: null }];
   for (const g of groups) {
     const own = projects.filter((p) => (g.id ? p.areaId === g.id : !areaIds.has(p.areaId)));
     const loose = tasks
@@ -203,9 +203,9 @@ function buildRows(input: {
       .sort(byStart);
     if (!g.id && !own.length && !loose.length) continue;
     const open = !collapsed[g.id];
-    add({ kind: "area", id: `a-${g.id}`, y, h: ROW_H.area, areaId: g.id, name: g.name, color: g.color, open });
+    add({ kind: "area", id: `a-${g.id}`, y, h: ROW_H.area, areaId: g.id, name: g.name, area: g.area, open });
     if (!open) continue;
-    const color = g.color ?? "var(--color-mut2)";
+    const color = g.area?.color ?? "var(--color-mut2)";
     for (const p of own) {
       const pc = projectColor(p, areas);
       const pts = tasks.filter((t) => t.projectId === p.id && t.status !== "canceled");
@@ -960,7 +960,7 @@ export function Timeline(props: {
                         <button type="button" aria-expanded={r.open} onClick={() => setCollapsed((c) => ({ ...c, [r.areaId]: r.open }))}
                           className="flex h-full min-w-0 flex-1 items-center gap-2 text-left">
                           <Icon name={r.open ? "chevronDown" : "chevronRight"} size={11} strokeWidth={2.6} className="shrink-0 text-mut2" />
-                          {r.color ? <Dot color={r.color} /> : <Icon name="inbox" size={12} className="shrink-0 text-mut2" />}
+                          {r.area ? <AreaMark area={r.area} /> : <Icon name="inbox" size={12} className="shrink-0 text-mut2" />}
                           <span className="truncate text-[12.5px] font-medium text-fg2">{r.name}</span>
                         </button>
                       )}

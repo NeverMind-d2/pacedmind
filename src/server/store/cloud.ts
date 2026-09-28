@@ -350,6 +350,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
     estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
+    run_in: input.agent === "human" ? null : input.runIn ?? null,
   }).select(TASK_SELECT).single());
   return toTask(r!);
 }
