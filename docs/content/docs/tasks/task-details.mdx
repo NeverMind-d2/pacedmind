@@ -43,7 +43,7 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 
 ## Fields
 
-**General** groups the planning fields and **Done by**. For agent tasks, a separate **Agent** section contains **Computer** (with more than one computer), **Run in**, **Model**, **Folder**, **Needs**, **Session** and **Usage**. When something would keep a session from starting where it goes, a line under **Needs** says so, as in [quick add](/tasks/quick-add#the-chips). Choosing **You** hides the agent controls. Earlier sessions and their usage remain under **Session history**.
+**General** groups the planning fields and **Done by**. For agent tasks, a separate **Agent** section contains **Computer** (with more than one computer), **Run in**, **Model**, **Folder**, **Needs**, **Session** and **Usage**. When something would keep a session from starting where it goes, a line under **Needs** says so, as in [quick add](/tasks/quick-add#the-chips). The agent name beside **Agent** is a picker linked to **Done by**: changing either sets the agent for new sessions. Choosing **You** hides the agent controls. Earlier sessions and their usage remain under **Session history**.
 
 | Field | Choices |
 | --- | --- |
@@ -61,7 +61,7 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 | **Model** | For terminal sessions: *Default*, or the chosen model with its **Thinking** and **Speed**. **Refresh list** checks the models again. See [Model, thinking and speed](/tasks/quick-add#model-thinking-and-speed). Changes apply when a terminal session next starts or resumes, including when sending changes back. |
 | **Labels** | The labels, and **+ Add**: type a label and press <kbd>Enter</kbd>. Click a label to remove it. |
 | **Needs** | For a task an agent does: *None*, or up to 10 MCP servers or connectors it needs. Open the searchable picker, select or deselect tools, and select **Done** to save the choices together. Each option lists the computers reporting it. Type a custom name and press <kbd>Enter</kbd> to add it. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
-| **Session** | The latest agent session, or a button to start one. See below. |
+| **Session** or **Last session** | The latest agent session, or a button to start one. An ended session is labeled **Last session**, so its agent stays distinct from the next session’s choice. See below. |
 | **Usage** | Once an agent reported it: what all the task's sessions used, such as *262k tokens · 1 min working · 1 session*. See [What it used](/agents/lifecycle#what-it-used). |
 
 The date fields open the date picker (see [Dates](/concepts/dates)): type a date, take a suggestion or pick a day on the calendar. **Plan for a day** closes once a day is picked; **Due date** stays open for its time: pick one, or **Done** for none. **Clear** appears once a date is set.
@@ -70,9 +70,11 @@ The date fields open the date picker (see [Dates](/concepts/dates)): type a date
 
 What the **Session** field shows depends on the task:
 
-* **A session exists**: the agent and the session's state and place, such as *Claude Code finished in a terminal*. Selecting it opens the session in **Sessions**. After a session that failed to start, the field offers to start one again.
+* **A session exists**: the agent and the session's state and place, such as *Claude Code finished in a terminal*. Selecting it opens the session in **Sessions**. After a session ends or fails to start, the session card offers a new one.
 * **The task is yours**: *None, this one is yours*. No session can start.
 * **Otherwise**: **Start with Claude Code** (or **Codex**, the task's agent), which starts the session where the task runs. Its arrow (**Choose agent and where it runs**) offers **Claude Code in a terminal**, **Claude Code in the Claude app**, **Claude Code on the web**, **Codex in a terminal**, **Codex in the Codex app** and **Codex cloud**.
+
+Choosing from the arrow saves the agent in **Done by** and the place in **Run in**, then starts the new session. Switching agents clears the previous agent’s model settings.
 
 Starting confirms where the session went, such as *Started DEV-22 in a new terminal* or *Opened DEV-22 in the Claude app. Send the first message there to start.* See [Start, resume and close sessions](/agents/start-and-manage).
 
@@ -93,7 +95,7 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | Finished, partly done | *Claude Code handed back part of it at 14:40 · waiting for you* |
 | Finished, blocked | *Claude Code got stuck at 14:40 · needs you* |
 | Done | *Claude Code finished, marked done* |
-| Closed | *Closed before the agent finished* |
+| Closed | *Codex session closed before it finished* (or *Claude Code session closed before it finished*) |
 | Failed | *Couldn't start:* and the reason |
 
 A question the agent asks with `ask_user` shows under the state line, with a field for your answer and **Send answer**. See [Answer while it works](/agents/lifecycle#answer-while-it-works).
@@ -143,18 +145,28 @@ The card ends with the session's folder and branch name, and these buttons:
 
 | Button | When | Result |
 | --- | --- | --- |
-| **Resume in terminal** | A terminal session that isn't running and didn't fail. | Opens a terminal in the session's folder again. Claude Code continues the same conversation. |
+| **Resume Codex** or **Resume Claude Code** | A terminal session that isn't running and didn't fail. | Continues that agent’s conversation in a terminal on the computer it ran on, regardless of **Done by**. |
 | **Reopen in terminal** | A running terminal session on this computer. | For one whose terminal is gone: asks *Reopen this session in a new terminal? Do it when its terminal is gone. If it's still open, close it first: two terminals on one conversation get in each other's way.*, then continues the conversation in a new terminal. See [Resume a session](/agents/start-and-manage#resume-a-session). |
 | **Open the Claude app** or **Open the Codex app** | A session in a desktop app. | Brings the app forward. |
 | **Open in the cloud** | A cloud session with a link. | Opens it in the browser. |
 | **Request changes** | A terminal session on this computer whose agent handed the task back, finished or done after you marked the task done, with the task's latest report. Not for a task that is yours, or while another session of it runs. | Opens a box to write what should change, and sends it to the agent. See [Request changes](#request-changes). |
 | **Answer its question** or **Answer its questions** | As for **Request changes**, when the agent's latest report has questions for you. | Opens a field for each question, and sends your answers to the agent. See [Answer the agent's questions](#answer-the-agents-questions). |
 | **Mark finished** | A running session outside a terminal. | Marks the session finished and the task **In review**, for sessions that can't report back. |
-| **New session** | The session is closed, done or failed, and the task isn't done. | Starts a fresh session. |
+| **New session with Claude Code** or **New session with Codex** | The session isn’t running, and the task isn’t done. | Starts a fresh session with the agent in **Done by**. Its arrow also lets you choose an agent and where it runs. |
 | **Mark done** | The agent finished. | Marks the task done after your review. This can start the next sessions of a flow. |
 | **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, then marks the session closed and sets an in-progress task back to **Todo**. |
 
 See [Review finished work](/agents/review).
+
+## Switch agents after a session ends
+
+To continue a task with Claude Code after stopping Codex:
+
+1. If PacedMind still shows the session as running, select **Close session**. Close its terminal too if the agent is still working there.
+2. Set **Done by** to **Claude Code**, or select **Claude Code** from the picker beside **Agent**. Both controls change the same choice.
+3. Check **Computer**, **Run in** and **Folder**, then select **New session with Claude Code**. If it runs on another computer, the usual request goes there.
+
+The arrow beside the new-session button can also choose and start the other agent directly. The old Codex session keeps its history. **Resume Codex** always continues that Codex conversation; switching agents starts a fresh conversation for the same task.
 
 ## Request changes
 
