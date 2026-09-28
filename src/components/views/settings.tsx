@@ -91,7 +91,7 @@ function ProjectAgents({ name, view, onServers }: { name: string; view: ProjectA
           <span className="text-[11.5px]">
             {chosen === null
               ? "Sessions get every MCP server Claude Code and Codex have in this folder, as when you start them yourself."
-              : "Claude Code gets only these, and none from plugins; Codex has the others switched off. PacedMind's own server always stays."}
+              : "Claude Code gets only these, and none from plugins or its claude.ai account; Codex has the others switched off. PacedMind's own server always stays."}
           </span>
         </div>
       )}

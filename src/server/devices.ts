@@ -4,12 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
 import * as repo from "./repo";
-import { agentCommandFor, deviceConfig, thisPlatform } from "./device";
+import { agentCommandFor, deviceConfig, thisPlatform, updateDevice } from "./device";
 import { agentExtras } from "./extras";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
-import { MCP_NAME, NO_AGENT_TOOLS, OLD_MCP_NAME, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink } from "@/lib/types";
+import {
+  MCP_NAME, NO_AGENT_TOOLS, OLD_MCP_NAME, type AgentExtras, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink,
+} from "@/lib/types";
 
 /*
  * This computer and the others signed in to the account. Each desktop app registers itself in the account's
@@ -298,8 +300,8 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
     const agents: Device["agents"] = {
-      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn, extras: agentExtras("claude") },
-      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn, extras: agentExtras("codex") },
+      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn, extras: withAccount("claude", agentExtras("claude")) },
+      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn, extras: withAccount("codex", agentExtras("codex")) },
     };
     g.__pacedmindTools = agents;
     g.__pacedmindToolsAt = new Date().toISOString();
@@ -310,6 +312,31 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
     g.__pacedmindCheck = null;
   });
   return g.__pacedmindCheck;
+}
+
+/** An agent's extras with what its sessions here last got from the account its CLI is signed in to (noteAccountServers). */
+function withAccount(agent: AgentId, extras: AgentExtras): AgentExtras {
+  const seen = deviceConfig().fromAccount?.[agent];
+  return seen ? { ...extras, account: seen.names, accountAt: seen.at } : extras;
+}
+
+/**
+ * A session PacedMind started here, with all the MCP servers its agent has (no project's pick), said which ones come
+ * from the account its CLI is signed in to (Claude Code's claude.ai connectors, sortReported). No file names those, and
+ * the CLI on another computer can be signed in to another account with others, so this computer keeps what its own
+ * sessions got and tells the account's list of computers when it changed.
+ */
+export async function noteAccountServers(agent: AgentId, names: string[]) {
+  const d = deviceConfig();
+  const before = d.fromAccount?.[agent];
+  const at = new Date().toISOString();
+  updateDevice({ fromAccount: { ...(d.fromAccount ?? {}), [agent]: { names, at } } });
+  const tools = g.__pacedmindTools;
+  if (!tools?.[agent].extras) return;
+  g.__pacedmindTools = { ...tools, [agent]: { ...tools[agent], extras: withAccount(agent, tools[agent].extras!) } };
+  if (before && before.names.join("\n") === names.join("\n")) return;
+  g.__pacedmindToolsSaved = undefined;
+  await saveToolsOnce().catch(() => {});
 }
 
 /** Saves what this computer found to its entry in the account, once per check and computer (after signing in, too). */

@@ -516,7 +516,11 @@ function Agents({ d, here, pending, now, onConnect }: {
   );
 }
 
-/** What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (extras.ts). */
+/**
+ * What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (extras.ts),
+ * and what its sessions there got from the account its CLI is signed in to, as the last one said: each computer's CLI
+ * can be signed in to another account, with other connectors.
+ */
 function Extras({ d }: { d: Device }) {
   const lines = AGENTS.flatMap((a) => {
     const t = d.agents[a];
@@ -524,6 +528,7 @@ function Extras({ d }: { d: Device }) {
     if (!h || (!t.cli && !t.app)) return [];
     const parts = [
       h.mcp.length ? `MCP servers ${h.mcp.join(", ")}` : "no other MCP servers",
+      h.account?.length ? `${a === "claude" ? "claude.ai connectors" : "connectors from its account"} ${h.account.join(", ")}` : null,
       h.plugins.length ? `plugins ${h.plugins.join(", ")}` : null,
       h.skills ? `${h.skills} ${h.skills === 1 ? "skill" : "skills"}` : null,
       h.hooks.length ? `hooks on ${h.hooks.join(", ")}` : null,
@@ -533,7 +538,7 @@ function Extras({ d }: { d: Device }) {
   if (!lines.length) return null;
   return (
     <div className="flex flex-col gap-1.5 border-t border-line px-4 py-2.5 text-[12.5px] max-md:px-3.5"
-      title="Read from Claude Code's and Codex's own settings on that computer. A project's folder can add more: see Settings.">
+      title="Read from Claude Code's and Codex's own settings on that computer; what comes from the account its CLI is signed in to, as the last session PacedMind started there said. A project's folder can add more: see Settings.">
       <span className="text-[12px] text-mut2">Besides PacedMind, their sessions also get</span>
       {lines.map(({ a, text }) => (
         <div key={a} className="flex items-start gap-2">

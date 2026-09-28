@@ -55,10 +55,16 @@ export interface DeviceConfig {
   trustFolders: boolean;
   /**
    * Whether this computer's sessions wait for your answers in PacedMind on your other devices too (asks.ts): a
-   * permission Claude Code asks for waits there a few minutes before it asks in the terminal, and answers from the web
-   * app or another computer count. Off, only this computer's window and terminal answer.
+   * permission Claude Code asks for waits there for up to ten minutes while its terminal asks as well, and answers
+   * from the web app or another computer count. Off, only this computer's window and terminal answer.
    */
   remoteAnswers: boolean;
+  /**
+   * By agent: the MCP servers its sessions here get from the account its CLI is signed in to (Claude Code's claude.ai
+   * connectors), which no config file names, as the last session PacedMind started here without a project's pick
+   * reported them (start_task), and when. Each computer's CLI can be signed in to another account, with others.
+   */
+  fromAccount?: Partial<Record<AgentId, { names: string[]; at: string }>>;
   /** For Claude Code and Codex that you start yourself (Settings shows it). */
   ownerToken: string;
   /**
