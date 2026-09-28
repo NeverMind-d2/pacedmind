@@ -1,6 +1,6 @@
 # PacedMind website
 
-The public home page: a static Next.js site, separate from the desktop app. It has its own dependencies, and `npm run build` writes plain files to `out/`.
+The public home page: a static Next.js site, separate from the desktop app. It has its own dependencies, and `npm run build` writes plain files to `out/`. On Windows, `next build` writes the router's prefetch files as nested folders; `scripts/postbuild.mjs`, which `npm run build` runs after it, renames them to the dotted names browsers ask for, as the docs' build does.
 
 ```bash
 cd site
