@@ -12,7 +12,8 @@
 // STRIPE_PORTAL_CONFIGURATION, and STRIPE_AUTOMATIC_TAX=off for a sandbox without tax settings), so the file can go to
 // Supabase as it is: npx supabase secrets set --env-file <file>. Secrets are written to the file, never printed. A
 // live key (sk_live_, rk_live_) also needs --live, and then tax must be set up first. --url changes the webhook's
-// address (by default PacedMind Cloud's project).
+// address (by default PacedMind Cloud's project), and --no-webhook leaves it out: a sandbox used against a local stack,
+// whose functions Stripe can't reach, and whose production function checks the live account's signing secret.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -80,9 +81,11 @@ async function stripe(method, url, params) {
 console.log(`Stripe ${live ? "LIVE" : "sandbox"} account, env file ${envFile}\n`);
 
 // 1. The webhook endpoint. Stripe shows its signing secret only when it makes it.
-const endpoints = (await stripe("GET", "webhook_endpoints?limit=100")).data;
-const endpoint = endpoints.find((e) => e.url === WEBHOOK_URL);
-if (!endpoint) {
+const endpoints = args.includes("--no-webhook") ? null : (await stripe("GET", "webhook_endpoints?limit=100")).data;
+const endpoint = endpoints?.find((e) => e.url === WEBHOOK_URL);
+if (!endpoints) {
+  console.log("  (no webhook endpoint: --no-webhook)");
+} else if (!endpoint) {
   console.log(`+ webhook endpoint ${WEBHOOK_URL}`);
   if (write) {
     const params = new URLSearchParams({ url: WEBHOOK_URL, description: "PacedMind Cloud billing (supabase/functions/stripe-webhook)" });

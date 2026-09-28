@@ -32,9 +32,12 @@ Deno.serve(async (req) => {
       const item = sub.items.data[0];
       if (!item) throw new HttpError(409, "That subscription has no price to switch.");
       const price = await priceFor(row.market ?? country, period);
+      // Billed at once: to yearly, the year less what's left of the month is charged now; to monthly, what's left of
+      // the year becomes credit for the next payments. (Left pending, the difference would wait for the next renewal,
+      // a year away.)
       await stripe().subscriptions.update(sub.id, {
         items: [{ id: item.id, price: price.id }],
-        proration_behavior: "create_prorations",
+        proration_behavior: "always_invoice",
       });
       return json({ switched: true });
     }
@@ -64,6 +67,8 @@ Deno.serve(async (req) => {
         ...(keepTrial ? { trial_end: trialEnd } : {}),
       },
       automatic_tax: { enabled: Deno.env.get("STRIPE_AUTOMATIC_TAX") !== "off" },
+      // A business gives its VAT ID and, in the EU, pays no VAT here (reverse charge).
+      tax_id_collection: { enabled: true },
       billing_address_collection: "required",
       allow_promotion_codes: true,
       success_url: urls.done,
