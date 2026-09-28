@@ -5,7 +5,7 @@ description: The flow editor lays out a project's tasks as agent sessions on a f
 
 A flow lays out a project's tasks as agent sessions and decides which one starts after which. **Flows** is the editor: a canvas with the project's sessions, a list of tasks to add, and a panel for the selected session or connection. What the connections do is explained in [Automate with flows](/agents/flows).
 
-<img src="/docs/screenshots/flows.png" alt="The flow editor with the task list on the left, connected sessions on the canvas and the help panel on the right" width="1920" height="1200" loading="lazy" />
+<img src="/docs/screenshots/flows.png" alt="The flow editor with the task list on the left and connected sessions filling the canvas while nothing is selected" width="1920" height="1200" loading="lazy" />
 
 ## The header
 
@@ -28,7 +28,9 @@ The panel on the left, **Add to the flow**, lists the project's open tasks that 
 * **Drag a task onto the canvas** to place it there. Dropped just below another session, it runs after that one: the preview says *Drop to run after DEV-21* and draws the connection. Elsewhere it says *Drop to add it here, run by Claude Code*.
 * **Click a task** to add it at the end of the flow (*Added DEV-26 to the flow*).
 
-Tasks that are yours never appear in the list; the panel notes, for example, *2 tasks are yours, so they stay out of the flow*. Setting a task on the canvas to **You** (under **Done by** in its details) takes it off the flow and deletes its connections: *DEV-26 is yours now, so it left the flow*. The panel's bottom part is the legend for the connection lines: **Automatically**, **After you mark it done**, **Same session, no stop** and **At a set time**.
+When the list is empty, a centered message explains whether there are no tasks yet, every open task is already in the flow, or no tasks match the search.
+
+Tasks that are yours never appear in the list; the panel notes, for example, *2 tasks are yours, so they stay out of the flow*. Setting a task on the canvas to **You** (under **Done by** in its details) takes it off the flow and deletes its connections: *DEV-26 is yours now, so it left the flow*.
 
 ## The canvas
 
@@ -98,7 +100,7 @@ Tasks that share one session run in the same place: choosing it for one moves th
 
 The panel adds a note where a session can't report back on its own:
 
-* **Claude app** or **Codex app**, while that agent isn't connected to PacedMind: *The Claude app can't tell PacedMind when it's done until Claude Code is connected to PacedMind. Until then, mark the session finished here.* The link opens **Computers**, where **Connect** sets it up.
+* **Claude app** or **Codex app**, while that agent isn't connected to PacedMind: *The Claude app can't tell PacedMind when it's done until Claude Code is connected to PacedMind. Until then, mark the session finished here.* The link opens **Settings → Computers**, where **Connect** sets it up.
 * **Claude Code on the web**: *The cloud can't reach PacedMind on your computer, so mark the session finished here when its pull request is ready.*
 * **Codex cloud**: *PacedMind checks Codex cloud every minute and marks the session finished when its task is ready.* A field asks for the project's Codex environment, its label or id from chatgpt.com/codex/settings/environments (*e.g. my-app*).
 
@@ -125,7 +127,7 @@ At the bottom:
 
 Selecting a connection shows its two keys, what it does (*DEV-23 starts after you mark DEV-22 done.*), how it starts, **Change how DEV-23 starts**, and **Remove connection** (<kbd>Delete</kbd>).
 
-With nothing selected, the panel shows four hints on using the editor.
+The right panel appears only while a session or connection is selected. Click empty canvas or press <kbd>Esc</kbd> to close it and give the canvas the full remaining width.
 
 ## Which project opens
 

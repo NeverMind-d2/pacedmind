@@ -214,9 +214,10 @@ export function MoreButton({ label, open, onOpen, onClose, className }: {
   );
 }
 
-export function AreaMenu({ area, anchor, usage, desktop, projects, onClose, onRename, onNewProject }: {
+export function AreaMenu({ area, anchor, usage, desktop, projects, onClose, onRename, onNewProject, onMoveUp, onMoveDown }: {
   area: Area; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void; onNewProject: () => void;
   desktop: boolean; projects: Project[];
+  onMoveUp?: () => void; onMoveDown?: () => void;
 }) {
   const { run } = useAction();
   const [confirm, setConfirm] = useState(false);
@@ -241,6 +242,11 @@ export function AreaMenu({ area, anchor, usage, desktop, projects, onClose, onRe
         <PopoverItem icon={<Icon name="folder" size={14} />} onClick={() => setWorkspace((v) => !v)}
           hint={<Icon name={workspace ? "chevronDown" : "chevronRight"} size={12} />}>Workspace…</PopoverItem>
         {workspace && <div className="px-3 py-2"><AreaWorkspace key={area.folder ?? ""} area={area} projects={projects} onSaved={onClose} /></div>}
+      </>}
+      {(onMoveUp || onMoveDown) && <>
+        <PopoverSeparator />
+        {onMoveUp && <PopoverItem icon={<Icon name="arrowRight" size={14} className="-rotate-90" />} onClick={() => { onClose(); onMoveUp(); }}>Move up</PopoverItem>}
+        {onMoveDown && <PopoverItem icon={<Icon name="arrowRight" size={14} className="rotate-90" />} onClick={() => { onClose(); onMoveDown(); }}>Move down</PopoverItem>}
       </>}
       <PopoverSeparator />
       <PopoverLabel>Color</PopoverLabel>

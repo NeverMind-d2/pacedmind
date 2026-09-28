@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { ComputersSettings } from "@/components/computers-settings";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
   PlanningSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
@@ -65,6 +66,8 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     }
     case "security":
       return state && <SecuritySettings account={accountView(state)} />;
+    case "computers":
+      return <ComputersSettings />;
     case "data": {
       const [legacy, sessions] = await Promise.all([state && desktop ? legacySummary() : null, repo.listSessions()]);
       return <DataSettings account={!!state} desktop={desktop} legacy={legacy} sessionsCount={sessions.length} />;

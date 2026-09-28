@@ -154,13 +154,6 @@ const MODE_LINE: Record<EdgeMode, { stroke: string; width: number; dash?: string
   time: { stroke: "var(--color-line-strong)", width: 1.8, dash: "1 4" },
 };
 
-const LEGEND: { mode: EdgeMode; label: string }[] = [
-  { mode: "auto", label: "Automatically" },
-  { mode: "manual", label: "After you mark it done" },
-  { mode: "session", label: "Same session, no stop" },
-  { mode: "time", label: "At a set time" },
-];
-
 /* ---------- types ---------- */
 
 type Tone = "done" | "waiting" | "running" | "ready" | "queued" | "stopped" | "canceled";
@@ -916,7 +909,7 @@ function FlowEditor(props: FlowViewProps) {
   const ghostTask = ghost ? graph.byId.get(ghost.taskId) : undefined;
   const ghostAfter = ghost && ghost.after !== null ? graph.byId.get(ghost.after) : undefined;
 
-  let inspector: ReactNode;
+  let inspector: ReactNode = null;
   if (selectedTask) {
     const at = (graph.incoming.get(selectedTask.id) ?? []).find((e) => e.mode === "time")?.atTime ?? "";
     const run = runs.get(selectedTask.id)!;
@@ -937,8 +930,6 @@ function FlowEditor(props: FlowViewProps) {
     inspector = (
       <EdgeInspector edge={selectedEdge} graph={graph} onPick={pickNode} onRemove={() => removeEdge(selectedEdge)} onClose={() => setSel(null)} />
     );
-  } else {
-    inspector = <EmptyInspector desktop={props.desktop} />;
   }
 
   return (
@@ -1154,7 +1145,7 @@ function Palette({ project, tasks, total, yours, dragging, open, draggable, onDr
   const list = q ? tasks.filter((t) => t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)) : tasks;
   const empty: ReactNode = q
     ? "No tasks match."
-    : total ? `Every open task in ${project.name} is in the flow.` : <>No tasks in {project.name} yet.<span className="max-md:hidden"> Press C to add one.</span></>;
+    : total ? `Every open task in ${project.name} is in the flow.` : <>No tasks in {project.name} yet.<span className="mt-2 block max-md:hidden">Press <Kbd>C</Kbd> to add one.</span></>;
   return (
     <aside aria-label="Add to the flow" className={cx("flex w-[250px] shrink-0 flex-col border-r border-line",
       open ? "max-md:fixed max-md:inset-0 max-md:z-30 max-md:w-auto max-md:border-r-0 max-md:bg-panel" : "max-md:hidden")}>
@@ -1166,11 +1157,8 @@ function Palette({ project, tasks, total, yours, dragging, open, draggable, onDr
         <input value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" placeholder="Search tasks"
           className="h-[30px] rounded-md border border-line2 bg-input px-2.5 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-        <div className="flex h-[26px] items-center gap-[7px] px-1.5 text-[12px] text-mut2">
-          <Dot color={project.color} size={6} />
-          <span className="truncate">{project.name}</span>
-        </div>
+      <div className={cx("min-h-0 flex-1 overflow-y-auto pb-3",
+        list.length ? "px-2" : "flex flex-col items-center justify-center px-5 text-center")}>
         {list.map((t) => (
           <button key={t.id} type="button" draggable={draggable} title="Drag onto the canvas, or click to add it at the end of the flow"
             onDragStart={(e) => {
@@ -1189,27 +1177,12 @@ function Palette({ project, tasks, total, yours, dragging, open, draggable, onDr
             <span title={`Run by ${AGENT_LABEL[t.agent]}`} className="flex shrink-0 text-mut2"><AgentIcon agent={t.agent} size={11} /></span>
           </button>
         ))}
-        {!list.length && <p className="px-1.5 py-1 text-[12px] leading-relaxed text-mut2">{empty}</p>}
+        {!list.length && <p className="max-w-[200px] text-[12px] leading-relaxed text-mut2">{empty}</p>}
         {yours > 0 && !q && (
           <p className="px-1.5 pt-2 text-[12px] leading-relaxed text-mut2">
             {yours === 1 ? "1 task is yours" : `${yours} tasks are yours`}, so {yours === 1 ? "it stays" : "they stay"} out of the flow.
           </p>
         )}
-      </div>
-      <div className="flex flex-col gap-[7px] border-t border-line px-4 py-3">
-        <div className="text-[12px] text-mut2">How the next session starts</div>
-        {LEGEND.map((l) => {
-          const line = MODE_LINE[l.mode];
-          return (
-            <span key={l.mode} className="flex items-center gap-2 text-[12px] text-mut">
-              <svg width="24" height="8" viewBox="0 0 24 8" aria-hidden="true">
-                <path d="M1 4H23" stroke={line.stroke === "var(--color-line-strong)" ? "var(--color-mut2)" : line.stroke} strokeWidth={line.width}
-                  strokeDasharray={line.dash} strokeLinecap="round" />
-              </svg>
-              {l.label}
-            </span>
-          );
-        })}
       </div>
     </aside>
   );
@@ -1620,7 +1593,7 @@ function Inspector({
           {surface === "desktop" && mcp !== null && mcp !== "connected" && (
             <p className="text-[12px] leading-relaxed text-mut2">
               The {APP_LABEL[task.agent]} can&apos;t tell PacedMind when it&apos;s done until {AGENT_LABEL[task.agent]} is{" "}
-              <Link href="/computers" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
+              <Link href="/settings/computers" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
               Until then, mark the session finished here.
             </p>
           )}
@@ -1741,25 +1714,6 @@ function EdgeInspector({ edge, graph, onPick, onRemove, onClose }: {
         <Button variant="ghost" onClick={onRemove}><Icon name="trash" size={13} />Remove connection</Button>
         <span className="flex-1" />
         <span className="flex max-md:hidden"><Kbd>Delete</Kbd></span>
-      </div>
-    </aside>
-  );
-}
-
-/** Help for the canvas beside it. A phone shows the canvas alone until a session is tapped. */
-function EmptyInspector({ desktop }: { desktop: boolean }) {
-  return (
-    <aside aria-label="Selected session" className="flex w-[320px] shrink-0 flex-col border-l border-line max-md:hidden">
-      <div className="flex h-11 shrink-0 items-center border-b border-line px-5 text-[12.5px] text-mut">Nothing selected</div>
-      <div className="flex flex-col gap-3 px-5 py-[18px] text-[12.5px] leading-relaxed text-mut2">
-        <p>Select a session on the canvas to choose its agent, where it runs and how it starts.</p>
-        <p>Put sessions anywhere on the grid; they stay where you leave them. To run one after another, drag from the dot under the first to the dot above the second.</p>
-        {desktop ? (
-          <p>A session runs in a terminal or the agent&apos;s desktop app on your computer, or in the agent&apos;s cloud. Each task can have its own folder.</p>
-        ) : (
-          <p>A session runs in a terminal or the agent&apos;s desktop app on one of your computers, or in the agent&apos;s cloud. Each computer keeps its own folders and switches the flow on for itself, in its desktop app.</p>
-        )}
-        <p>Click the agent on a session to hand it to Claude Code or Codex. Tidy up lines everything up in the order it runs. <Kbd>Delete</Kbd> removes what&apos;s selected.</p>
       </div>
     </aside>
   );
