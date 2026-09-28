@@ -26,6 +26,9 @@ const option = (name) => {
 const write = args.includes("--write");
 const envFile = option("--keys")?.replace(/^~(?=\/)/, os.homedir());
 const WEBHOOK_URL = option("--url") ?? "https://pyoynjoyhpolijlvoalu.supabase.co/functions/v1/stripe-webhook";
+// The site's terms and privacy policy, which the portal links to.
+const TERMS_URL = "https://pacedmind.com/terms";
+const PRIVACY_URL = "https://pacedmind.com/privacy";
 const EVENTS = [
   "checkout.session.completed",
   "customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted",
@@ -118,6 +121,8 @@ if (!config) {
   if (write) {
     const made = await stripe("POST", "billing_portal/configurations", {
       "business_profile[headline]": "PacedMind Cloud",
+      "business_profile[terms_of_service_url]": TERMS_URL,
+      "business_profile[privacy_policy_url]": PRIVACY_URL,
       "features[customer_update][enabled]": "true",
       "features[customer_update][allowed_updates][0]": "email",
       "features[customer_update][allowed_updates][1]": "address",
@@ -137,6 +142,15 @@ if (!config) {
     });
     setEnv("STRIPE_PORTAL_CONFIGURATION", made.id);
     console.log(`  ${made.id}, in the env file as STRIPE_PORTAL_CONFIGURATION`);
+  }
+} else if (config.business_profile?.terms_of_service_url !== TERMS_URL || config.business_profile?.privacy_policy_url !== PRIVACY_URL) {
+  console.log(`~ customer portal settings ${config.id}: link the terms and privacy policy`);
+  if (write) {
+    await stripe("POST", `billing_portal/configurations/${config.id}`, {
+      "business_profile[terms_of_service_url]": TERMS_URL,
+      "business_profile[privacy_policy_url]": PRIVACY_URL,
+    });
+    if (env.get("STRIPE_PORTAL_CONFIGURATION") !== config.id) setEnv("STRIPE_PORTAL_CONFIGURATION", config.id);
   }
 } else {
   console.log(`= customer portal settings ${config.id}`);

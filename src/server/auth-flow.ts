@@ -1,4 +1,5 @@
 import "server-only";
+import { supabaseConfig } from "./supabase-config";
 import type { AuthState } from "./supabase";
 
 /*
@@ -47,4 +48,27 @@ export function takeNext(): string {
   const saved = g.__pacedmindAfterSignIn;
   g.__pacedmindAfterSignIn = undefined;
   return saved && Date.now() - saved.at < 30 * 60_000 ? saved.next : "/today";
+}
+
+/*
+ * Signing in with Google, when the project has it switched on (Authentication → Sign In / Providers in Supabase). The
+ * sign-in page asks Supabase, so the button appears once Google is set up there and not before: a button that led to
+ * "provider is not enabled" would be worse than none.
+ */
+const providers = globalThis as unknown as { __pacedmindGoogle?: { on: boolean; at: number } };
+
+export async function googleSignIn(): Promise<boolean> {
+  const cached = providers.__pacedmindGoogle;
+  if (cached && Date.now() - cached.at < 5 * 60_000) return cached.on;
+  let on = false;
+  try {
+    const { url, key } = supabaseConfig();
+    const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: key }, signal: AbortSignal.timeout(4000) });
+    on = res.ok && (await res.json())?.external?.google === true;
+  } catch {
+    // Unreachable for now: no button this time, and ask again next time.
+    return false;
+  }
+  providers.__pacedmindGoogle = { on, at: Date.now() };
+  return on;
 }
