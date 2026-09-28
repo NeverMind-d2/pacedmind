@@ -20,6 +20,17 @@ export function supabaseConfig() {
   };
 }
 
+/**
+ * The hosted app, where agents reach PacedMind Cloud's MCP server: in the hosted app itself its own address, else
+ * PacedMind Cloud's. ORGANIZER_CLOUD_ORIGIN points a desktop app at another one (a local stack's web app).
+ */
+export function cloudOrigin(): string {
+  return (process.env.ORGANIZER_PUBLIC_ORIGIN || process.env.ORGANIZER_CLOUD_ORIGIN || "https://app.pacedmind.com").replace(/\/+$/, "");
+}
+
+/** PacedMind Cloud's MCP server, for agents signed in to an account (OAuth). */
+export const cloudMcpUrl = () => `${cloudOrigin()}/api/mcp`;
+
 /** The web app's session cookies: HttpOnly, so no script in a page can read the session. */
 export const COOKIE_OPTIONS = {
   httpOnly: true,

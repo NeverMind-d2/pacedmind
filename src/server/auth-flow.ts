@@ -17,10 +17,20 @@ export function nextStep(state: AuthState | null): AuthStep | null {
   return null;
 }
 
-/** Pages an email link may continue to after signing in. Anything else goes to Today. */
+/**
+ * Pages sign-in may continue to: where an email link pointed, or the page approving an agent's sign-in (the hosted
+ * app), which sends you to sign in first. Anything else goes to Today.
+ */
 const CONTINUE_TO = new Set(["/today", "/login/new-password"]);
+const CONSENT = /^\/oauth\/consent\?authorization_id=[A-Za-z0-9_-]{1,200}$/;
 
-export const safeNext = (next: string | null | undefined): string => (next && CONTINUE_TO.has(next) ? next : "/today");
+export const safeNext = (next: string | null | undefined): string => (next && (CONTINUE_TO.has(next) || CONSENT.test(next)) ? next : "/today");
+
+/** A sign-in step, keeping where to continue afterwards when that isn't Today. */
+export const withNext = (step: AuthStep, next: string | null | undefined): string => {
+  const to = safeNext(next);
+  return to === "/today" ? step : `${step}?next=${encodeURIComponent(to)}`;
+};
 
 /*
  * The desktop app finishes email links (sign-up confirmation, password reset) in whichever browser opens

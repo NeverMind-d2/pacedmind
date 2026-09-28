@@ -9,6 +9,7 @@ import { agentExtras } from "./extras";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
+import { cloudMcpUrl } from "./supabase-config";
 import { MCP_NAME, NO_AGENT_TOOLS, OLD_MCP_NAME, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink } from "@/lib/types";
 
 /*
@@ -198,6 +199,12 @@ export function cliCommand(agent: AgentId): string {
   return found && command === agent && QUOTABLE_PATH.test(found) ? `"${found}"` : command;
 }
 
+/** The agent's CLI itself, without the options Settings may add: where PacedMind found it, else its name. */
+export function cliBinary(agent: AgentId): string {
+  const found = localTools()[agent].cli?.path;
+  return found && QUOTABLE_PATH.test(found) ? `"${found}"` : agent;
+}
+
 /** Installed desktop apps by agent, with their versions when the system tells them. */
 async function desktopApps(): Promise<Record<AgentId, AgentTools["app"]>> {
   const found: Record<AgentId, AgentTools["app"]> = { claude: null, codex: null };
@@ -250,12 +257,14 @@ export function claudeMcpEntry(name: string): { url?: unknown; headers?: { Autho
 }
 
 /**
- * Whether Claude Code (and so the Claude app's Code sessions) has PacedMind's MCP server for all projects, with the owner
- * token: as "pacedmind", or still as "organizer", its old name.
+ * Whether Claude Code (and so the Claude app's Code sessions) has PacedMind's MCP server for all projects: this computer's,
+ * with the owner token, as "pacedmind" or still as "organizer", its old name; or PacedMind Cloud's, which it signs in to
+ * itself (OAuth), while this computer is signed in to the account too.
  */
-function claudeMcp(url: string, token: string): McpLink {
+function claudeMcp(url: string, token: string, signedIn: boolean): McpLink {
   const ours = (e: ReturnType<typeof claudeMcpEntry>) => e?.url === url && e?.headers?.Authorization === `Bearer ${token}`;
   const now = claudeMcpEntry(MCP_NAME);
+  if (now?.url === cloudMcpUrl()) return signedIn ? "cloud" : "elsewhere";
   if (now) return ours(now) ? "connected" : "elsewhere";
   const old = claudeMcpEntry(OLD_MCP_NAME);
   if (old) return ours(old) ? "old" : "elsewhere";
@@ -273,16 +282,27 @@ export function codexMcpTable(name: string): string | null {
 }
 
 /**
- * Whether Codex (and so the Codex app) has PacedMind's MCP server with the owner token, so it works without PacedMind's
- * terminal: as "pacedmind", or still as "organizer".
+ * Whether Codex (and so the Codex app) has PacedMind's MCP server, so it works without PacedMind's terminal: this
+ * computer's with the owner token, as "pacedmind" or still as "organizer"; or PacedMind Cloud's (OAuth).
  */
-function codexMcp(url: string, token: string): McpLink {
-  const ours = (table: string) => table.match(/^\s*url\s*=\s*["']([^"']+)["']/m)?.[1] === url && table.includes(token);
+function codexMcp(url: string, token: string, signedIn: boolean): McpLink {
+  const urlOf = (table: string) => table.match(/^\s*url\s*=\s*["']([^"']+)["']/m)?.[1];
+  const ours = (table: string) => urlOf(table) === url && table.includes(token);
   const now = codexMcpTable(MCP_NAME);
+  if (now && urlOf(now) === cloudMcpUrl()) return signedIn ? "cloud" : "elsewhere";
   if (now) return ours(now) ? "connected" : "elsewhere";
   const old = codexMcpTable(OLD_MCP_NAME);
   if (old) return ours(old) ? "old" : "elsewhere";
   return "missing";
+}
+
+/**
+ * How Claude Code and Codex here reach PacedMind right now, from their config files (cheap reads), for Settings and the
+ * offer after signing in: what the last check found can be from before you signed in. `url`: this server's MCP address.
+ */
+export function mcpLinks(url: string, signedIn: boolean): Record<AgentId, McpLink> {
+  const token = deviceConfig().ownerToken;
+  return { claude: claudeMcp(url, token, signedIn), codex: codexMcp(url, token, signedIn) };
 }
 
 /**
@@ -293,13 +313,13 @@ function codexMcp(url: string, token: string): McpLink {
 export function checkThisDevice(url: string): Promise<Device["agents"]> {
   g.__pacedmindCheck ??= (async () => {
     const d = deviceConfig();
-    const [claude, codex, apps] = await Promise.all([
-      cliVersion("claude", agentCommandFor("claude")), cliVersion("codex", agentCommandFor("codex")), desktopApps(),
+    const [claude, codex, apps, signedIn] = await Promise.all([
+      cliVersion("claude", agentCommandFor("claude")), cliVersion("codex", agentCommandFor("codex")), desktopApps(), usesCloud().catch(() => false),
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
     const agents: Device["agents"] = {
-      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn, extras: agentExtras("claude") },
-      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn, extras: agentExtras("codex") },
+      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken, signedIn), login: claudeIn, extras: agentExtras("claude") },
+      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken, signedIn), login: codexIn, extras: agentExtras("codex") },
     };
     g.__pacedmindTools = agents;
     g.__pacedmindToolsAt = new Date().toISOString();

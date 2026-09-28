@@ -25,7 +25,7 @@ import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
-  LIVE_STATUSES, deviceOnline, isLiveSession,
+  AGENT_LABEL, LIVE_STATUSES, deviceOnline, isLiveSession,
   type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
 } from "@/lib/types";
 
@@ -784,16 +784,49 @@ export async function checkDeviceAction(): Promise<Result> {
 }
 
 /**
- * Sets an agent up to reach this PacedMind with your token from sessions PacedMind doesn't configure itself (its
- * desktop app, a terminal you opened): Claude Code for all projects, Codex in its config.toml.
+ * Sets an agent up to reach PacedMind from sessions PacedMind doesn't configure itself (its desktop app, a terminal you
+ * opened): Claude Code for all projects, Codex in its config.toml. Signed in to PacedMind Cloud, its MCP server, which
+ * the agent signs in to itself (a terminal opens for that); without an account, this computer's with your token.
  */
 export async function connectAgentAction(agent: AgentId): Promise<Result> {
   await guard();
-  if (MODE !== "desktop") return { ok: false, error: "Agents connect to the PacedMind desktop app." };
+  if (MODE !== "desktop") return { ok: false, error: "Agents are connected from the PacedMind desktop app, or with the commands shown here." };
   if (agent !== "claude" && agent !== "codex") return { ok: false, error: "Unknown agent" };
-  const r = agent === "claude" ? connectClaudeCode() : connectCodex();
+  const target = (await usesCloud()) ? "cloud" : "local";
+  const r = agent === "claude" ? connectClaudeCode(target) : connectCodex(target);
   await checkThisDevice(mcpUrl());
   return done(r.ok ? { ok: true, message: r.message } : { ok: false, error: r.error });
+}
+
+/**
+ * The offer after signing in (desktop): connects the agents found here to PacedMind Cloud's MCP server, one sign-in
+ * terminal each, or (`connect` false) just stops offering. Either way it doesn't show again for this account here.
+ */
+export async function cloudConnectOfferAction(connect: boolean): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop" || !(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  updateDevice({ cloudConnectOffered: true });
+  if (!connect) return done({ ok: true });
+  const found = await checkThisDevice(mcpUrl());
+  const results = (["claude", "codex"] as AgentId[]).filter((a) => found[a].cli)
+    .map((a) => ({ agent: a, r: a === "claude" ? connectClaudeCode("cloud") : connectCodex("cloud") }));
+  await checkThisDevice(mcpUrl());
+  const failed = results.filter((x) => !x.r.ok);
+  if (!results.length) return done({ ok: false, error: "Neither Claude Code nor Codex is installed here." });
+  if (failed.length) return done({ ok: false, error: failed.map((x) => x.r.error).join(" ") });
+  return done({ ok: true, message: `Connected ${results.map((x) => AGENT_LABEL[x.agent]).join(" and ")} to PacedMind Cloud. Allow each in the browser page its terminal opens.` });
+}
+
+/** Disconnects an agent from PacedMind Cloud's MCP server: its sign-in ends at once. */
+export async function disconnectAgentAction(id: string): Promise<Result> {
+  await guard();
+  if (!/^[0-9a-f-]{36}$/.test(id)) return { ok: false, error: "Unknown agent" };
+  try {
+    await repo.disconnectAgent(id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  return done({ ok: true, message: "Disconnected. It has to sign in and be allowed again." });
 }
 
 /** Folders you work in with Claude Code and Codex on this computer, for the import. */

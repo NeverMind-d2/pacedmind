@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import {
-  connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
+  connectAgentAction, createProjectAction, disconnectAgentAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
   setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
@@ -14,7 +14,7 @@ import { projectColor } from "@/lib/colors";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, deviceOnline,
-  type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type FolderExtras, type Project, type ProjectAgentsView,
+  type AgentId, type AgentTools, type Area, type ConnectedAgent, type Device, type DeviceSettings, type FolderExtras, type McpLink, type Project, type ProjectAgentsView,
   type RemoteStart, type Settings,
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon } from "../icons";
@@ -33,6 +33,37 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Flows", ["get_flow", "connect_tasks", "disconnect_tasks", "add_to_flow", "remove_from_flow"]],
   ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "ask_user", "finish_task"]],
 ];
+
+/** Where your own agents reach PacedMind, and what's connected (Settings → MCP server). */
+export interface McpSettings {
+  /** PacedMind Cloud's MCP server with an account (agents sign in themselves), else this computer's (with the token). */
+  url: string;
+  cloud: boolean;
+  /** This computer's own server and owner token; null in the web app. */
+  local: { url: string; token: string } | null;
+  /** The agents you allowed on PacedMind Cloud's server; null without an account. */
+  agents: ConnectedAgent[] | null;
+  /** How Claude Code and Codex on this computer are set up; null in the web app. */
+  links: Record<AgentId, McpLink> | null;
+}
+
+const DOCS_CONNECT = "https://pacedmind.com/docs/mcp";
+
+const LINK_TEXT: Record<McpLink, string> = {
+  cloud: "Uses PacedMind Cloud", connected: "Uses this computer's PacedMind", old: "Uses this computer's PacedMind (old name)",
+  elsewhere: "Set up for another PacedMind", missing: "Not connected",
+};
+
+function connectHelp(agent: AgentId, mcp: McpSettings): string {
+  const app = agent === "claude" ? "The Claude app's Code sessions use it too." : "The Codex CLI and the Codex app share it.";
+  if (mcp.cloud && mcp.local) return `Connect sets it up for all your projects and opens a terminal where it signs in: allow it in the browser page that opens. ${app}`;
+  if (mcp.cloud) return `Run these in a terminal on your computer. The second opens a browser page where you allow it. ${app}`;
+  return agent === "claude"
+    ? "Connect adds PacedMind to Claude Code for all your projects, with your token, without showing it. The Claude app's Code sessions use it too."
+    : "The Codex CLI and the Codex app share this file. Sessions started from PacedMind don't need it: they get their own token.";
+}
+
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -158,8 +189,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
   thisDeviceId: string | null;
   /** This computer's own settings; null in the web app. */
   device: DeviceSettings | null;
-  /** Null in the web app: agents connect to the desktop app, where their terminals run. */
-  mcp: { url: string; token: string } | null;
+  mcp: McpSettings;
   /** What this computer's own data holds, to move into the signed-in account; null without an account. */
   legacy: { file: string; areas: number; projects: number; tasks: number } | null;
   sessionsCount: number;
@@ -181,15 +211,21 @@ export function SettingsView({ settings, projects, areas, account, devices, this
   const [deleting, setDeleting] = useState({ email: "", code: "" });
   const save = (patch: Partial<Settings>) => run(() => updateSettingsAction(patch), "Saved");
   const saveDevice = (patch: Parameters<typeof updateDeviceSettingsAction>[0]) => run(() => updateDeviceSettingsAction(patch));
-  const token = mcp?.token ?? "";
-  const claudeCmd = mcp ? `claude mcp add --transport http --scope user pacedmind ${mcp.url} --header "Authorization: Bearer ${token}"` : "";
+  const token = mcp.local?.token ?? "";
+  // Signed in, agents sign in to PacedMind Cloud's server themselves (OAuth); without an account, this computer's with the token.
+  const claudeCmd = mcp.cloud
+    ? `claude mcp add --transport http --scope user pacedmind ${mcp.url}\nclaude mcp login pacedmind`
+    : `claude mcp add --transport http --scope user pacedmind ${mcp.url} --header "Authorization: Bearer ${token}"`;
   // A header rather than bearer_token_env_var: the Codex app has no ORGANIZER_TOKEN to read.
-  const codexToml = mcp ? `# ~/.codex/config.toml\n[mcp_servers.pacedmind]\nurl = "${mcp.url}"\nhttp_headers = { Authorization = "Bearer ${token}" }` : "";
+  const codexToml = mcp.cloud
+    ? `codex mcp add pacedmind --url ${mcp.url}\ncodex mcp login pacedmind`
+    : `# ~/.codex/config.toml\n[mcp_servers.pacedmind]\nurl = "${mcp.url}"\nhttp_headers = { Authorization = "Bearer ${token}" }`;
   const connect = (agent: AgentId) => {
     const what = agent === "claude" ? "Claude Code, for all projects" : "Codex's config.toml";
-    if (confirm(`Add PacedMind (${mcp?.url ?? "this computer"}) to ${what}, with your token? Sessions you start yourself, and those in the ${APP_LABEL[agent]}, will report to this PacedMind.`)) {
-      run(() => connectAgentAction(agent));
-    }
+    const ask = mcp.cloud
+      ? `Set up ${what} to use PacedMind Cloud (${mcp.url})? A terminal opens where it signs in; allow it in the browser. Sessions you start yourself, and those in the ${APP_LABEL[agent]}, will report to your account.`
+      : `Add PacedMind (${mcp.url}) to ${what}, with your token? Sessions you start yourself, and those in the ${APP_LABEL[agent]}, will report to this PacedMind.`;
+    if (confirm(ask)) run(() => connectAgentAction(agent));
   };
 
   return (
@@ -398,44 +434,92 @@ export function SettingsView({ settings, projects, areas, account, devices, this
               </Section>
             </>}
 
-            {mcp && <>
-              <Section title="MCP server" note="Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished. Sessions PacedMind starts in a terminal get their own token, which works only for their task and only while they run.">
+            <>
+              <Section title="MCP server" note={mcp.cloud
+                ? "Claude Code, Codex and other agents use PacedMind Cloud's MCP server to read and plan your tasks and to report on their work. Each one signs in with your account, and you allow it once in the browser. Sessions PacedMind starts in a terminal use their computer's own server, with a token that works only for their task."
+                : "Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished. Sessions PacedMind starts in a terminal get their own token, which works only for their task and only while they run."}>
                 <Row label="Address">
                   <span className="flex-1 truncate font-mono text-[12px] text-fg2">{mcp.url}</span>
                   <Button size="sm" onClick={() => copy(mcp.url, "Address")}>Copy</Button>
                 </Row>
-                <Row label="Your token">
-                  <span className="flex-1 truncate font-mono text-[12px] text-fg2">{showToken ? token : `${token.slice(0, 5)}${"•".repeat(16)}${token.slice(-4)}`}</span>
-                  <Button size="sm" onClick={() => setShowToken((s) => !s)}>{showToken ? "Hide" : "Show"}</Button>
-                  <Button size="sm" onClick={() => copy(token, "Token")}>Copy</Button>
-                  <Button size="sm" onClick={() => confirm("Make a new token? Agents set up with the old one lose access until you connect them again.") && run(() => rotateMcpTokenAction())}>New token</Button>
-                </Row>
+                {mcp.local && !mcp.cloud && (
+                  <Row label="Your token">
+                    <span className="flex-1 truncate font-mono text-[12px] text-fg2">{showToken ? token : `${token.slice(0, 5)}${"•".repeat(16)}${token.slice(-4)}`}</span>
+                    <Button size="sm" onClick={() => setShowToken((s) => !s)}>{showToken ? "Hide" : "Show"}</Button>
+                    <Button size="sm" onClick={() => copy(token, "Token")}>Copy</Button>
+                    <Button size="sm" onClick={() => confirm("Make a new token? Agents set up with the old one lose access until you connect them again.") && run(() => rotateMcpTokenAction())}>New token</Button>
+                  </Row>
+                )}
               </Section>
 
-              <Section id="connect" title="Connect your agents" note="For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.">
-                <div className="flex flex-col gap-2.5 border-b border-line p-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <AgentIcon agent="claude" size={14} className="text-fg3" />
-                    <span className="flex-1 text-[13px] font-medium text-fg">Claude Code</span>
-                    <Button size="sm" disabled={pending} onClick={() => connect("claude")}>Connect</Button>
-                    <Button size="sm" onClick={() => copy(claudeCmd, "Command")}>Copy command</Button>
+              <Section id="connect" title="Connect your agents" note={mcp.cloud
+                ? <>For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Each signs in with your account in the browser; no token goes into their settings. <a href={DOCS_CONNECT} target="_blank" rel="noreferrer" className="underline hover:text-fg2">How to connect other agents</a>.</>
+                : "For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Anyone with your token can use PacedMind from this computer, so keep it out of shared files."}>
+                {(["claude", "codex"] as AgentId[]).map((agent) => {
+                  const text = agent === "claude" ? claudeCmd : codexToml;
+                  return (
+                    <div key={agent} className="flex flex-col gap-2.5 border-b border-line p-3.5 last:border-b-0">
+                      <div className="flex items-center gap-2.5">
+                        <AgentIcon agent={agent} size={14} className="text-fg3" />
+                        <span className="text-[13px] font-medium text-fg">{AGENT_LABEL[agent]}</span>
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-mut2">{mcp.links ? LINK_TEXT[mcp.links[agent]] : null}</span>
+                        {mcp.local && <Button size="sm" disabled={pending} onClick={() => connect(agent)}>Connect</Button>}
+                        <Button size="sm" onClick={() => copy(text, mcp.cloud || agent === "claude" ? "Commands" : "Config")}>{mcp.cloud ? "Copy commands" : agent === "claude" ? "Copy command" : "Copy config"}</Button>
+                      </div>
+                      {(mcp.cloud || agent === "codex") && (
+                        <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{showToken || mcp.cloud ? text : text.replace(token, "•".repeat(16))}</pre>
+                      )}
+                      <p className="text-[12px] text-mut2">{connectHelp(agent, mcp)}</p>
+                    </div>
+                  );
+                })}
+                {mcp.cloud && (
+                  <div className="flex flex-col gap-1.5 p-3.5">
+                    <span className="text-[13px] font-medium text-fg">Other agents</span>
+                    <p className="text-[12px] leading-relaxed text-mut2">
+                      Any MCP client that can sign in with OAuth, like a custom connector in Claude or ChatGPT: add the address above, then allow it when it asks.
+                    </p>
                   </div>
-                  <p className="text-[12px] text-mut2">Connect adds PacedMind to Claude Code for all your projects, with your token, without showing it. The Claude app&apos;s Code sessions use it too.</p>
-                </div>
-                <div className="flex flex-col gap-2.5 p-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <AgentIcon agent="codex" size={14} className="text-fg3" />
-                    <span className="flex-1 text-[13px] font-medium text-fg">Codex</span>
-                    <Button size="sm" disabled={pending} onClick={() => connect("codex")}>Connect</Button>
-                    <Button size="sm" onClick={() => copy(codexToml, "Config")}>Copy config</Button>
-                  </div>
-                  <pre className="whitespace-pre-wrap break-all rounded-md border border-line bg-input px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-fg3">{showToken ? codexToml : codexToml.replace(token, "•".repeat(16))}</pre>
-                  <p className="text-[12px] text-mut2">The Codex CLI and the Codex app share this file. Sessions started from PacedMind don&apos;t need it: they get their own token.</p>
-                </div>
+                )}
               </Section>
+
+              {mcp.agents && (
+                <Section title="Connected agents" note="Agents you allowed to use PacedMind Cloud. Disconnecting one ends its sign-in at once; to use PacedMind again it signs in and you allow it again.">
+                  {mcp.agents.length ? mcp.agents.map((a) => (
+                    <Row key={a.id} label={a.name || "Unnamed agent"}>
+                      <span className="flex-1 truncate text-[12.5px] text-fg3">
+                        {a.claimedAt ? `Signed in ${shortDate(a.claimedAt)}` : "Allowed, waiting for it to sign in"}
+                      </span>
+                      <Button size="sm" disabled={pending}
+                        onClick={() => confirm(`Disconnect ${a.name || "this agent"}? It loses access to PacedMind at once.`) && run(() => disconnectAgentAction(a.id))}>
+                        Disconnect
+                      </Button>
+                    </Row>
+                  )) : (
+                    <p className="px-3.5 py-3 text-[12.5px] text-mut2">No agents yet. Connect one above; it shows here once you allow it.</p>
+                  )}
+                </Section>
+              )}
+
+              {mcp.cloud && mcp.local && (
+                <Section title="This computer's MCP server" note="For an agent on this computer that can't sign in with OAuth: it reaches your account through this PacedMind, with this token. Anyone with the token can use PacedMind from this computer, so keep it out of shared files.">
+                  <Row label="Address">
+                    <span className="flex-1 truncate font-mono text-[12px] text-fg2">{mcp.local.url}</span>
+                    <Button size="sm" onClick={() => copy(mcp.local!.url, "Address")}>Copy</Button>
+                  </Row>
+                  <Row label="Token">
+                    <span className="flex-1 truncate font-mono text-[12px] text-fg2">{showToken ? token : `${token.slice(0, 5)}${"•".repeat(16)}${token.slice(-4)}`}</span>
+                    <Button size="sm" onClick={() => setShowToken((s) => !s)}>{showToken ? "Hide" : "Show"}</Button>
+                    <Button size="sm" onClick={() => copy(token, "Token")}>Copy</Button>
+                    <Button size="sm" onClick={() => confirm("Make a new token? Agents set up with the old one lose access until you connect them again.") && run(() => rotateMcpTokenAction())}>New token</Button>
+                  </Row>
+                </Section>
+              )}
 
               <Section title="Tools agents can use"
-                note={<>Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they&apos;re asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
+                note={<>Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they&apos;re asked. {mcp.cloud
+                  ? "Your own agents can use every tool, but starting a session or sending one back with changes gives you a link: it needs your two-factor code, or a click in the desktop app."
+                  : "Starting a session or sending one back with changes over MCP waits for you to allow it here."} Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
                 {TOOL_GROUPS.map(([group, names]) => (
                   <div key={group} className="flex items-start gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
                     <span className="w-[72px] shrink-0 text-[12.5px] text-mut2">{group}</span>
@@ -443,7 +527,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   </div>
                 ))}
               </Section>
-            </>}
+            </>
 
             <Section title={device ? "Projects on this computer" : "Projects"}
               action={device && <Button size="sm" variant="ghost" onClick={() => setImporting(true)}><Icon name="download" size={12} />Import from Claude and Codex</Button>}

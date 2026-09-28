@@ -5,6 +5,10 @@ description: Add PacedMind's MCP server to Codex's configuration, for the Codex 
 
 Codex reads its MCP servers from its configuration file, `~/.codex/config.toml`, which the Codex command-line tool and the Codex app share. Sessions PacedMind starts in a terminal bring their own connection to PacedMind, which replaces this entry for them, headers included, so they only send their own token. The Codex app, and Codex sessions you start yourself, need PacedMind's entry in that file.
 
+<Callout title="With a PacedMind Cloud account">
+Connect Codex to PacedMind Cloud instead: it signs in with your account (`codex mcp login pacedmind`), and no token goes into `config.toml`. See [Connect to PacedMind Cloud](/mcp/connect-cloud). This page is about the desktop app's own server, without an account.
+</Callout>
+
 ## With Connect in Settings
 
 In **Settings → Connect your agents**, select **Connect** next to **Codex** and confirm. PacedMind adds the section below to `config.toml`, in place of an earlier `pacedmind` section or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup` (*Connected Codex, its app included. New Codex sessions can use PacedMind.*). **Computers** then shows Codex as *Connected*.

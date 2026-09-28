@@ -15,7 +15,7 @@ import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   taskHref,
-  type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
+  type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
   type LaunchRequest, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
   type Task,
@@ -833,6 +833,18 @@ export async function addPushSubscription(sub: PushSubscriptionInput): Promise<v
 
 export async function removePushSubscription(endpoint: string) {
   void endpoint;
+}
+
+/* ---------- agents signed in to PacedMind Cloud's MCP server ---------- */
+
+/** Agents reach this computer's own data through its own MCP server, with its token: none sign in to the cloud. */
+export async function listConnectedAgents(): Promise<ConnectedAgent[]> {
+  return [];
+}
+
+export async function disconnectAgent(id: string): Promise<void> {
+  void id;
+  throw new Error("Agents sign in to PacedMind Cloud's MCP server with an account.");
 }
 
 /* ---------- live refresh ---------- */

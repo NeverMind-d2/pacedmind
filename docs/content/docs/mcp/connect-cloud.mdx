@@ -1,0 +1,120 @@
+---
+title: Connect to PacedMind Cloud
+description: "Signed in to PacedMind Cloud, agents use its MCP server at https://app.pacedmind.com/api/mcp: they sign in with your account in the browser, and you allow each one once."
+---
+
+With a PacedMind Cloud account, Claude Code, Codex and other MCP clients use PacedMind Cloud's MCP server. It serves your account's planner from any computer and any folder, whether or not the desktop app is running. No token goes into an agent's settings: each agent signs in with your account in the browser, and you allow it on PacedMind's page.
+
+| | |
+| --- | --- |
+| Address | `https://app.pacedmind.com/api/mcp` |
+| Transport | Streamable HTTP |
+| Server name | `pacedmind` |
+| Authentication | OAuth 2.1: the agent registers itself and signs in with your account; you allow it once |
+
+Sessions that PacedMind starts in a terminal don't use it: they reach the desktop app's own server on their computer, with a token that works only for their task. See [MCP server](/mcp).
+
+## Let your agent connect it
+
+Paste this into Claude Code, Codex or another agent with a terminal:
+
+```text
+Connect PacedMind's MCP server: follow "Instructions for agents" in https://pacedmind.com/docs/mcp/connect-cloud.mdx
+```
+
+The agent adds the server and starts the sign-in; the browser then opens PacedMind's page, where you select **Allow**.
+
+## With Connect in the desktop app
+
+Signed in to PacedMind Cloud in the desktop app:
+
+* After you sign in, PacedMind offers once, bottom right: **Connect your agents to PacedMind Cloud**. **Connect** sets up Claude Code and Codex, the ones installed on this computer; **Not now** leaves them as they are.
+* Any time, in **Settings → Connect your agents**, select **Connect** next to **Claude Code** or **Codex** and confirm.
+
+PacedMind sets the agent up for all your projects under the name `pacedmind`, in place of an earlier entry under that name or under `organizer`, and opens a terminal where the agent signs in (`claude mcp login pacedmind` or `codex mcp login pacedmind`). The agent opens a browser page: allow it there (see [Allow the agent](#allow-the-agent)). Codex's earlier `config.toml` is kept as `config.toml.pacedmind-backup`.
+
+**Settings** then shows the agent as *Uses PacedMind Cloud*, and **Computers** as *PacedMind Cloud*.
+
+## By hand
+
+### Claude Code
+
+```bash
+claude mcp add --transport http --scope user pacedmind https://app.pacedmind.com/api/mcp
+claude mcp login pacedmind
+```
+
+The first command registers the server for all your projects; the second opens the browser to sign in. Inside Claude Code, `/mcp` also offers **Authenticate** for a server that needs it. The Claude app's Code sessions use the same registration.
+
+### Codex
+
+```bash
+codex mcp add pacedmind --url https://app.pacedmind.com/api/mcp
+codex mcp login pacedmind
+```
+
+This adds the section below to `~/.codex/config.toml`, which the Codex command-line tool and the Codex app share, and signs in:
+
+```toml
+[mcp_servers.pacedmind]
+url = "https://app.pacedmind.com/api/mcp"
+```
+
+### Other MCP clients
+
+Any MCP client that supports OAuth sign-in, such as a custom connector in Claude or ChatGPT: add `https://app.pacedmind.com/api/mcp` as the server's address and follow its sign-in. The client finds PacedMind's sign-in on its own (OAuth protected resource metadata at `https://app.pacedmind.com/.well-known/oauth-protected-resource/api/mcp`) and registers itself.
+
+**Settings → Connect your agents** shows the same commands with **Copy commands**.
+
+## Allow the agent
+
+The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn't signed in to PacedMind, it asks for your email, password and two-factor code first, then comes back to the page.
+
+The page asks *Allow Claude Code to use PacedMind?*, with the agent's name as the agent gives it, and shows where the agent's sign-in returns to: for Claude Code and Codex, `localhost` (*this computer*). An agent you allowed before asks *Allow this agent to use PacedMind again?*
+
+* **Allow** sends you back to the agent, which then has PacedMind's tools.
+* **Deny** tells the agent no. For an agent you allowed before, the page says *Not connected. You can close this tab.*
+
+Only allow a request you started yourself, from an agent that returns somewhere you recognize. A request that waited too long says *This request has expired*: start connecting the agent again.
+
+## Instructions for agents
+
+For an AI agent asked to connect PacedMind. Run the commands in the user's terminal; never ask the user for a password, code or token.
+
+1. Check whether PacedMind is set up already: `claude mcp list` (Claude Code) or `codex mcp list` (Codex). An entry `pacedmind` with the address `https://app.pacedmind.com/api/mcp` that shows as connected needs nothing more; stop and say so.
+2. Remove an older entry that points elsewhere, such as `http://127.0.0.1:4319/api/mcp` or the name `organizer`, only if the user agrees: `claude mcp remove pacedmind --scope user`, `claude mcp remove organizer --scope user`; for Codex, `codex mcp remove pacedmind`.
+3. Add the server:
+   * Claude Code: `claude mcp add --transport http --scope user pacedmind https://app.pacedmind.com/api/mcp`
+   * Codex: `codex mcp add pacedmind --url https://app.pacedmind.com/api/mcp`
+4. Sign in: `claude mcp login pacedmind` or `codex mcp login pacedmind`. It opens the browser. Tell the user to sign in to PacedMind if asked and to select **Allow** on the page *Allow … to use PacedMind?*. Wait for the command to finish.
+5. Check: `claude mcp list` or `codex mcp list` shows `pacedmind` as connected. The tools are available in new sessions: in Claude Code as `mcp__pacedmind__…` (for example `mcp__pacedmind__get_overview`); a running Claude Code session picks them up after `/mcp`.
+6. Use the server name `pacedmind`: PacedMind's skills and the sessions it starts refer to it by that name.
+
+Other clients: add `https://app.pacedmind.com/api/mcp` as a streamable HTTP MCP server with OAuth, and let the user allow it.
+
+## What agents can do on PacedMind Cloud
+
+An agent you allowed acts as you: it reads and changes areas, projects, tasks, the calendar and flows, and reports on agent sessions with `start_task`, `report_progress` and `finish_task`. It can't:
+
+* start sessions, resume them or send them back with changes: `start_session` and `request_changes` answer with a link to the task, where you do it with **Start** or **Request changes** and your two-factor code, or in the desktop app;
+* ask questions that wait for your answer in PacedMind: there is no `ask_user`, so it asks in its own conversation, and `report_progress` with kind `question` shows the question on the task;
+* attach images from files on its computer: there is no `attach_image`, and `finish_task` takes no `images`;
+* set folders for projects and tasks: they belong to each computer's desktop app;
+* change your computers, answer for you, delete your account, or see the account's notification keys.
+
+Everything else is the same as on the desktop app's server, with 39 of the 41 [tools](/mcp/tools).
+
+## Connected agents
+
+**Settings → Connected agents** lists the agents you allowed: each with its name and *Signed in* with the date, or *Allowed, waiting for it to sign in* in the minutes after you allowed it. **Disconnect** ends an agent's sign-in at once, after the confirmation *Disconnect Claude Code? It loses access to PacedMind at once.*; to use PacedMind again, it signs in and you allow it again.
+
+Signing out everywhere (**Settings → Account → Sign out all**) also ends every agent's sign-in.
+
+## Security
+
+* An agent's sign-in counts only once you allowed it on PacedMind's page from a browser signed in with your two-factor code. A password alone can't allow an agent, and each approval works for one sign-in of that agent, within ten minutes.
+* The database itself checks every request against that approval, so a sign-in you didn't allow reads nothing, and one you disconnected stops working at once, not when its token expires.
+* Agents keep their sign-in in their own credential store; nothing about it goes into their settings files.
+* Requests from web pages (with an `Origin` header) are refused.
+
+PacedMind's [security overview](https://github.com/Pacedmind/pacedmind/blob/master/SECURITY.md) covers the rest.

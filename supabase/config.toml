@@ -378,13 +378,16 @@ enabled = false
 # domain = "example.clerk.accounts.dev"
 
 # OAuth server configuration
+# PacedMind: agents sign in to the hosted MCP server (app.pacedmind.com/api/mcp) through it. MCP clients (Claude Code,
+# Codex, claude.ai) register themselves, so dynamic registration is on; what they get still depends on your approval
+# on the consent page from a two-factor session (supabase/migrations/*_agent_logins.sql).
 [auth.oauth_server]
 # Enable OAuth server functionality
-enabled = false
-# Path for OAuth consent flow UI
+enabled = true
+# Path for OAuth consent flow UI (on the site URL: https://app.pacedmind.com/oauth/consent)
 authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
-allow_dynamic_registration = false
+allow_dynamic_registration = true
 
 [edge_runtime]
 enabled = true

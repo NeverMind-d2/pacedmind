@@ -18,7 +18,12 @@ const DESKTOP_OPEN = [
   /^\/auth\/done$/,
 ];
 /** Web routes that work without signing in. */
-const WEB_PUBLIC = [/^\/login(\/|$)/, /^\/auth\//, /^\/api\/health$/];
+const WEB_PUBLIC = [
+  /^\/login(\/|$)/, /^\/auth\//, /^\/api\/health$/,
+  /^\/api\/mcp\/?$/, // agents, with their own OAuth token (src/server/auth.ts)
+  /^\/\.well-known\/oauth-(protected-resource|authorization-server)(\/|$)/, // where agents sign in; public
+  /^\/oauth\/consent$/, // approving an agent's sign-in; sends you to sign in first, keeping the request
+];
 
 const LOCKED = `<!doctype html><meta charset="utf-8"><title>PacedMind</title>
 <body style="font:14px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#111;color:#bbb">

@@ -5,6 +5,7 @@ import { folderProblem } from "../folders";
 import { nextReadyTask } from "../flow";
 import { afterTaskDone, keepYoursOutOfFlow, startsAfterWouldLoop } from "../ops";
 import * as repo from "../repo";
+import { MODE } from "../supabase";
 import { usage } from "../views";
 import { callerSession } from "./principal";
 import { nextColor } from "@/lib/colors";
@@ -16,6 +17,14 @@ import {
   plural, projectRef, statusOf, statusSchema, taskLine, taskRef, todayLine, tool, when,
   type PRIORITY_NAMES, type STATUS_NAMES,
 } from "./common";
+
+/** A folder for sessions on this computer has to be usable here. PacedMind Cloud's MCP server knows no computer's folders. */
+function checkFolder(folder: string | null | undefined) {
+  if (!folder) return;
+  if (MODE === "web") fail("Folders are set on the computer where sessions run, in its PacedMind desktop app, not through PacedMind Cloud.");
+  const problem = folderProblem(folder);
+  if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
+}
 
 async function launched(rs: { ok: boolean; session?: { taskId: number } }[]): Promise<string[]> {
   const out: string[] = [];
@@ -313,10 +322,7 @@ export function registerPlanningTools(server: McpServer) {
     if (!args.name.trim()) fail("A project needs a name.");
     const a = await findArea(args.area);
     const folder = args.folder?.trim() || null;
-    if (folder) {
-      const problem = folderProblem(folder);
-      if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
-    }
+    checkFolder(folder);
     const after = args.starts_after ? await findProject(args.starts_after) : null;
     const color = args.color ? colorFrom(args.color) : null;
     const targetDate = args.target_date ? when(args.target_date, "drop") : null;
@@ -347,10 +353,7 @@ export function registerPlanningTools(server: McpServer) {
     const p = await findProject(args.project);
     if (args.name !== undefined && !args.name.trim()) fail("The name can't be empty.");
     const folder = args.folder === undefined ? undefined : args.folder?.trim() || null;
-    if (folder) {
-      const problem = folderProblem(folder);
-      if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
-    }
+    checkFolder(folder);
     let afterProjectId: string | null | undefined;
     if (args.starts_after === null) afterProjectId = null;
     else if (args.starts_after !== undefined) {
@@ -526,10 +529,7 @@ export function registerPlanningTools(server: McpServer) {
     sessionMayUpdate(t, args);
     if (args.title !== undefined && !args.title.trim()) fail("The title can't be empty.");
     const folder = args.folder === undefined ? undefined : args.folder?.trim() || null;
-    if (folder) {
-      const problem = folderProblem(folder);
-      if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
-    }
+    checkFolder(folder);
     const { projectId, areaId } = await moveTarget(t, args.project, args.area);
     let labels = args.labels ? cleanLabels(args.labels) : [...t.labels];
     if (args.add_labels) labels = cleanLabels([...labels, ...args.add_labels]);

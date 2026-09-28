@@ -66,7 +66,7 @@ function useRun(initial: Note = null) {
 type Mode = "signin" | "signup" | "reset";
 
 /** `confirmed`: an email link confirmed the address but couldn't sign in here (opened in another browser). */
-export function LoginForm({ initialError, confirmed }: { initialError: string | null; confirmed?: boolean }) {
+export function LoginForm({ initialError, confirmed, next }: { initialError: string | null; confirmed?: boolean; next?: string | null }) {
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -76,7 +76,7 @@ export function LoginForm({ initialError, confirmed }: { initialError: string | 
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (mode === "signin") return run(() => signInAction(email, password));
+    if (mode === "signin") return run(() => signInAction(email, password, next));
     if (mode === "reset") return run(() => sendResetAction(email));
     if (password !== confirm) return setNote({ text: "The two passwords don't match.", error: true });
     run(() => signUpAction(email, password));

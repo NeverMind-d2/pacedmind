@@ -16,10 +16,14 @@ export type SessionStatus = "starting" | "running" | "finished" | "done" | "clos
 export type Surface = "terminal" | "desktop" | "cloud";
 /** Whether PacedMind's MCP server is set up for sessions it doesn't configure itself (desktop apps). */
 /**
- * Whether an agent's own config reaches this PacedMind: `connected` as "pacedmind"; `old` under its old name,
- * "organizer" (it works, and Connect renames it); `elsewhere` for another PacedMind; `missing`.
+ * Whether an agent's own config reaches this PacedMind: `connected` as "pacedmind" with this computer's token; `old`
+ * under its old name, "organizer" (it works, and Connect renames it); `cloud` through PacedMind Cloud's MCP server,
+ * signed in with the account (while this computer is signed in to it); `elsewhere` for another PacedMind; `missing`.
  */
-export type McpLink = "connected" | "old" | "elsewhere" | "missing";
+export type McpLink = "connected" | "old" | "cloud" | "elsewhere" | "missing";
+
+/** Whether sessions in the agent's desktop app (and those you start yourself) report back to PacedMind. */
+export const mcpReaches = (link: McpLink) => link === "connected" || link === "old" || link === "cloud";
 
 /** The MCP server's name in the agents' configs: its tools are mcp__pacedmind__<tool>. */
 export const MCP_NAME = "pacedmind";
@@ -474,6 +478,17 @@ export interface AskView {
 }
 
 /** A browser's push subscription (PushSubscription.toJSON), as the account keeps it for notifications (push.ts). */
+/** An agent you allowed to use PacedMind Cloud's MCP server (OAuth), as Settings lists it. */
+export interface ConnectedAgent {
+  id: string;
+  /** The name the agent registered itself with (Claude Code, Codex…): plain text, never trusted. */
+  name: string;
+  /** When you allowed it (ISO). */
+  approvedAt: string;
+  /** When it signed in with that (ISO); null until it does, within ten minutes. */
+  claimedAt: string | null;
+}
+
 export interface PushSubscriptionInput {
   endpoint: string;
   p256dh: string;

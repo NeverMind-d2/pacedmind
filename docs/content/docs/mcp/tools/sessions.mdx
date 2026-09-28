@@ -37,6 +37,12 @@ Starts Claude Code or Codex working on a task, in the task's folder, the same wa
 
 Returns *Started DEV-22 with Claude Code in a terminal on DESKTOP-1 (session 3f2a9c1b).* For the desktop app, it adds *The first message is written there; the user sends it.*; for the cloud, *Cloud sessions can't report back to PacedMind; the user marks the task finished or done.* Fails when the task already has a running session, when it's the user's own task, when the computer lacks the agent's tool or app, when the folder can't be used, or, for the cloud, without a git repository or, for Codex, without the project's Codex environment.
 
+On PacedMind Cloud's server, `start_session` starts nothing and asks nothing: starting a session needs the user's two-factor code, or a click in the desktop app. It returns a link to the task in the web app:
+
+```text
+Starting a session runs an agent on one of the user's computers, so the user starts it themselves: with Start on DEV-22 in the PacedMind desktop app, or at https://app.pacedmind.com/project/…?task=DEV-22 with a two-factor code. Give the user that link; don't ask again.
+```
+
 ## `close_session`
 
 **Deletes. Agents ask the user first.**
@@ -90,9 +96,13 @@ Only a session in a terminal on this computer can be reopened. Refused, before a
 
 After the user allows it, the task's folder can still be unusable (*Can't use the folder …*), or the terminal can fail to open: the message in PacedMind says why, and the session stays as it was.
 
+On PacedMind Cloud's server, `request_changes` sends nothing: it returns a link to the task, where the user sends the changes with **Request changes** and their two-factor code, or does it in the desktop app (*Sending changes reopens the agent's session on the computer it ran on, so the user sends them themselves: …*).
+
 ## The protocol for agents working on a task
 
 A session that PacedMind starts begins with a message naming the task and the session. The agent picks the task up with `start_task`. While it works, it can attach screenshots with `attach_image`, keep the user posted with `report_progress`, and ask a question it needs answered with `ask_user`. It hands the task back with a report through `finish_task`. The **pacedmind-agent-session** skill teaches the protocol in detail. See [How a session runs](/agents/lifecycle).
+
+An agent connected to PacedMind Cloud's server, such as a session in the Claude or Codex app, follows the same protocol without `attach_image` and `ask_user`: that server can't read files from the agent's computer, and questions that wait for an answer come from the computer a session runs on. It asks in its conversation instead, and `finish_task` takes no `images` there.
 
 ### `get_next_task`
 

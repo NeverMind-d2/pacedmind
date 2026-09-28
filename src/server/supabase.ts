@@ -1,4 +1,5 @@
 import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 import { cache } from "react";
 import { cookies } from "next/headers";
@@ -20,7 +21,9 @@ import { COOKIE_OPTIONS, supabaseConfig } from "./supabase-config";
  *   encrypted file next to the app's data, so everything the server does (the window, MCP calls from agents,
  *   session hooks, the background loop) acts as that account.
  * - "web" (the hosted app, ORGANIZER_MODE=web): every browser has its own session, in HttpOnly cookies. It
- *   never starts agents: sessions it asks for go to a desktop app as requests (launch_requests).
+ *   never starts agents: sessions it asks for go to a desktop app as requests (launch_requests). Agents reach
+ *   its MCP server with an OAuth token of their own (runAsAgent), which the database answers only once you
+ *   approved that sign-in from a two-factor session (supabase/migrations/*_agent_logins.sql).
  */
 export const MODE: "desktop" | "web" = process.env.ORGANIZER_MODE === "web" ? "web" : "desktop";
 
@@ -86,9 +89,36 @@ const requestClient = cache(async (): Promise<SupabaseClient> => {
   });
 });
 
+/* ---------- web: an agent's MCP request, with its own OAuth token ---------- */
+
+type AgentContext = { token: string; client?: SupabaseClient };
+const agentContext = new AsyncLocalStorage<AgentContext>();
+
+/**
+ * Runs `fn` as the agent whose OAuth access token this is (the hosted MCP server): every query in it goes to
+ * Supabase with that token, so row level security answers as that agent's sign-in, never as a browser's.
+ */
+export const runAsAgent = <T>(token: string, fn: () => T): T => agentContext.run({ token }, fn);
+
+/** Whether this request is an agent's (the hosted MCP server). */
+export const actingAsAgent = (): boolean => agentContext.getStore() !== undefined;
+
+function agentClient(ctx: AgentContext): SupabaseClient {
+  if (!ctx.client) {
+    const { url, key } = supabaseConfig();
+    ctx.client = createClient(url, key, {
+      global: { headers: { Authorization: `Bearer ${ctx.token}` } },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
+  }
+  return ctx.client;
+}
+
 /** The Supabase client acting as the signed-in account (in the desktop app, the one account). */
 export async function supabase(): Promise<SupabaseClient> {
-  return MODE === "desktop" ? desktopClient() : requestClient();
+  if (MODE === "desktop") return desktopClient();
+  const agent = agentContext.getStore();
+  return agent ? agentClient(agent) : requestClient();
 }
 
 /* ---------- who is signed in ---------- */
@@ -107,12 +137,14 @@ export interface AuthState {
   hasRecoveryCodes: boolean;
   /** How this session signed in and when (the JWT's amr claim, newest first). */
   amr: { method: string; timestamp: number }[];
+  /** The OAuth client of an agent's sign-in (the hosted MCP server), null for a person's session. */
+  clientId: string | null;
 }
 
 /**
  * The signed-in account and how far it got, or null. The web app verifies the session's token (getClaims)
- * and asks Auth for the user (which also notices a revoked session); the desktop app's session is its own
- * encrypted file.
+ * and asks Auth for the user (which also notices a revoked session), a browser's from its cookies or an
+ * agent's from its bearer token; the desktop app's session is its own encrypted file.
  */
 export async function readAuthState(): Promise<AuthState | null> {
   const client = await supabase();
@@ -124,10 +156,11 @@ export async function readAuthState(): Promise<AuthState | null> {
     user = data.session?.user ?? null;
     if (data.session) claims = decodeClaims(data.session.access_token);
   } else {
-    const { data } = await client.auth.getClaims();
+    const token = agentContext.getStore()?.token;
+    const { data } = await client.auth.getClaims(token);
     if (data?.claims) {
       claims = data.claims as Record<string, unknown>;
-      user = (await client.auth.getUser()).data.user ?? null;
+      user = (await client.auth.getUser(token)).data.user ?? null;
     }
   }
   if (!user || !claims) return null;
@@ -139,6 +172,7 @@ export async function readAuthState(): Promise<AuthState | null> {
     factors: all.filter((f) => f.status === "verified" && (f.factor_type === "totp" || f.factor_type === "webauthn")),
     hasRecoveryCodes: all.some((f) => f.status === "verified" && (f.factor_type as string) === "recovery_code"),
     amr: Array.isArray(claims.amr) ? (claims.amr as { method: string; timestamp: number }[]) : [],
+    clientId: typeof claims.client_id === "string" && claims.client_id ? claims.client_id : null,
   };
 }
 

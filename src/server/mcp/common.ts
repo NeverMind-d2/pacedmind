@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as repo from "../repo";
 import { noteAgentActivity } from "../signals";
+import { MODE } from "../supabase";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
@@ -27,6 +28,12 @@ export function fail(message: string): never {
 type Kind = "read" | "write" | "delete" | "launch";
 
 /**
+ * Tools PacedMind Cloud's MCP server (the hosted app) doesn't have: it can't read files from an agent's computer, and
+ * a question that waits for your answer comes from the computer the session runs on (session_asks).
+ */
+const NOT_HOSTED: ReadonlySet<string> = new Set(["attach_image", "ask_user"]);
+
+/**
  * Registers a tool whose handler returns text; thrown errors become MCP tool errors. A session PacedMind
  * started only gets the tools in SESSION_TOOLS: the others aren't listed for it and refuse its calls.
  */
@@ -38,6 +45,7 @@ export function tool<S extends z.ZodObject>(
 ) {
   const ownerOnly = !SESSION_TOOLS.has(name);
   if (ownerOnly && caller().kind === "session") return;
+  if (MODE === "web" && NOT_HOSTED.has(name)) return;
   server.registerTool(
     name,
     {

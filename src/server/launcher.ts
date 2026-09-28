@@ -1,11 +1,12 @@
 import "server-only";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import { trustCheck, trustForClaude } from "./claude-trust";
 import { trustForCodex } from "./codex-trust";
-import { claudeMcpEntry, cliCommand, codexMcpTable, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
+import { claudeMcpEntry, cliBinary, cliCommand, codexMcpTable, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
 import { folderProblem, repoRoot } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
@@ -307,6 +308,22 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
+}
+
+/**
+ * Opens a terminal in your home folder where the agent signs in to PacedMind Cloud's MCP server itself (`claude mcp login
+ * pacedmind`, `codex mcp login pacedmind`): its browser page asks you to allow it, with your two-factor sign-in. Settings
+ * → Connect, once the agent's config names the server. The command is fixed: the agent's own CLI and the server's name.
+ */
+export function openMcpLogin(agent: AgentId): string | null {
+  if (MODE !== "desktop") return "Agents sign in from a terminal on your computer.";
+  const dir = path.join(dataDir(), "connect", agent);
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+  return openTerminal(dir, os.homedir(), `PacedMind - ${AGENT_LABEL[agent]} sign-in`, `${cliBinary(agent)} mcp login ${MCP_NAME}`, null, deviceConfig().terminal);
 }
 
 function openCmdWindow(title: string, script: string, env: NodeJS.ProcessEnv) {

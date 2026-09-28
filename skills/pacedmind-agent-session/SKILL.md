@@ -43,6 +43,8 @@ PacedMind started this session so that you do one task and then hand it back for
 
 `attach_image` (while you work) and the `images` of `finish_task` take the path of an image file on this computer: PNG, JPEG, GIF or WebP, up to 20 MB. PacedMind keeps its own copy. Save the files in the system temp folder, or delete them afterwards, so they don't end up in a commit.
 
+When your `pacedmind` tools come from PacedMind Cloud's server (a session in the Claude or Codex app, with an account), there is no `attach_image` or `ask_user`: describe what screenshots would show in the report's `details`, and ask your questions in the conversation.
+
 Ways to take them:
 
 - Your browser tools, if they can save a screenshot to a file, for example Playwright's `browser_take_screenshot` with a filename.

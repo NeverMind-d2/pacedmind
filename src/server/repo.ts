@@ -155,5 +155,9 @@ export const listPushSubscriptions = via("listPushSubscriptions");
 export const addPushSubscription = via("addPushSubscription");
 export const removePushSubscription = via("removePushSubscription");
 
+/* ---------- agents signed in to PacedMind Cloud's MCP server ---------- */
+export const listConnectedAgents = via("listConnectedAgents");
+export const disconnectAgent = via("disconnectAgent");
+
 /* ---------- live refresh ---------- */
 export const stateVersion = via("stateVersion");

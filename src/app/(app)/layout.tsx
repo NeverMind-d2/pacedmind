@@ -9,9 +9,12 @@ import { LiveRefresh } from "@/components/live-refresh";
 import { Approvals } from "@/components/approvals";
 import { RemoteStart } from "@/components/remote-start";
 import { ImportOffer } from "@/components/import-projects";
+import { CloudConnectOffer } from "@/components/cloud-connect-offer";
 import { Toaster } from "@/components/ui";
 import * as repo from "@/server/repo";
 import { deviceConfig } from "@/server/device";
+import { localTools, mcpLinks } from "@/server/devices";
+import { mcpUrl } from "@/server/launcher";
 import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
@@ -45,6 +48,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     sessions: waiting.length,
   };
   const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
+  // Signed in on the desktop, after the import's first offer: the agents here not yet on PacedMind Cloud's MCP server.
+  const offer = MODE === "desktop" && state?.aal === "aal2" && deviceConfig().importOffered && !deviceConfig().cloudConnectOffered;
+  const found = offer ? localTools() : null;
+  const links = offer ? mcpLinks(mcpUrl(), true) : null;
+  const cloudOffer = found && links ? (["claude", "codex"] as const).filter((a) => found[a].cli && links[a] !== "cloud") : [];
   const paletteTasks = tasks.map((t) => ({
     key: t.key, title: t.title, status: t.status,
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
@@ -66,6 +74,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       <LiveRefresh />
       {/* The first time PacedMind opens on a computer, it offers to bring the Claude Code and Codex projects there over. */}
       {MODE === "desktop" && !deviceConfig().importOffered && <ImportOffer areas={areas} />}
+      {/* Once signed in, it offers (once) to connect the agents here to PacedMind Cloud's MCP server. */}
+      {cloudOffer.length > 0 && <CloudConnectOffer agents={cloudOffer} />}
     </div>
   );
 }

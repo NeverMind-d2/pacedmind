@@ -27,7 +27,7 @@ import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast, type MenuItem } f
 import { parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
 import { GRID, NODE_H, NODE_W, freeSpot, layoutFlow, snap, type Point } from "@/lib/flow-layout";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, EDGE_LABEL, canRun, surfaceOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, EDGE_LABEL, canRun, mcpReaches, surfaceOf,
   type AgentId, type AgentTools, type EdgeMode, type FlowEdge, type McpLink, type ReportOutcome, type Session, type Status, type Surface,
 } from "@/lib/types";
 
@@ -1516,7 +1516,7 @@ function Inspector({
   const { surface, device } = run;
   const mcp: McpLink | null = device?.checked ? device.agents[task.agent].mcp : null;
   // Sessions that can't tell PacedMind they're done: cloud ones, and the desktop app until it has PacedMind's MCP server.
-  const silent = (s: Surface) => s === "cloud" || (s === "desktop" && mcp !== null && mcp !== "connected" && mcp !== "old");
+  const silent = (s: Surface) => s === "cloud" || (s === "desktop" && mcp !== null && !mcpReaches(mcp));
   const canFinish = !!session && active && silent(session.surface);
   // Another computer's task (any, in the web app) starts there, through the "Run on a computer" sheet.
   const away = !desktop || (!!device && !device.here && devices.some((d) => d.here));

@@ -4,6 +4,8 @@ Every tool the `pacedmind` MCP server offers, grouped by purpose. The tool descr
 
 A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
 
+PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign in to with the user's account) has every tool but `attach_image` and `ask_user`: it can't read files from your computer, so `finish_task` takes no `images` there, and you ask the user in the conversation instead. Its `start_session` and `request_changes` start nothing: they return a link where the user does it with their two-factor code. It can't set folders either.
+
 ## Orientation
 
 - `get_overview` (read): the current date and time, areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and sessions waiting for review or running. Start here.

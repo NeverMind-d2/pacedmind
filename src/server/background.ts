@@ -48,9 +48,15 @@ export function startBackground() {
       }
     }, ms);
   };
+  // What the agents here reach depends on the sign-in (PacedMind Cloud's MCP server counts only with it), so they're
+  // checked again when that changes.
+  let signedIn: boolean | null = null;
   // This computer in the account (registration, sign-out from elsewhere, requests to start sessions, what it
   // found of the agents; each does nothing without one), and flows reacting to tasks finished elsewhere.
   g.__organizerSync = every(5_000, "account sync", async () => {
+    const now = (await authState()) !== null;
+    if (signedIn !== null && now !== signedIn) void check();
+    signedIn = now;
     await syncDevice();
     await saveToolsOnce();
     await watchStatuses();

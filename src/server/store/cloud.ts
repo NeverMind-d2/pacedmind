@@ -17,7 +17,7 @@ import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
-  type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
+  type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence,
   type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
@@ -842,7 +842,7 @@ function toolsOf(v: unknown): AgentTools {
   const t = v as Row;
   const cli = t.cli && typeof t.cli === "object" && typeof (t.cli as Row).version === "string" ? { version: String((t.cli as Row).version) } : null;
   const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
-  const mcp = t.mcp === "connected" || t.mcp === "old" || t.mcp === "elsewhere" ? t.mcp : "missing";
+  const mcp = t.mcp === "connected" || t.mcp === "old" || t.mcp === "cloud" || t.mcp === "elsewhere" ? t.mcp : "missing";
   const extras = extrasOf(t.extras);
   return { cli, app, mcp, login: loginOf(t.login), ...(extras ? { extras } : {}) };
 }
@@ -1092,6 +1092,24 @@ export async function addPushSubscription(sub: PushSubscriptionInput) {
 export async function removePushSubscription(endpoint: string) {
   const db = await accountDb();
   check(await db.from("push_subscriptions").delete().eq("endpoint", endpoint));
+}
+
+/* ---------- agents signed in to PacedMind Cloud's MCP server ---------- */
+
+/** The agents you allowed (connected_agents): those signed in, and those you allowed in the last ten minutes. */
+export async function listConnectedAgents(): Promise<ConnectedAgent[]> {
+  const db = await accountDb();
+  const { data, error } = await db.rpc("connected_agents");
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((r) => ({ id: String(r.id), name: String(r.client_name ?? "").slice(0, 200), approvedAt: String(r.approved_at), claimedAt: s(r.claimed_at) }));
+}
+
+/** Disconnects an agent: its sign-in ends at once (revoke_agent_login). */
+export async function disconnectAgent(id: string): Promise<void> {
+  const db = await accountDb();
+  const { error } = await db.rpc("revoke_agent_login", { login: id });
+  if (error) throw new Error(/already disconnected/i.test(error.message) ? "That agent is already disconnected." : error.message);
 }
 
 /* ---------- live refresh ---------- */

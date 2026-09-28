@@ -69,6 +69,11 @@ export interface DeviceConfig {
   /** Once the import of the folders you work in with Claude Code and Codex was offered here (it opens by itself once). */
   importOffered: boolean;
   /**
+   * Once connecting Claude Code and Codex to PacedMind Cloud's MCP server was offered here after signing in (it shows
+   * by itself once per account; Settings → Connect does the same any time).
+   */
+  cloudConnectOffered?: boolean;
+  /**
    * "Continue without an account" was chosen on the sign-in screen and nobody signed in since, so the app
    * opens with this computer's own data instead of asking. Signing in clears it: after signing out it asks again.
    */
@@ -134,7 +139,7 @@ export function deviceFor(userId: string): DeviceConfig {
   const current = deviceConfig();
   if (current.userId === userId) return current;
   const next = current.userId === null
-    ? { ...current, userId, deviceId: null, claimedSession: null, sessionTokens: {} }
+    ? { ...current, userId, deviceId: null, claimedSession: null, sessionTokens: {}, cloudConnectOffered: false }
     : defaults(userId, current);
   save(next);
   return next;

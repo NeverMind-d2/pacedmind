@@ -10,6 +10,8 @@ import {
   activeSession, changesProblem, closeSession, edgeWouldLoop, finishTask, flowNeedsTidy, placeInFlow, removeFromFlow, startedLines, tidyFlow,
 } from "../ops";
 import * as repo from "../repo";
+import { MODE } from "../supabase";
+import { cloudOrigin } from "../supabase-config";
 import { callerSession } from "./principal";
 import { QUESTION_CALL_MS, QUESTION_OPEN_MS, answeredText, openAsk, waitForAnswer } from "../asks";
 import { planText } from "@/lib/dates";
@@ -104,11 +106,24 @@ async function reportingSession(taskId: number, sessionId?: string | null): Prom
   return latest?.status === "finished" ? latest : null;
 }
 
+/**
+ * PacedMind Cloud's MCP server (the hosted app) serves agents on any computer, so it knows none of their folders or
+ * files, and nothing it does runs on a computer.
+ */
+const HOSTED = MODE === "web";
+
+/** Where the user sees a task in the web app. */
+const taskLink = (t: Task) => `${cloudOrigin()}/${t.projectId ? `project/${encodeURIComponent(t.projectId)}` : "inbox"}?task=${t.key}`;
+
+const NO_FILES =
+  "PacedMind Cloud's MCP server can't read files from your computer, so it can't attach images. Describe what they'd show in the report's details, or link to it.";
+
 /** A session for an agent that works on a task PacedMind didn't start (your own Claude Code or Codex). */
 async function outsideSession(t: Task, agent?: AgentId): Promise<Session> {
   notYours(t);
   const s = await repo.createSession({
-    taskId: t.id, agent: agent ?? (await agentFor(t)) ?? "claude", folder: plannedFolder(t), deviceId: deviceConfig().deviceId, status: "running",
+    taskId: t.id, agent: agent ?? (await agentFor(t)) ?? "claude", folder: HOSTED ? null : plannedFolder(t),
+    deviceId: HOSTED ? null : deviceConfig().deviceId, status: "running",
   });
   await repo.addSessionEvent(s.id, "started", "Started outside PacedMind");
   return s;
@@ -335,6 +350,10 @@ export function registerAgentTools(server: McpServer) {
     const t = await findTask(task);
     notYours(t);
     if ((await repo.listSessions({ taskId: t.id, status: LIVE_STATUSES })).length) fail(`${t.key} already has a running session.`);
+    if (HOSTED) {
+      return `Starting a session runs an agent on one of the user's computers, so the user starts it themselves: with Start on ${t.key} ` +
+        `in the PacedMind desktop app, or at ${taskLink(t)} with a two-factor code. Give the user that link; don't ask again.`;
+    }
     const a = (await askFromAgent(t, agent ?? (await agentFor(t)) ?? "claude", where)) ?? fail(`${t.key} can't run on this computer.`);
     return (
       `Asked the user to allow ${t.key} with ${AGENT_LABEL[a.agent]} (${SURFACE_LABEL[a.surface].toLowerCase()}): PacedMind shows the request in its window ` +
@@ -370,6 +389,10 @@ export function registerAgentTools(server: McpServer) {
       fail(`${t.key} has no hand-back to send changes to${s ? `: its latest session is ${SESSION_TEXT[s.status]}` : ""}. start_session starts a new session.`);
     }
     if (!changes.trim()) fail("Write what should change.");
+    if (HOSTED) {
+      return `Sending changes reopens the agent's session on the computer it ran on, so the user sends them themselves: with Request changes on ` +
+        `${t.key} in PacedMind, or at ${taskLink(t)} with a two-factor code. Give the user that link and the changes to paste; don't ask again.`;
+    }
     const problem = await changesProblem(s);
     if (problem) fail(problem);
     const a = (await askForChanges(s, t, changes.trim())) ?? fail(`${t.key} can't run on this computer.`);
@@ -428,11 +451,15 @@ export function registerAgentTools(server: McpServer) {
       `\nPacedMind session: ${s.id}`,
       "Work on this task here. Keep the user posted with report_progress, but only when it matters: your plan once you have one (send it " +
         "again as steps get done) and anything that changes the scope or the risk (kind issue). Skip routine updates. When you need the " +
-        "user to decide something before you can go on, ask with ask_user: it waits for their answer, which they can give on any device.",
+        (HOSTED
+          ? "user to decide something before you can go on, ask in this conversation; report_progress with kind question also shows it on the task."
+          : "user to decide something before you can go on, ask with ask_user: it waits for their answer, which they can give on any device."),
       `When it is ready for the user to check, call finish_task with task ${t.key}, session ${s.id} and a report:`,
       "- summary: one or two sentences on what changed and what the user should look at first;",
       after.doneWhen.length ? "- criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);" : null,
-      "- images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;",
+      HOSTED
+        ? null
+        : "- images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;",
       "- verify: steps the user can follow to check the result, and questions: anything the user has to decide;",
       "- details: anything longer, in Markdown.",
       "If you can't finish, still call finish_task, with outcome partial or blocked, and say why. Do not mark the task done yourself.",
@@ -603,9 +630,10 @@ export function registerAgentTools(server: McpServer) {
     const clean = (xs?: string[]) => (xs ?? []).map((x) => x.trim()).filter(Boolean);
     const links = (args.links ?? []).map((l) => ({ label: l.label.trim(), url: l.url.trim() }))
       .filter((l) => /^https?:\/\/\S+$/i.test(l.url)).map((l) => ({ label: l.label || l.url, url: l.url }));
+    if (HOSTED && args.images?.length) fail(`${NO_FILES} Call finish_task again without images.`);
     const mine = await ownSession(t, args.session);
     const reporting = mine ?? (callerSession() ? null : await reportingSession(t.id, args.session));
-    const stored = storeImages(args.images ?? [], plannedFolder(t));
+    const stored = HOSTED ? [] : storeImages(args.images ?? [], plannedFolder(t));
     let result: Awaited<ReturnType<typeof finishTask>>;
     try {
       // A report belongs to a session: the agent's, or a new one when it works on the task outside PacedMind.

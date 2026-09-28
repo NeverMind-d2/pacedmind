@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { MODE, readAuthState, requireAal2, supabase } from "@/server/supabase";
-import { nextStep, safeNext, takeNext } from "@/server/auth-flow";
+import { nextStep, safeNext, takeNext, withNext } from "@/server/auth-flow";
 import { STEP_UP_REFUSED, refusedStepUp, verifyCode } from "@/server/step-up";
 import { requireDesktopWindow } from "@/server/window";
 import { deviceConfig, updateDevice } from "@/server/device";
@@ -63,19 +63,20 @@ async function goNext(nextParam?: string | null): Promise<never> {
   // Read again, not from this request's cache: signing in just changed it.
   const state = await readAuthState();
   const step = nextStep(state);
-  if (step) redirect(step);
+  if (step) redirect(MODE === "desktop" ? step : withNext(step, nextParam));
   redirect(MODE === "desktop" ? takeNext() : safeNext(nextParam));
 }
 
 /* ---------- signing in ---------- */
 
-export async function signInAction(email: string, password: string): Promise<AuthResult> {
+/** `next`: the hosted app's page to continue to once signed in (approving an agent's sign-in). */
+export async function signInAction(email: string, password: string, next?: string | null): Promise<AuthResult> {
   await guard();
   if (!looksLikeEmail(clean(email)) || !password) return { ok: false, error: "Enter your email and password." };
   const db = await supabase();
   const { error } = await db.auth.signInWithPassword({ email: clean(email), password });
   if (error) return { ok: false, error: explain(error.message) };
-  return goNext();
+  return goNext(next);
 }
 
 export async function signUpAction(email: string, password: string): Promise<AuthResult> {

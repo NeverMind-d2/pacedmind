@@ -3,6 +3,7 @@ import { authorizeMcp } from "@/server/auth";
 import { SERVER_INSTRUCTIONS, registerTools } from "@/server/mcp";
 import { runAs } from "@/server/mcp/principal";
 import { noteClient } from "@/server/signals";
+import { runAsAgent } from "@/server/supabase";
 
 // The tools live in src/server/mcp: planning.ts (areas, projects, tasks), calendar.ts (events, agenda,
 // work hours) and agents.ts (flows, sessions and the start_task / finish_task protocol). A new server is
@@ -13,8 +14,11 @@ const handler = createMcpHandler(registerTools, {
 });
 
 async function guarded(req: Request): Promise<Response> {
-  const who = await authorizeMcp(req);
-  if (who instanceof Response) return who;
+  const caller = await authorizeMcp(req);
+  if (caller instanceof Response) return caller;
+  const { who, agentToken } = caller;
+  // In the hosted app, every query of the request runs with the agent's own token (row level security).
+  if (agentToken) return runAsAgent(agentToken, () => runAs(who, () => handler(req)));
   // A session's agent says which client it is: in its initialize request, or with every request since MCP 2026-07-28
   // (params._meta). Its session records it (signals.ts keeps that to once per client and version).
   if (who.kind === "session" && req.method === "POST") {
