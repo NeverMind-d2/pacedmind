@@ -133,7 +133,11 @@ export async function proxy(request: NextRequest) {
     login.search = "";
     return withHeaders(NextResponse.redirect(login), csp);
   }
-  return withHeaders(response, csp);
+  const result = withHeaders(response, csp);
+  // Only the hosted consent page keeps a handle to the local agent's callback window so it can close it after
+  // the database confirms sign-in. Other pages retain full opener isolation. No callback is fetched by the server.
+  if (path === "/oauth/consent") result.headers.set("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  return result;
 }
 
 export const config = {

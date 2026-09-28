@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
   labels TEXT NOT NULL DEFAULT '[]', reminder TEXT, agent TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
   flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT,
-  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]', needs TEXT NOT NULL DEFAULT '[]'
+  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]', needs TEXT NOT NULL DEFAULT '[]', model_settings TEXT
 );
 CREATE TABLE IF NOT EXISTS subtasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS reports (
   task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, outcome TEXT NOT NULL DEFAULT 'done', summary TEXT NOT NULL,
   details TEXT NOT NULL DEFAULT '', criteria TEXT NOT NULL DEFAULT '[]', verify TEXT NOT NULL DEFAULT '[]',
   questions TEXT NOT NULL DEFAULT '[]', links TEXT NOT NULL DEFAULT '[]', follow_ups TEXT NOT NULL DEFAULT '[]', created_at TEXT NOT NULL,
-  changes TEXT, changes_at TEXT
+  changes TEXT, changes_at TEXT, diff TEXT
 );
 CREATE TABLE IF NOT EXISTS attachments (
   id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -140,9 +140,9 @@ function migrate(conn: DatabaseSync) {
   const added: Record<string, [string, string][]> = {
     areas: [["icon", "TEXT"], ["picture", "TEXT"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"]],
-    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"]],
+    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
-    reports: [["changes", "TEXT"], ["changes_at", "TEXT"]],
+    reports: [["changes", "TEXT"], ["changes_at", "TEXT"], ["diff", "TEXT"]],
   };
   for (const [table, columns] of Object.entries(added)) {
     const have = (conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);

@@ -282,6 +282,21 @@ begin
     out := out || '17w FAIL a usage that is not an object accepted' || E'\n';
     reset role;
   exception when others then out := out || '17w usage that is not an object rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  -- 17x-y. a report's diff: a small JSON object, nothing else
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.reports (session_id, task_id, summary, created_at, diff) values ('0123456789abcdef', tid, 'With a diff', '2026-09-25T12:00:00',
+      '{"base": "abc1234", "head": "def5678", "commits": [], "files": [{"path": "a.ts", "status": "modified", "added": 3, "removed": 1}], "added": 3, "removed": 1}');
+    select count(*) into n from public.reports where diff is not null; out := out || '17x report diff saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '17x ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.reports (session_id, task_id, summary, created_at, diff)
+      values ('0123456789abcdef', tid, 'Too big', '2026-09-25T12:00:00', jsonb_build_object('x', repeat('a', 100001)));
+    out := out || '17y FAIL an oversized diff accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17y oversized diff rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb,
       'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);
@@ -335,6 +350,26 @@ begin
     out := out || '18c FAIL unknown run-in accepted' || E'\n';
     reset role;
   exception when others then out := out || '18c run-in rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  -- Model settings are data, never arbitrary shell arguments; existing task RLS protects them.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set model_settings = '{"agent":"codex","model":"account-model","effort":"high","speed":"priority"}' where id = tid;
+    select count(*) into n from public.tasks where id = tid and model_settings->>'model' = 'account-model';
+    out := out || '18m model settings saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18m ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set model_settings = '{"agent":"codex","model":"x; whoami"}' where id = tid;
+    out := out || '18n FAIL model shell characters accepted' || E'\n';
+    reset role;
+  exception when check_violation then out := out || '18n model shell characters rejected (want rejected)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set model_settings = '{}' where id = tid;
+    out := out || '18o FAIL incomplete model settings accepted' || E'\n';
+    reset role;
+  exception when check_violation then out := out || '18o incomplete model settings rejected (want rejected)' || E'\n'; end;
   -- A task's needs are names only (what it needs from the computer its session runs on), at most ten.
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
@@ -830,6 +865,8 @@ begin
     out := out || '28f FAIL an account deleted its billing row' || E'\n';
     reset role;
   exception when others then out := out || '28f deleting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  -- Simulate pre-launch inside this rolled-back test, even when billing is already live.
+  update private.billing_switch set enforce = false;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     out := out || '28r plan before launch: enforced=' || (public.cloud_plan() ->> 'enforced') || ' (want false), writable='

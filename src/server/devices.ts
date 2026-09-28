@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
+import { readAgentCatalog } from "./agent-models";
+import type { ModelCatalog } from "@/lib/agent-models";
 import * as repo from "./repo";
 import { agentCommandFor, deviceConfig, thisPlatform, updateDevice } from "./device";
 import { agentExtras, folderExtras, serverChoices } from "./extras";
@@ -30,6 +32,7 @@ const g = globalThis as unknown as {
   __pacedmindTools?: Device["agents"];
   __pacedmindToolsAt?: string;
   __pacedmindCheck?: Promise<Device["agents"]> | null;
+  __pacedmindModelChecks?: Partial<Record<AgentId, Promise<ModelCatalog>>>;
   /** The computer id the latest tools were saved for. */
   __pacedmindToolsSaved?: string;
 };
@@ -339,9 +342,13 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
       cliVersion("claude", agentCommandFor("claude")), cliVersion("codex", agentCommandFor("codex")), desktopApps(), usesCloud().catch(() => false),
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
+    const [claudeModels, codexModels] = await Promise.all([
+      readAgentCatalog("claude", claudeIn.state === "in" ? cliLine("claude", claude, "") : null),
+      readAgentCatalog("codex", codexIn.state === "in" ? cliLine("codex", codex, "") : null),
+    ]);
     const agents: Device["agents"] = {
-      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken, signedIn), login: claudeIn, extras: withAccount("claude", agentExtras("claude")) },
-      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken, signedIn), login: codexIn, extras: withAccount("codex", agentExtras("codex")) },
+      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken, signedIn), login: claudeIn, models: claudeModels, extras: withAccount("claude", agentExtras("claude")) },
+      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken, signedIn), login: codexIn, models: codexModels, extras: withAccount("codex", agentExtras("codex")) },
     };
     g.__pacedmindTools = agents;
     g.__pacedmindToolsAt = new Date().toISOString();
@@ -352,6 +359,21 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
     g.__pacedmindCheck = null;
   });
   return g.__pacedmindCheck;
+}
+
+/** Fresh account capabilities when a picker opens and before every explicit model launch. No disk cache. */
+export function refreshAgentModels(agent: AgentId): Promise<ModelCatalog> {
+  const checks = g.__pacedmindModelChecks ??= {};
+  return checks[agent] ??= (async () => {
+    const cli = await cliVersion(agent, agentCommandFor(agent));
+    const login = await cliLogin(agent, cli);
+    const models = await readAgentCatalog(agent, login.state === "in" ? cliLine(agent, cli, "") : null);
+    const before = localTools();
+    g.__pacedmindTools = { ...before, [agent]: { ...before[agent], cli, login, models } };
+    g.__pacedmindToolsSaved = undefined;
+    await saveToolsOnce().catch(() => {});
+    return models;
+  })().finally(() => { delete checks[agent]; });
 }
 
 /** An agent's extras with what its sessions here last got from the account its CLI is signed in to (noteAccountServers). */

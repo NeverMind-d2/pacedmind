@@ -6,7 +6,7 @@ import { LiveRefresh } from "@/components/live-refresh";
  * The frame around the sign-in pages: the wordmark, a line of context and the form. It scrolls by itself,
  * since the app's body doesn't (its panels do), and on a phone the form is taller than the screen.
  */
-export function AuthShell({ note, children }: { note: ReactNode; children: ReactNode }) {
+export function AuthShell({ note, children, liveRefresh = true }: { note: ReactNode; children: ReactNode; liveRefresh?: boolean }) {
   return (
     <main className="h-full overflow-y-auto bg-bg">
       <div className="flex min-h-full items-center justify-center px-4 py-10 sm:py-16">
@@ -19,7 +19,7 @@ export function AuthShell({ note, children }: { note: ReactNode; children: React
         </div>
       </div>
       {/* Moves on by itself when sign-in finishes elsewhere, e.g. an email link opened in a browser. */}
-      <LiveRefresh />
+      {liveRefresh && <LiveRefresh />}
     </main>
   );
 }

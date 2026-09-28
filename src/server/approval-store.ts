@@ -9,6 +9,7 @@ import type { AgentId, LaunchRequestKind, Surface } from "@/lib/types";
 
 /** A session waiting for you, with what it would run as you saw it: launching refuses if any of it changed. */
 export interface Approval {
+  modelSettings: import("@/lib/agent-models").ModelSelection | null;
   id: string;
   /** The launch request it answers, or null when it's this computer's own (an agent over MCP, a flow). */
   requestId: string | null;

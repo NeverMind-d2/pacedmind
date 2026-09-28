@@ -1,4 +1,5 @@
 import "server-only";
+import { modelSelectionOf } from "@/lib/agent-models";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
@@ -12,7 +13,7 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
-import { SETTING_KEYS, areaPictureOf, deriveKey, usageOf } from "./store/shared";
+import { SETTING_KEYS, areaPictureOf, deriveKey, diffOf, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
@@ -327,18 +328,23 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       }
       return out;
     };
-    const taskRow = (t: Row, key: string) => ({
-      key, area_id: areaId(t.area_id), project_id: t.project_id == null ? null : projectId.get(String(t.project_id)) ?? null,
-      title: clip(t.title, 500) || "Untitled", description: String(t.description ?? "").slice(0, 100000),
-      status: oneOf(t.status, ["backlog", "todo", "progress", "review", "done", "canceled"]) ?? "todo", priority: int(t.priority, 0, 4, 0),
-      due_date: match(t.due_date, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/), planned_date: match(t.planned_date, DAY),
-      estimate_min: int(t.estimate_min, 0, 10080, 60), labels: labelsOf(t.labels),
-      reminder: match(t.reminder, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/), agent: oneOf(t.agent, ["claude", "codex", "human"]),
-      sort_order: int(t.sort_order, -1e9, 1e9, 0), flow_x: num(t.flow_x), flow_y: num(t.flow_y),
-      created_at: match(t.created_at, STAMP) ?? now, updated_at: match(t.updated_at, STAMP) ?? now, completed_at: match(t.completed_at, STAMP),
-      done_when: cleanDoneWhen(texts(t.done_when, 400)), needs: cleanNeeds(texts(t.needs, 48)), run_in: oneOf(t.run_in, SURFACES),
-      device_id: t.device_id ? here : null,
-    });
+    const taskRow = (t: Row, key: string) => {
+      let modelSettings = null;
+      try { modelSettings = modelSelectionOf(JSON.parse(String(t.model_settings ?? "null"))); } catch { /* Older local data. */ }
+      return {
+        key, area_id: areaId(t.area_id), project_id: t.project_id == null ? null : projectId.get(String(t.project_id)) ?? null,
+        title: clip(t.title, 500) || "Untitled", description: String(t.description ?? "").slice(0, 100000),
+        status: oneOf(t.status, ["backlog", "todo", "progress", "review", "done", "canceled"]) ?? "todo", priority: int(t.priority, 0, 4, 0),
+        due_date: match(t.due_date, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/), planned_date: match(t.planned_date, DAY),
+        estimate_min: int(t.estimate_min, 0, 10080, 60), labels: labelsOf(t.labels),
+        reminder: match(t.reminder, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/), agent: oneOf(t.agent, ["claude", "codex", "human"]),
+        sort_order: int(t.sort_order, -1e9, 1e9, 0), flow_x: num(t.flow_x), flow_y: num(t.flow_y),
+        created_at: match(t.created_at, STAMP) ?? now, updated_at: match(t.updated_at, STAMP) ?? now, completed_at: match(t.completed_at, STAMP),
+        done_when: cleanDoneWhen(texts(t.done_when, 400)), needs: cleanNeeds(texts(t.needs, 48)), run_in: oneOf(t.run_in, SURFACES),
+        device_id: t.device_id || modelSettings ? here : null,
+        model_settings: modelSettings,
+      };
+    };
     const KEY = /^[A-Z][A-Z0-9]{1,7}-[1-9][0-9]{0,8}$/;
     const seen = new Set<string>();
     const keyed: Row[] = [];
@@ -414,6 +420,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         criteria: criteria(r.criteria), verify: texts(r.verify, 2000), questions: texts(r.questions, 2000), links: links(r.links),
         follow_ups: texts(r.follow_ups, 40).filter((k) => KEY.test(k)), created_at: match(r.created_at, STAMP) ?? now,
         changes: clip(r.changes, 20000) || null, changes_at: clip(r.changes, 20000) ? match(r.changes_at, STAMP) : null,
+        diff: diffOf(r.diff),
       }).select("id").single()) as Row;
       reportId.set(Number(r.id), Number(row.id));
     }
@@ -559,14 +566,15 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const project = (v: unknown) => (v == null ? null : projectId.get(String(v)) ?? null);
 
     const insTask = conn.prepare(`INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date,
-      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when, needs)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when, needs, model_settings)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const t of tasks) {
       const r = insTask.run(
         String(t.key), area(t.area_id), project(t.project_id), String(t.title), String(t.description ?? ""), String(t.status), Number(t.priority ?? 0),
         s(t.due_date), s(t.planned_date), Number(t.estimate_min ?? 60), json(t.labels), s(t.reminder), s(t.agent), Number(t.sort_order ?? 0),
         t.flow_x == null ? null : Number(t.flow_x), t.flow_y == null ? null : Number(t.flow_y), String(t.created_at), String(t.updated_at),
         s(t.completed_at), s(t.run_in), json(t.done_when), json(cleanNeeds(Array.isArray(t.needs) ? t.needs.filter((x): x is string => typeof x === "string") : [])),
+        JSON.stringify(modelSelectionOf(t.model_settings)),
       );
       taskId.set(Number(t.id), Number(r.lastInsertRowid));
     }
@@ -592,11 +600,12 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     for (const e of sessionEvents) if (kept.has(String(e.session_id))) insEv.run(String(e.session_id), String(e.at), String(e.kind), String(e.text ?? ""));
 
     const insReport = conn.prepare(`INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links,
-      follow_ups, created_at, changes, changes_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      follow_ups, created_at, changes, changes_at, diff) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const r of reports) {
       if (!kept.has(String(r.session_id)) || !task(r.task_id)) continue;
       const row = insReport.run(String(r.session_id), task(r.task_id), String(r.outcome), String(r.summary), String(r.details ?? ""), json(r.criteria),
-        json(r.verify), json(r.questions), json(r.links), json(r.follow_ups), String(r.created_at), s(r.changes), s(r.changes_at));
+        json(r.verify), json(r.questions), json(r.links), json(r.follow_ups), String(r.created_at), s(r.changes), s(r.changes_at),
+        diffOf(r.diff) ? JSON.stringify(diffOf(r.diff)) : null);
       reportId.set(Number(r.id), Number(row.lastInsertRowid));
     }
     // Only the images whose files are on this computer.

@@ -5,6 +5,7 @@ import { revokeSessionTokens } from "./device";
 import { afterDone, afterFinished, afterFlowOn, startFromFlow } from "./flow";
 import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
+import { noteContinued, takeDiff } from "./diff";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
 import {
@@ -73,7 +74,9 @@ export async function finishTask(
     await repo.addSessionEvent(s.id, "finished", (by === "you" ? `You marked it finished${note ? `: ${note}` : ""}` : note).slice(0, 2000));
     if (report) {
       const { images = [], ...fields } = report;
-      const reportId = await repo.createReport({ sessionId: s.id, taskId, summary: note, ...fields });
+      // What changed in its folder since it started, when it started on this computer (diff.ts).
+      const diff = MODE === "desktop" ? await takeDiff(s.id) : null;
+      const reportId = await repo.createReport({ sessionId: s.id, taskId, summary: note, ...fields, diff });
       for (const x of images) await repo.addAttachment(x.img, { taskId, sessionId: s.id, reportId, caption: x.caption });
     }
   }
@@ -87,6 +90,7 @@ export async function finishTask(
       cliSessionId: s.cliSessionId, continuesSessionId: s.id,
     });
     await repo.addSessionEvent(continued.id, "started", `Continues session ${s.id} in the same ${s.surface === "desktop" ? "app session" : "terminal"}`);
+    if (MODE === "desktop") await noteContinued(s.id, continued.id);
     await repo.updateTask(continueWith.id, { status: "progress" });
   } else if (continueWith) {
     const r = await startFromFlow(continueWith, s?.agent);

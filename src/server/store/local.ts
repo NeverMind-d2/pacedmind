@@ -1,6 +1,8 @@
 import "server-only";
+import { checkedModelSelection, modelSelectionOf } from "@/lib/agent-models";
 import crypto from "node:crypto";
 import { removeImageFiles, type StoredImage } from "../attachments";
+import { removeDiffFiles } from "../diff";
 import {
   areaFolder, flowArmed, forgetArea, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
@@ -9,7 +11,7 @@ import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
   linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
-  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf,
+  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
@@ -252,6 +254,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
   doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
+  modelSettings: modelSelectionOf(json(r.model_settings, null)),
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
 });
@@ -308,11 +311,11 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
     JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
-    input.agent === "human" ? null : input.runIn ?? null, sort, stamp, stamp,
+    input.agent === "human" ? null : input.runIn ?? null, sort, stamp, stamp, JSON.stringify(checkedModelSelection(input.modelSettings)),
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }
@@ -336,6 +339,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
     if ((patch.folder || null) !== before && projectId && flowArmed(projectId)) setFlowArmed(projectId, false);
   }
   const values = columns(patch, TASK_COLS);
+  if (patch.modelSettings !== undefined) values.model_settings = JSON.stringify(checkedModelSelection(patch.modelSettings));
   if (patch.labels) values.labels = JSON.stringify(patch.labels);
   if (patch.doneWhen) values.done_when = JSON.stringify(cleanDoneWhen(patch.doneWhen));
   if (patch.needs) values.needs = JSON.stringify(cleanNeeds(patch.needs));
@@ -345,11 +349,14 @@ export async function updateTask(id: number, patch: TaskPatch) {
   update("tasks", id, values);
 }
 
-/** Deletes a task with its sub-tasks, sessions, reports and images. */
+/** Deletes a task with its sub-tasks, sessions, reports, images and diffs. */
 export async function deleteTask(id: number) {
   const files = all("SELECT file FROM attachments WHERE task_id = ?", id).map((r) => String(r.file));
+  const sessions = all("SELECT id FROM sessions WHERE task_id = ?", id).map((r) => String(r.id));
+  const patches = all("SELECT diff FROM reports WHERE task_id = ? AND diff IS NOT NULL", id).map((r) => diffOf(r.diff)?.patchId);
   run("DELETE FROM tasks WHERE id = ?", id);
   removeImageFiles(files);
+  removeDiffFiles(sessions, patches);
   forgetTask("local", id);
 }
 
@@ -546,11 +553,11 @@ export async function pendingImages(sessionIds: string[]): Promise<Map<string, A
 export async function createReport(input: ReportInput): Promise<number> {
   return tx(() => {
     const r = run(
-      `INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links, follow_ups, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO reports (session_id, task_id, outcome, summary, details, criteria, verify, questions, links, follow_ups, created_at, diff)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       input.sessionId, input.taskId, input.outcome, input.summary.trim(), (input.details ?? "").trim(), JSON.stringify(input.criteria ?? []),
       JSON.stringify(input.verify ?? []), JSON.stringify(input.questions ?? []), JSON.stringify(input.links ?? []),
-      JSON.stringify(input.followUps ?? []), input.createdAt ?? nowStamp(),
+      JSON.stringify(input.followUps ?? []), input.createdAt ?? nowStamp(), input.diff ? JSON.stringify(input.diff) : null,
     );
     const id = Number(r.lastInsertRowid);
     run("UPDATE attachments SET report_id = ? WHERE session_id = ? AND report_id IS NULL", id, input.sessionId);
@@ -580,6 +587,7 @@ function toReports(rows: Row[]): Report[] {
     images: images.filter((a) => a.reportId === Number(r.id)),
     changes: s(r.changes),
     changesAt: s(r.changes_at),
+    diff: diffOf(r.diff),
   }));
 }
 

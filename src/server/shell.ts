@@ -49,7 +49,7 @@ export function shQuote(text: string): string {
  * The shell that runs a command line: cmd.exe, which gets the line exactly as written (quotes included), or the
  * user's login shell on macOS and Linux, so tools installed with npm or Homebrew are on the PATH.
  */
-function shellFor(line: string): { file: string; args: string[]; verbatim: boolean } {
+export function shellFor(line: string): { file: string; args: string[]; verbatim: boolean } {
   if (process.platform === "win32") return { file: "cmd.exe", args: ["/d", "/s", "/c", `"${line}"`], verbatim: true };
   return { file: process.env.SHELL || (process.platform === "darwin" ? "/bin/zsh" : "/bin/sh"), args: ["-lc", line], verbatim: false };
 }

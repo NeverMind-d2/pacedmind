@@ -45,9 +45,11 @@ A time typed without a date goes on the planned day, when there is one: *15:00* 
 
 ## The chips
 
+**General** groups the task's status, dates, project, labels and **Done by**. When **Done by** selects an agent, including an inherited default, a separate **Agent** section holds **Run in**, **Computer**, **Needs**, the workspace summary and **Model settings**. Choosing **You** hides that section.
+
 | Chip | Offers |
 | --- | --- |
-| Area (top left) | **Inbox, no area**, or one of the areas. Choosing an area removes a project from another area. **Inbox, no area** keeps a chosen project, and the task then goes to that project. |
+| Area (top left) | **Inbox, no area**, or one of the areas. Choosing an area removes a project from another area. **Inbox, no area** removes the chosen project. |
 | **Task** / **Activity** (top right) | Switches between a new task and a new activity. |
 | Status | **Backlog**, **Todo** or **In progress**. New tasks are **Todo**. |
 | Priority | **Urgent**, **High**, **Medium**, **Low** or **No priority**. |
@@ -68,6 +70,18 @@ Chips filled from the title are highlighted. Changing a chip overrides what was 
 **Done by**, **Run in**, **Computer** and **Needs** are saved with the new task. Creating the task does not start an agent session. Selecting **You** clears the environment choice. **Create more** resets these choices for the next task too.
 
 Once the task has a due date, a priority, a label, a project or an estimate, a line above the buttons summarizes them, for example *due Fri 2 Oct at 10:00, high priority, label finance, in Q4 planning, about 30 min*.
+
+## Model, thinking and speed
+
+In the **Agent** section, select **Model settings** to expand the optional controls. The collapsed row shows *Agent defaults* or a summary of the chosen model, thinking and speed. Collapsing it keeps your choices. PacedMind checks the model list when you expand the controls.
+
+**Model** lists the models reported by the agent account on the selected computer. Select a model to see its available **Thinking** levels and **Speed** modes. These choices come from that account, so another computer or account can offer different options. **Default** keeps the agent's own configuration. A faster mode can use more of the account's allowance.
+
+**Refresh models** checks the local account again. For another computer it reads that computer's latest report and shows when it was checked; desktop apps refresh their reports every five minutes. Offline computers show their last report. If a list cannot be checked, leave **Default** or sign in to the agent on that computer and refresh.
+
+Choosing a model also selects **Terminal** and saves the computer with the task. Switching agents, models or computers clears dependent choices. PacedMind checks the selected settings again on the destination computer before starting, resuming or sending changes to a terminal session. If a choice is no longer available, the session waits for a new choice. The agent's desktop app and cloud keep their own model controls.
+
+In a flow, a **same session** connection starts a new terminal session when the next task has explicit model settings, so those settings can be checked and applied. Leave **Default** to continue in the existing conversation.
 
 ## Done when
 

@@ -1,8 +1,10 @@
 import "server-only";
+import { checkedModelSelection, modelSelectionOf, modelCatalogOf } from "@/lib/agent-models";
 import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { MODE, NotSignedIn, authState, supabase } from "../supabase";
 import { removeImageFiles, type StoredImage } from "../attachments";
+import { removeDiffFiles } from "../diff";
 import { repoIdentity } from "../git-remote";
 import {
   areaFolder, deviceConfig, flowArmed, forgetArea, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
@@ -11,7 +13,7 @@ import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
   deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
-  type TaskFilter, type TaskInput, type TaskPatch, usageOf,
+  type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
@@ -299,6 +301,7 @@ const toTask = (r: Row): Task => ({
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
   doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
+  modelSettings: modelSelectionOf(r.model_settings),
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
   subtasks: ((r.subtasks as Row[] | undefined) ?? []).map(toSubtask).sort((a, b) => a.sort - b.sort || a.id - b.id),
@@ -353,6 +356,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
     estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
     run_in: input.agent === "human" ? null : input.runIn ?? null,
+    model_settings: checkedModelSelection(input.modelSettings),
     device_id: input.agent === "human" ? null : input.deviceId ?? null,
   }).select(TASK_SELECT).single());
   return toTask(r!);
@@ -381,6 +385,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   }
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, TASK_COLS);
+  if (patch.modelSettings !== undefined) values.model_settings = checkedModelSelection(patch.modelSettings);
   if (patch.doneWhen) values.done_when = cleanDoneWhen(patch.doneWhen);
   if (patch.needs) values.needs = cleanNeeds(patch.needs);
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
@@ -394,9 +399,13 @@ export async function updateTask(id: number, patch: TaskPatch) {
 export async function deleteTask(id: number) {
   const db = await accountDb();
   const files = await localImageFiles(id);
+  // Its sessions' starting points and its reports' diffs on this computer go too (diff.ts).
+  const sessions = many(await db.from("sessions").select("id").eq("task_id", id)).map((r) => String(r.id));
+  const patches = many(await db.from("reports").select("diff").eq("task_id", id).not("diff", "is", null)).map((r) => diffOf(r.diff)?.patchId);
   check(await db.from("tasks").delete().eq("id", id));
   if (MODE === "desktop") {
     removeImageFiles(files);
+    removeDiffFiles(sessions, patches);
     forgetTask("cloud", id);
   }
 }
@@ -646,7 +655,7 @@ export async function createReport(input: ReportInput): Promise<number> {
   const r = one(await db.from("reports").insert({
     session_id: input.sessionId, task_id: input.taskId, outcome: input.outcome, summary: input.summary.trim(),
     details: (input.details ?? "").trim(), criteria: input.criteria ?? [], verify: input.verify ?? [], questions: input.questions ?? [],
-    links: input.links ?? [], follow_ups: input.followUps ?? [], created_at: input.createdAt ?? nowStamp(),
+    links: input.links ?? [], follow_ups: input.followUps ?? [], created_at: input.createdAt ?? nowStamp(), diff: input.diff ?? null,
   }).select("id").single());
   const id = Number(r!.id);
   check(await db.from("attachments").update({ report_id: id }).eq("session_id", input.sessionId).is("report_id", null));
@@ -681,6 +690,7 @@ async function toReports(rows: Row[]): Promise<Report[]> {
     images: images.filter((a) => a.reportId === Number(r.id)),
     changes: s(r.changes),
     changesAt: s(r.changes_at),
+    diff: diffOf(r.diff),
   }));
 }
 
@@ -864,7 +874,7 @@ function toolsOf(v: unknown): AgentTools {
   const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
   const mcp = t.mcp === "connected" || t.mcp === "old" || t.mcp === "cloud" || t.mcp === "elsewhere" ? t.mcp : "missing";
   const extras = extrasOf(t.extras);
-  return { cli, app, mcp, login: loginOf(t.login), ...(extras ? { extras } : {}) };
+  return { cli, app, mcp, login: loginOf(t.login), models: modelCatalogOf(t.models), ...(extras ? { extras } : {}) };
 }
 
 const isUuidValue = (v: unknown): v is string => typeof v === "string" && isUuid(v);
@@ -884,17 +894,19 @@ const toDevice = (r: Row): Device => {
 /**
  * Records what this computer found of the agents, for Settings on every computer: versions, whether the apps reach
  * PacedMind, whether each CLI is signed in (the state, and the method and plan as single words), and the names of
- * what else its sessions get (MCP servers, plugins, hooks, how many skills). Never where the tools are, what a server
- * runs or where it points, and never an email, an organization or a key. The database keeps it under 4000 bytes, so
+ * what else its sessions get (MCP servers, plugins, hooks, how many skills), and their account's model capabilities.
+ * Never where the tools are, what a server runs or where it points, and never an email, an organization or a key. The database keeps it under 64 KiB, so
  * long lists get shorter.
  */
 export async function saveDeviceTools(id: string, agents: Device["agents"]) {
   if (!isUuid(id)) return;
-  const shape = (max: number) => Object.fromEntries(Object.entries(agents).map(([agent, t]) => {
+  const shape = (max: number, includeModels = true) => Object.fromEntries(Object.entries(agents).map(([agent, t]) => {
     const extras = max > 0 ? extrasOf(t.extras, max) : undefined;
-    return [agent, { cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login), ...(extras ? { extras } : {}) }];
+    const models = modelCatalogOf(t.models);
+    return [agent, { cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login),
+      models: includeModels ? models : models ? { ...models, available: false, models: [] } : undefined, ...(extras ? { extras } : {}) }];
   }));
-  const plain = [12, 6, 3, 0].map(shape).find((p) => JSON.stringify(p).length <= 3800) ?? shape(0);
+  const plain = [12, 6, 3, 0].map((max) => shape(max)).find((p) => Buffer.byteLength(JSON.stringify(p)) <= 60_000) ?? shape(0, false);
   const db = await accountDb();
   check(await db.from("devices").update({ agents: plain, checked_at: new Date().toISOString() }).eq("id", id));
 }

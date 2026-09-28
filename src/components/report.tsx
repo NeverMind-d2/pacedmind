@@ -5,7 +5,10 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { parseLocal, type PlanStep } from "@/lib/dates";
-import { AGENT_LABEL, ANSWERS_HEADING, OUTCOME_LABEL, isAnswers, VERDICT_LABEL, type AgentId, type Attachment, type Report, type ReportCriterion } from "@/lib/types";
+import {
+  AGENT_LABEL, ANSWERS_HEADING, OUTCOME_LABEL, isAnswers, VERDICT_LABEL, type AgentId, type Attachment, type DiffFileStatus, type Report,
+  type ReportCriterion, type ReportDiff,
+} from "@/lib/types";
 import { Icon, StatusIcon, VerdictIcon } from "./icons";
 import { InlineMarkdown, Markdown } from "./markdown";
 import { Button, cx } from "./ui";
@@ -245,6 +248,8 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
         </Section>
       )}
 
+      {report.diff && <DiffSection diff={report.diff} />}
+
       {report.details && (
         <Section title="Details">
           <div className={cx("relative", clipped && "max-h-[150px] overflow-hidden")}>
@@ -285,6 +290,129 @@ export function ReportBody({ report, criteria, hideChanges }: { report: Report; 
 
       {!hideChanges && <ChangesNote report={report} />}
     </div>
+  );
+}
+
+const FILE_MARK: Record<DiffFileStatus, string> = { added: "A", modified: "M", deleted: "D", renamed: "R", untracked: "N" };
+const FILE_STATUS: Record<DiffFileStatus, string> = {
+  added: "Added", modified: "Changed", deleted: "Deleted", renamed: "Renamed", untracked: "New, not tracked by git",
+};
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en")} ${n === 1 ? one : many}`;
+
+/** "3 files · +120 −14 · 2 commits". */
+export function diffCount(d: ReportDiff): string {
+  const files = d.files.length + d.moreFiles;
+  const commits = d.commits.length + d.moreCommits;
+  return [
+    plural(files, "file"), files ? `+${d.added.toLocaleString("en")} −${d.removed.toLocaleString("en")}` : null, commits ? plural(commits, "commit") : null,
+  ].filter(Boolean).join(" · ");
+}
+
+/** The lines of a diff: file headers stand out, added lines are raised, removed ones dimmed. Grayscale, like all state. */
+function DiffView({ text }: { text: string }) {
+  const MAX = 5000;
+  const lines = text.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  const kind = (l: string) =>
+    l.startsWith("diff --git ") ? "mt-2 first:mt-0 font-medium text-fg2"
+      : /^(\+\+\+|---|index |new file|deleted file|similarity |rename |old mode|new mode|Binary)/.test(l) ? "text-dim"
+        : l.startsWith("@@") ? "text-mut2"
+          : l.startsWith("+") ? "bg-sel text-fg"
+            : l.startsWith("-") ? "bg-hover text-dim"
+              : "text-mut";
+  return (
+    <div className="flex flex-col gap-1">
+      <pre className="max-h-[420px] overflow-auto rounded-md border border-line bg-raised px-2.5 py-2 font-mono text-[11px] leading-[17px]">
+        {lines.slice(0, MAX).map((l, i) => <div key={i} className={cx("whitespace-pre px-1", kind(l))}>{l || " "}</div>)}
+      </pre>
+      {lines.length > MAX && <p className="text-[11.5px] text-mut2">Showing the first {MAX.toLocaleString("en")} of {lines.length.toLocaleString("en")} lines.</p>}
+    </div>
+  );
+}
+
+/**
+ * What changed in git in the session's folder since it started, as PacedMind saw it when the agent handed the task
+ * back: the commits, the files with their lines added and removed, and the full diff, which stays on the computer
+ * the session ran on.
+ */
+export function DiffSection({ diff }: { diff: ReportDiff }) {
+  const [all, setAll] = useState(false);
+  const [patch, setPatch] = useState<{ state: "closed" | "loading" | "elsewhere" } | { state: "open"; text: string }>({ state: "closed" });
+  if (diff.skipped) {
+    return (
+      <Section title="Files changed">
+        <p className="text-[12.5px] leading-[1.5] text-mut2">
+          {diff.skipped === "asks"
+            ? "No diff: PacedMind doesn't read folders in Desktop, Documents, Downloads or a cloud drive, where macOS asks first."
+            : "No diff: git wasn't there to compare the folder with."}
+        </p>
+      </Section>
+    );
+  }
+  const nothing = !diff.files.length && !diff.commits.length;
+  const shown = all ? diff.files : diff.files.slice(0, 8);
+  const open = async () => {
+    if (!diff.patchId) return;
+    setPatch({ state: "loading" });
+    const res = await fetch(`/api/diffs/${diff.patchId}`).catch(() => null);
+    setPatch(res?.ok ? { state: "open", text: await res.text() } : { state: "elsewhere" });
+  };
+  return (
+    <Section title="Files changed" aside={nothing ? undefined : `since the session started · ${diffCount(diff)}`}>
+      {nothing && <p className="text-[12.5px] leading-[1.5] text-mut2">Nothing changed in git since the session started.</p>}
+      {diff.dirtyAtStart && (
+        <p className="text-[12px] leading-[1.5] text-mut2">The folder already had changes that weren&apos;t committed when the session started: they count here too.</p>
+      )}
+      {diff.commits.length > 0 && (
+        <ul className="flex flex-col gap-0.5">
+          {diff.commits.map((c) => (
+            <li key={c.sha} className="flex items-baseline gap-2.5 text-[12.5px] leading-[1.5]">
+              <span className="shrink-0 font-mono text-[11px] text-dim">{c.sha}</span>
+              <span className="min-w-0 truncate text-fg2" title={c.subject}>{c.subject}</span>
+            </li>
+          ))}
+          {diff.moreCommits > 0 && <li className="text-[12px] text-mut2">and {plural(diff.moreCommits, "older commit")}</li>}
+        </ul>
+      )}
+      {diff.files.length > 0 && (
+        <ul className="flex flex-col">
+          {shown.map((f) => (
+            <li key={f.path} className="flex h-6 items-center gap-2.5 text-[12px]">
+              <span title={FILE_STATUS[f.status]} className="w-3 shrink-0 text-center font-mono text-[11px] text-dim">{FILE_MARK[f.status]}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-fg2" title={f.from ? `${f.from} → ${f.path}` : f.path}>
+                {f.from ? `${f.from} → ${f.path}` : f.path}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] text-mut2">
+                {f.added === null ? "binary" : `+${f.added} −${f.removed ?? 0}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {diff.files.length > 8 && (
+          <button type="button" onClick={() => setAll((a) => !a)} className="text-[12px] text-mut2 hover:text-fg2">
+            {all ? "Show fewer" : `Show all ${diff.files.length} files`}
+          </button>
+        )}
+        {diff.moreFiles > 0 && all && <span className="text-[12px] text-mut2">and {plural(diff.moreFiles, "more file")}</span>}
+        {diff.patchId && (patch.state === "open"
+          ? <button type="button" onClick={() => setPatch({ state: "closed" })} className="text-[12px] text-mut2 hover:text-fg2">Hide the diff</button>
+          : patch.state !== "elsewhere" && (
+            <button type="button" disabled={patch.state === "loading"} onClick={() => void open()} className="text-[12px] text-mut2 hover:text-fg2">
+              {patch.state === "loading" ? "Loading the diff…" : "Show the diff"}
+            </button>
+          ))}
+      </div>
+      {patch.state === "elsewhere" && <p className="text-[12px] leading-[1.5] text-mut2">The diff itself stays on the computer the session ran on. Open PacedMind there to see it.</p>}
+      {patch.state === "open" && (
+        <>
+          <DiffView text={patch.text} />
+          {diff.truncated && <p className="text-[11.5px] text-mut2">The diff was longer than PacedMind keeps (1 MB), so it&apos;s cut short.</p>}
+        </>
+      )}
+    </Section>
   );
 }
 

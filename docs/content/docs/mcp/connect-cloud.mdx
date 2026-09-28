@@ -72,8 +72,10 @@ The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn'
 
 The page asks *Allow Claude Code to use PacedMind?*, with the agent's name as the agent gives it. It shows the server the agent connects to, `app.pacedmind.com` (PacedMind Cloud), and where the sign-in is handed back to the agent: for Claude Code and Codex, an address such as `127.0.0.1:61154` or `localhost:53963` on this computer, where the agent waits only while it signs in. That address isn't the MCP server. An agent you allowed before asks *Allow this agent to use PacedMind again?*
 
-* **Allow** sends you back to the agent, which then has PacedMind's tools.
+* **Allow** finishes a local agent's sign-in in a temporary window. Once the connection is confirmed, that window closes and PacedMind shows *Connected to PacedMind*. Return to your agent to continue; you can close the PacedMind tab or select **Open PacedMind**. Hosted clients, and browsers that block the temporary window, return to the agent's own page instead.
 * **Deny** tells the agent no. For an agent you allowed before, the page says *Not connected. You can close this tab.*
+
+If PacedMind shows *Connection not confirmed*, check the agent's sign-in window and select **Check connection** once it finishes. If the sign-in has ended, start connecting the agent again.
 
 Only allow a request you started yourself, from an agent that returns somewhere you recognize. A request that waited too long says *This request has expired*: start connecting the agent again.
 
