@@ -22,13 +22,13 @@ Both are optional and independent. A task can have a deadline next Friday and be
 | Timeline | Drag a bar's start edge for the planned date, its end edge for the due date, or the whole bar to move both. A bar without a deadline also gets one, at its end, when its start edge is dragged. |
 | Agents | `due` and `planned` in `create_task` and `update_task`, or a whole day with `reschedule_day`. |
 
-The date picker has three ways to choose a day, and closes once one is chosen:
+The date picker has three ways to choose a day:
 
 - **Type a date**: phrases like *fri*, *tomorrow 15:00*, *in 2 weeks* or *oct 15*. The picker shows the date it read; **Enter** takes it. A time on its own (*2pm*) keeps the day already chosen.
 - Suggestions: **Today**, **Tomorrow**, **Weekend** (the coming Saturday) and **Next week** (next Monday), each with its day.
 - A calendar of one month, weeks from Monday, with today outlined and the chosen day filled. The arrows beside the month, or the arrow keys, move to other months.
 
-Due dates also have a time field at the bottom: type a time (*9*, *930*, *14:30*, *2pm*) or pick one from the half hours. Setting a time keeps the picker open, and the day chosen next keeps the time; a time set before any day is for today. The **×** beside it removes the time. **Clear** removes the date.
+A planned date has no time, so the picker closes once a day is chosen. A due date can have one: choosing a day leaves the picker open and moves to the time field at the bottom. Type a time (*9*, *1300*, *14:30*, *2pm*) and press <kbd>Enter</kbd>, or click the field and pick one from the half hours, and the picker closes. For no time, <kbd>Enter</kbd>, **Done**, <kbd>Esc</kbd> or a click outside closes it. A typed date and <kbd>Enter</kbd> close it at once, so *fri 10:00* sets both. Another day chosen keeps the time, and a time set before any day is for today. The **×** beside the time removes it. **Clear** removes the date.
 
 ## How the views use them
 

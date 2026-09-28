@@ -52,7 +52,7 @@ export function DateField({
           onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}
           className={cx("absolute z-50 w-[272px] max-w-[calc(100vw-16px)] rounded-lg border border-line2 bg-raised p-2 shadow-[var(--shadow-popover)]",
             fit?.up ? "bottom-full mb-1" : "top-full mt-1", align === "right" ? "right-0" : "left-0")}>
-          <DatePicker value={value} withTime={withTime} onChange={(v, done) => { onChange(v); if (done) close(); }}>
+          <DatePicker value={value} withTime={withTime} onChange={(v, done) => { onChange(v); if (done) close(); }} onDone={close}>
             {value && (
               <button type="button" onClick={() => { onChange(null); close(); }}
                 className="ml-auto h-7 rounded-md px-2 text-[12.5px] text-mut2 hover:bg-sel">Clear</button>

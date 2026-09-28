@@ -484,6 +484,8 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
   const value = kind === "due" ? t.dueDate : kind === "plan" ? t.plannedDate : null;
   const withTime = kind === "due";
   const [picking, setPicking] = useState(false);
+  // A deadline's new day and time, until Done moves the task.
+  const [draft, setDraft] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   return (
     <Popover anchor={anchor} onClose={onClose} width={288}>
@@ -499,8 +501,9 @@ function TaskMenu({ chip, anchor, onClose, onOpen, onDate, onClear, onDelete }: 
       )}
       {picking && (
         <div className="mx-1 mb-1 rounded-md border border-line2 bg-panel p-1.5">
-          {/* Every choice moves the task at once, a new time too. */}
-          <DatePicker value={value} withTime={withTime} onChange={(v) => onDate(v)} />
+          <DatePicker value={draft ?? value} withTime={withTime}
+            onChange={(v, done) => (!done ? setDraft(v) : v === value ? onClose() : onDate(v))}
+            onDone={() => (draft && draft !== value ? onDate(draft) : onClose())} />
         </div>
       )}
       {(kind === "due" || kind === "plan") && (
