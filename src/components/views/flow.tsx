@@ -25,7 +25,8 @@ import { folderDialog } from "@/components/folder-field";
 import { addToFlowAction, setAgentsAction, setRunAction, setStartAction, tidyFlowAction } from "@/app/(app)/flows/actions";
 import { AgentIcon, Icon, StatusIcon, SurfaceIcon } from "@/components/icons";
 import { Button, Dot, Kbd, Menu, Segmented, Switch, cx, toast, type MenuItem } from "@/components/ui";
-import { parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
+import { attentionWords, parseLocal, toDateStr, toDateTimeStr, type AttentionKind } from "@/lib/dates";
+import { desktopStartText } from "@/lib/session-health";
 import { GRID, NODE_H, NODE_W, freeSpot, layoutFlow, snap, type Point } from "@/lib/flow-layout";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, EDGE_LABEL, canRun, mcpReaches, surfaceOf,
@@ -35,7 +36,7 @@ import {
 /* ---------- data from the server ---------- */
 
 /** A task's latest session. `changesSince`: when you asked for changes, while its agent works on them. */
-export type FlowSession = Session & { changesSince: string | null };
+export type FlowSession = Session & { changesSince: string | null; attention: { kind: AttentionKind; text: string } | null };
 
 export interface FlowTask {
   id: number;
@@ -345,10 +346,15 @@ function nodeInfo(
     return { tone: "done", state: "Done", note };
   }
   if (t.status === "canceled") return { tone: "canceled", state: "Canceled", note: "Won't run" };
-  if (s?.status === "starting" && s.surface === "desktop") {
-    return { tone: "running", state: "Opened", note: `In the ${APP_LABEL[s.agent]} ${since(s.startedAt, now)}. Send the first message there to start` };
+  if (s && (s.status === "starting" || s.status === "running") && s.attention) {
+    return { tone: "waiting", state: attentionWords(s.attention.kind), note: s.attention.text };
   }
-  if (s && (s.status === "running" || s.status === "starting")) {
+  if (s?.status === "starting") {
+    return s.surface === "desktop"
+      ? { tone: "waiting", state: "Send the first message", note: desktopStartText(s.agent) }
+      : { tone: "running", state: "Starting", note: `Waiting for ${AGENT_LABEL[s.agent]} to check in` };
+  }
+  if (s?.status === "running") {
     const where = s.surface === "cloud" ? ` in ${CLOUD_LABEL[s.agent]}` : s.surface === "desktop" ? ` in the ${APP_LABEL[s.agent]}` : "";
     // Sent back with Request changes: the agent has been at it since then, not since the session first started.
     const note = continuedFrom[t.id]
@@ -490,8 +496,10 @@ function shortPath(p: string): string {
 }
 
 function lastRun(s: FlowSession, held: FlowTask["held"], now: number): string {
+  if ((s.status === "starting" || s.status === "running") && s.attention) return s.attention.text;
   switch (s.status) {
     case "starting":
+      return s.surface === "desktop" ? desktopStartText(s.agent) : `Starting ${AGENT_LABEL[s.agent]} · waiting for check-in`;
     case "running":
       return s.changesSince ? `Working on your changes since ${clock(s.changesSince, now)}` : `Running since ${clock(s.startedAt, now)}`;
     case "finished": {
@@ -1284,9 +1292,9 @@ function TaskNodeView({ id, data, selected, isConnectable }: NodeProps<TaskNode>
       <Handle type="target" position={Position.Top} isConnectableStart={false} style={handleStyle}><HandleDot /></Handle>
       <div className="flex h-[14px] items-center gap-[7px] leading-[14px]">
         <ToneIcon tone={data.tone} />
-        <span className="font-mono text-[11px] text-mut2">{data.key}</span>
+        <span className="shrink-0 font-mono text-[11px] text-mut2">{data.key}</span>
         <span className="flex-1" />
-        <span className={cx("whitespace-nowrap text-[11px]", data.tone === "waiting" ? "text-fg2" : "text-mut2")}>{data.state}</span>
+        <span title={data.state} className={cx("truncate text-[11px]", data.tone === "waiting" ? "text-fg2" : "text-mut2")}>{data.state}</span>
       </div>
       <div className={cx("h-[18px] truncate text-[13px] leading-[18px]", done ? "text-mut2" : "text-strong")}>{data.title}</div>
       <div className="flex h-4 min-w-0 items-center gap-2 text-[11px] leading-4">

@@ -95,8 +95,10 @@ export function dueInfo(due: string | null, now = new Date()): { text: string; t
  * Whether a session's agent checked in over MCP since the session started, or since it went back to work on changes.
  * A session attached from outside PacedMind was at work already: it counts as checked in.
  */
-export function checkedIn(events: { kind: string }[]): boolean {
-  const back = events.findLastIndex((e) => e.kind === "changes_requested");
+const restartsTerminal = (e: { kind: string; text?: string }) => e.kind === "resumed" && /^Reopened in (a new |a )terminal/.test(e.text ?? "");
+
+export function checkedIn(events: { kind: string; text?: string }[]): boolean {
+  const back = events.findLastIndex((e) => e.kind === "changes_requested" || restartsTerminal(e));
   return events.slice(back + 1).some((e) => e.kind === "picked_up" || e.kind === "attached");
 }
 
@@ -106,12 +108,12 @@ export function checkedIn(events: { kind: string }[]): boolean {
  */
 export function waitingInTerminal(
   s: { status: string; startedAt: string },
-  events: { kind: string; at: string }[],
+  events: { kind: string; at: string; text?: string }[],
   now = new Date(),
 ): boolean {
   if (s.status !== "starting" && s.status !== "running") return false;
   if (checkedIn(events)) return false;
-  const back = events.findLastIndex((e) => e.kind === "changes_requested");
+  const back = events.findLastIndex((e) => e.kind === "changes_requested" || restartsTerminal(e));
   return now.getTime() - parseLocal(back >= 0 ? events[back].at : s.startedAt).getTime() > 90_000;
 }
 
@@ -120,7 +122,7 @@ export function waitingInTerminal(
  * permission there (`permission`) or asks you something there (`input`), it stopped at a usage limit (`limit`), all
  * from the hooks in its terminal (signals.ts); or it asked you a question over MCP (`question`, report_progress).
  */
-export const ATTENTION_KINDS = ["waiting", "permission", "input", "question", "limit"] as const;
+export const ATTENTION_KINDS = ["waiting", "permission", "input", "question", "limit", "capacity", "locked", "error", "setup", "send_prompt"] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
 export const isAttention = (kind: string): kind is AttentionKind => (ATTENTION_KINDS as readonly string[]).includes(kind);
@@ -130,6 +132,11 @@ export function attentionWords(kind: AttentionKind): string {
   if (kind === "permission") return "Asks your permission";
   if (kind === "waiting") return "Waiting for you";
   if (kind === "limit") return "Paused: usage limit";
+  if (kind === "capacity") return "Paused: model at capacity";
+  if (kind === "locked") return "Conversation open elsewhere";
+  if (kind === "error") return "Paused: agent error";
+  if (kind === "setup") return "Check agent startup";
+  if (kind === "send_prompt") return "Send the first message";
   return "Has a question";
 }
 

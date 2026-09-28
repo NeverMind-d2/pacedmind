@@ -521,7 +521,12 @@ function notifyAttention(s) {
   const who = s.key ?? "A session";
   const title = s.kind === "permission" ? `${who} asks for your permission`
     : s.kind === "question" || s.kind === "input" ? `${who} has a question for you`
-    : s.kind === "limit" ? `${who} stopped at a usage limit` : `${who} is waiting for you`;
+    : s.kind === "limit" ? `${who} stopped at a usage limit`
+    : s.kind === "capacity" ? `${who}: model at capacity`
+    : s.kind === "locked" ? `${who}: conversation open elsewhere`
+    : s.kind === "error" ? `${who}: agent stopped on an error`
+    : s.kind === "setup" ? `${who}: check agent startup`
+    : s.kind === "send_prompt" ? `${who}: send the first message` : `${who} is waiting for you`;
   const n = new Notification({ title, body: [s.title, s.text].filter(Boolean).join("\n"), icon: ICON_PNG });
   notifications.add(n);
   n.on("click", () => showWindow(`${ORIGIN}/sessions?s=${encodeURIComponent(s.id)}`));

@@ -17,6 +17,7 @@ import { MODE } from "./supabase";
 import { activeDevice } from "./scope";
 import { dataDir, deviceConfig, issueSessionToken, projectServers } from "./device";
 import { noteStart } from "./diff";
+import { desktopStartText } from "@/lib/session-health";
 import { resolveFolder } from "./task-folder";
 export { plannedFolder } from "./task-folder";
 import { TELEMETRY_VAR, claudeServers, claudeTelemetrySet, codexServersOff, codexTelemetrySet } from "./extras";
@@ -387,10 +388,10 @@ function agentCommand(dir: string, session: Session, task: Task, kind: "start" |
     const auth = writeHookAuth(dir, token);
     const usage = codexUsage(session.id, token);
     const flags = `${mcp}${codexNotify(auth, session.id)}${codexHooks()}${usage?.flag ?? ""}`;
-    // A resume goes back into the conversation the session ran, once its SessionStart hook said which; else the last.
-    const back = session.cliSessionId && UUID.test(session.cliSessionId) ? `resume ${session.cliSessionId}` : "resume --last";
+    // Never resume an unrelated "last" conversation when startup stopped before this session got a conversation.
+    const back = session.cliSessionId && UUID.test(session.cliSessionId) ? `resume ${session.cliSessionId}` : null;
     return {
-      command: kind === "resume" ? `${exe} ${flags} ${back}` : `${exe} ${flags} "${prompt}"`, conversation: null,
+      command: kind === "resume" && back ? `${exe} ${flags} ${back}` : `${exe} ${flags} "${prompt}"`, conversation: null,
       env: { PACEDMIND_HOOK_URL: `${baseUrl()}/api/sessions/${session.id}`, PACEDMIND_HOOK_AUTH: auth, ...usage?.env }, after: codexAfter(),
     };
   }
@@ -686,6 +687,8 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   if (session.surface !== "cloud") await noteStart(session.id, folder);
   let failed: string | null = null;
   if (session.surface === "desktop") {
+    await repo.addSessionEvent(session.id, "opened", `Opened in ${where} (${REASON_TEXT[reason]}). Send the first message there to start.`);
+    await repo.addSessionEvent(session.id, "send_prompt", desktopStartText(agent));
     failed = openUrl(desktopLink(agent, folder, kickoffPrompt(task, session.id)));
   } else if (session.surface === "cloud" && agent === "codex") {
     sendToCodexCloud(session, task, folder, env);
@@ -695,6 +698,8 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   } else {
     const token = issueSessionToken(session.id, task.id);
     const a = agentCommand(dir, session, task, "start", token, folder);
+    // Record startup before opening: a fast check-in or error must be the latest event, not this notice.
+    await repo.addSessionEvent(session.id, "started", `Opened ${AGENT_LABEL[agent]} in ${where}: ${REASON_TEXT[reason]}. Waiting for the agent to check in.`);
     failed = openTerminal(dir, folder, title, a.command, token, terminal, a);
   }
   if (failed) {
@@ -705,8 +710,7 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   let message: string;
   if (session.surface === "desktop") {
     // The app writes the first message; the session starts when you send it and the agent checks in.
-    await repo.addSessionEvent(session.id, "opened", `Opened in ${where} (${REASON_TEXT[reason]}). Send the first message there to start.`);
-    message = `Opened ${task.key} in the ${APP_LABEL[agent]}. Send the first message there to start.`;
+    message = `Opened ${task.key} in the ${APP_LABEL[agent]}. Press Enter or select Send there to start.`;
   } else if (session.surface === "cloud" && agent === "codex") {
     await repo.addSessionEvent(session.id, "sending", `Sending it to ${where}: ${REASON_TEXT[reason]}`);
     message = `Sending ${task.key} to ${where}`;
@@ -715,8 +719,6 @@ async function launch(session: Session, task: Task, folder: string, env: string,
     await repo.addSessionEvent(session.id, "started", `Sent to ${where} from a terminal in ${path.basename(folder)}: ${REASON_TEXT[reason]}`);
     message = `Sending ${task.key} to ${where}. The terminal shows its link.`;
   } else {
-    await repo.updateSession(session.id, { status: "running" });
-    await repo.addSessionEvent(session.id, "started", `Started ${AGENT_LABEL[agent]} in ${where}: ${REASON_TEXT[reason]}`);
     message = `Started ${task.key} in a new terminal`;
     if (agent === "codex" && codexHooks() && !deviceConfig().codexHooksSeen) message += `. ${CODEX_HOOKS_FIRST}`;
   }

@@ -14,6 +14,7 @@ import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
 import { attentionOf, attentionWords, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, mcpProblemsOf, waitingInTerminal } from "@/lib/dates";
+import { desktopStartText } from "@/lib/session-health";
 import { fmtSpan, sessionTokens, tokenTotal, tokensLine } from "@/lib/usage";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, REOPEN_CONFIRM, TRUST_WAITING, harnessAgent,
@@ -70,7 +71,7 @@ export interface SessionItem {
 }
 
 export interface SessionGroup {
-  id: "finished" | "running" | "today" | "earlier";
+  id: "finished" | "attention" | "starting" | "running" | "today" | "earlier";
   name: string;
   items: SessionItem[];
 }
@@ -175,6 +176,7 @@ function meta(s: SessionItem, now: number): string {
     case "running": {
       const waits = waitsFor(s);
       if (waits) return attentionWords(waits.kind).toLowerCase();
+      if (s.status === "starting") return s.surface === "desktop" ? "send the first message" : "starting · waiting for check-in";
       if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
       if (asked) return `${isAnswers(s.reports[0].changes ?? "") ? "answers" : "changes"} since ${clock(asked, now)}`;
@@ -193,6 +195,7 @@ function headline(s: SessionItem, now: number): string {
   const who = AGENT_LABEL[s.agent];
   const waits = waitsFor(s);
   if (waits) return waits.text;
+  if (s.status === "starting" && s.surface === "desktop") return desktopStartText(s.agent);
   if (askingTrust(s)) return TRUST_WAITING;
   if (unheard(s, now)) {
     return s.surface === "desktop"
