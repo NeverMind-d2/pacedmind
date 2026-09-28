@@ -84,7 +84,7 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
     case "done":
       return { dot: "var(--color-faint)", text: `${who} finished, marked done` };
     case "closed":
-      return { dot: "var(--color-dim)", text: "Closed before the agent finished" };
+      return { dot: "var(--color-dim)", text: `${who} session closed before it finished` };
     default:
       return { dot: "var(--color-danger)", text: `Couldn't start: ${s.note ?? "unknown error"}` };
   }
@@ -120,6 +120,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
     { value: null, label: project?.agent ? `Project default, ${AGENT_LABEL[project.agent]}` : "Not decided" },
   ];
   const save = (patch: Parameters<typeof updateTaskAction>[1]) => run(() => updateTaskAction(task.id, patch));
+  const chooseDoer = (doer: Doer | null) => save({ agent: doer, ...(agentOf({ agent: doer }, project?.agent) !== agent ? { modelSettings: null } : {}) });
+  const doerItems = doers.map((d) => ({ ...d, disabled: pending, icon: <DoerIcon doer={d.value ?? project?.agent ?? null} size={13} /> }));
   const due = dueInfo(task.dueDate);
   const subsDone = task.subtasks.filter((s) => s.done).length;
   const active = session && (session.status === "running" || session.status === "starting");
@@ -151,6 +153,31 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const [answering, setAnswering] = useState(false);
   const questions = session && (session.status === "finished" || session.status === "done") ? latestOfSession?.questions ?? [] : [];
   const forThisTask = (r: { taskId: number }) => r.taskId === task.id;
+  // Every new-session entry point uses the task's choice. Resuming always belongs to the existing session.
+  const startButton = agent && (
+    <div className="flex h-7 max-w-full rounded-md border border-ctl">
+      <button type="button" disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent, task.runIn))}
+        title={task.runIn ? `Runs ${placeOf(agent, task.runIn)}` : "Runs in a terminal when the CLI is installed, else in the desktop app"}
+        className="flex min-w-0 items-center gap-1.5 rounded-l-[5px] px-2.5 text-left text-[12px] text-fg hover:bg-hover disabled:opacity-50">
+        <AgentIcon agent={agent} size={12} /><span className="truncate">{session ? "New session with" : "Start with"} {AGENT_LABEL[agent]}</span>
+      </button>
+      <Menu align="right" width={250} className="flex shrink-0"
+        trigger={<button type="button" disabled={pending} aria-label="Choose agent and where it runs" className="flex h-full w-6 items-center justify-center rounded-r-[5px] border-l border-ctl text-mut hover:bg-hover"><Icon name="chevronDown" size={12} /></button>}
+        items={(["claude", "codex"] as AgentId[]).flatMap((a) => (["terminal", "desktop", "cloud"] as Surface[]).map((s) => ({
+          value: `${a}:${s}`, label: s === "cloud" ? CLOUD_LABEL[a] : `${AGENT_LABEL[a]} ${placeOf(a, s)}`, icon: <SurfaceIcon surface={s} size={13} />, disabled: pending,
+        })))}
+        onSelect={(v) => {
+          const [a, s] = v.split(":") as [AgentId, Surface];
+          run(async () => {
+            const saved = await updateTaskAction(task.id, {
+              agent: a, runIn: s, ...(a !== agent || s !== "terminal" ? { modelSettings: null } : {}),
+            });
+            if (!saved.ok) return saved;
+            return startSessionOrAsk(task.id, a, s);
+          });
+        }} />
+    </div>
+  );
   const pager = reports.length > 1 && (
     <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
       <button type="button" aria-label="Older report" disabled={viewing >= reports.length - 1} onClick={() => setViewing((v) => v + 1)}
@@ -234,8 +261,9 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               <div className="flex flex-wrap gap-2">
                 {/* Elsewhere it resumes where it ran; a session that ran on no computer of the account can't. */}
                 {!active && session.status !== "failed" && session.surface === "terminal" && (!elsewhere || !!session.deviceId) && (
-                  <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(session))}>
-                    <Icon name="terminal" size={13} />{elsewhere ? `Resume on ${ranOn}` : "Resume in terminal"}
+                  <Button disabled={pending} title={`Continue the same ${AGENT_LABEL[session.agent]} conversation in a terminal${elsewhere ? ` on ${ranOn}` : ""}`}
+                    onClick={() => run(() => resumeSessionOrAsk(session))}>
+                    <AgentIcon agent={session.agent} size={13} />Resume {AGENT_LABEL[session.agent]}
                   </Button>
                 )}
                 {/* Its terminal is gone (or its agent lost PacedMind and you closed it): the conversation goes on in a new one. */}
@@ -264,8 +292,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 {active && session.surface !== "terminal" && (
                   <Button onClick={() => run(() => finishSessionAction(session.id))}><Icon name="check" size={13} />Mark finished</Button>
                 )}
-                {agent && (session.status === "closed" || session.status === "done" || session.status === "failed") && task.status !== "done" && (
-                  <Button disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent, task.runIn))}><Icon name="plus" size={13} />New session</Button>
+                {agent && !active && task.status !== "done" && (
+                  startButton
                 )}
                 {session.status === "finished" && (
                   <Button variant="primary" onClick={() => run(() => markSessionDoneAction(session.id))}>Mark done</Button>
@@ -277,8 +305,15 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 )}
               </div>
             )}
-            {/* For a failed session, Start under Session says it. */}
-            {session.status !== "failed" && trustHint("")}
+            {agent && agent !== session.agent && task.status !== "done" && (
+              <p className="text-[11.5px] leading-relaxed text-mut2">
+                Done by is {AGENT_LABEL[agent]} for the next session. {active
+                  ? `Close the ${AGENT_LABEL[session.agent]} session before starting a new one.`
+                  : `Start a new session to switch agents. The previous ${AGENT_LABEL[session.agent]} session keeps its conversation and history.`}
+              </p>
+            )}
+            {elsewhere && <p className="text-[11.5px] text-mut2">This {AGENT_LABEL[session.agent]} session belongs to {ranOn}.</p>}
+            {trustHint("")}
             {/* What became of a request to a computer for this task: waiting, started, refused… */}
             <RequestStatus match={forThisTask} />
           </div>
@@ -336,13 +371,13 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           <Prop label="Done by">
             <Menu width={240}
               trigger={
-                <button type="button" className={cx(pv, !task.agent && "text-mut2")}>
+                <button type="button" disabled={pending} aria-label="Change Done by" className={cx(pv, !task.agent && "text-mut2")}>
                   <DoerIcon doer={task.agent ?? project?.agent ?? null} size={14} />
                   {task.agent ? DOER_LABEL[task.agent] : project?.agent ? `${AGENT_LABEL[project.agent]}, the project's default` : "Not decided"}
                 </button>
               }
-              items={doers.map((d) => ({ ...d, icon: <DoerIcon doer={d.value ?? project?.agent ?? null} size={13} /> }))}
-              onSelect={(v) => save({ agent: v, modelSettings: null })} />
+              items={doerItems}
+              onSelect={chooseDoer} />
           </Prop>
           <Prop label="Labels">
             <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
@@ -363,7 +398,13 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             </div>
           </Prop>
           {(agent || session || hasUse(use)) && <h3 className="col-span-2 mt-4 flex items-center gap-2 border-t border-line pb-2 pt-3 font-medium text-fg2">
-            {agent ? <>Agent<span className="flex items-center gap-1.5 font-normal text-mut2"><AgentIcon agent={agent} size={12} />{AGENT_LABEL[agent]}</span></> : "Session history"}
+            {agent ? <>Agent<Menu width={240}
+              trigger={<button type="button" disabled={pending} aria-label="Change agent for new sessions"
+                title="Same choice as Done by. Applies to new sessions."
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 font-normal text-fg2 hover:bg-hover">
+                <AgentIcon agent={agent} size={12} />{AGENT_LABEL[agent]}<Icon name="chevronDown" size={12} />
+              </button>}
+              items={doerItems} onSelect={chooseDoer} /></> : "Session history"}
           </h3>}
           {agent && <>
             {chooseComputer && <Prop label="Computer">
@@ -400,8 +441,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             </Prop>
           )}
           {agent && <Issues items={issues} className="col-start-2 px-2 pb-1" />}
-          {(agent || session) && <Prop label="Session">
-            {session && session.status !== "failed" ? (
+          {(agent || session) && <Prop label={session && !active ? "Last session" : "Session"}>
+            {session ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>
                 <AgentIcon agent={session.agent} size={13} /><span className="shrink-0 whitespace-nowrap">{AGENT_LABEL[session.agent]}</span>
                 <span className="min-w-0 truncate text-mut2">{session.status === "finished" ? "finished" : session.status} {placeOf(session.agent, session.surface)}</span>
@@ -410,30 +451,14 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               <span className="px-2 text-mut2">None, this one is yours</span>
             ) : (
               <div className="flex flex-col items-start gap-1.5 px-2">
-                {/* No overflow-hidden here: it would clip the menu. The halves round their own corners. */}
-                <div className="flex h-[26px] rounded-md border border-ctl">
-                  <button type="button" disabled={pending} onClick={() => run(() => startSessionOrAsk(task.id, agent, task.runIn))}
-                    title={task.runIn ? `Runs ${placeOf(agent, task.runIn)}` : "Runs in a terminal when the CLI is installed, else in the desktop app"}
-                    className="flex items-center gap-1.5 rounded-l-[5px] px-2.5 text-[12px] text-fg hover:bg-hover">
-                    <AgentIcon agent={agent} size={12} />Start with {AGENT_LABEL[agent]}
-                  </button>
-                  <Menu align="right" width={250} className="flex"
-                    trigger={<button type="button" aria-label="Choose agent and where it runs" className="flex h-full w-6 items-center justify-center rounded-r-[5px] border-l border-ctl text-mut hover:bg-hover"><Icon name="chevronDown" size={12} /></button>}
-                    items={(["claude", "codex"] as AgentId[]).flatMap((a) => (["terminal", "desktop", "cloud"] as Surface[]).map((s) => ({
-                      value: `${a}:${s}`, label: s === "cloud" ? CLOUD_LABEL[a] : `${AGENT_LABEL[a]} ${placeOf(a, s)}`, icon: <SurfaceIcon surface={s} size={13} />,
-                    })))}
-                    onSelect={(v) => {
-                      const [a, s] = v.split(":") as [AgentId, Surface];
-                      run(() => startSessionOrAsk(task.id, a, s));
-                    }} />
-                </div>
+                {startButton}
                 {/* With a session, its card shows this. */}
                 {!session && <RequestStatus match={forThisTask} />}
               </div>
             )}
           </Prop>}
           {/* A row of its own under Start, so Session stays level with the button. */}
-          {agent && (!session || session.status === "failed") && trustHint("col-start-2 px-2 pb-1")}
+          {agent && !session && trustHint("col-start-2 px-2 pb-1")}
           {/* What its sessions used, as their agents reported it. */}
           {hasUse(use) && (
             <Prop label="Usage">

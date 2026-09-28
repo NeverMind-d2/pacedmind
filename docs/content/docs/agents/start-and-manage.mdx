@@ -177,7 +177,7 @@ A session in the agent's cloud has the cloud's own servers, so needs aren't chec
 
 ## Resume a session
 
-**Resume in terminal**, in the task's details or in **Sessions**, opens a new terminal in the session's folder for a terminal session that isn't running:
+**Resume Claude Code** or **Resume Codex** in the task’s details (**Resume in terminal** in **Sessions**) opens a new terminal in the session's folder for a terminal session that isn't running:
 
 * **Claude Code** continues the same conversation, with its full history.
 * **Codex** continues the same conversation, once its hooks or local session record identified it (shown in **Sessions** as **Codex session**). If startup stopped before it created an identifiable conversation, PacedMind opens a fresh conversation with this task's first message.
@@ -209,7 +209,7 @@ A session in the cloud, or in a desktop app that isn't connected to PacedMind, c
 * a session got stuck before the agent checked in;
 * the work should stop and start over.
 
-After a closed, done or failed session, **New session** in the task's details starts a fresh one, as long as the task isn't done.
+After a session finishes, closes or fails, **New session with Claude Code** (or **Codex**) in the task’s details starts a fresh one, as long as the task isn’t done. It uses **Done by**, also editable beside **Agent**; the arrow beside the button can choose and start either agent in another place. Changing the agent starts a fresh conversation and keeps the previous session’s history. See [Switch agents](/tasks/task-details#switch-agents-after-a-session-ends).
 
 ## One running session per task
 
