@@ -387,7 +387,7 @@ function RemoteBadge({ value, editable }: { value: RemoteStart; editable: boolea
   const box = "inline-flex h-5 items-center gap-1 rounded border border-line2 px-1.5 text-[11px] text-mut";
   if (!editable) return <span title={`${REMOTE_HINT[value]} It's set in the desktop app on that computer.`} className={box}>{text}</span>;
   return (
-    <Link href="/settings#this-computer" title={`${REMOTE_HINT[value]} Change it in Settings.`} className={cx(box, "hover:bg-hover hover:text-fg2")}>
+    <Link href="/settings/computer" title={`${REMOTE_HINT[value]} Change it in Settings.`} className={cx(box, "hover:bg-hover hover:text-fg2")}>
       {text}<Icon name="chevronRight" size={10} strokeWidth={2.4} />
     </Link>
   );

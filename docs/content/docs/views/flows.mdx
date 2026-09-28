@@ -92,13 +92,13 @@ Click the folder to give the task a folder of its own, such as a separate checko
 | **Claude app** or **Codex app** | *Opens a new Code session in the Claude app on DESKTOP-1 with the first message written. You send it.* For Codex, a new thread in the Codex app. |
 | **Claude Code on the web** or **Codex cloud** | *Runs on Anthropic's servers from the folder's GitHub repository, even while your computer sleeps.* For Codex, OpenAI's servers. |
 
-An option the computer can't run is dimmed and says why, such as *The Codex CLI isn't installed on DESKTOP-1* or *Codex cloud sessions start from the Codex CLI, which isn't installed on DESKTOP-1*. PacedMind finds out what each computer has on its own; see [Devices](/settings#devices). Until a task's place is chosen, it runs in a terminal when the agent's CLI is installed, else in the agent's desktop app.
+An option the computer can't run is dimmed and says why, such as *The Codex CLI isn't installed on DESKTOP-1* or *Codex cloud sessions start from the Codex CLI, which isn't installed on DESKTOP-1*. PacedMind finds out what each computer has on its own; see [Agents found here](/settings#agents-found-here). Until a task's place is chosen, it runs in a terminal when the agent's CLI is installed, else in the agent's desktop app.
 
 Tasks that share one session run in the same place: choosing it for one moves the others along (*DEV-22 and DEV-23 run in the Claude app now, because they share one session*). A task that continues another one's session says *It runs where DEV-22 runs, since it carries on that session.*
 
 The panel adds a note where a session can't report back on its own:
 
-* **Claude app** or **Codex app**, while that agent isn't connected to PacedMind: *The Claude app can't tell PacedMind when it's done until Claude Code is connected to PacedMind. Until then, mark the session finished here.* The link opens **Settings → Devices**.
+* **Claude app** or **Codex app**, while that agent isn't connected to PacedMind: *The Claude app can't tell PacedMind when it's done until Claude Code is connected to PacedMind. Until then, mark the session finished here.* The link opens **Computers**, where **Connect** sets it up.
 * **Claude Code on the web**: *The cloud can't reach PacedMind on your computer, so mark the session finished here when its pull request is ready.*
 * **Codex cloud**: *PacedMind checks Codex cloud every minute and marks the session finished when its task is ready.* A field asks for the project's Codex environment, its label or id from chatgpt.com/codex/settings/environments (*e.g. my-app*).
 

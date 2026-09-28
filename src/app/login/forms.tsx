@@ -237,7 +237,7 @@ export function SetupForm({ first, email }: { first: boolean; email: string }) {
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!enrollment) return;
-    run(() => confirmEnrollAction(enrollment.factorId, code), () => (first ? setDone(true) : router.push("/settings")));
+    run(() => confirmEnrollAction(enrollment.factorId, code), () => (first ? setDone(true) : router.push("/settings/security")));
   };
 
   return (
