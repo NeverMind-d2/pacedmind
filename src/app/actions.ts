@@ -25,6 +25,7 @@ import { guardAction as guard } from "@/server/guard";
 import { answerHere, askedHere, withdrawHere } from "@/server/asks";
 import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
 import { repoIdentity } from "@/server/git-remote";
+import { attachOutsideSession, type AttachInput } from "@/server/attach";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
@@ -340,6 +341,21 @@ export async function finishSessionAction(sessionId: string): Promise<Result> {
   if (s.status !== "starting" && s.status !== "running") return { ok: false, error: "The session isn't running" };
   const { started } = await finishTask(s.taskId, s.id, "", "you", undefined, s);
   return done({ ok: true, message: (await launched(started)) ?? `${(await repo.getTask(s.taskId))?.key ?? "The task"} waits for your check` });
+}
+
+/**
+ * Attaches a session PacedMind didn't start to a task, or to a new one made from its title (attach.ts). From the app,
+ * for this computer's sessions; for another computer's, from anywhere: the session keeps running on that computer.
+ */
+export async function attachSessionAction(input: AttachInput): Promise<Result & { sessionId?: string }> {
+  await guard();
+  const r = await attachOutsideSession({
+    computer: String(input.computer), harness: input.harness, ref: String(input.ref),
+    taskId: typeof input.taskId === "number" ? input.taskId : null, title: typeof input.title === "string" ? input.title.slice(0, 200) : undefined,
+    projectId: typeof input.projectId === "string" ? input.projectId : null,
+  });
+  if (!r.ok) return { ok: false, error: r.error };
+  return done({ ok: true, message: r.message, sessionId: r.session.id });
 }
 
 /** Closes a session by hand, e.g. when its terminal was closed or it got stuck before the agent checked in. */

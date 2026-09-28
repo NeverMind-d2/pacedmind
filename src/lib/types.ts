@@ -463,6 +463,10 @@ export const HARNESS_LABEL: Record<Harness, string> = {
 
 export const harnessAgent = (h: Harness): AgentId => (h.startsWith("claude") ? "claude" : "codex");
 
+/** The conversation a PacedMind session keeps for an outside session attached to a task (Session.cliSessionId). */
+export const outsideConversation = (s: Pick<OtherSession, "harness" | "ref" | "cli">): string | null =>
+  s.harness === "claude-app" ? s.cli ?? null : s.ref;
+
 /**
  * What a session is doing, as its own record shows: at work right now, waiting for you (its turn ended, or it stopped
  * in the middle of one, such as for a permission), or quiet for hours.
@@ -474,6 +478,8 @@ export interface OtherSession {
   harness: Harness;
   /** The tool's own id for the session. */
   ref: string;
+  /** For a Claude app session, the id of the Claude Code conversation it runs. */
+  cli?: string;
   /** Its own title, else its first message, on one line and short. */
   title: string;
   /** The name of its folder (never the path). */

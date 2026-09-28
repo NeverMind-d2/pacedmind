@@ -3,13 +3,14 @@ import { trustCheck } from "./claude-trust";
 import { deviceConfig } from "./device";
 import { runsHere, thisDeviceId } from "./devices";
 import { changesProblemIn, changesViaIn } from "./ops";
+import { attachedConversations } from "./attach";
 import { scanOtherSessions } from "./other-sessions";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
 import { dateOnly, todayStr } from "@/lib/dates";
-import type { OtherGroup, SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
-import { agentOf, deviceOnline, taskHref, type OtherSession, type Report, type Session, type Status, type Task } from "@/lib/types";
+import type { AttachableTask, OtherGroup, SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
+import { agentOf, deviceOnline, outsideConversation, taskHref, type OtherSession, type Report, type Session, type Status, type Task } from "@/lib/types";
 
 const EARLIER_LIMIT = 30;
 const active = (s: Session) => s.status === "starting" || s.status === "running";
@@ -19,11 +20,13 @@ const active = (s: Session) => s.status === "starting" || s.status === "running"
  * as they last said (every minute while they run). Computers without any are left out.
  */
 export async function otherSessionGroups(): Promise<OtherGroup[]> {
-  const [projects, devices, cloud] = await Promise.all([repo.listProjects(), repo.listDevices(), usesCloud()]);
+  const [projects, devices, cloud, attached] = await Promise.all([repo.listProjects(), repo.listDevices(), usesCloud(), attachedConversations()]);
   const names = new Map(projects.map((p) => [p.id, p.name]));
-  const named = (list: OtherSession[]) => list.map((s) => ({ ...s, project: (s.projectId && names.get(s.projectId)) || null }));
+  // One attached to a task since its computer last said is PacedMind's now.
+  const named = (list: OtherSession[]) => list.filter((s) => !attached.has(outsideConversation(s) ?? s.ref))
+    .map((s) => ({ ...s, project: (s.projectId && names.get(s.projectId)) || null }));
   const groups: OtherGroup[] = [];
-  if (MODE === "desktop") groups.push({ id: "here", computer: deviceConfig().name, here: true, online: true, sessions: named(scanOtherSessions(projects)) });
+  if (MODE === "desktop") groups.push({ id: "here", computer: deviceConfig().name, here: true, online: true, sessions: named(scanOtherSessions(projects, attached)) });
   const me = MODE === "desktop" && cloud ? thisDeviceId() : null;
   for (const d of devices) {
     if (d.revokedAt || d.id === me) continue;
@@ -33,7 +36,9 @@ export async function otherSessionGroups(): Promise<OtherGroup[]> {
 }
 
 /** Everything the Sessions screen shows, grouped the way it lists them. */
-export async function sessionList(selected: string | null): Promise<{ groups: SessionGroup[]; initialId: string | null; startable: StartableTask[] }> {
+export async function sessionList(selected: string | null): Promise<{
+  groups: SessionGroup[]; initialId: string | null; startable: StartableTask[]; attachable: AttachableTask[];
+}> {
   const [all, taskList, projectList, edges, done, deviceList] = await Promise.all([
     repo.listSessions(), repo.listTasks(), repo.listProjects(), repo.listEdges(), repo.doneTimes(), repo.listDevices(),
   ]);
@@ -103,7 +108,7 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       usage: s.usage ?? null,
       origin: s.continuesSessionId
         ? "continued"
-        : events.some((e) => e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text)) ? "outside" : "organizer",
+        : events.some((e) => e.kind === "attached" || (e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text))) ? "outside" : "organizer",
       continues: prev ? { id: prev.id, key: tasks.get(prev.taskId)?.key ?? "an earlier task" } : null,
       task: task ? { id: task.id, key: task.key, title: task.title } : null,
       project: project ? { id: project.id, name: project.name } : null,
@@ -152,5 +157,13 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
     .slice(0, 20)
     .map(({ t, p }) => ({ id: t.id, key: t.key, title: t.title, agent: agentOf(t, p?.agent) ?? "claude" }));
 
-  return { groups, initialId, startable };
+  // Tasks a session PacedMind didn't start can be attached to: open ones an agent may work on, their project's first.
+  const attachable = [...tasks.values()]
+    .filter((t) => t.status !== "done" && t.status !== "canceled" && t.agent !== "human")
+    .map((t) => ({ t, p: t.projectId ? projects.get(t.projectId) : undefined }))
+    .sort((a, b) => (a.p?.sort ?? 999) - (b.p?.sort ?? 999) || a.t.sortOrder - b.t.sortOrder)
+    .slice(0, 400)
+    .map(({ t }) => ({ id: t.id, key: t.key, title: t.title, projectId: t.projectId, busy: busy.has(t.id) }));
+
+  return { groups, initialId, startable, attachable };
 }

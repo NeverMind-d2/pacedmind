@@ -91,10 +91,13 @@ export function dueInfo(due: string | null, now = new Date()): { text: string; t
   };
 }
 
-/** Whether a session's agent checked in over MCP since the session started, or since it went back to work on changes. */
+/**
+ * Whether a session's agent checked in over MCP since the session started, or since it went back to work on changes.
+ * A session attached from outside PacedMind was at work already: it counts as checked in.
+ */
 export function checkedIn(events: { kind: string }[]): boolean {
   const back = events.findLastIndex((e) => e.kind === "changes_requested");
-  return events.slice(back + 1).some((e) => e.kind === "picked_up");
+  return events.slice(back + 1).some((e) => e.kind === "picked_up" || e.kind === "attached");
 }
 
 /**

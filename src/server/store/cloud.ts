@@ -520,12 +520,13 @@ export async function latestSession(taskId: number): Promise<Session | null> {
 
 export async function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; deviceId?: string | null; branch?: string | null; status?: SessionStatus;
-  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null;
+  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
 }): Promise<Session> {
   const db = await accountDb();
   const r = one(await db.from("sessions").insert({
     id: crypto.randomBytes(8).toString("hex"), task_id: input.taskId, agent: input.agent, surface: input.surface ?? "terminal",
-    device_id: input.deviceId ?? null, folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting", started_at: nowStamp(),
+    device_id: input.deviceId ?? null, folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting",
+    started_at: input.startedAt ?? nowStamp(), finished_at: input.finishedAt ?? null,
     cli_session_id: input.cliSessionId ?? null, continues_session_id: input.continuesSessionId ?? null,
   }).select().single());
   return toSession(r!);
