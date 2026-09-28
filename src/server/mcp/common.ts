@@ -8,6 +8,7 @@ import { noteAgentActivity } from "../signals";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
+import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
@@ -62,7 +63,7 @@ export function tool<S extends z.ZodObject>(
         if (who.kind === "session" && name !== "ask_user") await noteAgentActivity(who.sessionId).catch(() => {});
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
-        const text = e instanceof ToolError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
+        const text = e instanceof ToolError || e instanceof CloudReadOnly ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
         return { content: [{ type: "text" as const, text }], isError: true };
       }
     }) as never,

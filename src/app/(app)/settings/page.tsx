@@ -1,6 +1,7 @@
 import { SettingsView } from "@/components/views/settings";
 import * as repo from "@/server/repo";
 import { legacySummary } from "@/server/account";
+import { readPlan } from "@/server/billing";
 import { thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
 import { deviceConfig, projectServers } from "@/server/device";
@@ -10,9 +11,9 @@ import { MODE, authState } from "@/server/supabase";
 import type { DeviceSettings, ProjectAgentsView } from "@/lib/types";
 
 export default async function SettingsPage() {
-  const [settings, projects, areas, sessions, state, devices, legacy, me] = await Promise.all([
+  const [settings, projects, areas, sessions, state, devices, legacy, me, plan] = await Promise.all([
     repo.getSettings(), repo.listProjects(), repo.listAreas(), repo.listSessions(), authState(), repo.listDevices(),
-    MODE === "desktop" ? legacySummary() : null, MODE === "desktop" ? thisDevice() : null,
+    MODE === "desktop" ? legacySummary() : null, MODE === "desktop" ? thisDevice() : null, readPlan(),
   ]);
   const d = MODE === "desktop" ? deviceConfig() : null;
   const device: DeviceSettings | null = d && {
@@ -41,6 +42,7 @@ export default async function SettingsPage() {
         })),
         backupCodes: state.hasRecoveryCodes,
       }}
+      plan={plan?.enforced ? plan : null}
       devices={[...here, ...signedIn.filter((x) => x.id !== me?.id)]}
       thisDeviceId={here.length ? me!.id : null}
       device={device}

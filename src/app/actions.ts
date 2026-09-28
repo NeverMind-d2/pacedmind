@@ -1,8 +1,10 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import * as repo from "@/server/repo";
-import { importLegacy, resetAccount } from "@/server/account";
+import { importLegacy, moveToThisComputer, resetAccount } from "@/server/account";
+import { billingPortal, readPlan, subscribe } from "@/server/billing";
 import { usesCloud } from "@/server/scope";
 import { resetLocal } from "@/server/store/local-db";
 import { checkThisDevice, deviceIdFor, offeredDevice, runsHere } from "@/server/devices";
@@ -10,7 +12,7 @@ import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server
 import {
   afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
 } from "@/server/ops";
-import { approve, deny } from "@/server/requests";
+import { approve, cutOffAgents, deny } from "@/server/requests";
 import { commandProblem, deviceConfig, rotateOwnerToken, setProjectServers, updateDevice } from "@/server/device";
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
@@ -22,6 +24,7 @@ import { guardAction as guard } from "@/server/guard";
 import { answerHere, askedHere, withdrawHere } from "@/server/asks";
 import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
+import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
@@ -831,11 +834,64 @@ export async function dismissImportAction(): Promise<Result> {
 /* ---------- data ---------- */
 
 /** Starts the data in use over: the account's, or without an account this computer's own. */
-export async function resetDataAction(mode: "sample" | "empty") {
+export async function resetDataAction(mode: "sample" | "empty"): Promise<Result> {
   await guard();
-  if (await usesCloud()) await resetAccount(mode);
-  else resetLocal(mode);
+  if (await usesCloud()) {
+    // Starting over deletes before it adds: on a read-only account only the deleting would go through.
+    if ((await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
+    await resetAccount(mode);
+  } else resetLocal(mode);
   return done();
+}
+
+/* ---------- billing ---------- */
+
+/**
+ * Subscribing to PacedMind Cloud at a country's price, monthly or yearly: answers the Checkout page to open (the
+ * desktop app opens it in the browser). With a subscription already, it switches it between monthly and yearly.
+ */
+export async function subscribeAction(country: string, period: BillingPeriod): Promise<Result & { url?: string }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  if (!/^[A-Z]{2}$/.test(country) || (period !== "month" && period !== "year")) return { ok: false, error: "Pick a country and monthly or yearly." };
+  try {
+    const r = await subscribe(country, period);
+    if ("switched" in r) return done({ ok: true, message: period === "year" ? "You pay yearly from now on" : "You pay monthly from now on" });
+    return { ok: true, url: r.url };
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+/** The page for the card, invoices and cancelling. */
+export async function manageBillingAction(): Promise<Result & { url?: string }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  try {
+    return { ok: true, url: await billingPortal() };
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+/**
+ * The account's data to this computer's own, then signing out, so PacedMind goes on without an account here: for when
+ * the account's Cloud has ended (it only reads the account, which works while it's read-only).
+ */
+export async function moveToThisComputerAction(): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "Move it from the desktop app on the computer that should keep it." };
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  try {
+    await moveToThisComputer();
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  cutOffAgents();
+  await (await supabase()).auth.signOut({ scope: "local" });
+  updateDevice({ withoutAccount: true });
+  refresh();
+  redirect("/today");
 }
 
 /** Copies this computer's own data (what PacedMind keeps without an account) into the signed-in account. */
@@ -843,6 +899,8 @@ export async function importLegacyAction(): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Move it from the desktop app on the computer that has it." };
   if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  // It clears the account's default areas first: on a read-only account that would go through and the rest wouldn't.
+  if ((await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
   try {
     const n = await importLegacy();
     return done({ ok: true, message: `Moved ${n.tasks} tasks, ${n.projects} projects and ${n.areas} areas to your account` });

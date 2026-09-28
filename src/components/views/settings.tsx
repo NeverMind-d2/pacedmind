@@ -2,21 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
-  connectAgentAction, createProjectAction, importLegacyAction, resetDataAction, rotateMcpTokenAction, updateDeviceSettingsAction,
-  setProjectServersAction, updateProjectAction, updateSettingsAction,
+  connectAgentAction, createProjectAction, importLegacyAction, manageBillingAction, moveToThisComputerAction, resetDataAction, rotateMcpTokenAction, subscribeAction,
+  updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
 } from "@/app/auth/actions";
+import {
+  FALLBACK_MARKET, MARKETS, YEARLY_MONTHS, daysLeft, marketOf, planPrice, type BillingPeriod, type Plan,
+} from "@/lib/billing";
 import { projectColor } from "@/lib/colors";
+import { toDateStr } from "@/lib/dates";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, deviceOnline,
   type AgentId, type AgentTools, type Area, type Device, type DeviceSettings, type FolderExtras, type Project, type ProjectAgentsView,
   type RemoteStart, type Settings,
 } from "@/lib/types";
+import { guessCountry } from "../../../site/lib/markets";
+import { useOpenBilling } from "../billing";
 import { AgentIcon, AreaMark, Icon } from "../icons";
 import { ImportProjects } from "../import-projects";
 import { PushSettings, type PushDevice } from "../push-settings";
@@ -142,16 +148,80 @@ function copy(text: string, what: string) {
   navigator.clipboard.writeText(text).then(() => toast(`${what} copied`), () => toast("Couldn't copy", "error"));
 }
 
+const noSubscribe = () => () => {};
+/** The country whose price to show: the time zone's, as on the site, else the fallback's. */
+const guessedMarket = () => {
+  const code = guessCountry();
+  return code && MARKETS.some((m) => m.code === code) ? code : FALLBACK_MARKET;
+};
+const day = (iso: string | null) => (iso ? toDateStr(new Date(iso)) : "");
+
+/** Settings → Plan: the trial or subscription, subscribing at a country's price, and Stripe's page for the rest. */
+function PlanSection({ plan }: { plan: Plan }) {
+  const { open, pending } = useOpenBilling();
+  const guessed = useSyncExternalStore(noSubscribe, guessedMarket, () => FALLBACK_MARKET);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [period, setPeriod] = useState<BillingPeriod>(plan.period ?? "month");
+  const market = marketOf(picked ?? plan.market ?? guessed);
+  const subscribed = plan.state === "active" || plan.state === "past_due" || plan.state === "canceling";
+  const days = daysLeft(plan.trialEndsAt);
+  const other: BillingPeriod = plan.period === "year" ? "month" : "year";
+  const status: Record<Plan["state"], string> = {
+    trial: days === 0 ? "Free trial, ends today" : `Free trial, ${days === 1 ? "1 day" : `${days} days`} left (until ${day(plan.trialEndsAt)})`,
+    active: `Cloud, paid ${plan.period === "year" ? "yearly" : "monthly"}${plan.periodEnd ? `, renews ${day(plan.periodEnd)}` : ""}`,
+    canceling: `Cloud until ${day(plan.periodEnd)}, then read-only`,
+    past_due: "The last payment didn't go through; the card is tried again",
+    lapsed: "Read-only: subscribe to keep working in Cloud",
+    comped: "Cloud, included with your account",
+  };
+  return (
+    <Section id="plan" title="Plan"
+      note={`Cloud keeps your tasks, plans and sessions on all your computers and in the browser. A year costs ${YEARLY_MONTHS} months' worth. Payments go through Stripe: PacedMind never sees your card.`}>
+      <Row label="Plan">
+        <span className="flex-1 text-[12.5px] text-fg2" suppressHydrationWarning>{status[plan.state]}</span>
+      </Row>
+      {!subscribed && plan.state !== "comped" && <>
+        <Row label="Prices for">
+          <Menu width={220}
+            trigger={<button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2">{market.name}<Icon name="chevronDown" size={11} /></button>}
+            items={MARKETS.map((m) => ({ value: m.code, label: m.name }))}
+            onSelect={(code) => setPicked(code)} />
+        </Row>
+        <Row label="Pay">
+          <Segmented value={period} onChange={setPeriod} options={[{ value: "month", label: "Monthly" }, { value: "year", label: "Yearly" }]} />
+          <span className="flex-1 whitespace-nowrap text-[12.5px] text-fg2">{planPrice(market, period)} a {period}</span>
+          <Button variant="primary" disabled={pending} onClick={() => open(() => subscribeAction(market.code, period))}>Subscribe</Button>
+        </Row>
+      </>}
+      {(subscribed || plan.customer) && plan.state !== "comped" && (
+        <Row label="Billing">
+          {plan.state === "active" && (
+            <Button size="sm" disabled={pending}
+              onClick={() => confirm(`Pay ${other === "year" ? "yearly" : "monthly"} from now on? What's left of this period counts toward the new one.`)
+                && open(() => subscribeAction(plan.market ?? market.code, other))}>
+              Switch to {other === "year" ? "yearly" : "monthly"}
+            </Button>
+          )}
+          <span className="flex-1" />
+          <Button size="sm" disabled={pending} onClick={() => open(() => manageBillingAction())}>Manage billing</Button>
+        </Row>
+      )}
+    </Section>
+  );
+}
+
 export interface AccountView {
   email: string | null;
   factors: { id: string; name: string; added: string }[];
   backupCodes: boolean;
 }
 
-export function SettingsView({ settings, projects, areas, account, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform, agents, push }: {
+export function SettingsView({ settings, projects, areas, account, plan, devices, thisDeviceId, device, mcp, legacy, sessionsCount, platform, agents, push }: {
   settings: Settings; projects: Project[]; areas: Area[];
   /** The signed-in account; null without one, when the desktop app keeps this computer's own data. */
   account: AccountView | null;
+  /** The account's PacedMind Cloud plan once billing is on; null before, and without an account. */
+  plan: Plan | null;
   /** The computers signed in to the account, this one first; without an account, just this one. */
   devices: Device[];
   /** This computer's id in the account's list ("" without an account); null in the web app, or until it registered. */
@@ -222,6 +292,8 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                 <Button size="sm" onClick={() => confirm("Sign out everywhere, including here?") && run(() => signOutEverywhereAction())}>Sign out all</Button>
               </Row>
             </Section>
+
+            {plan && <PlanSection plan={plan} />}
 
             <Section title="Two-factor sign-in"
               note="Every sign-in asks for a code from an authenticator app, because PacedMind can start agents on your computers. Keep a second authenticator in case you lose your phone.">
@@ -516,7 +588,7 @@ export function SettingsView({ settings, projects, areas, account, devices, this
               </Row>
             </Section>
 
-            <Section title="Data" note={account
+            <Section id="data" title="Data" note={account
               ? `Stored in your account, not on this computer. Images agents attach stay on the computer they were saved on. ${sessionsCount} sessions recorded so far.`
               : `Stored on this computer, in PacedMind's data folder. ${sessionsCount} sessions recorded so far.`}>
               {legacy && legacy.tasks + legacy.projects > 0 && (
@@ -526,6 +598,13 @@ export function SettingsView({ settings, projects, areas, account, devices, this
                   </span>
                   <Button onClick={() => confirm("Move them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer. A copy stays on this computer, without its flows.")
                     && run(() => importLegacyAction())}>Move to account</Button>
+                </Row>
+              )}
+              {account && device && (
+                <Row label="Your account">
+                  <span className="flex-1 text-[12.5px] text-fg3">Keep it on this computer, without an account</span>
+                  <Button onClick={() => confirm("Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there, and flows are off until you switch them on. Your account keeps its data until you delete it.")
+                    && run(() => moveToThisComputerAction())}>Move to this computer</Button>
                 </Row>
               )}
               <Row label="Reset">

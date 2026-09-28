@@ -12,6 +12,11 @@ export const SITE = {
   docs: "/docs",
   // The web app, where PacedMind Cloud accounts sign in (it sends visitors without a session to its sign-in page).
   app: "https://app.pacedmind.com",
+  // Where Cloud's button leads: the web app's sign-in page, open on creating an account.
+  createAccount: "https://app.pacedmind.com/login?create=1",
+  // Whether Cloud takes subscriptions yet. Until billing launches the page says "Coming soon"; switch it on together
+  // with the database's billing switch (supabase/migrations, private.billing_switch).
+  cloudOpen: false,
   // The source code: the repository's name as GitHub's API takes it, its page, and the files the page links to.
   repo,
   source: `https://github.com/${repo}`,

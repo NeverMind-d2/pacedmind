@@ -224,7 +224,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "update_area", {
     title: "Update area",
-    description: `Rename an area, or change its color or icon. Its key stays the same, so existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}. An icon replaces the area's own picture, which only the app sets.`,
+    description: `Rename an area, or change its color or icon. A new name gives the area the key made from it, which its new tasks get; existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}. An icon replaces the area's own picture, which only the app sets.`,
     input: z.object({
       area: areaRef, name: z.string().optional(), color: z.string().optional().describe(`${PALETTE_NAMES}, or a hex color`),
       icon: z.string().optional().describe("One of the icons, or none to show the dot again"),
