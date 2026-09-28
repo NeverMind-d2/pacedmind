@@ -865,6 +865,8 @@ begin
     out := out || '28f FAIL an account deleted its billing row' || E'\n';
     reset role;
   exception when others then out := out || '28f deleting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  -- Simulate pre-launch inside this rolled-back test, even when billing is already live.
+  update private.billing_switch set enforce = false;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     out := out || '28r plan before launch: enforced=' || (public.cloud_plan() ->> 'enforced') || ' (want false), writable='
