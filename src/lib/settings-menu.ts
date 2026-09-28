@@ -49,7 +49,7 @@ export function settingsMenu({ account, plan, desktop }: { account: boolean; pla
           pages: [
             page("computer", "General", "This computer's name, and what it does when asked from elsewhere."),
             page("sessions", "Sessions", "How agent sessions start on this computer."),
-            page("projects", "Projects", "Each project's folder, flow, agent and MCP servers on this computer."),
+            page("projects", "Projects", "Area workspaces and each project's folder, flow, agent and MCP servers on this computer."),
             page("mcp", "MCP server", account
               ? "How Claude Code, Codex and other agents reach PacedMind Cloud."
               : "How Claude Code and Codex reach PacedMind."),

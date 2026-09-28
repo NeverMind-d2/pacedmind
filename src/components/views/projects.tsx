@@ -22,11 +22,12 @@ type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 
 const atPointer = (e: MouseEvent): Anchor => ({ x: e.clientX, y: e.clientY });
 
-export function ProjectsView({ areas, projects, usage, today }: {
+export function ProjectsView({ areas, projects, usage, today, desktop }: {
   areas: Area[];
   projects: Project[];
   usage: Usage;
   today: string;
+  desktop: boolean;
 }) {
   const router = useRouter();
   const { run } = useAction();
@@ -187,7 +188,7 @@ export function ProjectsView({ areas, projects, usage, today }: {
       )}
 
       {menuArea && menu && (
-        <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} onClose={closeMenu}
+        <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} projects={projects} onClose={closeMenu}
           onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => startProject(menuArea.id)} />
       )}
       {menuProject && menu && (

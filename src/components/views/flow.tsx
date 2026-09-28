@@ -72,7 +72,7 @@ export interface FlowDevice {
 }
 
 export interface FlowViewProps {
-  project: { id: string; name: string; flowOn: boolean; folder: string | null; color: string; codexEnv: string | null };
+  project: { id: string; name: string; flowOn: boolean; folder: string | null; folderSource: string; color: string; codexEnv: string | null };
   projects: { id: string; name: string; color: string; inFlow: number }[];
   /**
    * In the desktop app, which switches flows on for this computer and keeps its folders. The web app has neither: it
@@ -712,7 +712,7 @@ function FlowEditor(props: FlowViewProps) {
   const setFolder = (t: FlowTask, folder: string | null) => {
     const own = folder && folder !== project.folder ? folder : null;
     act(() => patchTask({ [t.id]: { folder: own ?? project.folder, ownFolder: own !== null } }),
-      () => updateTaskAction(t.id, { folder: own }), own ? `${t.key} works in its own folder now` : `${t.key} works in the project's folder`);
+      () => updateTaskAction(t.id, { folder: own }), own ? `${t.key} works in its own folder now` : `${t.key} uses its default workspace now`);
   };
 
   const addTask = (t: FlowTask, at: Point, after: number | null, message?: string) => {
@@ -1432,7 +1432,7 @@ function runChoice(agent: AgentId, surface: Surface, device: FlowDevice | undefi
 }
 
 /** A task's folder: its own or the project's. Click to type another; empty goes back to the project's. */
-function FolderField({ task, projectFolder, onSave }: { task: FlowTask; projectFolder: string | null; onSave: (folder: string | null) => void }) {
+function FolderField({ task, projectFolder, folderSource, onSave }: { task: FlowTask; projectFolder: string | null; folderSource: string; onSave: (folder: string | null) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(task.folder ?? "");
   const save = () => {
@@ -1459,8 +1459,8 @@ function FolderField({ task, projectFolder, onSave }: { task: FlowTask; projectF
         {task.folder ? shortPath(task.folder) : "PacedMind workspace"}
       </button>
       {task.ownFolder
-        ? <button type="button" onClick={() => onSave(null)} title="Use the project's folder again" className="shrink-0 text-[11.5px] text-mut2 hover:text-fg2">Own · reset</button>
-        : task.folder && <span className="shrink-0 text-[11.5px] text-dim">Project&apos;s</span>}
+        ? <button type="button" onClick={() => onSave(null)} title="Use the default workspace again" className="shrink-0 text-[11.5px] text-mut2 hover:text-fg2">Own · reset</button>
+        : task.folder && <span className="shrink-0 text-[11.5px] text-dim">{folderSource}</span>}
     </div>
   );
 }
@@ -1590,7 +1590,7 @@ function Inspector({
             {desktop && (
               <>
                 <span className="text-mut2">Folder</span>
-                <FolderField key={`${task.folder}:${task.ownFolder}`} task={task} projectFolder={project.folder} onSave={onFolder} />
+                <FolderField key={`${task.folder}:${task.ownFolder}`} task={task} projectFolder={project.folder} folderSource={project.folderSource} onSave={onFolder} />
               </>
             )}
             <span className="text-mut2">Branch</span>

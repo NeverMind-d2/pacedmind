@@ -1,12 +1,18 @@
 import "server-only";
 import * as repo from "./repo";
 import { plannedFolder, plannedSurface, startSession, type LaunchResult } from "./launcher";
-import { confirmedFlow } from "./device";
+import { areaFolder, confirmedFlow } from "./device";
 import { toolsHere } from "./devices";
 import { missingFrom } from "@/lib/needs";
 import { askFromFlow } from "./requests";
 import { toDateTimeStr } from "@/lib/dates";
-import { LIVE_STATUSES, agentOf, type AgentId, type FlowEdge, type Status, type Task } from "@/lib/types";
+import { LIVE_STATUSES, agentOf, type AgentId, type FlowEdge, type Project, type Status, type Task } from "@/lib/types";
+
+/** An area changed from elsewhere must not redirect an unattended flow into a different local workspace. */
+function workspaceConfirmed(task: Task, project: Project | null): boolean {
+  return !!task.folder || !!project?.folder || !areaFolder(task.areaId)
+    || (!!project && confirmedFlow(project.id)?.areaId === task.areaId);
+}
 
 /*
  * Which session starts after which. Flows only ever start sessions in the desktop app, and only for projects
@@ -56,7 +62,7 @@ export async function startFromFlow(task: Task, agent?: AgentId): Promise<Launch
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
   const who = agent ?? agentOf(task, project?.agent) ?? "claude";
   const lacks = task.needs.length ? missingFrom(task.needs, toolsHere(who, plannedFolder(task))) : [];
-  if (plannedSurface(task, who) === "cloud" || lacks.length) {
+  if (plannedSurface(task, who) === "cloud" || lacks.length || !workspaceConfirmed(task, project)) {
     await askFromFlow(task);
     return null;
   }
@@ -126,6 +132,7 @@ export async function afterFinished(taskId: number): Promise<{ continueWith: Tas
       // never for a task that is yours.
       const project = target.projectId ? await repo.getProject(target.projectId) : null;
       if (target.agent === "human" || !project?.flowOn || !confirmed(target.projectId, [e])) continue;
+      if (!workspaceConfirmed(target, project)) { await askFromFlow(target); continue; }
       const others = incoming(target.id, edges).filter((x) => x.id !== e.id);
       if (!continueWith && others.every((x) => satisfied(x, tasks.get(x.fromTaskId), held))) continueWith = target;
       continue;

@@ -7,12 +7,14 @@ import { execFileSync, spawn } from "node:child_process";
 import { trustCheck, trustForClaude } from "./claude-trust";
 import { trustForCodex } from "./codex-trust";
 import { claudeMcpEntry, cliBinary, cliCommand, codexMcpTable, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
-import { folderProblem, repoRoot } from "./folders";
+import { repoRoot } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { MODE } from "./supabase";
 import { activeDevice } from "./scope";
-import { dataDir, deviceConfig, issueSessionToken, projectFolder, projectServers } from "./device";
+import { dataDir, deviceConfig, issueSessionToken, projectServers } from "./device";
+import { resolveFolder } from "./task-folder";
+export { plannedFolder } from "./task-folder";
 import { TELEMETRY_VAR, claudeServers, claudeTelemetrySet, codexServersOff, codexTelemetrySet } from "./extras";
 import { HOST_SESSION_VARS, agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
@@ -539,28 +541,6 @@ function trustAhead(agent: AgentId, folder: string) {
 
 /** A message about a terminal that just opened, and what to answer in it first when Claude Code asks about the folder. */
 const withTrust = (message: string, asks: boolean) => (asks ? `${message.replace(/\.?$/, ".")} ${TRUST_FIRST}` : message);
-
-/**
- * Where a task's sessions run here: its own folder on this computer, else its project's, else a scratch folder per
- * task. All three come from this computer's settings.
- */
-export function plannedFolder(task: { key: string; projectId: string | null; folder: string | null }): string | null {
-  if (!TASK_KEY.test(task.key)) return null;
-  return task.folder ?? projectFolder(task.projectId) ?? path.join(dataDir(), "workspaces", task.key.toLowerCase());
-}
-
-function resolveFolder(task: Task): { folder?: string; error?: string } {
-  const own = task.folder;
-  const set = own ?? projectFolder(task.projectId);
-  if (set) {
-    const problem = folderProblem(set);
-    if (problem) return { error: `Can't use the folder ${set}: ${problem} Change it ${own ? "in the task's details" : "in Settings"}.` };
-    return { folder: set };
-  }
-  const folder = plannedFolder(task)!;
-  fs.mkdirSync(folder, { recursive: true });
-  return { folder };
-}
 
 /** Deletes the files of sessions that ended (their MCP config holds a token that no longer works anyway). */
 export function forgetSessionFiles(sessionIds: string[]) {

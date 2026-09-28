@@ -2,7 +2,7 @@ import "server-only";
 import crypto from "node:crypto";
 import { removeImageFiles, type StoredImage } from "../attachments";
 import {
-  flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
+  areaFolder, flowArmed, forgetArea, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
@@ -68,7 +68,7 @@ const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a
 
 const toArea = (r: Row): Area => ({
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
-  picture: pictureHash(r.picture), sort: Number(r.sort),
+  picture: pictureHash(r.picture), sort: Number(r.sort), folder: areaFolder(String(r.id)),
 });
 const areasNow = () => all("SELECT * FROM areas ORDER BY sort").map(toArea);
 
@@ -127,6 +127,7 @@ export async function deleteArea(id: string) {
     run("DELETE FROM areas WHERE id = ?", id);
   });
   for (const p of projects) forgetProject(p);
+  forgetArea(id);
 }
 
 /** Deletes a project. Its tasks stay in the project's area without a project. */
@@ -659,9 +660,10 @@ export async function heldTaskIds(): Promise<Set<number>> {
 /* ---------- flow edges ---------- */
 
 /** A project's flow as it is now: its connections, and the project it starts after. */
-export async function flowSnapshot(projectId: string): Promise<{ edges: string[]; after: string | null }> {
+export async function flowSnapshot(projectId: string): Promise<{ edges: string[]; after: string | null; areaId: string | null }> {
   const ids = all("SELECT id FROM tasks WHERE project_id = ?", projectId).map((r) => Number(r.id));
-  return snapshotOf(ids, edgesNow(), projectNow(projectId)?.afterProjectId ?? null);
+  const project = projectNow(projectId);
+  return { ...snapshotOf(ids, edgesNow(), project?.afterProjectId ?? null), areaId: project?.areaId ?? null };
 }
 
 const toEdge = (r: Row): FlowEdge => ({

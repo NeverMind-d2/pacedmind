@@ -109,11 +109,12 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
 
 type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 
-export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage }: {
+export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage, desktop }: {
   areas: Area[];
   projects: Project[];
   counts: { inbox: number; today: number; sessions: number };
   usage: Usage;
+  desktop: boolean;
 }) {
   const path = usePathname();
   const router = useRouter();
@@ -388,7 +389,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
         </div>
 
         {menuArea && menu && (
-          <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} onClose={closeMenu}
+          <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} desktop={desktop} projects={projects} onClose={closeMenu}
             onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => setDraft({ kind: "project", areaId: menuArea.id })} />
         )}
         {bulk?.kind === "area" && (

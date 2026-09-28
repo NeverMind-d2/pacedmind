@@ -10,6 +10,7 @@ import { AREA_PICTURE_MAX, AREA_PICTURE_PX } from "@/lib/area-picture";
 import { PALETTE, projectColor } from "@/lib/colors";
 import type { Area, Project, Usage } from "@/lib/types";
 import { ConfirmDialog } from "./dialog";
+import { AreaWorkspace } from "./area-workspace";
 import { AreaIconSvg, AreaMark, AreaPicture, Icon } from "./icons";
 import { Popover, PopoverItem, PopoverLabel, PopoverLink, PopoverSeparator, anchorOf, type Anchor } from "./popover";
 import { cx, toast, useAction } from "./ui";
@@ -213,11 +214,13 @@ export function MoreButton({ label, open, onOpen, onClose, className }: {
   );
 }
 
-export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject }: {
+export function AreaMenu({ area, anchor, usage, desktop, projects, onClose, onRename, onNewProject }: {
   area: Area; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void; onNewProject: () => void;
+  desktop: boolean; projects: Project[];
 }) {
   const { run } = useAction();
   const [confirm, setConfirm] = useState(false);
+  const [workspace, setWorkspace] = useState(false);
   const u = usage.areas[area.id] ?? { projects: 0, tasks: 0, open: 0 };
   if (confirm) {
     return (
@@ -234,6 +237,11 @@ export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject 
       <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
       <PopoverItem icon={<Icon name="plus" size={14} />} onClick={() => { onClose(); onNewProject(); }}>New project</PopoverItem>
       <PopoverLink icon={<Icon name="layers" size={14} />} href={`/area/${area.id}`} onClick={onClose}>Open tasks</PopoverLink>
+      {desktop && <>
+        <PopoverItem icon={<Icon name="folder" size={14} />} onClick={() => setWorkspace((v) => !v)}
+          hint={<Icon name={workspace ? "chevronDown" : "chevronRight"} size={12} />}>Workspace…</PopoverItem>
+        {workspace && <div className="px-3 py-2"><AreaWorkspace key={area.folder ?? ""} area={area} projects={projects} onSaved={onClose} /></div>}
+      </>}
       <PopoverSeparator />
       <PopoverLabel>Color</PopoverLabel>
       <ColorSwatches value={area.color} onPick={(c) => run(() => updateAreaAction(area.id, { color: c }))} />

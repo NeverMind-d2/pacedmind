@@ -548,7 +548,7 @@ function SessionSettings({ project, projects, colorOf, terminal }: SettingsProps
           <span className="truncate px-2 text-fg2">{terminal}</span>
         </Setting>
         <Setting label="Folder">
-          <input value={folder} aria-label="Folder" placeholder="A new folder per task" spellCheck={false}
+          <input value={folder} aria-label="Folder" placeholder="Area workspace, or a new folder per task" spellCheck={false}
             ref={(el) => { if (el && document.activeElement !== el) el.scrollLeft = el.scrollWidth; }}
             onChange={(e) => setFolder(e.target.value)}
             onBlur={(e) => {

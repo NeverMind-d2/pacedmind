@@ -245,6 +245,7 @@ export function resetLocal(mode: "sample" | "empty") {
   const conn = db();
   const files = (conn.prepare("SELECT file FROM attachments").all() as Row[]).map((r) => String(r.file));
   const projects = (conn.prepare("SELECT id FROM projects").all() as Row[]).map((r) => String(r.id));
+  const areas = (conn.prepare("SELECT id FROM areas").all() as Row[]).map((r) => String(r.id));
   conn.exec("BEGIN");
   try {
     for (const t of ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
@@ -259,7 +260,7 @@ export function resetLocal(mode: "sample" | "empty") {
   }
   // Only this data's images: the account's, if you use Cloud here too, stay.
   removeImageFiles(files);
-  forgetAll("local", projects);
+  forgetAll("local", projects, areas);
 }
 
 export const DEFAULT_AREAS = [
