@@ -22,6 +22,8 @@ export interface TaskFilter {
 }
 
 export interface TaskInput {
+  modelSettings?: import("@/lib/agent-models").ModelSelection | null;
+  deviceId?: string | null;
   title: string;
   areaId?: string | null;
   projectId?: string | null;

@@ -1,4 +1,6 @@
 import "server-only";
+import { modelFlags, modelSelectionProblem, type ModelSelection } from "@/lib/agent-models";
+import { refreshAgentModels } from "./devices";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -203,7 +205,7 @@ function usageEnv(route: string, cli: string, token: string): Record<string, str
  * servers the session gets when its project picks them (Settings), which it then gets alone (--strict-mcp-config).
  * Like the token, their definitions stay in files only you can read, deleted when the session ends.
  */
-function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: string, servers: Record<string, unknown> | null) {
+function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: string, servers: Record<string, unknown> | null, model: ModelSelection | null) {
   const mcp = {
     mcpServers: {
       ...(servers ?? {}),
@@ -219,6 +221,7 @@ function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: s
   }];
   const env = usageEnv(route, cli, token);
   const settings = {
+    ...(model?.speed ? { fastMode: model.speed === "fast" } : {}),
     ...(env ? { env } : {}),
     hooks: {
       SessionEnd: [{ hooks: [claudeHook(`${route}/ended?cli=${cli}`, token, false)] }],
@@ -362,7 +365,7 @@ function codexNotify(auth: string, sessionId: string): string {
 function agentCommand(dir: string, session: Session, task: Task, kind: "start" | "resume" | "changes", token: string, folder: string): {
   command: string; conversation: string | null; env?: Record<string, string>; after?: string;
 } {
-  const exe = cliCommand(session.agent);
+  const exe = cliCommand(session.agent) + modelFlags(task.modelSettings);
   const prompt = kind === "changes" ? changesPrompt(task, session.id) : kickoffPrompt(task, session.id);
   const servers = projectServers(task.projectId);
   if (session.agent === "codex") {
@@ -391,7 +394,7 @@ function agentCommand(dir: string, session: Session, task: Task, kind: "start" |
   // A start and a resume run the conversation the session names (a start's was made with the session); changes get
   // a new one.
   const conversation = last && kind !== "changes" ? last : crypto.randomUUID();
-  const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, token, servers && claudeServers(folder, servers));
+  const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, token, servers && claudeServers(folder, servers), task.modelSettings);
   const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__${MCP_NAME}__${t}`).join(",");
   const base = `${exe} --mcp-config "${mcpFile}"${servers ? " --strict-mcp-config" : ""} --settings "${settingsFile}" --allowedTools ${allowed}`;
   if (last && kind === "resume") return { command: `${base} --resume ${last}`, conversation };
@@ -588,6 +591,12 @@ function place(surface: Surface, agent: AgentId): string {
   return `a terminal on ${here}`;
 }
 
+/** Check overrides against this computer's current agent account, never another device's report. */
+async function checkModelSettings(task: Task, agent: AgentId, surface: Surface): Promise<string | null> {
+  if (!task.modelSettings) return null;
+  return modelSelectionProblem(task.modelSettings, agent, surface, await refreshAgentModels(agent));
+}
+
 /** Why this computer can't run an agent's session that way, or null (also before it looked for the agents). */
 function surfaceProblem(agent: AgentId, surface: Surface): string | null {
   const tools = localTools()[agent];
@@ -630,7 +639,7 @@ const REASON_TEXT: Record<LaunchReason, string> = {
  */
 export function startSession(
   taskId: number,
-  options: { agent?: AgentId; surface?: Surface; reason: LaunchReason; expect?: { key: string; agent: AgentId; folder: string; surface: Surface } },
+  options: { agent?: AgentId; surface?: Surface; reason: LaunchReason; expect?: { key: string; agent: AgentId; folder: string; surface: Surface; modelSettings: ModelSelection | null } },
 ): Promise<LaunchResult> {
   return exclusive(async () => {
     if (MODE !== "desktop") return { ok: false, error: "Sessions start in the PacedMind desktop app." };
@@ -654,6 +663,8 @@ export function startSession(
     const surface = options.surface ?? plannedSurface(task, agent);
     const problem = surfaceProblem(agent, surface);
     if (problem) return { ok: false, error: problem };
+    const modelProblem = await checkModelSettings(task, agent, surface);
+    if (modelProblem) return { ok: false, error: modelProblem };
     const env = project?.codexEnv?.trim() ?? "";
     if (surface === "cloud" && agent === "codex") {
       if (!env) return { ok: false, error: `Pick the Codex cloud environment ${project ? project.name : "this task"} runs in first: its label from chatgpt.com/codex/settings/environments.` };
@@ -667,8 +678,8 @@ export function startSession(
       return { ok: false, error: `${CLOUD_LABEL[agent]} works on a git repository, and ${folder} isn't in one. Give ${task.key} or its project a repository folder.` };
     }
     const e = options.expect;
-    if (e && (e.key !== task.key || e.agent !== agent || e.folder !== folder || e.surface !== surface)) {
-      return { ok: false, error: `${task.key} changed after you allowed it (its task, agent, folder or where it runs). Ask for the session again.` };
+    if (e && (e.key !== task.key || e.agent !== agent || e.folder !== folder || e.surface !== surface || JSON.stringify(e.modelSettings) !== JSON.stringify(task.modelSettings))) {
+      return { ok: false, error: `${task.key} changed after you allowed it (its task, agent, folder, model settings or where it runs). Ask for the session again.` };
     }
 
     const session = await repo.createSession({
@@ -769,6 +780,8 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     const dir = sessionDir(session.id);
     const title = safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60);
     const surface = to ?? session.surface;
+    const modelProblem = await checkModelSettings(task, session.agent, surface);
+    if (modelProblem) return { ok: false, error: modelProblem };
     trustAhead(session.agent, folder);
     const trust = surface !== "desktop" && asksTrust(session.agent, folder);
     let failed: string | null;
@@ -845,6 +858,8 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     if (bad) return { ok: false, error: bad };
     const elsewhere = reopenProblem(session);
     if (elsewhere) return { ok: false, error: elsewhere };
+    const modelProblem = await checkModelSettings(task, session.agent, "terminal");
+    if (modelProblem) return { ok: false, error: modelProblem };
     const { folder, error } = resolveFolder(task);
     if (!folder) return { ok: false, error };
     const dir = sessionDir(session.id);

@@ -43,6 +43,7 @@ export function pendingApprovals(): Approval[] {
 
 /** What the app shows for a waiting request: what it asks, which task, which agent, where it would run, who asked. */
 export interface ApprovalItem {
+  modelSettings: import("@/lib/agent-models").ModelSelection | null;
   id: string;
   /** Start a session, resume one, or send one back to its agent with changes. */
   kind: LaunchRequestKind;
@@ -71,7 +72,7 @@ export function approvalItems(tasks: Task[]): ApprovalItem[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   return pendingApprovals().map((a) => ({
     id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
-    surface: a.surface, folder: a.folder,
+    surface: a.surface, folder: a.folder, modelSettings: a.modelSettings,
     from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”`
       : a.resume ? `${FROM_TEXT[a.from]}, resuming its session`
         // A flow that asks because the task needs something the agent lacks here says so itself (missing).
@@ -102,7 +103,7 @@ async function ask(
   const where = surface ?? plannedSurface(task, who);
   const a: Approval = {
     id: requestId ?? crypto.randomUUID(), requestId, from, kind: "start", taskId: task.id, key: task.key, agent: who, folder,
-    surface: where, requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
+    surface: where, modelSettings: task.modelSettings, requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
     // The agent's cloud has its own servers, not this computer's.
     missing: task.needs.length && where !== "cloud" ? missingFrom(task.needs, toolsHere(who, folder)) : [],
   };
@@ -137,7 +138,7 @@ export async function askForChanges(
   const now = Date.now();
   const a: Approval = {
     id: origin?.requestId ?? crypto.randomUUID(), requestId: origin?.requestId ?? null, from: origin ? "elsewhere" : "agent", kind: "changes",
-    taskId: task.id, key: task.key, agent: session.agent, folder, surface: "terminal", changes: { sessionId: session.id, text },
+    taskId: task.id, key: task.key, agent: session.agent, folder, surface: "terminal", modelSettings: task.modelSettings, changes: { sessionId: session.id, text },
     requestedAt: origin?.times.at ?? now, expiresAt: origin?.times.until ?? now + TTL_MS,
   };
   approvals().set(a.id, a);
@@ -150,7 +151,7 @@ function askResume(session: Session, task: Task, to: Surface | undefined, reques
   if (!folder) return null;
   const a: Approval = {
     id: requestId, requestId, from: "elsewhere", kind: "resume", taskId: task.id, key: task.key, agent: session.agent, folder,
-    surface: to ?? session.surface, resume: { sessionId: session.id, ...(to ? { to } : {}) }, requestedAt: times.at, expiresAt: times.until,
+    surface: to ?? session.surface, modelSettings: task.modelSettings, resume: { sessionId: session.id, ...(to ? { to } : {}) }, requestedAt: times.at, expiresAt: times.until,
   };
   approvals().set(a.id, a);
   return a;
@@ -171,15 +172,15 @@ async function act(a: Approval): Promise<LaunchResult> {
   if (a.changes || a.resume) {
     const sessionId = a.changes?.sessionId ?? a.resume!.sessionId;
     const task = await repo.getTask(a.taskId);
-    if (!task || task.key !== a.key || plannedFolder(task) !== a.folder) {
-      return { ok: false, error: `${a.key} changed after you saw the request (its task or folder). ${again}` };
+    if (!task || task.key !== a.key || plannedFolder(task) !== a.folder || JSON.stringify(task.modelSettings) !== JSON.stringify(a.modelSettings)) {
+      return { ok: false, error: `${a.key} changed after you saw the request (its task, folder or model settings). ${again}` };
     }
     const session = await repo.getSession(sessionId);
     if (!session || session.taskId !== a.taskId) return { ok: false, error: `That session is gone. ${again}` };
     return a.changes ? requestChanges(sessionId, a.changes.text) : resumeSession(sessionId, a.resume!.to);
   }
   return startSession(a.taskId, {
-    agent: a.agent, surface: a.surface, reason: "approved", expect: { key: a.key, agent: a.agent, folder: a.folder, surface: a.surface },
+    agent: a.agent, surface: a.surface, reason: "approved", expect: { key: a.key, agent: a.agent, folder: a.folder, surface: a.surface, modelSettings: a.modelSettings },
   });
 }
 
@@ -320,7 +321,7 @@ async function handle(r: LaunchRequest, setting: RemoteStart, here: string, now:
     const folder = plannedFolder(task);
     // A session in the agent's cloud sends the project there, so it always waits for you, whatever the setting.
     if (setting === "auto" && surface !== "cloud" && folder) {
-      return done(await startSession(task.id, { agent: r.agent, surface, reason: "remote", expect: { key: task.key, agent: r.agent, folder, surface } }));
+      return done(await startSession(task.id, { agent: r.agent, surface, reason: "remote", expect: { key: task.key, agent: r.agent, folder, surface, modelSettings: task.modelSettings } }));
     }
     if (!(await ask(task, r.agent, "elsewhere", r.id, times, surface))) await settle("failed", { note: "That task can't run on this computer" });
     return;

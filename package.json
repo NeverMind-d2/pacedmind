@@ -4,6 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
+    "test:models": "node --conditions=react-server --import tsx --test tests/agent-models.test.ts",
     "dev": "next dev -p 4320 -H 127.0.0.1",
     "build": "next build",
     "desktop": "node scripts/build-desktop.mjs",
@@ -41,7 +42,9 @@
     "electron": "^44.4.5",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "server-only": "0.0.1",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5"
   }
 }

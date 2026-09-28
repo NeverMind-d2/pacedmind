@@ -1,7 +1,7 @@
 import "server-only";
 import { cloudWritable } from "./billing";
 import { checkCodexCloud } from "./cloud";
-import { checkThisDevice, saveToolsOnce } from "./devices";
+import { checkThisDevice, refreshAgentModels, saveToolsOnce } from "./devices";
 import { tick, watchStatuses } from "./flow";
 import { mcpUrl } from "./launcher";
 import { linkProjects } from "./project-links";
@@ -53,6 +53,8 @@ export function startBackground() {
       }
     }, ms);
   };
+  // Other computers get current account capabilities, even when nobody opens this computer's task picker.
+  every(5 * 60_000, "agent models", () => Promise.all([refreshAgentModels("claude"), refreshAgentModels("codex")]));
   // What the agents here reach depends on the sign-in (PacedMind Cloud's MCP server counts only with it), so they're
   // checked again when that changes.
   let signedIn: boolean | null = null;

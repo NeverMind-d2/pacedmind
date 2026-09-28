@@ -127,7 +127,14 @@ export async function afterFinished(taskId: number): Promise<{ continueWith: Tas
       const project = target.projectId ? await repo.getProject(target.projectId) : null;
       if (target.agent === "human" || !project?.flowOn || !confirmed(target.projectId, [e])) continue;
       const others = incoming(target.id, edges).filter((x) => x.id !== e.id);
-      if (!continueWith && others.every((x) => satisfied(x, tasks.get(x.fromTaskId), held))) continueWith = target;
+      if (!continueWith && others.every((x) => satisfied(x, tasks.get(x.fromTaskId), held))) {
+        // An existing conversation cannot apply another task's explicit model settings through MCP.
+        // Start it normally so the destination checks and applies those settings before any work happens.
+        if (target.modelSettings) {
+          const r = await startFromFlow(target);
+          if (r) started.push(r);
+        } else continueWith = target;
+      }
       continue;
     }
     const r = await maybeStart(target, snap);

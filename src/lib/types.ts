@@ -95,6 +95,8 @@ export interface Subtask {
 }
 
 export interface Task {
+  /** Explicit settings for the agent account on the selected computer; null preserves its defaults. */
+  modelSettings: import("./agent-models").ModelSelection | null;
   id: number;
   key: string;
   areaId: string | null;
@@ -309,6 +311,7 @@ export interface AgentLogin {
 
 /** What PacedMind found on a computer for one agent. */
 export interface AgentTools {
+  models?: import("./agent-models").ModelCatalog;
   /** The command-line tool, when it answered `--version`; `path` when it isn't on the PATH but was found where installers put it. */
   cli: { version: string; path?: string } | null;
   /** The desktop app, when it's installed. */

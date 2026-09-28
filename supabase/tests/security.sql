@@ -335,6 +335,26 @@ begin
     out := out || '18c FAIL unknown run-in accepted' || E'\n';
     reset role;
   exception when others then out := out || '18c run-in rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  -- Model settings are data, never arbitrary shell arguments; existing task RLS protects them.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set model_settings = '{"agent":"codex","model":"account-model","effort":"high","speed":"priority"}' where id = tid;
+    select count(*) into n from public.tasks where id = tid and model_settings->>'model' = 'account-model';
+    out := out || '18m model settings saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18m ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set model_settings = '{"agent":"codex","model":"x; whoami"}' where id = tid;
+    out := out || '18n FAIL model shell characters accepted' || E'\n';
+    reset role;
+  exception when check_violation then out := out || '18n model shell characters rejected (want rejected)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set model_settings = '{}' where id = tid;
+    out := out || '18o FAIL incomplete model settings accepted' || E'\n';
+    reset role;
+  exception when check_violation then out := out || '18o incomplete model settings rejected (want rejected)' || E'\n'; end;
   -- A task's needs are names only (what it needs from the computer its session runs on), at most ten.
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;

@@ -1,4 +1,5 @@
 "use client";
+import { ModelSettings } from "./model-picker";
 
 import { useId, useState, type ReactNode } from "react";
 import { MAX_NEEDS, cleanNeeds, needKey } from "@/lib/needs";
@@ -276,6 +277,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
         )}
 
         <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-x-2 gap-y-0.5 text-[12.5px]">
+          <h3 className="col-span-2 pb-2 font-medium text-fg2">General</h3>
           <Prop label="Status">
             <Menu trigger={<button type="button" className={pv}><StatusIcon status={task.status} />{STATUS_LABEL[task.status]}</button>}
               items={(Object.keys(STATUS_LABEL) as Status[]).map((s) => ({ value: s, label: STATUS_LABEL[s], icon: <StatusIcon status={s} /> }))}
@@ -310,7 +312,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           <Prop label="Project">
             <Menu trigger={<button type="button" className={cx(pv, !project && "text-mut2")}><Icon name="layers" size={14} />{project?.name ?? "Add to project"}</button>}
               items={[{ value: null as string | null, label: "No project" }, ...ctx.projects.map((p) => ({ value: p.id as string | null, label: p.name }))]}
-              onSelect={(v) => save({ projectId: v, ...(v ? { areaId: ctx.projects.find((p) => p.id === v)?.areaId ?? task.areaId } : {}) })} />
+              onSelect={(v) => save({ projectId: v, modelSettings: null, ...(v ? { areaId: ctx.projects.find((p) => p.id === v)?.areaId ?? task.areaId } : {}) })} />
           </Prop>
           <Prop label="Done by">
             <Menu width={240}
@@ -321,14 +323,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 </button>
               }
               items={doers.map((d) => ({ ...d, icon: <DoerIcon doer={d.value ?? project?.agent ?? null} size={13} /> }))}
-              onSelect={(v) => save({ agent: v })} />
+              onSelect={(v) => save({ agent: v, modelSettings: null })} />
           </Prop>
-          {/* Folders are this computer's: the desktop app sets them, for the sessions that run here. */}
-          {agent && ctx.desktop && (
-            <Prop label="Folder">
-              <FolderProp task={task} projectFolder={project?.folder ?? null} onSave={(folder) => save({ folder })} />
-            </Prop>
-          )}
           <Prop label="Labels">
             <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
               {task.labels.map((l) => (
@@ -347,13 +343,28 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 className="h-5 w-16 bg-transparent text-[11.5px] text-mut outline-none placeholder:text-mut2" />
             </div>
           </Prop>
+          {(agent || session || hasUse(use)) && <h3 className="col-span-2 mt-4 flex items-center gap-2 border-t border-line pb-2 pt-3 font-medium text-fg2">
+            {agent ? <>Agent<span className="flex items-center gap-1.5 font-normal text-mut2"><AgentIcon agent={agent} size={12} />{AGENT_LABEL[agent]}</span></> : "Session history"}
+          </h3>}
+          {agent && <div className="col-span-2 mb-2">
+            <ModelSettings key={`${task.id}:${agent}:${task.projectId}`} agent={agent} deviceId={task.deviceId ?? project?.deviceId ?? null}
+              surface={task.runIn} value={task.modelSettings} disabled={pending}
+              onChange={(modelSettings, deviceId) => save({ modelSettings, deviceId, ...(modelSettings ? { runIn: "terminal" } : {}) })}
+              onDeviceChange={(deviceId) => save({ deviceId, modelSettings: null })} />
+          </div>}
+          {/* Folders are this computer's: the desktop app sets them, for the sessions that run here. */}
+          {agent && ctx.desktop && (
+            <Prop label="Folder">
+              <FolderProp task={task} projectFolder={project?.folder ?? null} onSave={(folder) => save({ folder })} />
+            </Prop>
+          )}
           {/* What its agent needs from the computer its session runs on: PacedMind offers one that has it. */}
           {agent && (
             <Prop label="Needs">
               <NeedsProp needs={task.needs} tools={ctx.tools ?? []} onSave={(needs) => save({ needs })} />
             </Prop>
           )}
-          <Prop label="Session">
+          {(agent || session) && <Prop label="Session">
             {session && session.status !== "failed" ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>
                 <AgentIcon agent={session.agent} size={13} />{AGENT_LABEL[session.agent]}
@@ -384,7 +395,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 {!session && <RequestStatus match={forThisTask} />}
               </div>
             )}
-          </Prop>
+          </Prop>}
           {/* A row of its own under Start, so Session stays level with the button. */}
           {agent && (!session || session.status === "failed") && trustHint("col-start-2 px-2 pb-1")}
           {/* What its sessions used, as their agents reported it. */}

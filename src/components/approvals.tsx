@@ -7,6 +7,7 @@ import { needList } from "@/lib/needs";
 import { Button, useAction } from "./ui";
 
 export interface ApprovalView {
+  modelSettings?: import("@/lib/agent-models").ModelSelection | null;
   id: string;
   /** Start a session, resume one, or send one back with changes (src/server/requests.ts). */
   kind?: LaunchRequestKind;
@@ -70,6 +71,7 @@ export function Approvals({ items }: { items: ApprovalView[] }) {
             <span className="font-mono text-fg2">{a.key}</span> {a.title}
             <br />
             {a.agent} in <span className="break-all font-mono text-[11.5px] text-fg2">{a.folder}</span>
+            {a.modelSettings && <p className="mt-1 text-mut2">{a.modelSettings.model} · Thinking: {a.modelSettings.effort ?? "Default"} · Speed: {a.modelSettings.speed ?? "Default"}</p>}
           </div>
           {a.missing && a.missing.length > 0 && (
             <p className="text-[12px] leading-relaxed text-fg3">
