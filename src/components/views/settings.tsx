@@ -160,14 +160,14 @@ function copy(text: string, what: string) {
 
 function ComputersLink() {
   return (
-    <Link href="/computers" className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-mut hover:bg-hover hover:text-fg2">
+    <Link href="/settings/computers" className="flex h-6 items-center gap-1 rounded-md px-2 text-[12px] text-mut hover:bg-hover hover:text-fg2">
       Open Computers<Icon name="chevronRight" size={11} strokeWidth={2.2} />
     </Link>
   );
 }
 
 const PAGE_ICON: Record<SettingsSection, IconName> = {
-  account: "user", plan: "creditCard", security: "shield", data: "database",
+  account: "user", plan: "creditCard", security: "shield", computers: "laptop", data: "database",
   appearance: "palette", notifications: "bell", planning: "calendar",
   computer: "laptop", sessions: "terminal", projects: "folder", mcp: "plug",
 };
