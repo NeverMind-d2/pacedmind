@@ -98,7 +98,7 @@ Agents attach screenshots by saving an image file and passing its path (`attach_
 
 ## Views
 
-Today, Inbox, Upcoming, Calendar (month and week with auto-planned time blocks), Timeline, Projects, Roadmap and Flow (two views of one plan), Sessions, Computers, Settings. Pages refresh on their own when an agent changes something.
+Today, Inbox, Upcoming, Calendar (month and week with auto-planned time blocks), Timeline, Projects, Roadmap and Flow (two views of one plan), Sessions, Settings (including Computers). Pages refresh on their own when an agent changes something.
 
 Switch between dark and light mode beside Settings in the sidebar, or in **Settings → Appearance**. The choice is remembered on this device and also updates the Windows title-bar controls.
 

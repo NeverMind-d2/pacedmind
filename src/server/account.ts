@@ -7,7 +7,7 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { requireAal2, supabase } from "./supabase";
 import { attachmentPath, removeImageFiles } from "./attachments";
 import {
-  commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, projectServers, setFlowArmed, setProjectFolder, setProjectServers, setTaskFolder,
+  areaFolder, commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, projectServers, setAreaFolder, setFlowArmed, setProjectFolder, setProjectServers, setTaskFolder,
   taskFolder, updateDevice,
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
@@ -47,12 +47,13 @@ async function clearAccount(db: SupabaseClient) {
   const device = deviceConfig().deviceId;
   const files = device ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
   const projects = (check(await db.from("projects").select("id")) as Row[]).map((r) => String(r.id));
+  const areas = (check(await db.from("areas").select("id")) as Row[]).map((r) => String(r.id));
   // Deleting tasks takes their sub-tasks, sessions, reports, images and connections along; areas take their projects.
   for (const table of ["tasks", "events", "projects", "areas", "key_counters"]) {
     check(await db.from(table).delete().eq("user_id", id));
   }
   removeImageFiles(files);
-  forgetAll("cloud", projects);
+  forgetAll("cloud", projects, areas);
 }
 
 /** Starts the account over with the default areas, and optionally the sample data. */
@@ -285,6 +286,10 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const areaByKey = new Map(newAreas.map((a) => [String(a.key), String(a.id)]));
     const areaIds = new Map(areaRows.map((a) => [a.old, areaByKey.get(a.row.key) ?? null]));
     const areaId = (old: unknown) => (old == null ? null : areaIds.get(String(old)) ?? null);
+    for (const [old, id] of areaIds) {
+      const folder = areaFolder(old);
+      if (id && folder) setAreaFolder(id, folder);
+    }
 
     const projectId = new Map<string, string>();
     const flowsOn: string[] = [];
@@ -436,7 +441,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     // A flow that was on stays on, with the connections it already ran with on this computer; one added
     // later from elsewhere asks first. This computer's own copies no longer start anything.
     for (const id of flowsOn) setFlowArmed(id, true, await flowSnapshot(id));
-    forgetAll("local", projects.map((p) => String(p.id)));
+    forgetAll("local", projects.map((p) => String(p.id)), areas.map((a) => String(a.id)));
 
     // Planning settings go to the account; how sessions start stays on this computer (an earlier version kept
     // that in its database too).
@@ -504,6 +509,7 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     conn.prepare("VACUUM INTO ?").run(path.join(path.dirname(localDbPath()), `organizer-before-move-${stamp}.db`));
   }
   const localProjects = (conn.prepare("SELECT id FROM projects").all() as Row[]).map((r) => String(r.id));
+  const localAreas = (conn.prepare("SELECT id FROM areas").all() as Row[]).map((r) => String(r.id));
   const json = (v: unknown) => JSON.stringify(Array.isArray(v) ? v : []);
   const s = (v: unknown) => (v == null ? null : String(v));
   const slug = (name: unknown, fallback: string) =>
@@ -629,7 +635,11 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
 
   // This computer's folders follow the projects and tasks to their copies; the flows stay off until you switch them on.
   // The replaced data's settings go first. The account's stay, for signing in again.
-  forgetAll("local", localProjects);
+  forgetAll("local", localProjects, localAreas);
+  for (const [cloud, local] of areaId) {
+    const folder = areaFolder(cloud);
+    if (folder) setAreaFolder(local, folder);
+  }
   for (const [cloud, local] of projectId) {
     const folder = projectFolder(cloud);
     if (folder) setProjectFolder(local, folder);

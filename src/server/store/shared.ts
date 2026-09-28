@@ -35,11 +35,12 @@ export interface TaskInput {
   doneWhen?: string[];
   needs?: string[];
   agent?: Doer | null;
+  runIn?: Surface | null;
 }
 
 export type TaskPatch = Partial<TaskInput & {
   reminder: string | null; sortOrder: number; flowX: number | null; flowY: number | null;
-  runIn: Surface | null; deviceId: string | null; folder: string | null;
+  deviceId: string | null; folder: string | null;
 }>;
 
 export interface SessionFilter {

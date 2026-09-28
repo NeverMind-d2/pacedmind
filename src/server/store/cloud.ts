@@ -6,7 +6,7 @@ import { removeImageFiles, type StoredImage } from "../attachments";
 import { removeDiffFiles } from "../diff";
 import { repoIdentity } from "../git-remote";
 import {
-  deviceConfig, flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
+  areaFolder, deviceConfig, flowArmed, forgetArea, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
@@ -105,7 +105,7 @@ function chunks<T>(xs: T[], size = 100): T[][] {
 
 const toArea = (r: Row): Area => ({
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
-  picture: pictureHash(r.picture), sort: Number(r.sort),
+  picture: pictureHash(r.picture), sort: Number(r.sort), folder: MODE === "desktop" ? areaFolder(String(r.id)) : null,
 });
 
 export async function listAreas(): Promise<Area[]> {
@@ -167,6 +167,7 @@ export async function deleteArea(id: string) {
   if (!isUuid(id)) return;
   const db = await accountDb();
   check(await db.from("areas").delete().eq("id", id));
+  if (MODE === "desktop") forgetArea(id);
 }
 
 /** Deletes a project. Its tasks stay in the project's area without a project. */
@@ -351,6 +352,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
     estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
+    run_in: input.agent === "human" ? null : input.runIn ?? null,
   }).select(TASK_SELECT).single());
   return toTask(r!);
 }
@@ -787,9 +789,9 @@ export async function heldTaskIds(): Promise<Set<number>> {
 
 
 /** A project's flow as it is now: its connections, and the project it starts after. */
-export async function flowSnapshot(projectId: string): Promise<{ edges: string[]; after: string | null }> {
+export async function flowSnapshot(projectId: string): Promise<{ edges: string[]; after: string | null; areaId: string | null }> {
   const [tasks, edges, project] = await Promise.all([listTasks({ projectId }), listEdges(), getProject(projectId)]);
-  return snapshotOf(tasks.map((t) => t.id), edges, project?.afterProjectId ?? null);
+  return { ...snapshotOf(tasks.map((t) => t.id), edges, project?.afterProjectId ?? null), areaId: project?.areaId ?? null };
 }
 
 

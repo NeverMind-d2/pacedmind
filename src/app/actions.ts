@@ -14,7 +14,7 @@ import {
   afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
 } from "@/server/ops";
 import { approve, cutOffAgents, deny } from "@/server/requests";
-import { commandProblem, deviceConfig, rotateOwnerToken, setProjectServers, updateDevice } from "@/server/device";
+import { commandProblem, deviceConfig, rotateOwnerToken, setAreaFolder, setProjectServers, updateDevice } from "@/server/device";
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
@@ -609,10 +609,25 @@ export async function updateAreaAction(id: string, patch: { name?: string; color
   return done();
 }
 
-/**
- * An area's own picture, such as a company logo: base64 PNG that the browser made small (area-picture.ts), shown
- * instead of the area's icon. `null` puts the dot back.
- */
+/** The area's default workspace is local to this computer, just like a project's or task's folder. */
+export async function setAreaFolderAction(id: string, folder: string | null): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "Workspaces are set in the PacedMind desktop app on this computer." };
+  if (folder !== null && typeof folder !== "string") return { ok: false, error: "Enter a folder path." };
+  const [areas, projects] = await Promise.all([repo.listAreas(), repo.listProjects()]);
+  const area = areas.find((a) => a.id === id);
+  if (!area) return { ok: false, error: "Area not found" };
+  const next = folder?.trim() || null;
+  const inheriting = projects.filter((p) => p.areaId === id && !p.folder);
+  const changed = area.folder !== next;
+  const error = setAreaFolder(id, next, inheriting.map((p) => p.id));
+  if (error) return { ok: false, error };
+  return done({ ok: true, message: changed && inheriting.some((p) => p.flowOn)
+    ? "Workspace saved. Flows that inherit it are paused; switch them on again to use the new folder."
+    : "Workspace saved" });
+}
+
+/** An area's own picture: a small base64 PNG made by the browser. Null removes it. */
 export async function setAreaPictureAction(id: string, picture: string | null) {
   await guard();
   const problem = picture === null ? null : typeof picture === "string" ? areaPictureProblem(picture) : "That isn't a picture.";

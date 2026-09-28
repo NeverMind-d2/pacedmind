@@ -1,6 +1,6 @@
 /** Settings' pages, each at /settings/<id> (src/app/(app)/settings/[section]). */
 export type SettingsSection =
-  | "account" | "plan" | "security" | "data"
+  | "account" | "plan" | "security" | "computers" | "data"
   | "appearance" | "notifications" | "planning"
   | "computer" | "sessions" | "projects" | "mcp";
 
@@ -32,6 +32,7 @@ export function settingsMenu({ account, plan, desktop }: { account: boolean; pla
           : page("account", "Account", "Use PacedMind on your other computers and in the browser too."),
         ...(account && plan ? [page("plan", "Plan", "Your PacedMind Cloud trial or subscription, and paying for it.")] : []),
         ...(account ? [page("security", "Security", "Two-factor sign-in and your password.")] : []),
+        page("computers", "Computers", "Your computers, their agents, flows and sessions."),
         page("data", "Data", account ? "What your account holds, moving it, and starting over." : "What this computer keeps, and starting over."),
       ],
     },
@@ -49,7 +50,7 @@ export function settingsMenu({ account, plan, desktop }: { account: boolean; pla
           pages: [
             page("computer", "General", "This computer's name, and what it does when asked from elsewhere."),
             page("sessions", "Sessions", "How agent sessions start on this computer."),
-            page("projects", "Projects", "Each project's folder, flow, agent and MCP servers on this computer."),
+            page("projects", "Projects", "Area workspaces and each project's folder, flow, agent and MCP servers on this computer."),
             page("mcp", "MCP server", account
               ? "How Claude Code, Codex and other agents reach PacedMind Cloud."
               : "How Claude Code and Codex reach PacedMind."),
@@ -71,7 +72,7 @@ export function settingsMenu({ account, plan, desktop }: { account: boolean; pla
  * were their ids (#plan, #data).
  */
 export const OLD_ANCHORS: Record<string, SettingsSection> = {
-  devices: "account",
+  devices: "computers",
   "this-computer": "computer",
   connect: "mcp",
   "projects-and-folders": "projects",

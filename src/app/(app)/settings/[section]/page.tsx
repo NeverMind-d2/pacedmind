@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { ComputersSettings } from "@/components/computers-settings";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
   PlanningSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
@@ -65,6 +66,8 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     }
     case "security":
       return state && <SecuritySettings account={accountView(state)} />;
+    case "computers":
+      return <ComputersSettings />;
     case "data": {
       const [legacy, sessions] = await Promise.all([state && desktop ? legacySummary() : null, repo.listSessions()]);
       return <DataSettings account={!!state} desktop={desktop} legacy={legacy} sessionsCount={sessions.length} />;
@@ -85,9 +88,10 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     case "projects": {
       const [projects, areas] = await Promise.all([repo.listProjects(), repo.listAreas()]);
       // What agents get in each project's folder here, and the MCP servers its sessions get: this computer's to decide.
-      const agents: Record<string, ProjectAgentsView> | null = desktop ? Object.fromEntries(projects.map((p) => [p.id, {
-        extras: p.folder ? folderExtras(p.folder) : null, choices: serverChoices(p.folder), servers: projectServers(p.id),
-      }])) : null;
+      const agents: Record<string, ProjectAgentsView> | null = desktop ? Object.fromEntries(projects.map((p) => {
+        const folder = p.folder ?? areas.find((a) => a.id === p.areaId)?.folder ?? null;
+        return [p.id, { extras: folder ? folderExtras(folder) : null, choices: serverChoices(folder), servers: projectServers(p.id) }];
+      })) : null;
       return <ProjectSettings projects={projects} areas={areas} desktop={desktop} agents={agents} platform={process.platform} />;
     }
     case "mcp": {

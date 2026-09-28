@@ -15,7 +15,6 @@ import { ConfirmDialog } from "../dialog";
 import { InlineName } from "../entity-menu";
 import { AgentIcon, Icon, SurfaceIcon } from "../icons";
 import { Button, Dot, cx, useAction } from "../ui";
-import { ViewHeader } from "./calendar-parts";
 
 /* ---------- data from the server ---------- */
 
@@ -183,73 +182,69 @@ export function ComputersView({ devices, hereId, account, registering, projects,
   };
 
   return (
-    <section aria-label="Computers" className="flex min-w-0 flex-1 flex-col">
-      <ViewHeader icon="laptop" title="Computers" subtitle={subtitle} />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="@container mx-auto flex max-w-[920px] flex-col gap-5 px-10 py-8 max-md:gap-4 max-md:px-4 max-md:py-5">
-          {registering && (
-            <div className="flex items-center gap-3 rounded-lg border border-line2 px-4 py-3.5 text-[12.5px] text-mut">
-              <Icon name="laptop" size={16} className="shrink-0 text-mut2" />
-              Adding this computer to your account…
-            </div>
-          )}
-
-          {devices.map((d) => (
-            <Computer key={d.id} d={d} here={d.id === hereId} desktop={hereId !== null} account={account} online={online(d)} now={now}
-              flows={d.flowsOn.flatMap((id) => byId.get(id) ?? [])}
-              sessions={sessions.filter((s) => (account ? s.deviceId === d.id : d.id === hereId))}
-              renaming={renaming === d.id} pending={pending}
-              onRename={() => setRenaming(d.id)} onRenamed={() => setRenaming(null)}
-              onSave={(name) => { setRenaming(null); run(() => renameDeviceAction(d.id, name)); }}
-              onDefault={() => run(() => setDefaultDeviceAction(d.id))}
-              onCheck={() => run(() => checkDeviceAction())}
-              onConnect={connect}
-              onSignOut={() => setLeaving(d)} />
-          ))}
-
-          {account && !devices.length && !registering && (
-            <div className="flex flex-col items-center gap-3 px-6 py-20 text-center max-md:py-14">
-              <Icon name="laptop" size={22} className="text-mut2" />
-              <div className="text-[14px] text-fg2">No computers yet</div>
-              <p className="max-w-md text-[12.5px] leading-relaxed text-mut2">
-                Claude Code and Codex sessions run on your computers. Install the PacedMind desktop app on one where you use them, and
-                sign in there with this account: it shows up here within a minute.
-              </p>
-              <div className="flex flex-wrap justify-center gap-2 pt-1">
-                <a href="https://pacedmind.com/download/windows" target="_blank" rel="noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-ctl px-3 text-[12.5px] text-fg2 hover:bg-hover">
-                  <Icon name="download" size={13} />Download for Windows
-                </a>
-                <a href="https://pacedmind.com/download/mac" target="_blank" rel="noreferrer"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-ctl px-3 text-[12.5px] text-fg2 hover:bg-hover">
-                  <Icon name="download" size={13} />Download for macOS
-                </a>
-              </div>
-            </div>
-          )}
-
-          {!account && (
-            <div className="flex items-start gap-3 rounded-lg border border-dashed border-line2 px-4 py-3.5 max-md:px-3.5">
-              <Icon name="cloud" size={16} className="mt-0.5 shrink-0 text-mut2" />
-              <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-mut">
-                With PacedMind Cloud your computers work together: each one shows up here with what it has and runs, and you can start
-                a session on one from another, or from your phone.
-              </p>
-              <Link href="/login" className="inline-flex h-7 shrink-0 items-center rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
-                Sign in
-              </Link>
-            </div>
-          )}
-
-          {account && devices.length > 0 && (
-            <p className="text-[12px] leading-relaxed text-mut2">
-              What runs on a computer is decided there: its agent commands, folders, flow switches and whether it takes sessions from
-              elsewhere are set in its desktop app. A computer is online when it checked in during the last two minutes; what it has of
-              the agents, it looks for when it starts and every half hour.
-            </p>
-          )}
+    <section aria-label="Computers" className="@container flex min-w-0 flex-col gap-5 max-md:gap-4">
+      <p className="text-[12.5px] text-mut2">{subtitle}</p>
+      {registering && (
+        <div className="flex items-center gap-3 rounded-lg border border-line2 px-4 py-3.5 text-[12.5px] text-mut">
+          <Icon name="laptop" size={16} className="shrink-0 text-mut2" />
+          Adding this computer to your account…
         </div>
-      </div>
+      )}
+
+      {devices.map((d) => (
+        <Computer key={d.id} d={d} here={d.id === hereId} desktop={hereId !== null} account={account} online={online(d)} now={now}
+          flows={d.flowsOn.flatMap((id) => byId.get(id) ?? [])}
+          sessions={sessions.filter((s) => (account ? s.deviceId === d.id : d.id === hereId))}
+          renaming={renaming === d.id} pending={pending}
+          onRename={() => setRenaming(d.id)} onRenamed={() => setRenaming(null)}
+          onSave={(name) => { setRenaming(null); run(() => renameDeviceAction(d.id, name)); }}
+          onDefault={() => run(() => setDefaultDeviceAction(d.id))}
+          onCheck={() => run(() => checkDeviceAction())}
+          onConnect={connect}
+          onSignOut={() => setLeaving(d)} />
+      ))}
+
+      {account && !devices.length && !registering && (
+        <div className="flex flex-col items-center gap-3 px-6 py-20 text-center max-md:py-14">
+          <Icon name="laptop" size={22} className="text-mut2" />
+          <div className="text-[14px] text-fg2">No computers yet</div>
+          <p className="max-w-md text-[12.5px] leading-relaxed text-mut2">
+            Claude Code and Codex sessions run on your computers. Install the PacedMind desktop app on one where you use them, and
+            sign in there with this account: it shows up here within a minute.
+          </p>
+          <div className="flex flex-wrap justify-center gap-2 pt-1">
+            <a href="https://pacedmind.com/download/windows" target="_blank" rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-ctl px-3 text-[12.5px] text-fg2 hover:bg-hover">
+              <Icon name="download" size={13} />Download for Windows
+            </a>
+            <a href="https://pacedmind.com/download/mac" target="_blank" rel="noreferrer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-ctl px-3 text-[12.5px] text-fg2 hover:bg-hover">
+              <Icon name="download" size={13} />Download for macOS
+            </a>
+          </div>
+        </div>
+      )}
+
+      {!account && (
+        <div className="flex items-start gap-3 rounded-lg border border-dashed border-line2 px-4 py-3.5 max-md:px-3.5">
+          <Icon name="cloud" size={16} className="mt-0.5 shrink-0 text-mut2" />
+          <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-mut">
+            With PacedMind Cloud your computers work together: each one shows up here with what it has and runs, and you can start
+            a session on one from another, or from your phone.
+          </p>
+          <Link href="/login" className="inline-flex h-7 shrink-0 items-center rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
+            Sign in
+          </Link>
+        </div>
+      )}
+
+      {account && devices.length > 0 && (
+        <p className="text-[12px] leading-relaxed text-mut2">
+          What runs on a computer is decided there: its agent commands, folders, flow switches and whether it takes sessions from
+          elsewhere are set in its desktop app. A computer is online when it checked in during the last two minutes; what it has of
+          the agents, it looks for when it starts and every half hour.
+        </p>
+      )}
 
       {leaving && (
         <ConfirmDialog title={leaving.id === hereId ? "Sign this computer out?" : `Sign ${leaving.name} out?`} confirmLabel="Sign out" danger
@@ -293,7 +288,7 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
                 <InlineName initial={d.name} placeholder="Computer name" onSave={onSave} onCancel={onRenamed} className="max-w-[280px]" />
               ) : (
                 <>
-                  <h2 className="min-w-0 truncate text-[14px] font-semibold text-strong">{d.name}</h2>
+                  <h3 className="min-w-0 truncate text-[14px] font-semibold text-strong">{d.name}</h3>
                   <button type="button" aria-label={`Rename ${d.name}`} title="Rename" onClick={onRename}
                     className="-ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-mut hover:bg-hover hover:text-fg2 pointer-coarse:h-8 pointer-coarse:w-8">
                     <Icon name="pen" size={12} />
