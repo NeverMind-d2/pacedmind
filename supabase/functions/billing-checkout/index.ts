@@ -71,12 +71,8 @@ Deno.serve(async (req) => {
       tax_id_collection: { enabled: true },
       billing_address_collection: "required",
       allow_promotion_codes: true,
-      custom_text: {
-        submit: {
-          message: "By subscribing you accept PacedMind's terms (pacedmind.com/terms) and privacy policy (pacedmind.com/privacy). "
-            + "Within 14 days of your first payment you can ask for it back in full (pacedmind.com/refunds).",
-        },
-      },
+      // No custom_text: with Stripe as the merchant of record (Managed Payments, on in the live account), Checkout shows
+      // its own terms and refuses text of ours. The Customer Portal links PacedMind's terms and privacy policy.
       success_url: urls.done,
       cancel_url: urls.back,
     });

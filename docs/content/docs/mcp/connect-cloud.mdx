@@ -70,7 +70,7 @@ Any MCP client that supports OAuth sign-in, such as a custom connector in Claude
 
 The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn't signed in to PacedMind, it asks for your email, password and two-factor code first, then comes back to the page.
 
-The page asks *Allow Claude Code to use PacedMind?*, with the agent's name as the agent gives it, and shows where the agent's sign-in returns to: for Claude Code and Codex, `localhost` (*this computer*). An agent you allowed before asks *Allow this agent to use PacedMind again?*
+The page asks *Allow Claude Code to use PacedMind?*, with the agent's name as the agent gives it. It shows the server the agent connects to, `app.pacedmind.com` (PacedMind Cloud), and where the sign-in is handed back to the agent: for Claude Code and Codex, an address such as `127.0.0.1:61154` or `localhost:53963` on this computer, where the agent waits only while it signs in. That address isn't the MCP server. An agent you allowed before asks *Allow this agent to use PacedMind again?*
 
 * **Allow** sends you back to the agent, which then has PacedMind's tools.
 * **Deny** tells the agent no. For an agent you allowed before, the page says *Not connected. You can close this tab.*

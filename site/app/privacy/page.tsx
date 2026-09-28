@@ -49,7 +49,7 @@ export default function Privacy() {
       <List items={[
         <><strong>Supabase</strong> hosts the Cloud database and sign-in, in the EU (Ireland), and sends sign-in emails.</>,
         <><strong>OVHcloud</strong> hosts the web app, this website and the downloads, in the EU (France).</>,
-        <><strong>Stripe</strong> takes payments and keeps your payment details, as a controller of its own for part of them (<a href="https://stripe.com/privacy" className="underline underline-offset-2 hover:text-ink">Stripe&rsquo;s privacy policy</a>). Stripe may process data in the United States under the EU&rsquo;s standard contractual clauses and the EU–US Data Privacy Framework.</>,
+        <><strong>Stripe</strong> sells the subscription as the merchant of record, takes payments and keeps your payment details and billing address, as a controller of its own for them (<a href="https://stripe.com/privacy" className="underline underline-offset-2 hover:text-ink">Stripe&rsquo;s privacy policy</a>). Stripe may process data in the United States under the EU&rsquo;s standard contractual clauses and the EU–US Data Privacy Framework.</>,
         <><strong>Browser push services</strong> (Google, Mozilla, Apple, Microsoft) carry the notifications you turn on.</>,
       ]} />
       <p>We don&rsquo;t sell your data or share it with anyone else, except when the law requires it.</p>
