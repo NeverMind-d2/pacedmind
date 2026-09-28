@@ -19,5 +19,10 @@ touch /srv/pacedmind/web.env
 chown root:pacedmind /srv/pacedmind/web.env
 chmod 640 /srv/pacedmind/web.env
 
+# System logs, which can hold an IP address when something fails, go after 30 days (the privacy policy says so).
+install -d /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\n' > /etc/systemd/journald.conf.d/pacedmind.conf
+systemctl restart systemd-journald
+
 echo "Node $(node --version), npm $(npm --version), $(caddy version | cut -d' ' -f1)"
 echo "Next: put SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in /srv/pacedmind/web.env, then run deploy/deploy.sh."

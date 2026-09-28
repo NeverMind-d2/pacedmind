@@ -14,9 +14,20 @@ export const SITE = {
   app: "https://app.pacedmind.com",
   // Where Cloud's button leads: the web app's sign-in page, open on creating an account.
   createAccount: "https://app.pacedmind.com/login?create=1",
+  // Who runs PacedMind and PacedMind Cloud, for the terms, privacy policy and refunds (app/terms, app/privacy,
+  // app/refunds), as the business register (CEIDG) has it.
+  operator: {
+    name: "NMD Mikołaj Bednarczyk",
+    address: "ul. Warszawska 62 lok. 4, 96-500 Sochaczew, Poland",
+    nip: "8371874588",
+    regon: "523093293",
+    email: "mbednarczyk@preseed.tech",
+  },
+  // When the terms, privacy policy and refund policy last changed.
+  legalUpdated: "28 September 2026",
   // Whether Cloud takes subscriptions yet. Until billing launches the page says "Coming soon"; switch it on together
   // with the database's billing switch (supabase/migrations, private.billing_switch).
-  cloudOpen: false,
+  cloudOpen: true,
   // The source code: the repository's name as GitHub's API takes it, its page, and the files the page links to.
   repo,
   source: `https://github.com/${repo}`,

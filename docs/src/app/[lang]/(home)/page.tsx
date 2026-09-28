@@ -106,7 +106,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Accounts and Cloud',
-      description: 'In development: PacedMind accounts, sign-in, cloud data and plans.',
+      description: 'The One device and Cloud plans, the free trial, subscribing, and what happens when Cloud ends.',
       href: '/accounts-and-cloud',
       icon: 'user',
     },
