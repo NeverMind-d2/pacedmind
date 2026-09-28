@@ -1,0 +1,63 @@
+---
+title: When Cloud ends
+description: "When the trial or the subscription is over, the account is read-only: what still works, the banners, subscribing again, moving the data to this computer, and deleting the account."
+---
+
+PacedMind Cloud ends when the free trial is over without a subscription, or when the subscription ends or isn't paid. The account then becomes read-only. Nothing in it is deleted.
+
+## The banner
+
+A banner above every page appears when the plan needs attention, and only then:
+
+| When | The banner says | Buttons |
+| --- | --- | --- |
+| The trial has three days or fewer left | *Your free trial of PacedMind Cloud ends in 2 days. After that it's read-only until you subscribe.* On the last two days: *ends tomorrow*, *ends today*. | **Subscribe** opens **Settings → Plan**. |
+| A payment didn't go through | *The last payment for PacedMind Cloud didn't go through. Cloud keeps working while the card is tried again.* | **Update payment** opens the billing page. |
+| Cloud has ended | In the desktop app: *PacedMind Cloud is read-only: you can see and delete what's in it, but not change it. Subscribe, or move it to this computer.* In the web app, without the last sentence. | **Move to this computer** (desktop app only) opens **Settings → Data**. **Subscribe** opens **Settings → Plan**. |
+
+## What a read-only account can do
+
+Everything in the account can still be read and deleted, on every computer and in the web app. Adding or changing anything is refused with *PacedMind Cloud is read-only: subscribe to keep working in it, or move your data to this computer.*
+
+| | While Cloud has ended |
+| --- | --- |
+| Reading tasks, projects, the calendar, sessions and reports | Works |
+| Deleting | Works |
+| Adding or changing anything, such as a task, a project or an activity | Refused |
+| **Load sample data**, **Start empty** and **Move to account** in **Settings → Data** | Refused |
+| Agents connected over MCP | Reading works. Adding or changing anything, such as a session's report, gets the same message. |
+| Starting a session | Refused, on this computer and on your other computers: they can't be asked to start one. |
+| Flows | Start no sessions. |
+| Your computers | Still show as signed in. |
+| **Move to this computer** | Works. See [below](#move-to-this-computer). |
+| Deleting the account | Works. See [below](#delete-the-account). |
+
+## Subscribe again
+
+Subscribe from **Settings → Plan**, as the first time: see [Subscribe to Cloud](/accounts-and-cloud/subscribing#subscribe). The account is writable again as soon as the payment goes through, with everything still in it, on every computer signed in to it.
+
+## Move to this computer
+
+The account's data can move to one computer and stay there without an account, on the free One device plan. This works while Cloud is read-only, and only from the desktop app.
+
+1. In the desktop app on the computer that should keep the data, open **Settings → Data**. The **Move to this computer** button on the banner goes there too.
+2. In the **Your account** row, *Keep it on this computer, without an account*, select **Move to this computer**.
+3. Confirm the question *Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there, and flows are off until you switch them on. Your account keeps its data until you delete it.*
+
+PacedMind then copies the data, signs this computer out, and opens **Today** with the data as this computer's own.
+
+* Tasks keep their keys, such as WRK-12. Sessions and their reports come along, with the images agents attached on this computer.
+* The project and task folders set on this computer stay with their projects and tasks. The flows are off until each project's **Flow on** is switched on again. See [Flows](/agents/flows#when-the-flow-starts-a-session).
+* What this computer kept without an account before is replaced. When it had projects or tasks, a copy of its database stays in the data folder as `organizer-before-move-<time>.db`. See [Where your data lives](/getting-started/data).
+* The account keeps its data until it's deleted, and your other computers stay signed in to it.
+
+## Delete the account
+
+**Settings → Delete account** deletes the account and everything in it: areas, projects, tasks, calendar, sessions and computers. It can't be undone.
+
+1. Type the account's email under **Your email**, and a current code from the authenticator app under **Code**.
+2. Select **Delete account**, and confirm *Delete your PacedMind account and all its data for good?*.
+
+While a subscription would still renew, the deletion is refused with *Cancel your subscription in Manage billing first: it would go on renewing.* Cancel it in **Manage billing** (see [Cancel](/accounts-and-cloud/subscribing#cancel)), then delete the account. Once the subscription is canceled, the account can be deleted, also before the paid period ends.
+
+To keep the data without the account, [move it to this computer](#move-to-this-computer) first.

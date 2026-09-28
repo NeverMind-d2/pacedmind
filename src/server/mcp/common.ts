@@ -4,15 +4,19 @@ import { format } from "date-fns";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as repo from "../repo";
+import { noteAgentActivity } from "../signals";
+import { MODE } from "../supabase";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
+import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL,
+  AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isAnswers,
   type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task,
 } from "@/lib/types";
+import { NO_USE, addUse, agentUseLine, hasUse, sessionUse } from "@/lib/usage";
 
 /* ---------- registering tools ---------- */
 
@@ -26,6 +30,12 @@ export function fail(message: string): never {
 type Kind = "read" | "write" | "delete" | "launch";
 
 /**
+ * Tools PacedMind Cloud's MCP server (the hosted app) doesn't have: it can't read files from an agent's computer, and
+ * a question that waits for your answer comes from the computer the session runs on (session_asks).
+ */
+const NOT_HOSTED: ReadonlySet<string> = new Set(["attach_image", "ask_user"]);
+
+/**
  * Registers a tool whose handler returns text; thrown errors become MCP tool errors. A session PacedMind
  * started only gets the tools in SESSION_TOOLS: the others aren't listed for it and refuse its calls.
  */
@@ -37,6 +47,7 @@ export function tool<S extends z.ZodObject>(
 ) {
   const ownerOnly = !SESSION_TOOLS.has(name);
   if (ownerOnly && caller().kind === "session") return;
+  if (MODE === "web" && NOT_HOSTED.has(name)) return;
   server.registerTool(
     name,
     {
@@ -52,12 +63,16 @@ export function tool<S extends z.ZodObject>(
     },
     (async (args: z.infer<S>) => {
       try {
-        if (ownerOnly && caller().kind === "session") {
+        const who = caller();
+        if (ownerOnly && who.kind === "session") {
           fail(`Sessions that PacedMind started can't use ${name}. Ask the user to do it in PacedMind.`);
         }
+        // A session's agent calling PacedMind is at work, whatever it waited for before; except while it waits for your
+        // answer to what it asked (ask_user, which it calls again to keep waiting).
+        if (who.kind === "session" && name !== "ask_user") await noteAgentActivity(who.sessionId).catch(() => {});
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
-        const text = e instanceof ToolError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
+        const text = e instanceof ToolError || e instanceof CloudReadOnly ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
         return { content: [{ type: "text" as const, text }], isError: true };
       }
     }) as never,
@@ -244,9 +259,11 @@ export function taskLine(t: Task, n: Names): string {
 }
 
 export async function describeTask(t: Task, given?: Names): Promise<string> {
-  const [n, edges, tasks, session, report] = await Promise.all([
-    given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id), repo.latestReport(t.id),
+  const [n, edges, tasks, session, report, sessions] = await Promise.all([
+    given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id), repo.latestReport(t.id), repo.listSessions({ taskId: t.id }),
   ]);
+  // What its sessions used, as their agents reported it.
+  const use = sessions.map(sessionUse).reduce(addUse, NO_USE);
   const keys = new Map(tasks.map((x) => [x.id, x.key]));
   const keyOf = (id: number) => keys.get(id) ?? `#${id}`;
   const after = edges.filter((e) => e.toTaskId === t.id).map((e) => `${keyOf(e.fromTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
@@ -261,6 +278,8 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,
     t.runIn ? `Sessions run in: ${t.runIn === "desktop" ? "the agent's desktop app" : t.runIn === "cloud" ? "the agent's cloud" : "a terminal"}` : null,
+    t.needs.length ? `Needs on its computer: ${t.needs.join(", ")}` : null,
+    hasUse(use) ? `Agents used: ${agentUseLine(use)} (the price is what the tokens cost through the API)` : null,
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",
     t.doneWhen.length ? `\nDone when:\n${t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n")}` : null,
     t.subtasks.length ? `\nSub-tasks:\n${t.subtasks.map((s, i) => `${i + 1}. [${s.done ? "x" : " "}] ${s.title}`).join("\n")}` : null,
@@ -307,7 +326,7 @@ export function reportText(r: Report, heading = "Report"): string {
     r.links.length ? `Links: ${r.links.map((l) => (l.label === l.url ? l.url : `${l.label} (${l.url})`)).join(", ")}` : null,
     r.followUps.length ? `Follow-ups: ${r.followUps.map((f) => (f.title ? `${f.key} ${f.title}` : f.key)).join(", ")}` : null,
     r.details ? `Details:\n${r.details}` : null,
-    r.changes ? `The user asked for changes (${(r.changesAt ?? "").replace("T", " ")}):\n${r.changes}` : null,
+    r.changes ? `The user ${isAnswers(r.changes) ? "answered your questions" : "asked for changes"} (${(r.changesAt ?? "").replace("T", " ")}):\n${r.changes}` : null,
   ].filter((x) => x !== null).join("\n");
 }
 

@@ -5,6 +5,8 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { mcpUrl } from "../launcher";
 import { agentCommandFor, deviceConfig } from "../device";
 import * as repo from "../repo";
+import { MODE } from "../supabase";
+import { cloudMcpUrl } from "../supabase-config";
 import { planTimeBlocks, type PlanResult } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, hhmm, minutesOf, parseLocal, timeOf, toDateStr } from "@/lib/dates";
 import { PRIORITY_LABEL, type CalEvent } from "@/lib/types";
@@ -272,11 +274,18 @@ export function registerCalendarTools(server: McpServer) {
     kind: "read",
   }, async () => {
     const s = await repo.getSettings();
+    const hours = [
+      `Work hours: ${s.workStart}–${s.workEnd} · Break: ${s.lunchStart}–${s.lunchEnd}`,
+      `Work days: ${s.workDays.map((d) => DAY_NAMES[d - 1]).join(", ")}`,
+    ];
+    // PacedMind Cloud's MCP server: how sessions start is each computer's own setting, in its desktop app.
+    if (MODE === "web") {
+      return [...hours, "Sessions start on the user's computers, as each computer's PacedMind desktop app says.", `MCP address: ${cloudMcpUrl()}`].join("\n");
+    }
     const d = deviceConfig();
     const asked = { off: "refused", ask: "wait for the user to allow them on this computer", auto: "start right away" }[d.remoteStart];
     return [
-      `Work hours: ${s.workStart}–${s.workEnd} · Break: ${s.lunchStart}–${s.lunchEnd}`,
-      `Work days: ${s.workDays.map((d) => DAY_NAMES[d - 1]).join(", ")}`,
+      ...hours,
       `Sessions on this computer open in: ${terminalFor(d.terminal, process.platform).label} · Claude Code command: ${agentCommandFor("claude")} · Codex command: ${agentCommandFor("codex")}`,
       `Sessions asked for over MCP wait for the user to allow them in PacedMind. Requests from the web app or another computer: ${asked}.`,
       `MCP address: ${mcpUrl()}`,

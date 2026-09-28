@@ -1,15 +1,36 @@
 import "server-only";
 import { trustCheck } from "./claude-trust";
-import { runsHere } from "./devices";
+import { deviceConfig } from "./device";
+import { runsHere, thisDeviceId } from "./devices";
 import { changesProblemIn, changesViaIn } from "./ops";
+import { scanOtherSessions } from "./other-sessions";
 import * as repo from "./repo";
+import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
 import { dateOnly, todayStr } from "@/lib/dates";
-import type { SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
-import { agentOf, taskHref, type Report, type Session, type Status, type Task } from "@/lib/types";
+import type { OtherGroup, SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
+import { agentOf, deviceOnline, taskHref, type OtherSession, type Report, type Session, type Status, type Task } from "@/lib/types";
 
 const EARLIER_LIMIT = 30;
 const active = (s: Session) => s.status === "starting" || s.status === "running";
+
+/**
+ * The sessions PacedMind didn't start, by computer: this one's as it finds them now (other-sessions.ts), the others'
+ * as they last said (every minute while they run). Computers without any are left out.
+ */
+export async function otherSessionGroups(): Promise<OtherGroup[]> {
+  const [projects, devices, cloud] = await Promise.all([repo.listProjects(), repo.listDevices(), usesCloud()]);
+  const names = new Map(projects.map((p) => [p.id, p.name]));
+  const named = (list: OtherSession[]) => list.map((s) => ({ ...s, project: (s.projectId && names.get(s.projectId)) || null }));
+  const groups: OtherGroup[] = [];
+  if (MODE === "desktop") groups.push({ id: "here", computer: deviceConfig().name, here: true, online: true, sessions: named(scanOtherSessions(projects)) });
+  const me = MODE === "desktop" && cloud ? thisDeviceId() : null;
+  for (const d of devices) {
+    if (d.revokedAt || d.id === me) continue;
+    groups.push({ id: d.id, computer: d.name, here: false, online: deviceOnline(d), sessions: named(d.otherSessions) });
+  }
+  return groups.filter((g) => g.sessions.length);
+}
 
 /** Everything the Sessions screen shows, grouped the way it lists them. */
 export async function sessionList(selected: string | null): Promise<{ groups: SessionGroup[]; initialId: string | null; startable: StartableTask[] }> {
@@ -79,6 +100,7 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       endAt: active(s) || s.status === "finished" ? null : endAt(s),
       note: s.note,
       cliSessionId: s.cliSessionId,
+      usage: s.usage ?? null,
       origin: s.continuesSessionId
         ? "continued"
         : events.some((e) => e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text)) ? "outside" : "organizer",

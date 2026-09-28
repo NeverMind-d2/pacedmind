@@ -1,3 +1,4 @@
+import type { AgentUse } from "./usage";
 import type { AreaIcon } from "./area-icons";
 
 export type Status = "backlog" | "todo" | "progress" | "review" | "done" | "canceled";
@@ -15,7 +16,20 @@ export type SessionStatus = "starting" | "running" | "finished" | "done" | "clos
  */
 export type Surface = "terminal" | "desktop" | "cloud";
 /** Whether PacedMind's MCP server is set up for sessions it doesn't configure itself (desktop apps). */
-export type McpLink = "connected" | "elsewhere" | "missing";
+/**
+ * Whether an agent's own config reaches this PacedMind: `connected` as "pacedmind" with this computer's token; `old`
+ * under its old name, "organizer" (it works, and Connect renames it); `cloud` through PacedMind Cloud's MCP server,
+ * signed in with the account (while this computer is signed in to it); `elsewhere` for another PacedMind; `missing`.
+ */
+export type McpLink = "connected" | "old" | "cloud" | "elsewhere" | "missing";
+
+/** Whether sessions in the agent's desktop app (and those you start yourself) report back to PacedMind. */
+export const mcpReaches = (link: McpLink) => link === "connected" || link === "old" || link === "cloud";
+
+/** The MCP server's name in the agents' configs: its tools are mcp__pacedmind__<tool>. */
+export const MCP_NAME = "pacedmind";
+/** Its name before, which configs set up earlier still have (Connect replaces it). */
+export const OLD_MCP_NAME = "organizer";
 /** How an agent handed a task back: all of it ready, part of it, or stuck until the user decides something. */
 export type ReportOutcome = "done" | "partial" | "blocked";
 /** An agent's answer to one "Done when" item. */
@@ -60,6 +74,11 @@ export interface Project {
   deviceId: string | null;
   /** The Codex cloud environment (its label or id) that tasks sent to Codex cloud run in. */
   codexEnv: string | null;
+  /**
+   * Its git repository as host/owner/name (and "#subfolder" inside one), read from its folder on a computer, so each
+   * computer recognizes the project in its own copy. Null until a computer with its folder saw one.
+   */
+  repo: string | null;
   agent: AgentId | null;
   afterProjectId: string | null;
   /** Whether its flow may start sessions on this computer by itself (a switch in the desktop app). */
@@ -92,6 +111,11 @@ export interface Task {
   labels: string[];
   /** What must be true when the task is finished, one checkable outcome per item. Agents answer each when they hand it back. */
   doneWhen: string[];
+  /**
+   * What its agent needs from the computer its session runs on, by name: MCP servers or claude.ai connectors, such as
+   * "supabase" or "Gmail" (src/lib/needs.ts). PacedMind offers a computer that has them.
+   */
+  needs: string[];
   reminder: string | null;
   agent: Doer | null;
   /** Where its agent sessions run; null picks the terminal when the agent's CLI is installed, else its desktop app. */
@@ -148,6 +172,32 @@ export interface Session {
   note: string | null;
   cliSessionId: string | null;
   continuesSessionId: string | null;
+  /** What its agent used, as the agent reported it (its usage metrics, the usage route); null until it did. */
+  usage?: SessionUsage | null;
+}
+
+/** Tokens an agent used, as its records count them: read fresh, read from its cache, written to its cache, and written. */
+export interface TokenCounts {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+}
+
+/**
+ * What a session's agent used, as Claude Code's usage metrics report it (OpenTelemetry): tokens per conversation it ran,
+ * by its own id for it (a request for changes starts a new one), what they'd cost at API prices, how long it worked,
+ * and the models it ran, the latest first.
+ */
+export interface SessionUsage {
+  conversations: Record<string, TokenCounts>;
+  /** US dollars at API prices, as Claude Code counts them; on a plan, not what you pay. */
+  costUsd: number;
+  /** Seconds the agent was working (not waiting for you). */
+  activeSeconds: number;
+  models: string[];
+  /** When it last reported. */
+  at: string;
 }
 
 export interface SessionEvent {
@@ -233,6 +283,10 @@ export interface DeviceSettings {
   claudeCommand: string;
   codexCommand: string;
   remoteStart: RemoteStart;
+  /** Whether PacedMind answers Claude Code's and Codex's question whether you trust a session's folder, before it starts. */
+  trustFolders: boolean;
+  /** Whether this computer's sessions wait for answers from PacedMind on your other devices too (asks.ts). */
+  remoteAnswers: boolean;
   /** This computer's id in the account's list, once registered. */
   deviceId: string | null;
   /** Whether the app's secrets on disk are encrypted with a key from the OS keychain. */
@@ -263,6 +317,59 @@ export interface AgentTools {
   mcp: McpLink;
   /** Whether the CLI is signed in (Claude Code on the web and Codex cloud start from it). */
   login: AgentLogin;
+  /** What its sessions get besides PacedMind in every folder, as its config files name it (extras.ts); missing until it looked. */
+  extras?: AgentExtras;
+}
+
+/**
+ * What an agent gets on a computer besides PacedMind, by name only (extras.ts): the MCP servers and plugins its config
+ * turns on everywhere, how many skills it has, and which of its hooks run. Never a server's command, address or keys.
+ */
+export interface AgentExtras {
+  mcp: string[];
+  plugins: string[];
+  skills: number;
+  hooks: string[];
+  /**
+   * The MCP servers its sessions get from the account its CLI is signed in to (Claude Code's claude.ai connectors,
+   * such as Gmail), which no config file names: as the last session PacedMind started here without a project's
+   * pick reported them (start_task), and when. Missing until one did.
+   */
+  account?: string[];
+  accountAt?: string;
+}
+
+/** An MCP server a project's folder names for Claude Code (.mcp.json): whether Claude Code may use it there, or asks you first (null). */
+export interface FolderServer {
+  name: string;
+  approved: boolean | null;
+}
+
+/**
+ * What an agent gets in a project's folder on this computer on top of what it has everywhere (extras.ts), by name only:
+ * MCP servers from the folder's own files and Claude Code's servers for this folder alone, skills, hooks and plugins
+ * the folder's settings add, and the instruction files the agents read there.
+ */
+export interface FolderExtras {
+  claudeMcp: FolderServer[];
+  /** Claude Code's servers for this folder only (local scope, kept in ~/.claude.json). */
+  claudeLocal: string[];
+  codexMcp: string[];
+  skills: number;
+  hooks: string[];
+  plugins: string[];
+  /** CLAUDE.md, AGENTS.md: what the agents read there before they start. */
+  instructions: string[];
+}
+
+/**
+ * A project on this computer as Settings shows it for agents: what they get in its folder (null without one), the MCP
+ * servers besides PacedMind its sessions could have, by agent, and the ones they get (null: all of them).
+ */
+export interface ProjectAgentsView {
+  extras: FolderExtras | null;
+  choices: Record<AgentId, string[]>;
+  servers: string[] | null;
 }
 
 export const NO_AGENT_TOOLS: AgentTools = { cli: null, app: null, mcp: "missing", login: { state: "unknown" } };
@@ -288,6 +395,40 @@ export interface Device {
   appVersion: string | null;
   /** Projects whose flow is switched on at that computer, as it last said. For display: each computer decides for itself. */
   flowsOn: string[];
+  /** The Claude Code and Codex sessions it found that PacedMind didn't start, as it last said (other-sessions.ts). */
+  otherSessions: OtherSession[];
+}
+
+/** Where a Claude Code or Codex session runs on a computer: the command-line tool in a terminal, or the desktop app. */
+export type Harness = "claude-cli" | "claude-app" | "codex-cli" | "codex-app";
+
+export const HARNESS_LABEL: Record<Harness, string> = {
+  "claude-cli": "Claude Code", "claude-app": "Claude app", "codex-cli": "Codex CLI", "codex-app": "Codex app",
+};
+
+export const harnessAgent = (h: Harness): AgentId => (h.startsWith("claude") ? "claude" : "codex");
+
+/**
+ * What a session is doing, as its own record shows: at work right now, waiting for you (its turn ended, or it stopped
+ * in the middle of one, such as for a permission), or quiet for hours.
+ */
+export type OtherSessionState = "working" | "waiting" | "idle";
+
+/** A Claude Code or Codex session on one of your computers that PacedMind didn't start, as that computer found it. */
+export interface OtherSession {
+  harness: Harness;
+  /** The tool's own id for the session. */
+  ref: string;
+  /** Its own title, else its first message, on one line and short. */
+  title: string;
+  /** The name of its folder (never the path). */
+  place: string;
+  /** The project its folder is, on that computer; null for none. */
+  projectId: string | null;
+  state: OtherSessionState;
+  /** ISO timestamps. */
+  startedAt: string;
+  activeAt: string;
 }
 
 /** A computer counts as online when it said so in the last two minutes (it does every minute while it runs). */
@@ -331,11 +472,76 @@ export interface LaunchRequest {
   note: string | null;
 }
 
+/** What a running session's agent waits for you to answer: a permission for a tool, or a question (asks.ts). */
+export type AskKind = "permission" | "question";
+export type AskStatus = "pending" | "answered" | "expired" | "withdrawn";
+
+/**
+ * Something a running session's agent waits for your answer to, held for a few minutes by the computer it runs on:
+ * a tool it wants permission for (Claude Code's PermissionRequest hook) or a question (the ask_user tool). Answered
+ * once, from that computer, or from elsewhere when that computer takes answers from elsewhere (`remoteOk`).
+ */
+export interface SessionAsk {
+  id: string;
+  sessionId: string;
+  /** The computer it runs on; null for this computer's own data without an account. */
+  deviceId: string | null;
+  kind: AskKind;
+  /** The tool it wants to use, as the agent names it (Bash, Edit…); null for a question. */
+  tool: string | null;
+  /** The question, or what the tool would do (the command, the file). */
+  text: string;
+  /** Whether its computer takes answers from elsewhere, as that computer's setting said when it asked. */
+  remoteOk: boolean;
+  askedAt: string;
+  expiresAt: string;
+  status: AskStatus;
+  /** "allow" or "deny" for a permission; the answer for a question. */
+  answer: string | null;
+  answeredAt: string | null;
+  /** Whether the answer came from the session's own computer or from elsewhere (the web app, another computer). */
+  answeredVia: "computer" | "elsewhere" | null;
+}
+
+/** A pending ask as `/api/state` reports it, for the answer card. `here`: this page runs on the session's computer. */
+export interface AskView {
+  id: string;
+  sessionId: string;
+  kind: AskKind;
+  tool: string | null;
+  text: string;
+  remoteOk: boolean;
+  here: boolean;
+  /** When the agent stops waiting (ms since the epoch). */
+  expiresAt: number;
+}
+
+/** A browser's push subscription (PushSubscription.toJSON), as the account keeps it for notifications (push.ts). */
+/** An agent you allowed to use PacedMind Cloud's MCP server (OAuth), as Settings lists it. */
+export interface ConnectedAgent {
+  id: string;
+  /** The name the agent registered itself with (Claude Code, Codex…): plain text, never trusted. */
+  name: string;
+  /** When you allowed it (ISO). */
+  approvedAt: string;
+  /** When it signed in with that (ISO); null until it does, within ten minutes. */
+  claimedAt: string | null;
+}
+
+export interface PushSubscriptionInput {
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  /** Which browser or phone it is, in a few words, for Settings. */
+  label: string;
+}
+
 /** A request of the last half hour as `/api/state` reports it, for "Waiting for X", "Started on X", "Refused by X". */
 export interface LaunchRequestView {
   id: string;
   kind: LaunchRequestKind;
   taskId: number;
+  agent: AgentId;
   /** Null when the task is gone. */
   taskKey: string | null;
   /** The session it resumes or sends back (resume, changes). */
@@ -381,6 +587,13 @@ export interface TaskContext {
    * whether you do (desktop app): the running one's folder, else where the next one would start.
    */
   asksTrust?: Record<number, boolean>;
+  /**
+   * The MCP servers, claude.ai connectors and plugins the account's computers said their agents have (src/lib/needs.ts),
+   * each with the computers that have it: what a task's Needs suggests and says.
+   */
+  tools?: { name: string; on: string[] }[];
+  /** Per task id with sessions: what all its sessions used and how long they ran (src/lib/usage.ts). */
+  agentUse?: Record<number, AgentUse>;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
@@ -418,6 +631,13 @@ export const SURFACE_LABEL: Record<Surface, string> = { terminal: "Terminal", de
 /** The agent's desktop app and its cloud, by name. */
 export const APP_LABEL: Record<AgentId, string> = { claude: "Claude app", codex: "Codex app" };
 export const CLOUD_LABEL: Record<AgentId, string> = { claude: "Claude Code on the web", codex: "Codex cloud" };
+
+/**
+ * How your answers to an agent's questions start when they go back to it, like changes (AnswerForm in report.tsx):
+ * requestChanges tells them apart by it, also when they come from another computer.
+ */
+export const ANSWERS_HEADING = "My answers to your questions:";
+export const isAnswers = (text: string) => text.startsWith(ANSWERS_HEADING);
 
 /** The answer Claude Code needs the first time it starts in a folder, before it reads its first message (claude-trust.ts). */
 export const TRUST_ANSWER = "Yes, I trust this folder";

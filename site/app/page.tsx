@@ -222,11 +222,13 @@ export default async function Home() {
             </div>
             <div className="border-t border-line pb-12 pt-10 md:border-l md:border-t-0 md:pl-14">
               <h3 className="text-[22px] font-medium text-ink">Cloud</h3>
-              <div className="mt-6"><PlanPrice markets={markets} fallback={prices.fallback} /></div>
+              <div className="mt-6"><PlanPrice markets={markets} fallback={prices.fallback} yearlyMonths={prices.yearlyMonths} /></div>
               <ul className="mt-8 space-y-3 text-[16px] text-text">
                 {CLOUD.map((item) => <li key={item}>{item}</li>)}
               </ul>
-              <p className="mt-10 flex h-12 items-center text-[16px] text-mut">Coming soon</p>
+              {SITE.cloudOpen
+                ? <a className="download mt-10" href={SITE.createAccount}>Start 7 days free</a>
+                : <p className="mt-10 flex h-12 items-center text-[16px] text-mut">Coming soon</p>}
             </div>
           </div>
         </section>
@@ -254,7 +256,11 @@ export default async function Home() {
             <a href={SITE.docs} className="hover:text-ink">Docs</a>
             <a href={SITE.source} className="hover:text-ink" {...sourceEvent("footer")}>GitHub</a>
             <a href={SITE.app} className="hover:text-ink" {...signInEvent("footer")}>Sign in</a>
-            <span>© 2026</span>
+            <Link href="/terms" className="hover:text-ink">Terms</Link>
+            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/refunds" className="hover:text-ink">Refunds</Link>
+            <a href={`mailto:${SITE.operator.email}`} className="hover:text-ink">Contact</a>
+            <span>© 2026 {SITE.operator.name}</span>
           </div>
         </div>
       </footer>

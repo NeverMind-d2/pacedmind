@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { deleteAreaAction, deleteProjectAction, setAreaPictureAction, updateAreaAction, updateProjectAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import {
+  deleteAreaAction, deleteProjectAction, mergeProjectsAction, setAreaPictureAction, updateAreaAction, updateProjectAction,
+} from "@/app/actions";
 import { AREA_ICON_CATEGORIES, areaIconLabel, findAreaIcons, type AreaIcon } from "@/lib/area-icons";
 import { AREA_PICTURE_MAX, AREA_PICTURE_PX } from "@/lib/area-picture";
 import { PALETTE, projectColor } from "@/lib/colors";
@@ -244,14 +247,54 @@ export function AreaMenu({ area, anchor, usage, onClose, onRename, onNewProject 
   );
 }
 
-export function ProjectMenu({ project, areas, anchor, usage, onClose, onRename }: {
-  project: Project; areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void;
+/** The projects others can be merged into, each with its area, which tells two of the same name apart. */
+function MergeTargets({ targets, areas, onPick }: { targets: Project[]; areas: Area[]; onPick: (p: Project) => void }) {
+  return targets.map((p) => (
+    <PopoverItem key={p.id} icon={<span className="h-2 w-2 rounded-full" style={{ background: projectColor(p, areas) }} />}
+      hint={<span className="text-[11px]">{areas.find((a) => a.id === p.areaId)?.name}</span>} onClick={() => onPick(p)}>
+      <span className="pl-1">{p.name}</span>
+    </PopoverItem>
+  ));
+}
+
+/** Asks before merging projects into another (mergeProjectsAction), then opens the project they became. */
+function MergeConfirm({ from, into, usage, onClose, onMerged }: {
+  from: Project[]; into: Project; usage: Usage; onClose: () => void; onMerged?: () => void;
+}) {
+  const { run } = useAction();
+  const router = useRouter();
+  const tasks = from.reduce((n, p) => n + (usage.projects[p.id]?.tasks ?? 0), 0);
+  const one = from.length === 1;
+  return (
+    <ConfirmDialog title={`Merge ${one ? from[0].name : plural(from.length, "project", "projects")} into ${into.name}?`} confirmLabel="Merge projects"
+      onCancel={onClose}
+      onConfirm={() => {
+        run(async () => {
+          const r = await mergeProjectsAction(from.map((p) => p.id), into.id);
+          if (r.ok) router.push(`/project/${into.id}`);
+          return r;
+        });
+        onMerged?.();
+        onClose();
+      }}>
+      {one ? "" : `${names(from)}. `}
+      {tasks ? `${plural(tasks, "task moves", "tasks move")} to ${into.name}, after its own, and ${tasks === 1 ? "keeps its key" : "keep their keys"}. ` : ""}
+      {one ? `${from[0].name} is then deleted.` : "They're then deleted."} If {into.name} has no folder on this computer, it gets {one ? "its" : "theirs"}.
+    </ConfirmDialog>
+  );
+}
+
+export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, onRename }: {
+  project: Project; projects: Project[]; areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onRename: () => void;
 }) {
   const { run } = useAction();
   const [confirm, setConfirm] = useState(false);
   const [moving, setMoving] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [into, setInto] = useState<Project | null>(null);
   const area = areas.find((a) => a.id === project.areaId);
   const u = usage.projects[project.id] ?? { tasks: 0, open: 0, done: 0, pct: 0 };
+  if (into) return <MergeConfirm from={[project]} into={into} usage={usage} onClose={onClose} />;
   if (confirm) {
     return (
       <ConfirmDialog title={`Delete ${project.name}?`} confirmLabel="Delete project" danger
@@ -262,6 +305,7 @@ export function ProjectMenu({ project, areas, anchor, usage, onClose, onRename }
     );
   }
   const others = areas.filter((a) => a.id !== project.areaId);
+  const targets = projects.filter((p) => p.id !== project.id);
   return (
     <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
       <PopoverLabel>{project.name}</PopoverLabel>
@@ -291,8 +335,135 @@ export function ProjectMenu({ project, areas, anchor, usage, onClose, onRename }
           ))}
         </>
       )}
+      {targets.length > 0 && (
+        <>
+          {others.length === 0 && <PopoverSeparator />}
+          <PopoverItem icon={<Icon name="link" size={14} />} hint={<Icon name={merging ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMerging((m) => !m)}>
+            Merge into…
+          </PopoverItem>
+          {merging && <MergeTargets targets={targets} areas={areas} onPick={setInto} />}
+        </>
+      )}
       <PopoverSeparator />
       <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete project…</PopoverItem>
+    </Popover>
+  );
+}
+
+type Outcome = { ok: boolean; error?: string };
+
+/** Runs `step` for each item in turn, stopping at the first that fails, and shows `message` when all went through. */
+function useEach<T>(items: T[]) {
+  const { run } = useAction();
+  return (step: (item: T) => Promise<Outcome>, message: string) => run(async () => {
+    for (const item of items) {
+      const r = await step(item);
+      if (!r.ok) return r;
+    }
+    return { ok: true, message };
+  });
+}
+
+const names = (xs: { name: string }[]) => xs.map((x) => x.name).join(", ");
+
+/** The menu for several areas selected together in the sidebar. */
+export function AreasMenu({ areas, anchor, usage, onClose, onDeleted }: {
+  areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onDeleted: () => void;
+}) {
+  const each = useEach(areas);
+  const [confirm, setConfirm] = useState(false);
+  const count = plural(areas.length, "area", "areas");
+  if (confirm) {
+    const projects = areas.reduce((n, a) => n + (usage.areas[a.id]?.projects ?? 0), 0);
+    const tasks = areas.reduce((n, a) => n + (usage.areas[a.id]?.tasks ?? 0), 0);
+    return (
+      <ConfirmDialog title={`Delete ${count}?`} confirmLabel="Delete areas" danger onCancel={onClose}
+        onConfirm={() => {
+          each((a) => deleteAreaAction(a.id), tasks ? `Deleted ${count}. Their tasks moved to the Inbox.` : `Deleted ${count}`);
+          onDeleted();
+          onClose();
+        }}>
+        {names(areas)}. {projects ? `${plural(projects, "project", "projects")} in them will be deleted too. ` : ""}
+        {tasks ? `${plural(tasks, "task stays", "tasks stay")} and ${tasks === 1 ? "moves" : "move"} to the Inbox.` : "They have no tasks."}
+      </ConfirmDialog>
+    );
+  }
+  const shared = areas.every((a) => a.color === areas[0].color) ? areas[0].color : null;
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
+      <PopoverLabel>{count}</PopoverLabel>
+      <PopoverSeparator />
+      <PopoverLabel>Color</PopoverLabel>
+      <ColorSwatches value={shared} onPick={(c) => each((a) => updateAreaAction(a.id, { color: c }), `Recolored ${count}`)} />
+      <PopoverSeparator />
+      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete {count}…</PopoverItem>
+    </Popover>
+  );
+}
+
+/** The menu for several projects selected together in the sidebar. */
+export function ProjectsMenu({ projects, areas, anchor, usage, onClose, onDeleted }: {
+  projects: Project[]; areas: Area[]; anchor: Anchor; usage: Usage; onClose: () => void; onDeleted: () => void;
+}) {
+  const each = useEach(projects);
+  const [confirm, setConfirm] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [into, setInto] = useState<Project | null>(null);
+  const count = plural(projects.length, "project", "projects");
+  if (into) return <MergeConfirm from={projects.filter((p) => p.id !== into.id)} into={into} usage={usage} onClose={onClose} onMerged={onDeleted} />;
+  if (confirm) {
+    const tasks = projects.reduce((n, p) => n + (usage.projects[p.id]?.tasks ?? 0), 0);
+    return (
+      <ConfirmDialog title={`Delete ${count}?`} confirmLabel="Delete projects" danger onCancel={onClose}
+        onConfirm={() => {
+          each((p) => deleteProjectAction(p.id), tasks ? `Deleted ${count}. Their tasks stay in their areas.` : `Deleted ${count}`);
+          onDeleted();
+          onClose();
+        }}>
+        {names(projects)}. {tasks ? `${plural(tasks, "task stays", "tasks stay")} in ${tasks === 1 ? "its area" : "their areas"} without a project. ` : "They have no tasks. "}
+        Their folders, agents and flow settings are removed.
+      </ConfirmDialog>
+    );
+  }
+  const shared = projects.every((p) => p.color === projects[0].color) ? projects[0].color : null;
+  // An area they're all in already isn't somewhere to move them.
+  const targets = areas.filter((a) => projects.some((p) => p.areaId !== a.id));
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={MENU_WIDTH}>
+      <PopoverLabel>{count}</PopoverLabel>
+      <PopoverSeparator />
+      <PopoverLabel>Color</PopoverLabel>
+      <ColorSwatches value={shared} onPick={(c) => each((p) => updateProjectAction(p.id, { color: c }), `Recolored ${count}`)} />
+      <PopoverItem icon={<span className="h-3 w-3 rounded-full border border-dashed border-mut" />}
+        hint={projects.every((p) => p.color === null) && <Icon name="check" size={13} />}
+        onClick={() => each((p) => (p.color === null ? Promise.resolve({ ok: true }) : updateProjectAction(p.id, { color: null })), `${count} use their area's color`)}>
+        Same as their areas
+      </PopoverItem>
+      {targets.length > 0 && (
+        <>
+          <PopoverSeparator />
+          <PopoverItem icon={<Icon name="arrowRight" size={14} />} hint={<Icon name={moving ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMoving((m) => !m)}>
+            Move to area
+          </PopoverItem>
+          {moving && targets.map((a) => (
+            <PopoverItem key={a.id} icon={<AreaMark area={a} dot={8} />}
+              onClick={() => {
+                each((p) => (p.areaId === a.id ? Promise.resolve({ ok: true }) : updateProjectAction(p.id, { areaId: a.id })), `Moved ${count} to ${a.name}`);
+                onClose();
+              }}>
+              <span className="pl-1">{a.name}</span>
+            </PopoverItem>
+          ))}
+        </>
+      )}
+      {targets.length === 0 && <PopoverSeparator />}
+      <PopoverItem icon={<Icon name="link" size={14} />} hint={<Icon name={merging ? "chevronDown" : "chevronRight"} size={12} />} onClick={() => setMerging((m) => !m)}>
+        Merge into…
+      </PopoverItem>
+      {merging && <MergeTargets targets={projects} areas={areas} onPick={setInto} />}
+      <PopoverSeparator />
+      <PopoverItem icon={<Icon name="trash" size={14} />} danger onClick={() => setConfirm(true)}>Delete {count}…</PopoverItem>
     </Popover>
   );
 }

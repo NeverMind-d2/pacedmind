@@ -1,6 +1,6 @@
 #!/bin/sh
 # One-time setup of the VPS for the hosted PacedMind web app. Run it on the server as a sudoer, e.g.:
-#   ssh -i ~/Desktop/keys/pacedmind_vps ubuntu@<server> 'sudo sh -s' < deploy/provision.sh
+#   ssh pacedmind 'sudo sh -s' < deploy/provision.sh      (the ssh alias in deploy/README.md)
 # Installs Node and Caddy from Ubuntu's own repositories, and creates the user and folders the service uses.
 set -eu
 
@@ -18,6 +18,11 @@ install -d -o pacedmind -g pacedmind /srv/pacedmind/app /srv/pacedmind/site /srv
 touch /srv/pacedmind/web.env
 chown root:pacedmind /srv/pacedmind/web.env
 chmod 640 /srv/pacedmind/web.env
+
+# System logs, which can hold an IP address when something fails, go after 30 days (the privacy policy says so).
+install -d /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\n' > /etc/systemd/journald.conf.d/pacedmind.conf
+systemctl restart systemd-journald
 
 echo "Node $(node --version), npm $(npm --version), $(caddy version | cut -d' ' -f1)"
 echo "Next: put SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in /srv/pacedmind/web.env, then run deploy/deploy.sh."

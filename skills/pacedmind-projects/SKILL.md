@@ -5,7 +5,7 @@ description: Set up and structure projects in PacedMind - create the project, br
 
 # Projects in PacedMind
 
-The tools come from the PacedMind MCP server, `organizer` (in Claude Code: `mcp__organizer__<tool>`).
+The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
 
 ## Set up a project
 

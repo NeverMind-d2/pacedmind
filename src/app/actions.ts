@@ -1,28 +1,35 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import * as repo from "@/server/repo";
-import { importLegacy, resetAccount } from "@/server/account";
+import { importLegacy, moveToThisComputer, resetAccount } from "@/server/account";
+import { billingPortal, readPlan, subscribe } from "@/server/billing";
 import { usesCloud } from "@/server/scope";
 import { resetLocal } from "@/server/store/local-db";
-import { checkThisDevice, deviceIdFor, offeredDevice, runsHere } from "@/server/devices";
-import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
+import { checkThisDevice, deviceIdFor, offeredDevice, runsHere, thisDeviceId, toolsHere } from "@/server/devices";
+import { deviceWithNeeds, missingFrom, needList } from "@/lib/needs";
+import { mcpUrl, plannedFolder, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
 import {
   afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
 } from "@/server/ops";
-import { approve, deny } from "@/server/requests";
-import { commandProblem, deviceConfig, rotateOwnerToken, updateDevice } from "@/server/device";
+import { approve, cutOffAgents, deny } from "@/server/requests";
+import { commandProblem, deviceConfig, rotateOwnerToken, setProjectServers, updateDevice } from "@/server/device";
 import { folderProblem } from "@/server/folders";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
+import { mergeProjects } from "@/server/project-links";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
+import { answerHere, askedHere, withdrawHere } from "@/server/asks";
+import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
+import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
-  LIVE_STATUSES, deviceOnline, isLiveSession,
+  AGENT_LABEL, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
   type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
 } from "@/lib/types";
 
@@ -155,7 +162,11 @@ const SURFACES = new Set<Surface>(["terminal", "desktop", "cloud"]);
  * ran there). The page then asks that computer with a fresh two-factor code: requestSessionAction,
  * requestResumeAction or requestChangesRemoteAction.
  */
-type Remote = { remote?: boolean; deviceId?: string | null; pinned?: boolean };
+type Remote = {
+  remote?: boolean; deviceId?: string | null; pinned?: boolean;
+  /** Offered instead of starting here: what the task needs that the agent doesn't have on this computer. */
+  missingHere?: string[];
+};
 
 /**
  * What a request to a computer answers: the request's id once sent (it shows in /api/state's `requests`), and
@@ -167,21 +178,38 @@ type Requested = Result & { requestId?: string; needCode?: boolean };
 /**
  * Starts a session: in the desktop app, where the task says (a terminal or the agent's app here, or its cloud).
  * The web app can't start anything, and a task that runs on another computer starts there: both answer `remote`,
- * offering the computer the task names, else its project's, else the account's default.
+ * offering the computer the task names, else its project's, else one whose agent has what the task needs, else the
+ * account's default. A task that needs something (Task.needs) the agent doesn't have here, when another computer has
+ * it, answers `remote` too, with that computer and what's missing here (`missingHere`), unless `anyway`.
  */
-export async function startSessionAction(taskId: number, agent?: AgentId | null, surface?: Surface): Promise<Result & Remote> {
+export async function startSessionAction(
+  taskId: number, agent?: AgentId | null, surface?: Surface, anyway = false,
+): Promise<Result & Remote> {
   await guard();
   if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to run the session" };
   const task = await repo.getTask(taskId);
   if (!task) return { ok: false, error: "Task not found" };
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
+  const who = agent ?? agentOf(task, project?.agent);
   if (MODE === "web") {
-    return { ok: false, remote: true, ...offeredDevice(task, project, await repo.listDevices()), error: "Choose a computer to start it on." };
+    return { ok: false, remote: true, ...offeredDevice(task, project, await repo.listDevices(), who), error: "Choose a computer to start it on." };
   }
   const runsOn = deviceIdFor(task.deviceId, project?.deviceId);
   if (runsOn && !runsHere(runsOn)) return { ok: false, remote: true, deviceId: runsOn, pinned: true, error: `${task.key} runs on another computer.` };
+  const missing = who && task.needs.length && surface !== "cloud" ? missingFrom(task.needs, toolsHere(who, plannedFolder(task))) : [];
+  if (missing.length && !anyway && !runsOn && (await usesCloud())) {
+    const other = deviceWithNeeds(task.needs, who!, (await repo.listDevices()).filter((d) => d.id !== thisDeviceId()));
+    if (other) {
+      return {
+        ok: false, remote: true, deviceId: other.id, pinned: false, missingHere: missing,
+        error: `${task.key} needs ${needList(missing)}, which ${AGENT_LABEL[who!]} doesn't have on this computer. ${other.name} has everything it needs.`,
+      };
+    }
+  }
   const r = await startSession(taskId, { agent: agent ?? undefined, surface, reason: "you" });
-  return done(r.ok ? { ok: true, message: r.message ?? "Session started" } : { ok: false, error: r.error });
+  const started = r.message ?? "Session started";
+  const lacks = missing.length ? `${/[.!?]$/.test(started) ? "" : "."} ${AGENT_LABEL[who!]} doesn't have ${needList(missing)} here, which ${task.key} needs.` : "";
+  return done(r.ok ? { ok: true, message: `${started}${lacks}` } : { ok: false, error: r.error });
 }
 
 /**
@@ -358,6 +386,96 @@ export async function requestChangesRemoteAction(sessionId: string, text: string
   }, device, code, device.remoteStart !== "auto");
 }
 
+/**
+ * Answers what a running session's agent waits for (asks.ts): "allow" or "deny" for a permission, the text for a
+ * question. On the session's own computer it goes at once; from anywhere else only when that computer takes answers
+ * from elsewhere, and with a two-factor code from the last five minutes (`code`, or "" to use one entered in the last
+ * four), which the database checks again.
+ */
+export async function answerAskAction(askId: string, answer: string, code = ""): Promise<Requested> {
+  await guard();
+  const ask = typeof askId === "string" ? await repo.getAsk(askId) : null;
+  if (!ask || ask.status !== "pending" || Date.parse(ask.expiresAt) <= Date.now()) {
+    return done({ ok: false, error: "The agent isn't waiting for this answer any more." });
+  }
+  const value = ask.kind === "permission"
+    ? (answer === "allow" || answer === "deny" ? answer : null)
+    : (typeof answer === "string" ? answer.trim().slice(0, 20000) : "") || null;
+  if (!value) return { ok: false, error: ask.kind === "permission" ? "Allow it or refuse it." : "Write your answer." };
+  const session = await repo.getSession(ask.sessionId);
+  if (!session || !isLiveSession(session)) return done({ ok: false, error: "That session isn't running any more." });
+  if (await askedHere(ask)) {
+    try {
+      await answerHere(ask.id, value);
+    } catch (e) {
+      return done({ ok: false, error: errorOf(e) });
+    }
+    return done({ ok: true });
+  }
+  if (!ask.remoteOk) {
+    return { ok: false, error: "Its computer takes answers only there. Answer it there, or turn on Answer from elsewhere in that computer's Settings." };
+  }
+  const stale = await stepUp(code);
+  if (stale) return stale;
+  try {
+    await repo.answerAsk(ask.id, value);
+  } catch (e) {
+    const message = errorOf(e);
+    if (!refusedStepUp(message)) return done({ ok: false, error: message });
+    return { ok: false, needCode: true, error: (code ?? "").trim() ? STEP_UP_REFUSED : "Enter a current two-factor code." };
+  }
+  return done({ ok: true, message: "Sent. The agent gets it within a few seconds." });
+}
+
+/* ---------- notifications on your phone and in the browser (push.ts) ---------- */
+
+const NO_PUSH = "Notifications on your phone and in the browser come with PacedMind Cloud.";
+
+/** The account's public key for web push, which a browser subscribes with: made the first time one asks. */
+export async function pushKeyAction(): Promise<Result & { publicKey?: string }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: NO_PUSH };
+  try {
+    return { ok: true, publicKey: await ensurePushKeys() };
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+/** Keeps a browser that turned notifications on (its PushSubscription), for the account's computers to send to. */
+export async function savePushSubscriptionAction(sub: { endpoint: string; p256dh: string; auth: string; label: string }): Promise<Result> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: NO_PUSH };
+  if (!sub || typeof sub.endpoint !== "string" || !PUSH_ENDPOINT.test(sub.endpoint) || typeof sub.p256dh !== "string" || typeof sub.auth !== "string") {
+    return { ok: false, error: "This browser's push service isn't one PacedMind sends to." };
+  }
+  const label = typeof sub.label === "string" ? sub.label.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 100) : "";
+  try {
+    await repo.addPushSubscription({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth, label });
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  return done({ ok: true, message: "Notifications are on in this browser." });
+}
+
+/** Stops notifications to a browser (this one, or one listed in Settings). */
+export async function removePushSubscriptionAction(endpoint: string): Promise<Result> {
+  await guard();
+  if (typeof endpoint !== "string" || !(await usesCloud())) return { ok: false, error: NO_PUSH };
+  await repo.removePushSubscription(endpoint);
+  return done({ ok: true, message: "Notifications are off there." });
+}
+
+/** "Answer in the terminal": the session's computer stops holding a permission, so the agent's own prompt asks there. */
+export async function withdrawAskAction(askId: string): Promise<Result> {
+  await guard();
+  const ask = typeof askId === "string" ? await repo.getAsk(askId) : null;
+  if (!ask || ask.status !== "pending") return done();
+  if (!(await askedHere(ask))) return { ok: false, error: "Only the computer the session runs on can hand this to its terminal." };
+  await withdrawHere(ask.id);
+  return done({ ok: true, message: "Answer it in the agent's terminal." });
+}
+
 export async function markSessionDoneAction(sessionId: string): Promise<Result> {
   await guard();
   const s = await repo.getSession(sessionId);
@@ -514,6 +632,49 @@ export async function deleteAreaAction(id: string) {
   return done({ ok: true, message: kept ? `Deleted ${a.name}. Its tasks moved to the Inbox.` : `Deleted ${a.name}` });
 }
 
+const isIdList = (ids: unknown): ids is string[] => Array.isArray(ids) && ids.every((id) => typeof id === "string");
+
+/**
+ * `items` in the order of `ids`. Ids that are gone are skipped, and items the list leaves out (made elsewhere
+ * meanwhile) keep their order after it.
+ */
+function inOrder<T extends { id: string }>(items: T[], ids: string[]): T[] {
+  const byId = new Map(items.map((x) => [x.id, x]));
+  const first = [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
+  return [...first, ...items.filter((x) => !first.includes(x))];
+}
+
+/** Puts the areas in this order, as dragged in the sidebar. */
+export async function reorderAreasAction(ids: string[]): Promise<Result> {
+  await guard();
+  if (!isIdList(ids)) return { ok: false, error: "That isn't a list of areas." };
+  const areas = inOrder(await repo.listAreas(), ids);
+  await Promise.all(areas.map((a, i) => (a.sort !== i + 1 ? repo.updateArea(a.id, { sort: i + 1 }) : null)));
+  return done();
+}
+
+/**
+ * Merges projects into one, such as the copies two computers made of the same project: their tasks move into
+ * `intoId` and keep their keys, and they're deleted (project-links.ts).
+ */
+export async function mergeProjectsAction(fromIds: string[], intoId: string): Promise<Result> {
+  await guard();
+  if (!isIdList(fromIds) || typeof intoId !== "string") return { ok: false, error: "That isn't a list of projects." };
+  const r = await mergeProjects(fromIds, intoId);
+  if ("error" in r) return { ok: false, error: r.error };
+  const what = r.merged.length === 1 ? r.merged[0].name : `${r.merged.length} projects`;
+  return done({ ok: true, message: `Merged ${what} into ${r.into.name}` });
+}
+
+/** Puts the projects in this order, as dragged in the sidebar. */
+export async function reorderProjectsAction(ids: string[]): Promise<Result> {
+  await guard();
+  if (!isIdList(ids)) return { ok: false, error: "That isn't a list of projects." };
+  const projects = inOrder(await repo.listProjects(), ids);
+  await Promise.all(projects.map((p, i) => (p.sort !== i + 1 ? repo.updateProject(p.id, { sort: i + 1 }) : null)));
+  return done();
+}
+
 /** Saves a project. Switching its flow on (desktop app only) starts the sessions it would have started while it was off. */
 export async function updateProjectAction(id: string, patch: Partial<Omit<Project, "id">>): Promise<Result> {
   await guard();
@@ -538,6 +699,19 @@ export async function setCodexEnvAction(projectId: string, env: string | null): 
   return done();
 }
 
+/**
+ * Which MCP servers besides PacedMind a project's sessions get on this computer, by name; null for all of them. This
+ * computer's own setting, like the project's folder.
+ */
+export async function setProjectServersAction(projectId: string, names: string[] | null): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "A project's MCP servers are set in the desktop app, on the computer where its sessions run." };
+  if (names && (!Array.isArray(names) || names.some((n) => typeof n !== "string"))) return { ok: false, error: "Pick servers by name" };
+  if (!(await repo.getProject(projectId))) return { ok: false, error: "Project not found" };
+  setProjectServers(projectId, names);
+  return done();
+}
+
 /** Planning settings, stored with the account. */
 export async function updateSettingsAction(patch: Partial<Settings>) {
   await guard();
@@ -549,7 +723,8 @@ const TERMINAL_IDS = new Set<TerminalId>(["wt", "cmd", "terminal", "iterm"]);
 
 /** How sessions start on this computer; only its own window changes it. */
 export async function updateDeviceSettingsAction(patch: {
-  name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart;
+  name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart; trustFolders?: boolean;
+  remoteAnswers?: boolean;
 }): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "These are set in the PacedMind desktop app." };
@@ -566,6 +741,8 @@ export async function updateDeviceSettingsAction(patch: {
     ...(patch.claudeCommand ? { claudeCommand: patch.claudeCommand.trim() } : {}),
     ...(patch.codexCommand ? { codexCommand: patch.codexCommand.trim() } : {}),
     ...(patch.remoteStart ? { remoteStart: patch.remoteStart } : {}),
+    ...(typeof patch.trustFolders === "boolean" ? { trustFolders: patch.trustFolders } : {}),
+    ...(typeof patch.remoteAnswers === "boolean" ? { remoteAnswers: patch.remoteAnswers } : {}),
   });
   const id = deviceConfig().deviceId;
   // The account's copy, for Settings elsewhere. What counts is saved above already: if the copy doesn't go through now
@@ -632,16 +809,49 @@ export async function checkDeviceAction(): Promise<Result> {
 }
 
 /**
- * Sets an agent up to reach this PacedMind with your token from sessions PacedMind doesn't configure itself (its
- * desktop app, a terminal you opened): Claude Code for all projects, Codex in its config.toml.
+ * Sets an agent up to reach PacedMind from sessions PacedMind doesn't configure itself (its desktop app, a terminal you
+ * opened): Claude Code for all projects, Codex in its config.toml. Signed in to PacedMind Cloud, its MCP server, which
+ * the agent signs in to itself (a terminal opens for that); without an account, this computer's with your token.
  */
 export async function connectAgentAction(agent: AgentId): Promise<Result> {
   await guard();
-  if (MODE !== "desktop") return { ok: false, error: "Agents connect to the PacedMind desktop app." };
+  if (MODE !== "desktop") return { ok: false, error: "Agents are connected from the PacedMind desktop app, or with the commands shown here." };
   if (agent !== "claude" && agent !== "codex") return { ok: false, error: "Unknown agent" };
-  const r = agent === "claude" ? connectClaudeCode() : connectCodex();
+  const target = (await usesCloud()) ? "cloud" : "local";
+  const r = agent === "claude" ? connectClaudeCode(target) : connectCodex(target);
   await checkThisDevice(mcpUrl());
   return done(r.ok ? { ok: true, message: r.message } : { ok: false, error: r.error });
+}
+
+/**
+ * The offer after signing in (desktop): connects the agents found here to PacedMind Cloud's MCP server, one sign-in
+ * terminal each, or (`connect` false) just stops offering. Either way it doesn't show again for this account here.
+ */
+export async function cloudConnectOfferAction(connect: boolean): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop" || !(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  updateDevice({ cloudConnectOffered: true });
+  if (!connect) return done({ ok: true });
+  const found = await checkThisDevice(mcpUrl());
+  const results = (["claude", "codex"] as AgentId[]).filter((a) => found[a].cli)
+    .map((a) => ({ agent: a, r: a === "claude" ? connectClaudeCode("cloud") : connectCodex("cloud") }));
+  await checkThisDevice(mcpUrl());
+  const failed = results.filter((x) => !x.r.ok);
+  if (!results.length) return done({ ok: false, error: "Neither Claude Code nor Codex is installed here." });
+  if (failed.length) return done({ ok: false, error: failed.map((x) => x.r.error).join(" ") });
+  return done({ ok: true, message: `Connected ${results.map((x) => AGENT_LABEL[x.agent]).join(" and ")} to PacedMind Cloud. Allow each in the browser page its terminal opens.` });
+}
+
+/** Disconnects an agent from PacedMind Cloud's MCP server: its sign-in ends at once. */
+export async function disconnectAgentAction(id: string): Promise<Result> {
+  await guard();
+  if (!/^[0-9a-f-]{36}$/.test(id)) return { ok: false, error: "Unknown agent" };
+  try {
+    await repo.disconnectAgent(id);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  return done({ ok: true, message: "Disconnected. It has to sign in and be allowed again." });
 }
 
 /** Folders you work in with Claude Code and Codex on this computer, for the import. */
@@ -654,11 +864,17 @@ export async function findProjectsAction(): Promise<FoundProject[]> {
 export async function importProjectsAction(items: ImportItem[], areaId: string): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Import from the desktop app on the computer with the folders." };
-  if (!(await repo.listAreas()).some((a) => a.id === areaId)) return { ok: false, error: "Pick an area for the projects" };
-  const { created, skipped } = await importProjects(items.filter((i) => i && typeof i.folder === "string" && typeof i.name === "string"), areaId);
+  const valid = items.filter((i) => i && typeof i.folder === "string" && typeof i.name === "string" && (i.projectId == null || typeof i.projectId === "string"));
+  // Every folder that joins a project needs no area; a new project does.
+  if (valid.some((i) => !i.projectId) && !(await repo.listAreas()).some((a) => a.id === areaId)) return { ok: false, error: "Pick an area for the projects" };
+  const { created, linked, skipped } = await importProjects(valid, areaId);
   updateDevice({ importOffered: true });
-  const made = created.length === 1 ? `Added ${created[0].name}` : `Added ${created.length} projects`;
-  return done(created.length
+  const names = (ps: Project[]) => (ps.length === 1 ? ps[0].name : `${ps.length} projects`);
+  const made = [
+    created.length ? `Added ${names(created)}` : "",
+    linked.length ? `${created.length ? "linked" : "Linked"} ${names(linked)} to ${linked.length === 1 ? "its" : "their"} folder${linked.length === 1 ? "" : "s"} here` : "",
+  ].filter(Boolean).join(" and ");
+  return done(made
     ? { ok: true, message: skipped.length ? `${made}. Skipped ${skipped.join(", ")}.` : made }
     : { ok: false, error: skipped.length ? `Couldn't add ${skipped.join(", ")}` : "Pick a project to add" });
 }
@@ -673,11 +889,64 @@ export async function dismissImportAction(): Promise<Result> {
 /* ---------- data ---------- */
 
 /** Starts the data in use over: the account's, or without an account this computer's own. */
-export async function resetDataAction(mode: "sample" | "empty") {
+export async function resetDataAction(mode: "sample" | "empty"): Promise<Result> {
   await guard();
-  if (await usesCloud()) await resetAccount(mode);
-  else resetLocal(mode);
+  if (await usesCloud()) {
+    // Starting over deletes before it adds: on a read-only account only the deleting would go through.
+    if ((await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
+    await resetAccount(mode);
+  } else resetLocal(mode);
   return done();
+}
+
+/* ---------- billing ---------- */
+
+/**
+ * Subscribing to PacedMind Cloud at a country's price, monthly or yearly: answers the Checkout page to open (the
+ * desktop app opens it in the browser). With a subscription already, it switches it between monthly and yearly.
+ */
+export async function subscribeAction(country: string, period: BillingPeriod): Promise<Result & { url?: string }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  if (!/^[A-Z]{2}$/.test(country) || (period !== "month" && period !== "year")) return { ok: false, error: "Pick a country and monthly or yearly." };
+  try {
+    const r = await subscribe(country, period);
+    if ("switched" in r) return done({ ok: true, message: period === "year" ? "You pay yearly from now on" : "You pay monthly from now on" });
+    return { ok: true, url: r.url };
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+/** The page for the card, invoices and cancelling. */
+export async function manageBillingAction(): Promise<Result & { url?: string }> {
+  await guard();
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  try {
+    return { ok: true, url: await billingPortal() };
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+}
+
+/**
+ * The account's data to this computer's own, then signing out, so PacedMind goes on without an account here: for when
+ * the account's Cloud has ended (it only reads the account, which works while it's read-only).
+ */
+export async function moveToThisComputerAction(): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "Move it from the desktop app on the computer that should keep it." };
+  if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  try {
+    await moveToThisComputer();
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
+  cutOffAgents();
+  await (await supabase()).auth.signOut({ scope: "local" });
+  updateDevice({ withoutAccount: true });
+  refresh();
+  redirect("/today");
 }
 
 /** Copies this computer's own data (what PacedMind keeps without an account) into the signed-in account. */
@@ -685,6 +954,8 @@ export async function importLegacyAction(): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Move it from the desktop app on the computer that has it." };
   if (!(await usesCloud())) return { ok: false, error: "Sign in to PacedMind Cloud first." };
+  // It clears the account's default areas first: on a read-only account that would go through and the rest wouldn't.
+  if ((await readPlan())?.writable === false) return { ok: false, error: READ_ONLY_MESSAGE };
   try {
     const n = await importLegacy();
     return done({ ok: true, message: `Moved ${n.tasks} tasks, ${n.projects} projects and ${n.areas} areas to your account` });

@@ -39,5 +39,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "monthly",
       priority: 1,
     },
+    // The terms, privacy policy and refund policy.
+    ...["/terms", "/privacy", "/refunds"].map((path) => ({
+      url: absoluteUrl(path),
+      lastModified: lastCommit("--", `app${path}`, "components/legal.tsx"),
+      changeFrequency: "yearly" as const,
+      priority: 0.3,
+    })),
   ];
 }

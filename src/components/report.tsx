@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { format } from "date-fns";
-import { parseLocal } from "@/lib/dates";
-import { AGENT_LABEL, OUTCOME_LABEL, VERDICT_LABEL, type AgentId, type Attachment, type Report, type ReportCriterion } from "@/lib/types";
-import { Icon, VerdictIcon } from "./icons";
+import { parseLocal, type PlanStep } from "@/lib/dates";
+import { AGENT_LABEL, ANSWERS_HEADING, OUTCOME_LABEL, isAnswers, VERDICT_LABEL, type AgentId, type Attachment, type Report, type ReportCriterion } from "@/lib/types";
+import { Icon, StatusIcon, VerdictIcon } from "./icons";
 import { InlineMarkdown, Markdown } from "./markdown";
 import { Button, cx } from "./ui";
 
@@ -35,6 +35,23 @@ function Section({ title, aside, children }: { title: string; aside?: ReactNode;
   );
 }
 
+/** The plan an agent reported while it works (report_progress), with the steps it finished ticked off. */
+export function SessionPlan({ plan }: { plan: { steps: PlanStep[]; at: string } }) {
+  const done = plan.steps.filter((s) => s.done).length;
+  return (
+    <Section title="Plan" aside={`${done} of ${plan.steps.length} done · ${format(parseLocal(plan.at), "HH:mm")}`}>
+      <div className="flex flex-col">
+        {plan.steps.map((s, i) => (
+          <div key={i} className="flex items-start gap-2.5 py-[3px]">
+            <span className="mt-[2px] shrink-0"><StatusIcon status={s.done ? "done" : "todo"} /></span>
+            <span className={cx("min-w-0 text-[12.5px] leading-[1.5]", s.done ? "text-mut2 line-through" : "text-fg2")}>{s.text}</span>
+          </div>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
 /** One "Done when" item with the agent's answer and note. */
 export function CriterionRow({ c }: { c: ReportCriterion }) {
   return (
@@ -52,17 +69,18 @@ export function CriterionRow({ c }: { c: ReportCriterion }) {
   );
 }
 
-/** What the user asked to change after reading a report. */
+/** What the user asked to change after reading a report, or their answers to its questions. */
 export function ChangesNote({ report }: { report: Report }) {
   if (!report.changes) return null;
+  const answers = isAnswers(report.changes);
   return (
     <div className="flex flex-col gap-1 border-l-2 border-line-strong pl-3 max-md:wrap-break-word">
       <div className="flex items-center gap-1.5 text-[12px] font-medium text-fg3">
         <Icon name="user" size={12} className="text-mut2" />
-        You asked for changes
+        {answers ? "You answered its questions" : "You asked for changes"}
         {report.changesAt && <span className="font-normal text-mut2">· {format(parseLocal(report.changesAt), "d MMM HH:mm")}</span>}
       </div>
-      <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg2">{report.changes}</p>
+      <p className="whitespace-pre-wrap text-[12.5px] leading-[1.55] text-fg2">{answers ? report.changes.slice(ANSWERS_HEADING.length).trim() : report.changes}</p>
     </div>
   );
 }
@@ -88,12 +106,11 @@ export function SessionReport({ report, criteria, working }: { report: Report; c
 }
 
 /**
- * Asks for changes to a hand-back. The agent goes back to work in a new terminal: Claude Code continues its
- * conversation (`resumes`), otherwise a new one starts with the report and the changes.
+ * Asks for changes to a hand-back. The agent goes back to work in a new terminal, in a new conversation that starts
+ * with its last report and the changes.
  */
-export function RequestChangesForm({ agent, resumes, pending, onSend, onCancel }: {
+export function RequestChangesForm({ agent, pending, onSend, onCancel }: {
   agent: AgentId;
-  resumes: boolean;
   pending: boolean;
   onSend: (changes: string) => void;
   onCancel: () => void;
@@ -110,13 +127,61 @@ export function RequestChangesForm({ agent, resumes, pending, onSend, onCancel }
         }}
         className="field-sizing-content min-h-[76px] w-full resize-none bg-transparent text-[12.5px] leading-[1.55] text-fg2 outline-none placeholder:text-mut2" />
       <div className="text-[11.5px] leading-[1.45] text-mut2">
-        {resumes
-          ? `${AGENT_LABEL[agent]} continues its conversation in a new terminal.`
-          : `${AGENT_LABEL[agent]} starts again in a new terminal, with its last report and your changes.`}
+        {AGENT_LABEL[agent]} starts again in a new terminal, with its last report and your changes.
       </div>
       <div className="flex items-center justify-end gap-2">
         <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button variant="primary" disabled={!text.trim() || pending} onClick={send}>
+          Send to {AGENT_LABEL[agent]} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Your answers to an agent's questions as one message, the way they go back to it (requestChanges in ops.ts). */
+export function answersText(questions: string[], answers: string[], more: string): string {
+  const parts = questions.flatMap((q, i) => (answers[i]?.trim() ? [`${i + 1}. ${q}\n${answers[i].trim()}`] : []));
+  return [ANSWERS_HEADING, ...parts, more.trim()].filter(Boolean).join("\n\n");
+}
+
+/**
+ * Answers to the questions in an agent's report, one field each, sent back to it like changes. `onSend` gets the
+ * message (answersText); the questions left empty stay out of it.
+ */
+export function AnswerForm({ agent, questions, pending, onSend, onCancel }: {
+  agent: AgentId;
+  questions: string[];
+  pending: boolean;
+  onSend: (text: string) => void;
+  onCancel: () => void;
+}) {
+  const [answers, setAnswers] = useState<string[]>(() => questions.map(() => ""));
+  const [more, setMore] = useState("");
+  const ready = answers.some((a) => a.trim()) && !pending;
+  const send = () => { if (ready) onSend(answersText(questions, answers, more)); };
+  const keys = (e: ReactKeyboardEvent) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); }
+    if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+  };
+  const field = "field-sizing-content min-h-[40px] w-full resize-none rounded-md border border-line2 bg-input px-2 py-1.5 text-[12.5px] leading-[1.55] text-fg2 outline-none placeholder:text-mut2 focus:border-line-strong";
+  return (
+    <div className="flex flex-col gap-3 rounded-md border border-line2 bg-raised p-2.5">
+      {questions.map((q, i) => (
+        <label key={i} className="flex flex-col gap-1.5">
+          <span className="text-[12px] leading-[1.45] text-fg3"><InlineMarkdown text={q} /></span>
+          <textarea autoFocus={i === 0} value={answers[i]} aria-label={`Answer to question ${i + 1}`} placeholder="Your answer"
+            onChange={(e) => setAnswers((a) => a.map((x, k) => (k === i ? e.target.value : x)))} onKeyDown={keys} className={field} />
+        </label>
+      ))}
+      <textarea value={more} aria-label="Anything else" placeholder="Anything else it should know (optional)"
+        onChange={(e) => setMore(e.target.value)} onKeyDown={keys} className={field} />
+      <div className="text-[11.5px] leading-[1.45] text-mut2">
+        {AGENT_LABEL[agent]} starts again in a new terminal, with its last report and your answers.
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button variant="primary" disabled={!ready} onClick={send}>
           Send to {AGENT_LABEL[agent]} <span className="rounded bg-ink/15 px-1.5 font-mono text-[10.5px] max-md:hidden">Ctrl ↵</span>
         </Button>
       </div>

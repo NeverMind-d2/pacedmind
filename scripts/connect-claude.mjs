@@ -8,7 +8,8 @@
 //   npm run connect -- --remove  disconnect
 import { execFileSync, execSync } from "node:child_process";
 
-const NAME = "organizer"; // The MCP server id the skills and launched sessions use (mcp__organizer__*).
+const NAME = "pacedmind"; // The MCP server's name the skills and launched sessions use (mcp__pacedmind__*).
+const OLD_NAME = "organizer"; // Its name before: connecting replaces it.
 
 /** Runs the claude CLI. On Windows it is usually an npm .cmd shim, which only starts through cmd.exe. */
 function claude(args) {
@@ -19,12 +20,16 @@ function claude(args) {
 }
 
 if (process.argv.includes("--remove")) {
-  try {
-    claude(["mcp", "remove", NAME, "--scope", "user"]);
-    console.log("Claude Code is no longer connected to PacedMind.");
-  } catch {
-    console.log("Claude Code wasn't connected to PacedMind.");
+  let removed = false;
+  for (const name of [NAME, OLD_NAME]) {
+    try {
+      claude(["mcp", "remove", name, "--scope", "user"]);
+      removed = true;
+    } catch {
+      // Not set up under this name.
+    }
   }
+  console.log(removed ? "Claude Code is no longer connected to PacedMind." : "Claude Code wasn't connected to PacedMind.");
   process.exit(0);
 }
 

@@ -1,23 +1,26 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { MAX_NEEDS, cleanNeeds, needKey } from "@/lib/needs";
 import { format } from "date-fns";
 import {
   addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction, requestChangesAction,
   toggleSubtaskAction, updateTaskAction,
 } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
+import { AskCard } from "./ask-card";
 import { RequestStatus, useComputer } from "./request-status";
-import { checkedIn, dueInfo, fmtTime, parseLocal, timeOf, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
+import { agentUseLine, hasUse } from "@/lib/usage";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
   type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
   type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
 import { InlineMarkdown } from "./markdown";
-import { Gallery, ReportBody, RequestChangesForm, SessionReport, sameText } from "./report";
+import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
 
 /** "in a terminal", "in the Claude app" or "in Claude Code on the web". */
@@ -49,7 +52,10 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
   const who = AGENT_LABEL[s.agent];
   switch (s.status) {
     case "starting":
-    case "running":
+    case "running": {
+      // Its terminal's hooks, or the agent itself, said it waits for you.
+      const waits = attentionOf(events);
+      if (waits) return { dot: "var(--color-accent)", text: waits.text };
       if (asksTrust && s.surface === "terminal" && !checkedIn(events)) return { dot: "var(--color-accent)", text: TRUST_WAITING };
       if (s.surface !== "cloud" && waitingInTerminal(s, events)) {
         return {
@@ -59,8 +65,11 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
             : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`,
         };
       }
-      if (report?.changes && report.changesAt) return { dot: "var(--color-fg3)", text: `${who} is working on your changes since ${fmtTime(report.changesAt)}` };
+      if (report?.changes && report.changesAt) {
+        return { dot: "var(--color-fg3)", text: `${who} is working ${isAnswers(report.changes) ? "with your answers" : "on your changes"} since ${fmtTime(report.changesAt)}` };
+      }
       return { dot: "var(--color-fg3)", text: `Running ${s.surface === "terminal" ? `in ${who}` : placeOf(s.agent, s.surface)} since ${fmtTime(s.startedAt)}` };
+    }
     case "finished": {
       const at = fmtTime(s.finishedAt ?? s.startedAt);
       if (report?.outcome === "blocked") return { dot: "var(--color-accent)", text: `${who} got stuck at ${at} · needs you` };
@@ -85,6 +94,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const area = ctx.areas.find((a) => a.id === task.areaId) ?? null;
   const project = ctx.projects.find((p) => p.id === task.projectId) ?? null;
   const session = ctx.sessions[task.id] ?? null;
+  const use = ctx.agentUse?.[task.id];
   const events = session ? ctx.sessionEvents[session.id] ?? [] : [];
   // Null when the task is yours: then it never starts an agent session.
   const agent = agentOf(task, project?.agent);
@@ -98,6 +108,8 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const due = dueInfo(task.dueDate);
   const subsDone = task.subtasks.filter((s) => s.done).length;
   const active = session && (session.status === "running" || session.status === "starting");
+  // What the agent plans to do, while it works (report_progress).
+  const plan = active ? planOf(events) : null;
 
   // What agents handed back, newest first. The one on view answers the Done when list; the arrows page through older ones.
   const reports = ctx.reports[task.id] ?? [];
@@ -120,6 +132,9 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const elsewhere = !!session && (!ctx.desktop || (!!session.deviceId && !!ctx.deviceId && session.deviceId !== ctx.deviceId));
   const ranOn = useComputer(session?.deviceId)?.name ?? "its computer";
   const changesVia = session ? ctx.changesVia?.[session.id] ?? null : null;
+  // The questions of the agent's latest hand-back: answering them sends the session back with the answers, like changes.
+  const [answering, setAnswering] = useState(false);
+  const questions = session && (session.status === "finished" || session.status === "done") ? latestOfSession?.questions ?? [] : [];
   const forThisTask = (r: { taskId: number }) => r.taskId === task.id;
   const pager = reports.length > 1 && (
     <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
@@ -172,8 +187,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               <span className="min-w-0 flex-1">{head.text}</span>
               {inCard && pager}
             </div>
+            {active && <AskCard sessionId={session.id} agent={session.agent} />}
             {inCard ? <SessionReport key={report.id} report={report} criteria={offList} working={!!active} />
               : session.note && session.status !== "failed" && <p className="text-[12.5px] leading-relaxed text-mut">“{session.note}”</p>}
+            {plan && <SessionPlan plan={plan} />}
             {soFar.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <div className="text-[12px] font-medium text-fg3">Images so far</div>
@@ -181,8 +198,19 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
               </div>
             )}
             <div className="truncate font-mono text-[11px] text-mut2">{[session.folder, session.branch].filter(Boolean).join(" · ")}</div>
-            {asking && canAsk ? (
-              <RequestChangesForm agent={session.agent} resumes={session.agent === "claude" && !!session.cliSessionId} pending={pending}
+            {answering && questions.length > 0 && (canAsk || changesVia) ? (
+              <AnswerForm agent={session.agent} questions={questions} pending={pending}
+                onCancel={() => setAnswering(false)}
+                onSend={(text) => {
+                  if (!canAsk) { askForChangesOn(session, changesVia!, text); setAnswering(false); return; }
+                  run(async () => {
+                    const r = await requestChangesAction(session.id, text);
+                    if (r.ok) setAnswering(false);
+                    return r;
+                  });
+                }} />
+            ) : asking && canAsk ? (
+              <RequestChangesForm agent={session.agent} pending={pending}
                 onCancel={() => setAsking(false)}
                 onSend={(changes) => run(async () => {
                   const r = await requestChangesAction(session.id, changes);
@@ -206,6 +234,9 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                     className="inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
                     <Icon name="cloud" size={13} />Open in the cloud
                   </a>
+                )}
+                {questions.length > 0 && (canAsk || changesVia) && (
+                  <Button onClick={() => setAnswering(true)}><Icon name="help" size={13} />{questions.length === 1 ? "Answer its question" : "Answer its questions"}</Button>
                 )}
                 {(canAsk || changesVia) && (
                   <Button onClick={() => (canAsk ? setAsking(true) : askForChangesOn(session, changesVia!))}><Icon name="pen" size={13} />Request changes</Button>
@@ -316,6 +347,12 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 className="h-5 w-16 bg-transparent text-[11.5px] text-mut outline-none placeholder:text-mut2" />
             </div>
           </Prop>
+          {/* What its agent needs from the computer its session runs on: PacedMind offers one that has it. */}
+          {agent && (
+            <Prop label="Needs">
+              <NeedsProp needs={task.needs} tools={ctx.tools ?? []} onSave={(needs) => save({ needs })} />
+            </Prop>
+          )}
           <Prop label="Session">
             {session && session.status !== "failed" ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>
@@ -350,6 +387,13 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           </Prop>
           {/* A row of its own under Start, so Session stays level with the button. */}
           {agent && (!session || session.status === "failed") && trustHint("col-start-2 px-2 pb-1")}
+          {/* What its sessions used, as their agents reported it. */}
+          {hasUse(use) && (
+            <Prop label="Usage">
+              <span title="As the agents reported it. The price is what these tokens cost through the API; on a plan, not what you pay."
+                className="flex h-7 items-center truncate px-2 text-fg2">{agentUseLine(use)}</span>
+            </Prop>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -382,7 +426,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
 
         <div className="flex flex-col gap-2.5 border-t border-line pt-3.5 text-[12px] text-mut2">
           <Activity at={task.createdAt} text="Created" />
-          {events.map((e) => <Activity key={e.id} at={e.at} text={e.text || e.kind} />)}
+          {events.map((e) => <Activity key={e.id} at={e.at} text={eventLine(e)} />)}
           {task.completedAt && <Activity at={task.completedAt} text="Marked done" />}
         </div>
       </div>
@@ -491,6 +535,48 @@ function Activity({ at, text }: { at: string; text: string }) {
       <span className="h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full bg-faint" />
       <span className="flex-1 text-mut">{text}</span>
       <span className="shrink-0 font-mono text-[11px] text-dim">{format(parseLocal(at), "d MMM HH:mm")}</span>
+    </div>
+  );
+}
+
+/**
+ * What a task's agent needs from the computer its session runs on (Task.needs): MCP servers or claude.ai connectors by
+ * name. Each says which of your computers have it; the field suggests what they have.
+ */
+function NeedsProp({ needs, tools, onSave }: { needs: string[]; tools: { name: string; on: string[] }[]; onSave: (needs: string[]) => void }) {
+  const [text, setText] = useState("");
+  const listId = useId();
+  const on = (n: string) => tools.find((t) => needKey(t.name) === needKey(n))?.on ?? [];
+  const add = () => {
+    const next = cleanNeeds([...needs, text]);
+    if (next.length !== needs.length) onSave(next);
+    setText("");
+  };
+  return (
+    <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
+      {needs.map((n) => {
+        const where = on(n);
+        return (
+          <button key={n} type="button" onClick={() => onSave(needs.filter((x) => x !== n))}
+            title={`${where.length ? `On ${where.join(", ")}` : "None of your computers said it has this"}. Click to remove.`}
+            className={cx("inline-flex h-5 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] hover:border-line-strong",
+              where.length ? "text-mut" : "text-dim")}>
+            <Icon name="plug" size={10} strokeWidth={2} />{n}
+          </button>
+        );
+      })}
+      {needs.length < MAX_NEEDS && (
+        <>
+          <input list={listId} value={text} onChange={(e) => setText(e.target.value)} placeholder={needs.length ? "+ Add" : "+ MCP server or connector"}
+            aria-label="Add what its agent needs from the computer" onKeyDown={(e) => { if (e.key === "Enter" && text.trim()) add(); }}
+            className={cx("h-5 bg-transparent text-[11.5px] text-mut outline-none placeholder:text-mut2", needs.length ? "w-16" : "w-44")} />
+          <datalist id={listId}>
+            {tools.filter((t) => !needs.some((n) => needKey(n) === needKey(t.name))).map((t) => (
+              <option key={t.name} value={t.name}>{t.on.join(", ")}</option>
+            ))}
+          </datalist>
+        </>
+      )}
     </div>
   );
 }

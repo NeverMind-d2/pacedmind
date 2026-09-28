@@ -1,4 +1,6 @@
 import "server-only";
+import { noteSessionEvent } from "./attention";
+import { isAttention } from "@/lib/dates";
 import { confirmedFlow, flowArmed, reconfirmFlow } from "./device";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
@@ -12,8 +14,8 @@ import * as local from "./store/local";
  */
 
 export {
-  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature,
-  type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature, repoOf,
+  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./store/shared";
 
 type Store = typeof cloud;
@@ -41,6 +43,8 @@ export const getProject = via("getProject");
 export const createProject = via("createProject");
 export const updateProject = via("updateProject");
 export const deleteProject = via("deleteProject");
+export const setProjectRepo = via("setProjectRepo");
+export const mergeProject = via("mergeProject");
 
 /* ---------- tasks ---------- */
 export const listTasks = via("listTasks");
@@ -67,7 +71,14 @@ export const getSession = via("getSession");
 export const latestSession = via("latestSession");
 export const createSession = via("createSession");
 export const updateSession = via("updateSession");
-export const addSessionEvent = via("addSessionEvent");
+const addEvent = via("addSessionEvent");
+/** Adds to a session's history. Every event goes through here, so what the session waits for you about stays current (attention.ts). */
+export async function addSessionEvent(sessionId: string, kind: string, text = "") {
+  await addEvent(sessionId, kind, text);
+  noteSessionEvent(sessionId, kind);
+  // The moments a session needs you reach your other devices too (push.ts, which uses this module: loaded when needed).
+  if (isAttention(kind) || kind === "finished") void import("./push").then((m) => m.pushEvent(sessionId, kind, text)).catch(() => {});
+}
 export const sessionEvents = via("sessionEvents");
 export const sessionEventsFor = via("sessionEventsFor");
 export const doneTimes = via("doneTimes");
@@ -131,6 +142,22 @@ export const updateDeviceRow = via("updateDeviceRow");
 export const listLaunchRequests = via("listLaunchRequests");
 export const createLaunchRequest = via("createLaunchRequest");
 export const settleLaunchRequest = via("settleLaunchRequest");
+
+/* ---------- what a running session waits for you to answer (asks.ts), and web push (push.ts) ---------- */
+export const createAsk = via("createAsk");
+export const getAsk = via("getAsk");
+export const listAsks = via("listAsks");
+export const answerAsk = via("answerAsk");
+export const settleAsk = via("settleAsk");
+export const pushKeys = via("pushKeys");
+export const savePushKeys = via("savePushKeys");
+export const listPushSubscriptions = via("listPushSubscriptions");
+export const addPushSubscription = via("addPushSubscription");
+export const removePushSubscription = via("removePushSubscription");
+
+/* ---------- agents signed in to PacedMind Cloud's MCP server ---------- */
+export const listConnectedAgents = via("listConnectedAgents");
+export const disconnectAgent = via("disconnectAgent");
 
 /* ---------- live refresh ---------- */
 export const stateVersion = via("stateVersion");

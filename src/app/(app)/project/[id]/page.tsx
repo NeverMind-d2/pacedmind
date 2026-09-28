@@ -5,6 +5,7 @@ import { Icon } from "@/components/icons";
 import * as repo from "@/server/repo";
 import { groupByStatus, taskContext } from "@/server/views";
 import { fmtShort } from "@/lib/dates";
+import { NO_USE, addUse, agentUseShort, hasUse } from "@/lib/usage";
 
 export default async function ProjectPage(props: PageProps<"/project/[id]">) {
   const { id } = await props.params;
@@ -15,13 +16,16 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
   const [areas, tasks] = await Promise.all([repo.listAreas(), repo.listTasks({ projectId: id })]);
   const area = areas.find((a) => a.id === project.areaId);
   const link = "inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover";
+  const ctx = await taskContext(tasks);
+  // What the agents used on the project's tasks, as they reported it.
+  const use = Object.values(ctx.agentUse ?? {}).reduce(addUse, NO_USE);
   return (
     <TaskList
       icon="layers"
       title={project.name}
-      subtitle={[area?.name, project.targetDate && `target ${fmtShort(project.targetDate)}`].filter(Boolean).join(" · ")}
+      subtitle={[area?.name, project.targetDate && `target ${fmtShort(project.targetDate)}`, hasUse(use) && agentUseShort(use)].filter(Boolean).join(" · ")}
       groups={groupByStatus(tasks)}
-      ctx={await taskContext(tasks)}
+      ctx={ctx}
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ projectId: id }}
       headerRight={

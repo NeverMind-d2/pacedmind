@@ -349,6 +349,20 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+# Sign in with Google (src/app/login). In PacedMind Cloud it's set in the dashboard (Authentication → Sign In / Providers
+# → Google) with the Google Cloud OAuth client's id and secret; its redirect URI there is
+# https://pyoynjoyhpolijlvoalu.supabase.co/auth/v1/callback. Off here so a local stack starts without them; set both
+# variables and switch it on to try it locally. Before `supabase config push`, set enabled = true and both variables,
+# or the push switches Google off in the project.
+[auth.external.google]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+url = ""
+skip_nonce_check = false
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
@@ -378,13 +392,16 @@ enabled = false
 # domain = "example.clerk.accounts.dev"
 
 # OAuth server configuration
+# PacedMind: agents sign in to the hosted MCP server (app.pacedmind.com/api/mcp) through it. MCP clients (Claude Code,
+# Codex, claude.ai) register themselves, so dynamic registration is on; what they get still depends on your approval
+# on the consent page from a two-factor session (supabase/migrations/*_agent_logins.sql).
 [auth.oauth_server]
 # Enable OAuth server functionality
-enabled = false
-# Path for OAuth consent flow UI
+enabled = true
+# Path for OAuth consent flow UI (on the site URL: https://app.pacedmind.com/oauth/consent)
 authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
-allow_dynamic_registration = false
+allow_dynamic_registration = true
 
 [edge_runtime]
 enabled = true
@@ -399,6 +416,19 @@ deno_version = 2
 
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
+
+# Billing (supabase/functions). They check the caller themselves rather than through the gateway: checkout and the
+# portal read the caller's own billing row through row level security (a two-factor session that still exists), and
+# the webhook takes only requests Stripe signed. Their secrets: `npx supabase secrets set STRIPE_SECRET_KEY=…
+# STRIPE_WEBHOOK_SECRET=…`.
+[functions.billing-checkout]
+verify_jwt = false
+
+[functions.billing-portal]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
 
 [analytics]
 enabled = true

@@ -31,13 +31,14 @@ With **Flow on**, PacedMind starts a task's session on its own when all of these
 * the task is **Todo** or **Backlog**;
 * the task isn't yours;
 * the task has at least one connection leading to it, none of them **Same session**, and every one is ready;
-* the task has no running session.
+* the task has no running session;
+* the agent has, on this computer, what the task needs (its **Needs**). When it doesn't, PacedMind asks you in the app instead: *It needs Gmail, which the agent doesn't have on this computer.* See [What a task needs](/agents/start-and-manage#what-a-task-needs).
 
 PacedMind checks this when an agent hands a task back, when a session is marked finished, when you mark a task done, and every minute for timed connections. A session started this way notes *Started on its own* in the editor. Switching the flow on checks every task in the project the same way, so tasks that became ready while it was paused start right away. Adding a connection doesn't go back over tasks that are already ready: start those by hand, for example with the start button in the editor's panel.
 
 A session in the cloud, or in a desktop app that isn't connected to PacedMind, can't hand its task back. **Mark finished** does it for the session, and the flow goes on from there. PacedMind notices finished Codex cloud tasks by itself.
 
-**Flow on** is set per project: in the **Flows** header, in the **Roadmap**'s session panel, or in **Settings → Projects and folders**. With the flow **Paused**, nothing starts on its own; connections still show the order, and sessions can be started by hand.
+**Flow on** is set per project: in the **Flows** header, in the **Roadmap**'s session panel, or in **Settings → Projects**. With the flow **Paused**, nothing starts on its own; connections still show the order, and sessions can be started by hand.
 
 Tasks without connections leading to them, the first ones in a flow, don't start on their own, except when the project [starts after another one](#projects-in-sequence) and that one finishes, or has already finished when you switch the flow on. Start them yourself, for example with the start button in the editor's panel.
 
@@ -67,7 +68,7 @@ Tasks that are yours are never part of a flow. They can still have connections, 
 
 ## Build a flow step by step
 
-1. Give the project a folder and a default agent in **Settings → Projects and folders**, or bring your projects over with **Import from Claude and Codex** there.
+1. Give the project a folder and a default agent in **Settings → Projects**, or bring your projects over with **Import from Claude and Codex** there.
 2. Break the work into tasks with clear descriptions and **Done when** lists, which agents answer in their reports. See [Tasks](/concepts/tasks#done-when).
 3. Open **Flows** for the project and drag the tasks onto the canvas in order. Dropping a task just below another connects it automatically.
 4. Set how each session starts, and where it runs: select it and choose under **Starts** and **Runs in**. Use **Manually** where you want to review before the next step.

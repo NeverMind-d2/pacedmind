@@ -12,8 +12,22 @@ export function agentEnv(): NodeJS.ProcessEnv {
   for (const key of Object.keys(env)) {
     if (/^(PORT|HOSTNAME|NODE_ENV|ELECTRON_RUN_AS_NODE|NEXT_.*|__NEXT_.*|TURBOPACK.*|ORGANIZER_.*|SUPABASE_.*)$/i.test(key)) delete env[key];
   }
+  for (const key of HOST_SESSION_VARS) delete env[key];
   return env;
 }
+
+/**
+ * What a running Claude Code session sets for the programs it starts. PacedMind can run inside one (`npm run dev`
+ * from Claude Code, say); an agent it starts then isn't that session's child: with these, Claude Code saves no
+ * transcript (so Request changes has no conversation to resume) and the agent would get the host session's own
+ * messaging token. The user's own settings, such as CLAUDE_CODE_USE_BEDROCK, stay. The terminal scripts clear
+ * them again (launcher.ts), since a terminal app started by an earlier launch keeps its environment.
+ */
+export const HOST_SESSION_VARS = [
+  "CLAUDECODE", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_HOST_SESSION_ID",
+  "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDE_CODE_SSE_PORT", "CLAUDE_CODE_EXECPATH",
+  "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_PID",
+];
 
 /** A command from Settings that is safe to hand to cmd.exe or sh as it is: a program and plain arguments. */
 export const plainCommand = (command: string) => /^[\w .:\\/@()+=,-]+$/.test(command.trim());

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { publishPlan } from "./plan-state";
 import { POLL_EVENT, publishLaunchState } from "./request-status";
 
 /**
@@ -24,8 +25,9 @@ export function LiveRefresh({ every = 4000 }: { every?: number }) {
       busy = true;
       try {
         const r = await fetch("/api/state", { cache: "no-store" });
-        const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown };
+        const state = (await r.json()) as { version: string; requests?: unknown; codeFreshUntil?: unknown; asks?: unknown; plan?: unknown };
         publishLaunchState(state);
+        publishPlan(state.plan);
         if (last !== null && state.version !== last) router.refresh();
         last = state.version;
       } catch {

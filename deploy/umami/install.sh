@@ -2,8 +2,8 @@
 # Installs Umami (cookieless visitor statistics, compose.yml here) on the VPS, or updates it to the
 # newest image. Run from the repository in Git Bash:
 #
-#   scp -i ~/Desktop/keys/pacedmind_vps deploy/umami/compose.yml ubuntu@<server>:/tmp/umami-compose.yml
-#   ssh -i ~/Desktop/keys/pacedmind_vps ubuntu@<server> 'sudo sh -s' < deploy/umami/install.sh
+#   scp deploy/umami/compose.yml pacedmind:/tmp/umami-compose.yml
+#   ssh pacedmind 'sudo sh -s' < deploy/umami/install.sh
 #
 # Docker comes from Ubuntu's own repositories. The secrets are generated here the first time and stay
 # in the root-only /opt/umami/.env; they never leave the server. Umami listens on 127.0.0.1:3001, and

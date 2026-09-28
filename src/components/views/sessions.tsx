@@ -1,18 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "@/components/remote-start";
+import { AskCard } from "@/components/ask-card";
 import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, useClock, useLaunchState } from "@/components/request-status";
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
-import { Gallery, RequestChangesForm, SessionReport } from "@/components/report";
+import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
-import { checkedIn, parseLocal, toDateStr, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, attentionWords, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, mcpProblemsOf, waitingInTerminal } from "@/lib/dates";
+import { fmtSpan, fmtUsd, sessionTokens, tokenTotal, tokensLine } from "@/lib/usage";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, TRUST_WAITING, type AgentId, type Attachment, type Report, type SessionEvent, type SessionStatus, type Surface,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
+  type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type SessionUsage, type Surface,
 } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
@@ -35,6 +38,8 @@ export interface SessionItem {
   endAt: string | null;
   note: string | null;
   cliSessionId: string | null;
+  /** What its agent used, as it reported it; null when it couldn't (the apps, the cloud) or hasn't yet. */
+  usage: SessionUsage | null;
   origin: "organizer" | "outside" | "continued";
   /** The session whose terminal this one carries on ("same session" connections). */
   continues: { id: string; key: string } | null;
@@ -73,6 +78,18 @@ export interface StartableTask {
   key: string;
   title: string;
   agent: AgentId;
+}
+
+/** A session PacedMind didn't start, with its project's name. */
+export type OtherItem = OtherSession & { project: string | null };
+
+/** The sessions PacedMind didn't start on one computer: this one's as found now, another's as it last said. */
+export interface OtherGroup {
+  id: string;
+  computer: string;
+  here: boolean;
+  online: boolean;
+  sessions: OtherItem[];
 }
 
 /* ---------- helpers ---------- */
@@ -119,6 +136,8 @@ function duration(span: number): string {
 
 /** A session on a device whose agent hasn't checked in: waiting in its terminal, or for you to send it in the app. */
 const unheard = (s: SessionItem, now: number) => s.surface !== "cloud" && waitingInTerminal(s, s.events, new Date(now));
+/** What a running session's agent waits for you about, as its terminal's hooks or the agent said (attentionOf). */
+const waitsFor = (s: SessionItem) => (isActive(s) ? attentionOf(s.events) : null);
 /** Claude Code asking in its terminal whether you trust the folder, from the start. */
 const askingTrust = (s: SessionItem) => !!s.asksTrust && isActive(s) && s.surface === "terminal" && !checkedIn(s.events);
 
@@ -143,9 +162,11 @@ function meta(s: SessionItem, now: number): string {
     }
     case "starting":
     case "running": {
+      const waits = waitsFor(s);
+      if (waits) return attentionWords(waits.kind).toLowerCase();
       if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
-      if (asked) return `changes since ${clock(asked, now)}`;
+      if (asked) return `${isAnswers(s.reports[0].changes ?? "") ? "answers" : "changes"} since ${clock(asked, now)}`;
       return `${s.surface === "cloud" ? "in the cloud " : ""}since ${clock(s.startedAt, now)}`;
     }
     case "done":
@@ -159,6 +180,8 @@ function meta(s: SessionItem, now: number): string {
 
 function headline(s: SessionItem, now: number): string {
   const who = AGENT_LABEL[s.agent];
+  const waits = waitsFor(s);
+  if (waits) return waits.text;
   if (askingTrust(s)) return TRUST_WAITING;
   if (unheard(s, now)) {
     return s.surface === "desktop"
@@ -170,7 +193,7 @@ function headline(s: SessionItem, now: number): string {
       return s.surface === "cloud" ? `Sending to ${CLOUD_LABEL[s.agent]} since ${clockLong(s.startedAt, now)}` : `Starting ${who} since ${clockLong(s.startedAt, now)}`;
     case "running": {
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
-      if (asked) return `${who} is working on your changes since ${clockLong(asked, now)}`;
+      if (asked) return `${who} is working ${isAnswers(s.reports[0].changes ?? "") ? "with your answers" : "on your changes"} since ${clockLong(asked, now)}`;
       return s.surface === "terminal" ? `Running in ${who} since ${clockLong(s.startedAt, now)}` : `Running in ${place(s)} since ${clockLong(s.startedAt, now)}`;
     }
     case "finished": {
@@ -199,7 +222,7 @@ function workedFor(s: SessionItem, now: number): string | null {
 
 function eventText(e: SessionEvent, agent: AgentId): string {
   if (e.kind === "finished") return `${agentShort(agent)} marked it finished`;
-  return e.text || e.kind;
+  return eventLine(e);
 }
 
 /** Current time, starting from the server's clock (no hydration mismatch) and ticking every 30 s. */
@@ -214,14 +237,23 @@ function useNow(initial: string): number {
 
 /* ---------- the view ---------- */
 
-export function SessionsView({ groups, initialId, startable, now: serverNow }: {
+export function SessionsView({ groups, others, initialId, startable, now: serverNow }: {
   groups: SessionGroup[];
+  others: OtherGroup[];
   initialId: string | null;
   startable: StartableTask[];
   now: string;
 }) {
   const now = useNow(serverNow);
+  const router = useRouter();
   const params = useSearchParams();
+  // This computer's other sessions change without anything in PacedMind changing: look again now and then.
+  const watching = others.length > 0;
+  useEffect(() => {
+    if (!watching) return;
+    const id = window.setInterval(() => router.refresh(), 30_000);
+    return () => window.clearInterval(id);
+  }, [watching, router]);
   const { run, pending } = useAction();
   const all = groups.flatMap((g) => g.items);
   // The selection lives in the URL (?s=), so links from tasks open the right session and refreshes keep it.
@@ -243,7 +275,9 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="terminal" className="shrink-0 text-mut" />
           <h1 className="text-[14px] font-semibold text-strong">Sessions</h1>
-          <span className="min-w-0 truncate text-mut2">Claude Code and Codex sessions started from PacedMind</span>
+          <span className="min-w-0 truncate text-mut2">
+            {others.length ? "Claude Code and Codex sessions on your computers" : "Claude Code and Codex sessions started from PacedMind"}
+          </span>
           <span className="flex-1" />
           {startable.length > 0 && (
             <Menu align="right" width={340}
@@ -268,7 +302,17 @@ export function SessionsView({ groups, initialId, startable, now: serverNow }: {
               ))}
             </div>
           ))}
-          {!all.length && (
+          {others.map((g) => {
+            const key = `other:${g.id}`;
+            return (
+              <div key={key}>
+                <GroupHeader name={`Not from PacedMind, on ${g.here ? `this computer (${g.computer})` : g.computer}${g.online ? "" : " · offline"}`}
+                  count={g.sessions.length} collapsed={!!collapsed[key]} onToggle={() => setCollapsed((c) => ({ ...c, [key]: !c[key] }))} />
+                {!collapsed[key] && g.sessions.map((s) => <OtherRow key={`${s.harness}:${s.ref}`} s={s} now={now} />)}
+              </div>
+            );
+          })}
+          {!all.length && !others.length && (
             <div className="flex flex-col items-center gap-3 px-8 py-24 text-center">
               <div className="text-[14px] text-fg2">No sessions yet</div>
               <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">
@@ -335,18 +379,59 @@ function Asked({ tasks }: { tasks: { id: number; key: string; title: string }[] 
   );
 }
 
-function StateDot({ status }: { status: SessionStatus }) {
-  const d = DOT[status];
+const OTHER_DOT: Record<OtherSessionState, { fill: string; ring: string }> = {
+  working: DOT.running,
+  waiting: DOT.finished,
+  idle: DOT.closed,
+};
+
+/** When a session PacedMind didn't start last did something, and what it's doing. */
+function otherMeta(s: OtherItem, now: number): string {
+  if (s.state === "working") return "Working now";
+  const at = clock(toDateTimeStr(new Date(s.activeAt)), now);
+  return s.state === "waiting" ? `Waiting for you · ${at}` : `Idle since ${at}`;
+}
+
+/**
+ * A session PacedMind didn't start, as its computer found it: nothing to open or manage here, it lives in its own
+ * terminal or app. Its title, its project (or folder's name), where it runs and what it's doing.
+ */
+function OtherRow({ s, now }: { s: OtherItem; now: number }) {
+  const d = OTHER_DOT[s.state];
+  const where = `${HARNESS_LABEL[s.harness]}${s.project ? ` · ${s.project}` : ""} · ${s.place}`;
+  return (
+    <div title={`${s.title || "Untitled session"}\n${where}`} className="flex h-[42px] w-full items-center gap-3 border-b border-hover px-5">
+      <span className="flex w-3.5 shrink-0 justify-center">
+        <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full border" style={{ background: d.fill, borderColor: d.ring }} />
+      </span>
+      <span className="w-[50px] shrink-0 @max-md:hidden" />
+      <span className={cx("min-w-0 flex-1 truncate", s.state === "idle" ? "text-mut2" : "text-fg")}>{s.title || "Untitled session"}</span>
+      <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project ?? s.place}</span>
+      <span className="hidden w-[110px] shrink-0 items-center gap-1.5 truncate text-[12px] text-mut2 @2xl:flex">
+        <AgentIcon agent={harnessAgent(s.harness)} size={12} className="text-mut" />{HARNESS_LABEL[s.harness]}
+      </span>
+      <span className="w-9 shrink-0 @max-md:w-auto" />
+      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.state === "waiting" ? "text-fg2" : "text-mut2")}>
+        {otherMeta(s, now)}
+      </span>
+    </div>
+  );
+}
+
+/** A session's state; `waits` when its agent waits for you while it runs, which counts like a finished one. */
+function StateDot({ status, waits }: { status: SessionStatus; waits?: boolean }) {
+  const d = DOT[waits ? "finished" : status];
   return <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full border" style={{ background: d.fill, borderColor: d.ring }} />;
 }
 
 function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; selected: boolean; onSelect: () => void }) {
   const live = s.status === "finished" || isActive(s);
+  const waits = !!waitsFor(s);
   const images = (s.reports[0]?.images.length ?? 0) + s.pending.length;
   return (
     <button type="button" onClick={onSelect} aria-current={selected ? "true" : undefined}
       className={cx("flex h-[42px] w-full items-center gap-3 border-b border-hover px-5 text-left", selected ? "bg-sel" : "hover:bg-hover")}>
-      <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} /></span>
+      <span className="flex w-3.5 shrink-0 justify-center"><StateDot status={s.status} waits={waits} /></span>
       <span className="w-[50px] shrink-0 font-mono text-[11.5px] text-mut2 @max-md:hidden">{s.task?.key ?? "—"}</span>
       <span className={cx("min-w-0 flex-1 truncate", live ? "text-fg" : "text-mut2")}>{s.task?.title ?? "Deleted task"}</span>
       <span className="hidden w-[110px] shrink-0 truncate text-[12px] text-mut2 @xl:block">{s.project?.name ?? "No project"}</span>
@@ -357,7 +442,7 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
       <span title={images ? `${images} image${images === 1 ? "" : "s"}` : undefined} className="flex w-9 shrink-0 items-center gap-1 text-[11.5px] text-mut2 @max-md:w-auto">
         {images > 0 && <><Icon name="image" size={13} />{images}</>}
       </span>
-      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.status === "finished" ? "text-fg2" : "text-mut2")}>
+      <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.status === "finished" || waits ? "text-fg2" : "text-mut2")}>
         {meta(s, now)}
       </span>
     </button>
@@ -374,6 +459,9 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   const [viewing, setViewing] = useState(0);
   const report = s.reports[Math.min(viewing, s.reports.length - 1)] ?? null;
   const [asking, setAsking] = useState(false);
+  // The questions of the agent's latest hand-back: answering them sends the session back with the answers, like changes.
+  const [answering, setAnswering] = useState(false);
+  const questions = s.status === "finished" || s.status === "done" ? s.reports[0]?.questions ?? [] : [];
   // Only where the server would take them: a terminal on this computer, the task's latest report, not your own task.
   const canAsk = s.canRequestChanges;
   // A session goes on where it ran. The frame lists the account's computers other than this one (the web app has
@@ -383,6 +471,8 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   const on = s.device ?? "its computer";
   const ref = { id: s.id, taskId: s.task?.id ?? 0, agent: s.agent, surface: s.surface, cliSessionId: s.cliSessionId };
   const worked = workedFor(s, now);
+  // What the agent plans to do, while it works (report_progress).
+  const plan = active ? planOf(s.events) : null;
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
     s.origin === "outside" ? "outside PacedMind" : s.origin === "continued" ? "in the same session" : "from PacedMind"
@@ -395,8 +485,24 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
     ["Started", started, false],
   ];
   if (worked) props.push(["Duration", worked, false]);
+  // What its agent used, as its usage metrics said (usage-metrics.ts).
+  if (s.usage) {
+    const tokens = sessionTokens(s.usage);
+    if (s.usage.activeSeconds) props.push(["Working", fmtSpan(s.usage.activeSeconds * 1000), false]);
+    if (tokenTotal(tokens)) props.push(["Tokens", tokensLine(tokens), false]);
+    if (s.usage.costUsd) props.push(["API price", `${fmtUsd(s.usage.costUsd)}, what these tokens cost through the API`, false]);
+    if (s.usage.models[0]) props.push(["Model", s.usage.models.join(", "), true]);
+  }
+  // What it runs in, as its MCP client said when it connected, and what the agent says it runs with (start_task).
+  const client = s.events.findLast((e) => e.kind === "connected");
+  if (client) props.push(["Client", client.text.replace(/^Connected from /, ""), false]);
+  const env = s.events.findLast((e) => e.kind === "environment");
+  if (env) props.push(["Agent says", env.text.replace(/^.+? says it /, ""), false]);
+  // MCP servers it should have tools from but hasn't, as Claude Code's own record of the session says (session-mcp.ts).
+  const missing = mcpProblemsOf(s.events);
+  if (missing) props.push(["Not available", missing, false]);
   props.push(["Session", s.id, true]);
-  if (s.cliSessionId) props.push(["Claude session", s.cliSessionId, true]);
+  if (s.cliSessionId) props.push([s.agent === "codex" ? "Codex session" : "Claude session", s.cliSessionId, true]);
 
   return (
     <aside aria-label="Session details" className={cx("flex w-[420px] shrink-0 flex-col border-l border-line",
@@ -419,7 +525,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
         <div className="flex flex-col gap-2.5">
           <h2 className="text-[20px] font-semibold leading-snug tracking-[-0.01em] text-strong">{s.task?.title ?? "Deleted task"}</h2>
           <div className="flex items-center gap-2 text-[12.5px] text-fg2">
-            <StateDot status={s.status} />
+            <StateDot status={s.status} waits={!!waitsFor(s)} />
             <span className="min-w-0 flex-1">{headline(s, now)}</span>
             {s.reports.length > 1 && (
               <span className="flex shrink-0 items-center gap-0.5 text-[11.5px] text-mut2">
@@ -438,7 +544,11 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
           {!report && s.note && s.status !== "failed" && <p className="text-[13px] leading-[1.6] text-mut">“{s.note}”</p>}
         </div>
 
+        {active && <AskCard sessionId={s.id} agent={s.agent} />}
+
         {report && <SessionReport key={report.id} report={report} criteria={report.criteria} working={active} />}
+
+        {plan && <SessionPlan plan={plan} />}
 
         {s.pending.length > 0 && (
           <div className="flex flex-col gap-1.5">
@@ -481,8 +591,20 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
       </div>
 
       <div className="flex shrink-0 flex-col gap-3 border-t border-line pb-4 pl-6 pr-4 pt-3.5">
-        {asking && canAsk && (
-          <RequestChangesForm agent={s.agent} resumes={s.agent === "claude" && !!s.cliSessionId} pending={pending}
+        {answering && questions.length > 0 && (canAsk || s.changesVia) && (
+          <AnswerForm agent={s.agent} questions={questions} pending={pending}
+            onCancel={() => setAnswering(false)}
+            onSend={(text) => {
+              if (!canAsk) { askForChangesOn(ref, s.changesVia!, text); setAnswering(false); return; }
+              run(async () => {
+                const r = await requestChangesAction(s.id, text);
+                if (r.ok) setAnswering(false);
+                return r;
+              });
+            }} />
+        )}
+        {asking && canAsk && !answering && (
+          <RequestChangesForm agent={s.agent} pending={pending}
             onCancel={() => setAsking(false)}
             onSend={(changes) => run(async () => {
               const r = await requestChangesAction(s.id, changes);
@@ -490,7 +612,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
               return r;
             })} />
         )}
-        <div className={cx("flex flex-wrap items-center gap-2", asking && canAsk && "hidden")}>
+        <div className={cx("flex flex-wrap items-center gap-2", ((asking && canAsk) || answering) && "hidden")}>
           {!active && s.status !== "failed" && s.surface === "terminal" && (
             <Button disabled={pending} onClick={() => run(() => resumeSessionOrAsk(ref))} className="min-w-0 max-w-full">
               <Icon name="terminal" size={13} strokeWidth={2} className="shrink-0" />
@@ -526,6 +648,11 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
             <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check, and what comes next may start."
               onClick={() => run(() => finishSessionAction(s.id))}>
               <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
+            </Button>
+          )}
+          {questions.length > 0 && (canAsk || s.changesVia) && (
+            <Button disabled={pending} onClick={() => setAnswering(true)}>
+              <Icon name="help" size={13} strokeWidth={2} />{questions.length === 1 ? "Answer its question" : "Answer its questions"}
             </Button>
           )}
           {(canAsk || s.changesVia) && (

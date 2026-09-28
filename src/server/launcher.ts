@@ -1,21 +1,24 @@
 import "server-only";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { trustCheck } from "./claude-trust";
-import { cliCommand, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
+import { trustCheck, trustForClaude } from "./claude-trust";
+import { trustForCodex } from "./codex-trust";
+import { claudeMcpEntry, cliBinary, cliCommand, codexMcpTable, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
 import { folderProblem, repoRoot } from "./folders";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { MODE } from "./supabase";
 import { activeDevice } from "./scope";
-import { dataDir, deviceConfig, issueSessionToken, projectFolder } from "./device";
-import { agentEnv, execLine, openUrl } from "./shell";
+import { dataDir, deviceConfig, issueSessionToken, projectFolder, projectServers } from "./device";
+import { TELEMETRY_VAR, claudeServers, claudeTelemetrySet, codexServersOff, codexTelemetrySet } from "./extras";
+import { HOST_SESSION_VARS, agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
 import { terminalFor } from "@/lib/terminals";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, TRUST_FIRST, agentOf, canRun, surfaceOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, TRUST_FIRST, agentOf, canRun, surfaceOf,
   type AgentId, type Session, type Surface, type Task, type TerminalId,
 } from "@/lib/types";
 
@@ -67,14 +70,17 @@ const safe = (s: string, max = 400) => s.replace(/\s+/g, " ").replace(/[^\p{L}\p
 
 export function kickoffPrompt(task: Task, sessionId: string): string {
   return safe(
-    `PacedMind task ${task.key}, session ${sessionId}. Call the organizer MCP tool start_task with task ${task.key} and session ${sessionId}, then follow the instructions it returns.`,
+    `PacedMind task ${task.key}, session ${sessionId}. Call the ${MCP_NAME} MCP tool start_task with task ${task.key} and session ${sessionId}, then follow the instructions it returns.`,
   );
 }
 
-/** The first message when an agent goes back to a task because the user asked for changes (see requestChanges in ops.ts). */
+/**
+ * The first message when an agent goes back to a task because the user asked for changes or answered its questions
+ * (see requestChanges in ops.ts).
+ */
 export function changesPrompt(task: Task, sessionId: string): string {
   return safe(
-    `PacedMind task ${task.key}, session ${sessionId}: the user reviewed your work and asked for changes. Call the organizer MCP tool start_task with task ${task.key} and session ${sessionId} to read them, then follow the instructions it returns.`,
+    `PacedMind task ${task.key}, session ${sessionId}: the user reviewed your work and wrote back. Call the ${MCP_NAME} MCP tool start_task with task ${task.key} and session ${sessionId} to read it, then follow the instructions it returns.`,
   );
 }
 
@@ -106,15 +112,129 @@ function writePrivate(file: string, text: string, mode = 0o600) {
   fs.writeFileSync(file, text, { mode });
 }
 
+/** Where the hooks' curl puts the server's answer: nothing a hook prints may reach the agent (UserPromptSubmit's goes into the conversation). */
+const DEV_NULL = process.platform === "win32" ? "NUL" : "/dev/null";
+
 /**
- * The MCP config and the SessionEnd hook for one Claude Code conversation (`cli`). The hook names its
- * conversation, and each conversation has its own settings file, so a terminal still open on an older
- * conversation of the session can't close the session when it exits.
+ * The session's token as a header line, in a file only you can read, for Codex's notify (`curl -H @file`), so the
+ * token isn't on a command line for as long as Codex runs. Each launch has its own file and removes the older ones: a
+ * terminal still open from an earlier launch then has no token to send.
  */
-function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: string) {
-  const mcp = { mcpServers: { organizer: { type: "http", url: mcpUrl(), headers: { Authorization: `Bearer ${token}` } } } };
-  const ended = `curl -s -X POST -H "Authorization: Bearer ${token}" "${baseUrl()}/api/sessions/${sessionId}/ended?cli=${cli}"`;
-  const settings = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: ended }] }] } };
+function writeHookAuth(dir: string, token: string): string {
+  for (const f of fs.readdirSync(dir)) if (f.endsWith(".auth")) fs.rmSync(path.join(dir, f), { force: true });
+  const file = path.join(dir, `hooks-${crypto.randomBytes(4).toString("hex")}.auth`);
+  writePrivate(file, `Authorization: Bearer ${token}\n`);
+  return file;
+}
+
+/**
+ * Claude Code runs hooks of type "http" itself, since before 2.1.84: no process per tool call, and nothing to go wrong
+ * once the session's files are gone. An older one, as far as this computer found, gets curl.
+ */
+function httpHooks(): boolean {
+  const v = localTools().claude.cli?.version.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!v) return true;
+  const [major, minor, patch] = v.slice(1).map(Number);
+  return major > 2 || (major === 2 && (minor > 1 || (minor === 1 && patch >= 84)));
+}
+
+/**
+ * One of a Claude Code conversation's hooks: a POST to the session's route with the session's token, from Claude Code
+ * itself, or from curl for an older one (with `body`, curl passes on the JSON the agent gives the hook). Nothing it
+ * gets back reaches the agent: the routes answer without a body, and curl's goes nowhere.
+ */
+function claudeHook(url: string, token: string, body: boolean, timeout = 10) {
+  if (httpHooks()) return { type: "http", url, headers: { Authorization: `Bearer ${token}` }, timeout };
+  const data = body ? ` -H "Content-Type: application/json" --data-binary @-` : "";
+  return { type: "command", command: `curl -s -m 5 -o ${DEV_NULL} -X POST -H "Authorization: Bearer ${token}"${data} "${url}"`, timeout: 10 };
+}
+
+/** Whether the environment PacedMind starts terminals with sends the agents' telemetry somewhere already. */
+function telemetryInEnv(): boolean {
+  const env = agentEnv();
+  return Object.keys(env).some((k) => TELEMETRY_VAR.test(k) && !!env[k]);
+}
+
+/**
+ * What sends a Codex session's usage metrics to its usage route (usage-metrics.ts): its [otel] metrics exporter, as
+ * JSON, and the session's token as the exporter's header from the terminal's environment (Codex doesn't read variables
+ * in a header's value). Its other telemetry stays as your config has it; nothing when your config or the environment
+ * sends its metrics somewhere, or for a Codex before 0.150.
+ */
+function codexUsage(sessionId: string, token: string): { flag: string; env: Record<string, string> } | null {
+  if (!codexHooksOn() || telemetryInEnv() || codexTelemetrySet()) return null;
+  const value = `otel.metrics_exporter={otlp-http={endpoint="${baseUrl()}/api/sessions/${sessionId}/usage",protocol="json"}}`;
+  return {
+    flag: process.platform === "win32" ? ` -c "${value.replace(/"/g, '\\"')}"` : ` -c '${value}'`,
+    env: {
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: `Authorization=Bearer ${token}`,
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "delta",
+      OTEL_METRIC_EXPORT_INTERVAL: "30000",
+    },
+  };
+}
+
+/**
+ * What sends a Claude Code conversation's usage metrics to its session's usage route (usage-metrics.ts): tokens, their
+ * cost at API prices and its active time, as OpenTelemetry metrics in JSON every half minute, with the session's token.
+ * Only metrics: no events, so nothing of what you or the agent write. Null when you send Claude Code's telemetry
+ * somewhere yourself (in the environment PacedMind starts terminals with, your settings or the managed ones), which
+ * PacedMind leaves as it is: those sessions show no usage.
+ */
+function usageEnv(route: string, cli: string, token: string): Record<string, string> | null {
+  if (telemetryInEnv() || claudeTelemetrySet()) return null;
+  return {
+    CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+    OTEL_METRICS_EXPORTER: "otlp",
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "http/json",
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: `${route}/usage?cli=${cli}`,
+    OTEL_EXPORTER_OTLP_METRICS_HEADERS: `Authorization=Bearer ${token}`,
+    OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "delta",
+    OTEL_METRIC_EXPORT_INTERVAL: "30000",
+    OTEL_METRICS_INCLUDE_ACCOUNT_UUID: "false",
+  };
+}
+
+/**
+ * The MCP config and the hooks for one Claude Code conversation (`cli`). SessionEnd closes the session when its
+ * terminal closes; the others tell PacedMind when the agent waits for you, asks for your permission, stops at a usage
+ * limit, or goes back to work (signals.ts). Its `env` sends its usage metrics (usageEnv). The hooks name their conversation, and each conversation has its own settings file, so a
+ * terminal still open on an older conversation of the session says nothing about it. `servers`: the other MCP
+ * servers the session gets when its project picks them (Settings), which it then gets alone (--strict-mcp-config).
+ * Like the token, their definitions stay in files only you can read, deleted when the session ends.
+ */
+function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: string, servers: Record<string, unknown> | null) {
+  const mcp = {
+    mcpServers: {
+      ...(servers ?? {}),
+      // Your own config may still name PacedMind by its old name, with the owner token: a session gets its own token only,
+      // so that entry is replaced here by one that reaches nothing (port 9 discards), until Connect renames yours.
+      ...(!servers && claudeMcpEntry(OLD_MCP_NAME) ? { [OLD_MCP_NAME]: { type: "http", url: "http://127.0.0.1:9/renamed" } } : {}),
+      [MCP_NAME]: { type: "http", url: mcpUrl(), headers: { Authorization: `Bearer ${token}` } },
+    },
+  };
+  const route = `${baseUrl()}/api/sessions/${sessionId}`;
+  const signal = (kind: string, body: boolean, matcher?: string) => [{
+    ...(matcher ? { matcher } : {}), hooks: [claudeHook(`${route}/signal?kind=${kind}&cli=${cli}`, token, body)],
+  }];
+  const env = usageEnv(route, cli, token);
+  const settings = {
+    ...(env ? { env } : {}),
+    hooks: {
+      SessionEnd: [{ hooks: [claudeHook(`${route}/ended?cli=${cli}`, token, false)] }],
+      Stop: signal("stop", true),
+      // An error from the API ended its turn: a usage limit, or one it gave up on.
+      StopFailure: signal("failure", true),
+      Notification: signal("notify", true, "permission_prompt|idle_prompt|elicitation_dialog|agent_needs_input|quota_auto_resume_fired"),
+      UserPromptSubmit: signal("prompt", false),
+      PostToolUse: signal("tool", false),
+      // With "Answer from elsewhere" on, a permission also waits for you in PacedMind, while the terminal asks too
+      // (asks.ts); only as an http hook, which can wait that long.
+      ...(deviceConfig().remoteAnswers && httpHooks()
+        ? { PermissionRequest: [{ hooks: [claudeHook(`${route}/permission?cli=${cli}`, token, true, 11 * 60)] }] }
+        : {}),
+    },
+  };
   const mcpFile = path.join(dir, "mcp.json");
   const settingsFile = path.join(dir, `settings-${cli}.json`);
   writePrivate(mcpFile, JSON.stringify(mcp, null, 2));
@@ -123,29 +243,158 @@ function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: s
 }
 
 /**
- * The command line that opens the agent in a terminal (without folder/title handling). start: a new conversation
- * with the kickoff message. resume: back into the last conversation. changes: the last conversation goes on as a
- * new branch whose first message says the user asked for changes; Codex starts a new conversation instead.
- * Also returns the Claude Code conversation it runs (null for Codex), which is new when there is none to go back to.
+ * Codex's hooks for PacedMind's sessions: the same events Claude Code's hooks report (signals.ts), plus its permission
+ * requests (the permission route) and its end. Codex runs a hook only once you've trusted it ("Hooks need review" in
+ * its terminal, or /hooks), and keeps that per definition, so these are the same in every session on a computer: each
+ * runs PacedMind's hook script with its event, and the script reads the session's route and header file from the
+ * terminal's environment (PACEDMIND_HOOK_URL, PACEDMIND_HOOK_AUTH). Trusted once, they stay trusted. From Codex 0.150,
+ * whose hooks are on by default; an older one gets none, and its sessions report what its notify says.
  */
-function agentCommand(dir: string, session: Session, task: Task, kind: "start" | "resume" | "changes", token: string): {
-  command: string; conversation: string | null;
+const CODEX_HOOK_EVENTS: [event: string, kind: string, timeout: number, async: boolean][] = [
+  ["SessionStart", "start", 10, true],
+  ["UserPromptSubmit", "prompt", 10, true],
+  ["PermissionRequest", "permission", 11 * 60, false],
+  ["PostToolUse", "tool", 10, true],
+  ["Stop", "stop", 10, true],
+  // Codex caps SessionEnd at 3 seconds, and runs it before it exits.
+  ["SessionEnd", "ended", 3, false],
+];
+
+/** What a Codex session's start says until this computer's Codex has run PacedMind's hooks. */
+const CODEX_HOOKS_FIRST = "The first time, Codex asks you to review PacedMind's hooks: choose “Trust all and continue” in its terminal, so PacedMind hears when it waits for you and when it ends.";
+
+/** Whether this computer's Codex CLI has hooks turned on by default (0.150 and later). */
+function codexHooksOn(): boolean {
+  const v = localTools().codex.cli?.version.match(/^(\d+)\.(\d+)/);
+  return !!v && (Number(v[1]) > 0 || Number(v[2]) >= 150);
+}
+
+/**
+ * PacedMind's hook script for Codex, in this computer's data folder: posts what Codex hands a hook to the session's
+ * route, with the session's token from its header file, and prints only a permission's decision. It reads the session
+ * from the environment, so it does nothing in a Codex that PacedMind didn't start. Rewritten at each launch, so a
+ * newer PacedMind's takes effect; the hooks name only its path. Null when that path can't go into a hook definition.
+ */
+function codexHookScript(): string | null {
+  const win = process.platform === "win32";
+  const file = path.join(/*turbopackIgnore: true*/ dataDir(), win ? "codex-hook.cmd" : "codex-hook.sh");
+  if (!/^[^"'`$%!^&|<>;\r\n]+$/.test(file)) return null;
+  const script = win
+    ? [
+      "@echo off",
+      "rem PacedMind's hook for the Codex sessions it starts: posts what Codex hands the hook to the session's route.",
+      "if not defined PACEDMIND_HOOK_URL exit /b 0",
+      "if not defined PACEDMIND_HOOK_AUTH exit /b 0",
+      `if "%~1"=="permission" (curl.exe -s -m 650 -H "@%PACEDMIND_HOOK_AUTH%" -H "Content-Type: application/json" --data-binary @- "%PACEDMIND_HOOK_URL%/permission" & exit /b 0)`,
+      `if "%~1"=="ended" (curl.exe -s -m 3 -o NUL -X POST -H "@%PACEDMIND_HOOK_AUTH%" "%PACEDMIND_HOOK_URL%/ended" & exit /b 0)`,
+      `curl.exe -s -m 5 -o NUL -H "@%PACEDMIND_HOOK_AUTH%" -H "Content-Type: application/json" --data-binary @- "%PACEDMIND_HOOK_URL%/signal?kind=%~1"`,
+      "exit /b 0", "",
+    ].join("\r\n")
+    : [
+      "#!/bin/sh",
+      "# PacedMind's hook for the Codex sessions it starts: posts what Codex hands the hook to the session's route.",
+      '[ -n "$PACEDMIND_HOOK_URL" ] && [ -r "$PACEDMIND_HOOK_AUTH" ] || exit 0',
+      'case "$1" in',
+      '  permission) curl -s -m 650 -H "@$PACEDMIND_HOOK_AUTH" -H "Content-Type: application/json" --data-binary @- "$PACEDMIND_HOOK_URL/permission" ;;',
+      '  ended) curl -s -m 3 -o /dev/null -X POST -H "@$PACEDMIND_HOOK_AUTH" "$PACEDMIND_HOOK_URL/ended" ;;',
+      '  start|prompt|tool|stop) curl -s -m 5 -o /dev/null -H "@$PACEDMIND_HOOK_AUTH" -H "Content-Type: application/json" --data-binary @- "$PACEDMIND_HOOK_URL/signal?kind=$1" ;;',
+      "esac",
+      "exit 0", "",
+    ].join("\n");
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== script) writePrivate(file, script, 0o700);
+  } catch {
+    return null;
+  }
+  return file;
+}
+
+/**
+ * The -c flags that give a Codex session PacedMind's hooks, as one line for the terminal script: in sh, each value in
+ * single quotes; in cmd, in double quotes with the inner ones escaped (Codex reads its arguments the usual Windows way).
+ * Empty without hooks (an older Codex, or a data folder whose path can't go into a definition).
+ */
+function codexHooks(): string {
+  const script = codexHooksOn() ? codexHookScript() : null;
+  if (!script) return "";
+  const win = process.platform === "win32";
+  return CODEX_HOOK_EVENTS.map(([event, kind, timeout, async]) => {
+    // Codex runs a Windows hook in the session's shell (PowerShell or cmd): `cmd /d /c "<script>" <event>` runs in both.
+    const handler = win
+      ? `{type='command',command='cmd /d /c "${script}" ${kind}',commandWindows='cmd /d /c "${script}" ${kind}',timeout=${timeout}${async ? ",async=true" : ""}}`
+      : `{type="command",command="\\"${script}\\" ${kind}",timeout=${timeout}${async ? ",async=true" : ""}}`;
+    const value = `hooks.${event}=[{hooks=[${handler}]}]`;
+    return win ? ` -c "${value.replace(/"/g, '\\"')}"` : ` -c '${value}'`;
+  }).join("");
+}
+
+/** What a Codex session's terminal runs after Codex exits: its end, for when its SessionEnd hook isn't trusted yet. */
+function codexAfter(): string | undefined {
+  const script = codexHooksOn() ? codexHookScript() : null;
+  if (!script) return undefined;
+  return process.platform === "win32" ? `call "${script}" ended` : `"${script}" ended`;
+}
+
+/**
+ * Codex's `notify` for a session: when a turn ends, curl posts what Codex passes it (the turn as JSON, appended as the
+ * last argument, here the value of --data-raw) to the session's signal route. No shell runs it, so what the agent said
+ * never meets a command line. It stands in for the user's own notify setting while the session runs. Empty when the
+ * folder's path has characters the quoting below can't carry.
+ */
+function codexNotify(auth: string, sessionId: string): string {
+  if (/['"%$`!\r\n]/.test(auth)) return "";
+  const args = ["curl", "-s", "-m", "5", "-o", DEV_NULL, "-H", `@${auth}`, "-H", "Content-Type: application/json",
+    `${baseUrl()}/api/sessions/${sessionId}/signal?kind=turn`, "--data-raw"];
+  return ` -c "notify=[${args.map((a) => `'${a}'`).join(",")}]"`;
+}
+
+/**
+ * The command line that opens the agent in a terminal in `folder` (without folder/title handling). start: a new
+ * conversation with the kickoff message. resume: back into the last conversation. changes: a new conversation whose
+ * first message says the user wrote back; start_task hands it the changes and the last report. (An interactive
+ * Claude Code that resumes a conversation answers its first message before PacedMind's MCP server is back, drops the
+ * tools the conversation had, and gives up.) Also returns the Claude Code conversation it runs (null for Codex).
+ *
+ * When the task's project picks the MCP servers its sessions get here (Settings), Claude Code gets those alone
+ * (--strict-mcp-config, which also leaves out the plugins' servers) and Codex has the others switched off.
+ */
+function agentCommand(dir: string, session: Session, task: Task, kind: "start" | "resume" | "changes", token: string, folder: string): {
+  command: string; conversation: string | null; env?: Record<string, string>; after?: string;
 } {
   const exe = cliCommand(session.agent);
   const prompt = kind === "changes" ? changesPrompt(task, session.id) : kickoffPrompt(task, session.id);
+  const servers = projectServers(task.projectId);
   if (session.agent === "codex") {
     // PacedMind's MCP server for this session, whatever config.toml says; the token comes from ORGANIZER_TOKEN,
-    // which the terminal script sets.
-    const mcp = `-c mcp_servers.organizer.url="${mcpUrl()}" -c mcp_servers.organizer.bearer_token_env_var="ORGANIZER_TOKEN"`;
-    return { command: kind === "resume" ? `${exe} ${mcp} resume --last` : `${exe} ${mcp} "${prompt}"`, conversation: null };
+    // which the terminal script sets. Settings → Connect puts the owner token in the same table as a header, so
+    // the headers are cleared: the session must only ever send its own token.
+    const mcp = [
+      `-c mcp_servers.${MCP_NAME}.url="${mcpUrl()}"`, `-c mcp_servers.${MCP_NAME}.bearer_token_env_var="ORGANIZER_TOKEN"`,
+      `-c mcp_servers.${MCP_NAME}.http_headers={}`, `-c mcp_servers.${MCP_NAME}.env_http_headers={}`, `-c mcp_servers.${MCP_NAME}.enabled=true`,
+      // The old name in your config.toml, with the owner token, stays off in a session (Connect renames it).
+      ...(codexMcpTable(OLD_MCP_NAME) ? [`-c mcp_servers.${OLD_MCP_NAME}.enabled=false`] : []),
+      ...(servers ? codexServersOff(folder, servers).map((name) => `-c mcp_servers.${name}.enabled=false`) : []),
+    ].join(" ");
+    // The session's token as a header file, for its notify and hooks, which find it through the terminal's environment.
+    const auth = writeHookAuth(dir, token);
+    const usage = codexUsage(session.id, token);
+    const flags = `${mcp}${codexNotify(auth, session.id)}${codexHooks()}${usage?.flag ?? ""}`;
+    // A resume goes back into the conversation the session ran, once its SessionStart hook said which; else the last.
+    const back = session.cliSessionId && UUID.test(session.cliSessionId) ? `resume ${session.cliSessionId}` : "resume --last";
+    return {
+      command: kind === "resume" ? `${exe} ${flags} ${back}` : `${exe} ${flags} "${prompt}"`, conversation: null,
+      env: { PACEDMIND_HOOK_URL: `${baseUrl()}/api/sessions/${session.id}`, PACEDMIND_HOOK_AUTH: auth, ...usage?.env }, after: codexAfter(),
+    };
   }
   const last = session.cliSessionId && UUID.test(session.cliSessionId) ? session.cliSessionId : null;
+  // A start and a resume run the conversation the session names (a start's was made with the session); changes get
+  // a new one.
   const conversation = last && kind !== "changes" ? last : crypto.randomUUID();
-  const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, token);
-  const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__organizer__${t}`).join(",");
-  const base = `${exe} --mcp-config "${mcpFile}" --settings "${settingsFile}" --allowedTools ${allowed}`;
+  const { mcpFile, settingsFile } = writeClaudeConfig(dir, session.id, conversation, token, servers && claudeServers(folder, servers));
+  const allowed = AGENT_ALLOWED_TOOLS.map((t) => `mcp__${MCP_NAME}__${t}`).join(",");
+  const base = `${exe} --mcp-config "${mcpFile}"${servers ? " --strict-mcp-config" : ""} --settings "${settingsFile}" --allowedTools ${allowed}`;
   if (last && kind === "resume") return { command: `${base} --resume ${last}`, conversation };
-  if (last && kind === "changes") return { command: `${base} --resume ${last} --fork-session --session-id ${conversation} "${prompt}"`, conversation };
   return { command: `${base} --session-id ${conversation} -n "${safe(`${task.key} ${task.title}`, 80)}" "${prompt}"`, conversation };
 }
 
@@ -180,14 +429,23 @@ export function desktopHome(agent: AgentId): string {
   return agent === "claude" ? "claude://code/needs-input" : "codex://launch";
 }
 
-/** Opens a terminal in `folder` that runs `command`; `token` (a session's MCP token) goes into its ORGANIZER_TOKEN. */
-function openTerminal(dir: string, folder: string, title: string, command: string, token: string | null, terminal: TerminalId): string | null {
+/**
+ * Opens a terminal in `folder` that runs `command`; `token` (a session's MCP token) goes into its ORGANIZER_TOKEN, and
+ * `extra.env` (plain values: a URL and a file of the session's) into its environment too. `extra.after` runs once the
+ * command exits.
+ */
+function openTerminal(
+  dir: string, folder: string, title: string, command: string, token: string | null, terminal: TerminalId,
+  extra: { env?: Record<string, string>; after?: string } = {},
+): string | null {
   const env = agentEnv();
+  const vars = Object.entries(extra.env ?? {}).filter(([k, v]) => /^[A-Z_]+$/.test(k) && /^[^"'`$%!\r\n]+$/.test(v));
   try {
     if (process.platform === "win32") {
       const script = path.join(dir, "start.cmd");
       writePrivate(script, [
-        "@echo off", "chcp 65001 >nul", `title ${title}`, `cd /d "${folder}"`, ...(token ? [`set ORGANIZER_TOKEN=${token}`] : []), command, "",
+        "@echo off", "chcp 65001 >nul", `title ${title}`, `cd /d "${folder}"`, ...HOST_SESSION_VARS.map((v) => `set ${v}=`),
+        ...(token ? [`set ORGANIZER_TOKEN=${token}`] : []), ...vars.map(([k, v]) => `set "${k}=${v}"`), command, ...(extra.after ? [extra.after] : []), "",
       ].join("\r\n"));
       if (terminalFor(terminal, "win32").value === "wt") {
         const child = spawn("wt.exe", ["-w", "organizer", "new-tab", "--title", title, "-d", folder, "cmd", "/k", script], {
@@ -200,14 +458,33 @@ function openTerminal(dir: string, folder: string, title: string, command: strin
       }
       return null;
     }
-    if (process.platform === "darwin") return openMacTerminal(dir, folder, title, token, command, terminal);
+    const shell = [...(token ? [`export ORGANIZER_TOKEN=${token}`] : []), ...vars.map(([k, v]) => `export ${k}="${v}"`)];
+    if (process.platform === "darwin") return openMacTerminal(dir, folder, title, shell, command, extra.after, terminal);
     const script = path.join(dir, "start.sh");
-    writePrivate(script, ["#!/bin/sh", `cd "${folder}"`, ...(token ? [`export ORGANIZER_TOKEN=${token}`] : []), command, ""].join("\n"), 0o700);
+    writePrivate(script, [
+      "#!/bin/sh", `cd "${folder}"`, `unset ${HOST_SESSION_VARS.join(" ")}`, ...shell, command, ...(extra.after ? [extra.after] : []), "",
+    ].join("\n"), 0o700);
     spawn("x-terminal-emulator", ["-e", script], { detached: true, stdio: "ignore", env }).unref();
     return null;
   } catch (e) {
     return e instanceof Error ? e.message : String(e);
   }
+}
+
+/**
+ * Opens a terminal in your home folder where the agent signs in to PacedMind Cloud's MCP server itself (`claude mcp login
+ * pacedmind`, `codex mcp login pacedmind`): its browser page asks you to allow it, with your two-factor sign-in. Settings
+ * → Connect, once the agent's config names the server. The command is fixed: the agent's own CLI and the server's name.
+ */
+export function openMcpLogin(agent: AgentId): string | null {
+  if (MODE !== "desktop") return "Agents sign in from a terminal on your computer.";
+  const dir = path.join(dataDir(), "connect", agent);
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+  return openTerminal(dir, os.homedir(), `PacedMind - ${AGENT_LABEL[agent]} sign-in`, `${cliBinary(agent)} mcp login ${MCP_NAME}`, null, deviceConfig().terminal);
 }
 
 function openCmdWindow(title: string, script: string, env: NodeJS.ProcessEnv) {
@@ -219,16 +496,19 @@ function openCmdWindow(title: string, script: string, env: NodeJS.ProcessEnv) {
  * so the agent finds the user's own PATH, and `open` needs no permission to control another app.
  * The escape sequence names the window. Without iTerm installed, the session opens in Terminal.
  */
-function openMacTerminal(dir: string, folder: string, title: string, token: string | null, command: string, terminal: TerminalId): string | null {
+function openMacTerminal(
+  dir: string, folder: string, title: string, env: string[], command: string, after: string | undefined, terminal: TerminalId,
+): string | null {
   const script = path.join(dir, "start.command");
   writePrivate(script, [
-    "#!/bin/sh", `printf '\\033]0;%s\\007' "${title}"`, `cd "${folder}" || exit 1`, ...(token ? [`export ORGANIZER_TOKEN=${token}`] : []), command, "",
+    "#!/bin/sh", `printf '\\033]0;%s\\007' "${title}"`, `cd "${folder}" || exit 1`, `unset ${HOST_SESSION_VARS.join(" ")}`,
+    ...env, command, ...(after ? [after] : []), "",
   ].join("\n"), 0o700);
   const apps = terminalFor(terminal, "darwin").value === "iterm" ? ["iTerm", "Terminal"] : ["Terminal"];
   let error = "";
   for (const app of apps) {
     try {
-      execFileSync("open", ["-a", app, script], { stdio: "pipe" });
+      execFileSync("open", ["-a", app, script], { stdio: "pipe", env: agentEnv() });
       return null;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -242,6 +522,20 @@ function openMacTerminal(dir: string, folder: string, title: string, token: stri
  * before the terminal opens, so the answer can't have come in yet.
  */
 const asksTrust = (agent: AgentId, folder: string) => agent === "claude" && !!trustCheck()?.(folder);
+
+/**
+ * Answers the agent's question whether you trust the folder before it starts there, when this computer's setting says
+ * so (device.ts `trustFolders`), so the session never waits for it in its terminal.
+ */
+function trustAhead(agent: AgentId, folder: string) {
+  if (!deviceConfig().trustFolders) return;
+  try {
+    if (agent === "claude") trustForClaude(folder);
+    else trustForCodex(folder);
+  } catch (e) {
+    console.error("[organizer] couldn't answer the folder question ahead", e);
+  }
+}
 
 /** A message about a terminal that just opened, and what to answer in it first when Claude Code asks about the folder. */
 const withTrust = (message: string, asks: boolean) => (asks ? `${message.replace(/\.?$/, ".")} ${TRUST_FIRST}` : message);
@@ -392,6 +686,8 @@ async function launch(session: Session, task: Task, folder: string, env: string,
   const dir = sessionDir(session.id);
   const where = place(session.surface, agent);
   const title = safe(`${task.key} · ${session.surface === "cloud" ? CLOUD_LABEL[agent] : AGENT_LABEL[agent]}`, 60);
+  // Codex cloud runs out of sight and asks nothing; everything else starts the agent in the folder here.
+  if (!(session.surface === "cloud" && agent === "codex")) trustAhead(agent, folder);
   const trust = session.surface !== "desktop" && asksTrust(agent, folder);
   let failed: string | null = null;
   if (session.surface === "desktop") {
@@ -403,7 +699,8 @@ async function launch(session: Session, task: Task, folder: string, env: string,
     failed = openTerminal(dir, folder, title, `${cliCommand(agent)} --cloud "${safe(cloudPrompt(task), 3000)}"`, null, terminal);
   } else {
     const token = issueSessionToken(session.id, task.id);
-    failed = openTerminal(dir, folder, title, agentCommand(dir, session, task, "start", token).command, token, terminal);
+    const a = agentCommand(dir, session, task, "start", token, folder);
+    failed = openTerminal(dir, folder, title, a.command, token, terminal, a);
   }
   if (failed) {
     await repo.updateSession(session.id, { status: "failed", endedAt: session.startedAt, note: failed.slice(0, 2000) });
@@ -426,6 +723,7 @@ async function launch(session: Session, task: Task, folder: string, env: string,
     await repo.updateSession(session.id, { status: "running" });
     await repo.addSessionEvent(session.id, "started", `Started ${AGENT_LABEL[agent]} in ${where}: ${REASON_TEXT[reason]}`);
     message = `Started ${task.key} in a new terminal`;
+    if (agent === "codex" && codexHooks() && !deviceConfig().codexHooksSeen) message += `. ${CODEX_HOOKS_FIRST}`;
   }
   if (task.status === "todo" || task.status === "backlog") await repo.updateTask(task.id, { status: "progress" });
   return { ok: true, session: (await repo.getSession(session.id))!, message: withTrust(message, trust) };
@@ -471,6 +769,7 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     const dir = sessionDir(session.id);
     const title = safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60);
     const surface = to ?? session.surface;
+    trustAhead(session.agent, folder);
     const trust = surface !== "desktop" && asksTrust(session.agent, folder);
     let failed: string | null;
     let text: string;
@@ -490,14 +789,16 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
       }
     } else {
       const token = issueSessionToken(session.id, task.id);
-      const { command, conversation } = agentCommand(dir, session, task, "resume", token);
+      const a = agentCommand(dir, session, task, "resume", token, folder);
       // Live again before its terminal opens, so however fast the agent calls, its token works: a closed session
-      // runs again, and with no conversation to go back to, a new one started.
+      // runs again, and with no conversation to go back to, a new one started. Codex goes back into the conversation
+      // its hooks named, which stays.
       const before = { status: session.status, endedAt: session.endedAt, cliSessionId: session.cliSessionId };
       await repo.updateSession(session.id, {
-        endedAt: null, cliSessionId: conversation, ...(session.status === "closed" || session.status === "failed" ? { status: "running" as const } : {}),
+        endedAt: null, cliSessionId: session.agent === "codex" ? session.cliSessionId : a.conversation,
+        ...(session.status === "closed" || session.status === "failed" ? { status: "running" as const } : {}),
       });
-      failed = openTerminal(dir, folder, title, command, token, device.terminal);
+      failed = openTerminal(dir, folder, title, a.command, token, device.terminal, a);
       if (failed) await repo.updateSession(session.id, before);
       text = "Reopened in a terminal";
     }
@@ -527,9 +828,10 @@ export function reopenProblem(session: Session): string | null {
 }
 
 /**
- * Sends a terminal session back to work on changes the user asked for (see requestChanges in ops.ts). It reopens
- * with a first message that says so. Claude Code continues its conversation as a new branch of it, with its own
- * id, so a terminal still open on the old one doesn't get in the way; Codex starts a new conversation.
+ * Sends a terminal session back to work on changes the user asked for, or with answers to its questions (see
+ * requestChanges in ops.ts). It reopens in a new conversation with a first message that says so, and start_task hands
+ * it what you wrote and its last report. A Claude Code conversation has its own id, so a terminal still open on the
+ * old one doesn't get in the way.
  */
 export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
   return exclusive(async () => {
@@ -547,11 +849,14 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     if (!folder) return { ok: false, error };
     const dir = sessionDir(session.id);
     const token = issueSessionToken(session.id, task.id);
-    const { command, conversation } = agentCommand(dir, session, task, "changes", token);
-    // The new conversation counts before its terminal opens, so a terminal still open on the old one can't end the session.
+    const a = agentCommand(dir, session, task, "changes", token, folder);
+    const conversation = a.conversation;
+    // The new conversation counts before its terminal opens, so a terminal still open on the old one can't end the
+    // session. Codex's new one says its id through its SessionStart hook.
     if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: conversation });
+    trustAhead(session.agent, folder);
     const trust = asksTrust(session.agent, folder);
-    const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), command, token, device.terminal);
+    const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), a.command, token, device.terminal, a);
     if (failed) {
       if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: session.cliSessionId });
       return { ok: false, error: failed };

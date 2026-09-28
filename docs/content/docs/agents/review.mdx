@@ -1,6 +1,6 @@
 ---
 title: Review finished work
-description: Where finished agent sessions show up, how to read an agent's report, how to send the work back with Request changes, what a partly done or blocked hand-back holds up, and what Mark done changes.
+description: Where finished agent sessions show up, how to read an agent's report, how to send the work back with Request changes or answer the agent's questions, what a partly done or blocked hand-back holds up, and what Mark done changes.
 ---
 
 When an agent hands a task back, it sends a report: what it changed, its answer to each item of the task's **Done when** list, screenshots, and how to check the result. The session is then **finished, waiting for you** and the task is **In review**, as they are when a session is marked finished. The agent never marks its own task done: that's yours to do after looking at the result.
@@ -21,6 +21,8 @@ In a flow, tasks connected **Manually** wait for that. Tasks connected **Automat
 | **Flows** | The session's card reads *Waiting for you*, *Partly done* or *Blocked*; its panel adds *Finished 12:22, check it and mark done*, *Handed back part of it at 12:22, check it and mark done* or *Got stuck at 12:22, it needs you*. |
 | **Timeline** | A navy outline around the task's bar and a navy dot after it. |
 | **Calendar**, week | A 45-minute block to check the result, *Check DEV-21*, planned in your focus time. |
+
+A session that is still running can need you too, when its agent waits for you in its terminal or asks you a question: it shows in the task's details, the task list and **Sessions** with a navy dot, and the desktop app notifies. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
 
 ## The report
 
@@ -62,13 +64,25 @@ A session without a report shows the agent's note instead, if it left one. That'
 2. Write what should change in the field (*What should change? Be as specific as you'd be with a colleague.*). The agent reads it as written, so answer its questions there too.
 3. Select **Send to Claude Code** (or **Send to Codex**), or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>. **Cancel** or <kbd>Esc</kbd> drops the text.
 
-PacedMind adds your changes to the report, under **You asked for changes**, and opens a new terminal in the session's folder: a new tab in Windows Terminal, a new window otherwise. *Sent to Claude Code in a new terminal* confirms it. Then:
+PacedMind adds your changes to the report, under **You asked for changes**, and opens a new terminal in the task's folder: a new tab in Windows Terminal, a new window otherwise. *Sent to Claude Code in a new terminal* confirms it. Then:
 
-* **Claude Code** continues its conversation, as a new branch of it (*Claude Code continues its conversation in a new terminal.*). The old terminal can stay open or be closed. **Codex**, and Claude Code without a conversation to go back to, start again, with the last report and your changes (*Codex starts again in a new terminal, with its last report and your changes.*).
+* The agent starts a new conversation, with its last report and your changes, as the line under the box says (*Claude Code starts again in a new terminal, with its last report and your changes.*). Claude Code doesn't go back into its earlier conversation, so that PacedMind's tools are connected when it reads your changes. The old terminal can stay open or be closed.
 * The task goes back to **In progress**, from **Done** too, and the session to **Running**: *Claude Code is working on your changes since 14:05*. The earlier report folds away under **The report from 25 Sep 12:22**.
 * The agent reads your changes first, makes them without starting the task over, and hands the task back with a new report whose summary starts with what it changed. You're notified again. The earlier report keeps your changes.
 
 For a session in the Claude or Codex app, or in the cloud, write the changes to the agent where it runs. A session that ran on another computer takes its changes from PacedMind on that computer. An agent you're talking to can send changes the same way, with the MCP tool [`request_changes`](/mcp/tools/sessions#request_changes), when you ask it to.
+
+## Answer the agent's questions
+
+When the agent's latest report has questions for you, **Answer its question** (or **Answer its questions**) appears next to **Request changes**, wherever that is offered. It sends your answers back to the agent the same way as changes.
+
+1. Select **Answer its question**.
+2. Write an answer under each question, in the fields marked *Your answer*. A question you leave empty is left out. The last field, *Anything else it should know (optional)*, takes anything else.
+3. Select **Send to Claude Code** (or **Send to Codex**), or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, once at least one answer is written. **Cancel** or <kbd>Esc</kbd> drops the answers.
+
+The line under the fields says *Claude Code starts again in a new terminal, with its last report and your answers.* PacedMind sends your answers as one message, which starts with *My answers to your questions:* and lists each question you answered with your answer. From there it goes as with **Request changes**: the report shows your answers under **You answered its questions**, the session's history records *You answered its questions:* and the start of your answers, and the session runs again with *Claude Code is working with your answers since 14:05*. The agent reads your answers first when it calls `start_task`, goes on with the task using them, and hands it back with a new report.
+
+While a session runs, the agent can also ask you something in its terminal, or with `report_progress`: answer it there. A question it asks with `ask_user` waits for your answer in PacedMind, on the task and in **Sessions**: see [Answer while it works](/agents/lifecycle#answer-while-it-works). See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
 
 ## Partly done or blocked
 

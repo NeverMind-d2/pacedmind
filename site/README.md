@@ -24,6 +24,10 @@ npm run prices -- --write   # also saves the new prices and today's date
 
 A change of more than 40% is never saved, because it more likely means the page was misread: check that country by hand. To add a country, add it to `prices.json` with `"amount": 0` and run with `--write`.
 
+A year of Cloud costs `yearlyMonths` (in `prices.json`) times the monthly price. The payments use the same numbers: `npm run stripe:prices` in the repository's root makes the payment provider's prices match `prices.json`, so run it after saving new prices. Until billing launches, `SITE.cloudOpen` in `lib/site.ts` is off and the Cloud card says "Coming soon"; switched on, it links to creating an account (`SITE.createAccount`) and the copy stops saying Cloud is coming.
+
+`/subscribed` is where the payment and billing pages send someone from the desktop app back to (its own server only answers its window). It isn't in the sitemap, and tells search engines not to index it.
+
 ## Search and answer engines
 
 - The page's words live in `lib/content.ts`, which the page, `/llms.txt`, `/llms-full.txt` and the structured data all read, so they can't drift apart (the hero and the pricing heading are still written out in `app/page.tsx` too). The FAQ there is shown on the page and repeated in its FAQPage data word for word; never add a question to one without the other. The entity is always "PacedMind".

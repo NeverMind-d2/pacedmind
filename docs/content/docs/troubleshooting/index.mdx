@@ -55,12 +55,12 @@ The task's details and **Sessions** show *Couldn't start:* and the reason, or a 
 | --- | --- |
 | *… already has a running session* | Open the running session, or close it with **Close session** first. |
 | *… is marked as yours. Hand it to Claude Code or Codex before starting a session.* | Set **Done by** to an agent. |
-| *The Codex CLI (codex) isn't installed on … Run it in the Codex app instead.* | Choose the Codex app under **Runs in**, or install the command-line tool and select **Check again** in **Settings → Devices**. |
+| *The Codex CLI (codex) isn't installed on … Run it in the Codex app instead.* | Choose the Codex app under **Runs in**, or install the command-line tool and select **Check again** for this computer on the **Computers** page. |
 | *The Claude app isn't installed on …* | Install the app, or choose **Terminal** under **Runs in**. |
-| *… sessions start from the Codex CLI (codex), which isn't installed on …* | Cloud sessions start from the agent's command-line tool. Install it, then select **Check again** in **Settings → Devices**. |
+| *… sessions start from the Codex CLI (codex), which isn't installed on …* | Cloud sessions start from the agent's command-line tool. Install it, then select **Check again** for this computer on the **Computers** page. |
 | *… works on a git repository, and … isn't in one.* | Give the task or its project a folder inside a git repository, or run the session on the computer. |
 | *Pick the Codex cloud environment … runs in first* | In **Flows**, select the session, choose **Codex cloud** under **Runs in**, and enter the environment's label from chatgpt.com/codex/settings/environments. |
-| *Can't use the folder …: That folder doesn't exist.* | Correct the project's folder in **Settings → Projects and folders**, or the task's own folder in its details. |
+| *Can't use the folder …: That folder doesn't exist.* | Correct the project's folder in **Settings → Projects**, or the task's own folder in its details. |
 | *… Use an absolute path, like C:\Users\Anna\code\my-app.* (on macOS, *like /Users/anna/code/my-app*) | Enter the full path, starting with the drive letter on Windows, or with `/` on macOS. |
 | *… The path contains characters that can't be passed to a terminal safely …* | Move or rename the folder so its path has none of `"` `%` `!` `^` `&` `\|` `<` `>` `` ` `` `$`. |
 | *… The path contains a backslash, which can't be passed to a terminal safely.* (macOS) | Move or rename the folder so its path has no `\`. |
@@ -69,8 +69,8 @@ The task's details and **Sessions** show *Couldn't start:* and the reason, or a 
 
 The terminal shows an error such as *'claude' is not recognized as an internal or external command* on Windows, or *claude: command not found* on macOS. The agent isn't installed, or isn't on the `PATH` that the session sees.
 
-* Check in a new terminal that `claude --version` or `codex --version` works. **Settings → Devices** shows what PacedMind found: *No CLI* means it didn't find the command-line tool, on the `PATH` or where the installers put it.
-* Or enter the agent's full path in **Settings → Starting sessions** (**Claude command**, **Codex command**). The command is used as typed, so put a path with spaces in double quotes, such as `"C:\Program Files\Tools\claude.exe"`.
+* Check in a new terminal that `claude --version` or `codex --version` works. **Settings → General** shows what PacedMind found, under **Agents found here**: a row without *CLI*, such as *Claude app 1.4* or *Not found*, means it didn't find the command-line tool, on the `PATH` or where the installers put it.
+* Or enter the agent's full path in **Settings → Sessions** (**Claude command**, **Codex command**). The command is used as typed, so put a path with spaces in double quotes, such as `"C:\Program Files\Tools\claude.exe"`.
 * On Windows, after installing an agent, quit and restart PacedMind, so it sees the new `PATH`. On macOS, each session starts in a new login shell, which reads the `PATH` from your shell's settings, such as `~/.zshrc`.
 
 The Codex app doesn't install the Codex command-line tool. Without it, run Codex sessions in the Codex app.
@@ -81,17 +81,17 @@ Then close the stuck session with **Close session** and start a new one.
 
 After 90 seconds without word from the agent, a running session shows *… hasn't checked in yet. It may be waiting for you in its terminal.* When Claude Code doesn't trust the session's folder yet, it shows *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.* right away. Switch to its terminal:
 
-* The agent may be asking a question: to trust the folder, to sign in, or to approve a tool. Answer it. To Claude Code's question about the folder, **Yes, I trust this folder** lets the session go on; **No, exit** ends it. See [Trusting the folder in Claude Code](/agents/start-and-manage#trusting-the-folder-in-claude-code).
+* The agent may be asking a question: to trust the folder, to sign in, or to approve a tool. Answer it. To Claude Code's question about the folder, **Yes, I trust this folder** lets the session go on; **No, exit** ends it. With **Trust session folders** on, PacedMind answers it before the session starts. See [Trusting the folder](/agents/start-and-manage#trusting-the-folder).
 * The agent may not reach PacedMind's MCP server. Check that PacedMind is running; see [An agent can't reach PacedMind](#an-agent-cant-reach-pacedmind).
 * If the agent is working but never called `start_task`, ask it to follow its first message.
 
-In the Claude or Codex app, the session shows *Opened in the Claude app. Send the first message there to start.* instead: the app wrote the first message but waits for you to send it. When the agent works but PacedMind never hears from it, the app isn't connected to PacedMind: select **Connect** for the agent in **Settings → Devices**, and **Mark finished** for this session when it's done.
+In the Claude or Codex app, the session shows *Opened in the Claude app. Send the first message there to start.* instead: the app wrote the first message but waits for you to send it. When the agent works but PacedMind never hears from it, the app isn't connected to PacedMind: select **Connect** for the agent in **Settings → MCP server**, and **Mark finished** for this session when it's done.
 
 If the session can't recover, select **Close session** and start a new one.
 
 ### A session stays "running" after its terminal closed
 
-Claude Code reports its exit to PacedMind; Codex doesn't. A Codex session, or a Claude Code session whose terminal was killed, stays running in PacedMind. Select **Close session** in the task's details or in **Sessions**. The task goes back to **Todo** if it was in progress.
+Claude Code reports its exit to PacedMind, and so does Codex, through its hooks or once it exits in its terminal. A session whose terminal was killed while the agent ran, or a Codex session whose window was closed before its hooks were trusted, stays running in PacedMind. Select **Close session** in the task's details or in **Sessions**. The task goes back to **Todo** if it was in progress.
 
 Sessions in a desktop app or the cloud don't report closing either. Select **Mark finished** when their work is done, or **Close session** to drop them.
 
@@ -102,31 +102,56 @@ The cloud can't reach PacedMind on your computer. Follow a Claude Code on the we
 ### Resume opens the wrong conversation, or none
 
 * **Claude Code** resumes by its conversation id, shown in **Sessions** as **Claude session**. If that conversation was deleted, start a **New session**.
-* **Codex** continues its most recent session in the session's folder. To pick another one, run `codex resume` in that terminal.
+* **Codex** resumes by its conversation id, shown in **Sessions** as **Codex session**, once its hooks said which; before that, it continues its most recent session in the session's folder. To pick another one, run `codex resume` in that terminal.
 
 ### An agent can't reach PacedMind
 
 * **PacedMind isn't running.** Agents can only connect while the app runs, in the window, the tray or the menu bar.
-* **The token changed.** After **Regenerate**, select **Connect** for Claude Code and Codex in **Settings → Devices** again. See [MCP server](/mcp#the-access-token).
-* **Wrong port.** The desktop app uses 4319; a development copy started with `npm run dev` uses 4320. **Settings → Devices** says *Reports to another PacedMind* when an agent is set up for another copy: select **Connect** in the copy it should report to.
+* **The token changed.** After **New token**, select **Connect** for Claude Code and Codex in **Settings → MCP server** again. See [MCP server](/mcp#the-access-token).
+* **Wrong port.** The desktop app uses 4319; a development copy started with `npm run dev` uses 4320. The **Computers** page says *Reports elsewhere* under **MCP** when an agent is set up for another copy: select **Connect** in the copy it should report to.
 * **Claude Code: the tools are missing in one project.** The server was registered for another project folder. Register it with `--scope user`. See [Connect Claude Code](/mcp/connect-claude-code).
-* **Codex app: the tools don't start.** The `organizer` section in `~/.codex/config.toml` reads the token from `ORGANIZER_TOKEN`, which the app doesn't have. Select **Connect** in **Settings → Devices** to write the token into the section. See [Connect Codex](/mcp/connect-codex).
+* **The tools are named `mcp__organizer__…`, or the skills mention the old name.** The agent is connected under PacedMind's earlier name, which still works. Select **Connect** in **Settings → MCP server** to rename the entry to `pacedmind`.
+* **Codex app: the tools don't start.** An older `organizer` section in `~/.codex/config.toml` reads the token from `ORGANIZER_TOKEN`, which the app doesn't have. Select **Connect** in **Settings → MCP server** to write the token into the section. See [Connect Codex](/mcp/connect-codex).
 
 Requests without the right token get `401 Unauthorized`.
 
 ### Request changes is missing, or doesn't reopen the session
 
-**Request changes** shows only where it can send the work back: on the task's latest report, for a session that ran in a terminal on this computer, while no other session of the task runs, and not for your own tasks. When an agent sends changes with `request_changes`, or a request can't go through, the message says why:
+**Request changes**, and **Answer its questions**, show only where they can send the work back: on the task's latest report, for a session that ran in a terminal on this computer, while no other session of the task runs, and not for your own tasks. When an agent sends changes with `request_changes`, or a request can't go through, the message says why:
 
 | Message | Solution |
 | --- | --- |
 | *This session runs in the Claude app. Open it there and write your changes to the agent.* | Sessions in a desktop app or in the cloud take changes where they run. |
-| *This session ran on DESKTOP-2. Ask for the changes in PacedMind there.* | Use PacedMind on the computer where the session ran. |
+| *This session ran on another computer. Ask for the changes in PacedMind there.* | Use PacedMind on the computer where the session ran. |
 | *This task already has a running session* | Wait until that session hands the task back, or close it with **Close session**. |
 | *DEV-22 has a newer report. Ask for the changes on that one.* | Ask for the changes on the task's latest report. |
-| *DEV-22 has no folder to work in* | Give the task or its project a folder. |
+| *Can't use the folder …* | Correct the task's or the project's folder, as when a session starts. |
 
 When the terminal doesn't open, the message gives the reason, as when a session starts. See [A session couldn't start](#a-session-couldnt-start).
+
+The reopened session is a new conversation, for Claude Code too: the agent reads your changes or answers and its last report from `start_task`, not from its earlier conversation. To continue the earlier conversation itself, select **Resume in terminal** instead.
+
+### A session doesn't show that its agent waits for you
+
+PacedMind hears that an agent waits for you only from sessions it started in a terminal. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
+
+* **Sessions in a desktop app or the cloud** have no hooks: look at the app, or the cloud session, yourself.
+* **Codex** reports only the end of a turn until you trust PacedMind's hooks: choose **Trust all and continue** when it asks *Hooks need review*, or open `/hooks` in its terminal. A Codex older than 0.150 has none. A question Codex asks in its terminal never shows.
+* **Claude Code older than 2.1.84, and Codex,** report through `curl`. Check that `curl --version` works in a new terminal. In PacedMind's Codex sessions, PacedMind's `notify` program takes the place of your own.
+* **The desktop app notifies once each time the agent starts waiting.** If none appear, check the system's notification settings: see [Notifications](/desktop-app#notifications).
+
+### A session shows no usage
+
+Only sessions PacedMind started in a terminal report what their agent used, and only once the agent has: every 30 seconds while it works, and when it exits. See [What it used](/agents/lifecycle#what-it-used).
+
+* **Sessions in a desktop app or the cloud**, and sessions started outside PacedMind, report nothing.
+* **Codex older than 0.150** reports nothing. Codex never reports a price.
+* **Your own telemetry**: when Claude Code's settings, its managed settings, Codex's `config.toml` or PacedMind's environment already send its telemetry somewhere (`CLAUDE_CODE_ENABLE_TELEMETRY`, `OTEL_METRICS_EXPORTER`, `OTEL_EXPORTER_OTLP_…`, or Codex's `metrics_exporter`), PacedMind leaves it alone. The same variables exported in your shell's startup files also take its place.
+* **A session started before this version** of PacedMind reports nothing; its next one does.
+
+### A session says "Paused: usage limit"
+
+Claude Code stopped because a usage limit of your plan, or your API credit, ran out; the session's line says what Claude Code said, such as when the limit resets. The session stays running. Claude Code may wait for the limit to reset and go on by itself; otherwise, write to it in its terminal once it has, or switch it to another model or account there.
 
 ### An image is missing from a report
 
@@ -158,7 +183,7 @@ The note while dragging explains the rule: dependencies stay within one project,
 
 ### The week view plans nothing
 
-* **Work days** or **Focus hours** in **Settings → Auto-plan** leave no time, or the week's activities fill it.
+* **Work days** or **Focus hours** in **Settings → Planning** leave no time, or the week's activities fill it.
 * Your tasks have no due date, no planned day, and neither **Urgent** nor **High** priority, so the planner leaves them out.
 * The tasks are handed to Claude Code or Codex. The planner leaves those to the agents.
 * The tasks are in the backlog or in review.

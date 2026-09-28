@@ -36,6 +36,11 @@ export interface DeviceConfig {
   /** Projects whose flows may start sessions on this computer by themselves. */
   armed: string[];
   /**
+   * Project id → the MCP servers besides PacedMind its sessions get here, by name (Settings). A project that isn't
+   * listed gets all of them, as Claude Code and Codex would give them anyway; an empty list gets PacedMind's alone.
+   */
+  servers: Record<string, string[]>;
+  /**
    * Per project whose flow is on: its connections ("from>to:mode", see flowSignature) and the project it
    * starts after, as they were when you switched the flow on or last changed it in this window. A flow only
    * starts sessions by itself along these; anything added elsewhere (an agent, the web app, another
@@ -43,6 +48,28 @@ export interface DeviceConfig {
    */
   confirmed: Record<string, { edges: string[]; after: string | null }>;
   remoteStart: RemoteStart;
+  /**
+   * Whether the launcher answers Claude Code's and Codex's question whether you trust a session's folder before the
+   * session starts there (claude-trust.ts, codex-trust.ts), so a session never waits for it in its terminal.
+   */
+  trustFolders: boolean;
+  /**
+   * Whether this computer's sessions wait for your answers in PacedMind on your other devices too (asks.ts): a
+   * permission Claude Code asks for waits there for up to ten minutes while its terminal asks as well, and answers
+   * from the web app or another computer count. Off, only this computer's window and terminal answer.
+   */
+  remoteAnswers: boolean;
+  /**
+   * By agent: the MCP servers its sessions here get from the account its CLI is signed in to (Claude Code's claude.ai
+   * connectors), which no config file names, as the last session PacedMind started here without a project's pick
+   * reported them (start_task), and when. Each computer's CLI can be signed in to another account, with others.
+   */
+  fromAccount?: Partial<Record<AgentId, { names: string[]; at: string }>>;
+  /**
+   * Whether a Codex session here has run PacedMind's hooks (its SessionStart said so): once you've trusted them, which
+   * Codex asks the first time. Until then, a Codex session's start says what to answer.
+   */
+  codexHooksSeen?: boolean;
   /** For Claude Code and Codex that you start yourself (Settings shows it). */
   ownerToken: string;
   /**
@@ -52,6 +79,11 @@ export interface DeviceConfig {
   sessionTokens: Record<string, { sessionId: string; taskId: number; issuedAt: string; expires?: number }>;
   /** Once the import of the folders you work in with Claude Code and Codex was offered here (it opens by itself once). */
   importOffered: boolean;
+  /**
+   * Once connecting Claude Code and Codex to PacedMind Cloud's MCP server was offered here after signing in (it shows
+   * by itself once per account; Settings → Connect does the same any time).
+   */
+  cloudConnectOffered?: boolean;
   /**
    * "Continue without an account" was chosen on the sign-in screen and nobody signed in since, so the app
    * opens with this computer's own data instead of asking. Signing in clears it: after signing out it asks again.
@@ -79,8 +111,11 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     folders: {},
     taskFolders: {},
     armed: [],
+    servers: {},
     confirmed: {},
     remoteStart: "ask",
+    trustFolders: keep?.trustFolders ?? true,
+    remoteAnswers: keep?.remoteAnswers ?? false,
     ownerToken: newOwnerToken(),
     sessionTokens: {},
     importOffered: false,
@@ -115,7 +150,7 @@ export function deviceFor(userId: string): DeviceConfig {
   const current = deviceConfig();
   if (current.userId === userId) return current;
   const next = current.userId === null
-    ? { ...current, userId, deviceId: null, claimedSession: null, sessionTokens: {} }
+    ? { ...current, userId, deviceId: null, claimedSession: null, sessionTokens: {}, cloudConnectOffered: false }
     : defaults(userId, current);
   save(next);
   return next;
@@ -202,7 +237,7 @@ export function forgetTask(scope: TaskScope, taskId: number) {
 }
 
 /**
- * Forgets the folders and flow switches of these projects, and every task folder of `scope`: after the
+ * Forgets the folders, flow switches and MCP servers of these projects, and every task folder of `scope`: after the
  * account's data or this computer's own was started over, or this computer's was moved to Cloud.
  */
 export function forgetAll(scope: TaskScope, projectIds: string[]) {
@@ -212,7 +247,8 @@ export function forgetAll(scope: TaskScope, projectIds: string[]) {
   const folders = Object.fromEntries(Object.entries(d.folders).filter(([id]) => !gone.has(id)));
   const taskFolders = Object.fromEntries(Object.entries(d.taskFolders ?? {}).filter(([key]) => local(key) !== (scope === "local")));
   const confirmed = Object.fromEntries(Object.entries(d.confirmed ?? {}).filter(([id]) => !gone.has(id)));
-  save({ ...d, folders, taskFolders, armed: d.armed.filter((id) => !gone.has(id)), confirmed });
+  const servers = Object.fromEntries(Object.entries(d.servers ?? {}).filter(([id]) => !gone.has(id)));
+  save({ ...d, folders, taskFolders, armed: d.armed.filter((id) => !gone.has(id)), confirmed, servers });
 }
 
 export const flowArmed = (projectId: string | null | undefined) => !!projectId && deviceConfig().armed.includes(projectId);
@@ -246,15 +282,30 @@ export function reconfirmFlow(projectId: string, snapshot: { edges: string[]; af
   save({ ...d, confirmed: { ...(d.confirmed ?? {}), [projectId]: snapshot } });
 }
 
-/** Forgets a deleted project's folder and flow switch. */
+/** Forgets a deleted project's folder, flow switch and MCP servers. */
 export function forgetProject(projectId: string) {
   const d = deviceConfig();
-  if (!(projectId in d.folders) && !d.armed.includes(projectId)) return;
+  if (!(projectId in d.folders) && !d.armed.includes(projectId) && !(projectId in (d.servers ?? {}))) return;
   const folders = { ...d.folders };
   delete folders[projectId];
   const confirmed = { ...(d.confirmed ?? {}) };
   delete confirmed[projectId];
-  save({ ...d, folders, armed: d.armed.filter((id) => id !== projectId), confirmed });
+  const servers = { ...(d.servers ?? {}) };
+  delete servers[projectId];
+  save({ ...d, folders, armed: d.armed.filter((id) => id !== projectId), confirmed, servers });
+}
+
+/** The MCP servers besides PacedMind that a project's sessions get on this computer, by name: null for all of them. */
+export const projectServers = (projectId: string | null | undefined): string[] | null =>
+  (projectId && deviceConfig().servers?.[projectId]) || null;
+
+/** Sets which MCP servers a project's sessions get here (null: all of them). Names only; the launcher reads the rest. */
+export function setProjectServers(projectId: string, names: string[] | null) {
+  const d = deviceConfig();
+  const servers = { ...(d.servers ?? {}) };
+  if (names) servers[projectId] = [...new Set(names.filter((n) => /^[\w.@:+-]{1,48}$/.test(n)))].sort().slice(0, 40);
+  else delete servers[projectId];
+  save({ ...d, servers });
 }
 
 /* ---------- MCP tokens ---------- */

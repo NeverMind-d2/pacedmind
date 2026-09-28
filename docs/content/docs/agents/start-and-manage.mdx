@@ -1,6 +1,6 @@
 ---
 title: Start, resume and close sessions
-description: Where agent sessions start from, which agent runs them and where, in a terminal, a desktop app or the cloud, which folder they use, what agents may do without asking, and how to resume, finish or close a session.
+description: Where agent sessions start from, which agent runs them and where, in a terminal, a desktop app or the cloud, which folder they use, what agents may do without asking, which other MCP servers they get, and how to resume, finish or close a session.
 ---
 
 ## Start a session
@@ -36,7 +36,7 @@ A session runs in one of three places, chosen per task under **Runs in** in the 
 | Place | What PacedMind does | How the session reports back |
 | --- | --- | --- |
 | **Terminal** | Opens a terminal on the computer with the agent's command-line tool, in the task's folder, with the first message. | Over PacedMind's MCP server, as in [How a session runs](/agents/lifecycle). |
-| **Claude app** or **Codex app** | Opens the agent's desktop app with a new session in the task's folder and the first message written: a Code session in the Claude app, a thread in the Codex app. You send the message. The Claude app first asks to confirm the folder. | Over the MCP server once the agent is connected to PacedMind in [Settings → Devices](/settings#devices). Until then, select **Mark finished** when it's done. |
+| **Claude app** or **Codex app** | Opens the agent's desktop app with a new session in the task's folder and the first message written: a Code session in the Claude app, a thread in the Codex app. You send the message. The Claude app first asks to confirm the folder. | Over the MCP server once the agent is connected to PacedMind in [Settings → MCP server](/settings#connect-your-agents). Until then, select **Mark finished** when it's done. |
 | **Claude Code on the web** or **Codex cloud** | Claude Code: opens a terminal that runs `claude --cloud` with the task; the terminal shows the cloud session being set up, and its link. Codex: runs `codex cloud exec` out of sight, in the project's Codex environment, and records the task's link. | The cloud can't reach PacedMind on your computer. Select **Mark finished** for Claude Code on the web; PacedMind asks Codex every minute and marks finished Codex cloud tasks by itself. |
 
 Until a task's place is chosen, it runs in a terminal when the agent's command-line tool is installed on the computer, else in the agent's desktop app. PacedMind finds out what the computer has on its own, when it starts and every half hour.
@@ -45,7 +45,7 @@ A cloud session works on a copy of a repository. Claude Code on the web uses the
 
 ## Where a session works
 
-A session works in the task's **own folder**, set with **Folder** in the task's details or in the flow editor, else in its **project's folder**, set in **Settings → Projects and folders** or in the **Roadmap**'s session panel. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
+A session works in the task's **own folder**, set with **Folder** in the task's details or in the flow editor, else in its **project's folder**, set in **Settings → Projects** or in the **Roadmap**'s session panel. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
 
 The folder must be an absolute path to an existing folder, without the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`. Otherwise the start is refused, before any session is recorded, with a message such as:
 
@@ -59,23 +59,25 @@ For a task's own folder, the message ends with *Change it in the task's details.
 
 A task with neither its own folder nor a project folder gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The **Flows** panel shows it as *PacedMind workspace*.
 
-### Trusting the folder in Claude Code
+### Trusting the folder
 
-The first time Claude Code starts in a folder, it asks whether you trust it, and waits for the answer before it reads its first message. Choose **Yes, I trust this folder** in the session's terminal: Claude Code remembers it for that folder, and the session goes on. **No, exit** ends the session, and Claude Code asks again next time.
+The first time Claude Code or Codex starts in a folder, it asks whether you trust it, and waits for the answer before it reads its first message. Trusting a folder also lets the agent use that folder's own settings, hooks and MCP servers.
 
-PacedMind doesn't answer for you, because trusting a folder also lets Claude Code use that folder's own settings, hooks and MCP servers. It reads Claude Code's settings file (`~/.claude.json`) to tell you the question is coming, for sessions in a terminal on this computer:
+With **Trust session folders** on (**Settings → Sessions**, on by default, for each computer), PacedMind answers yes just before it starts, resumes or sends back a session, for that session's folder only, so the session never waits for it. It writes the answer where the agent keeps it: for Claude Code in its settings file (`~/.claude.json`), for Codex in its `config.toml`, for the folder's repository. A folder Codex was told not to trust stays that way. Give projects only folders whose settings and hooks you'd let an agent run.
+
+With it off, answer in the session's terminal: **Yes, I trust this folder** in Claude Code, which remembers it for that folder, and the session goes on; **No, exit** ends the session, and Claude Code asks again next time. PacedMind then reads Claude Code's settings file to tell you the question is coming, for sessions in a terminal on this computer:
 
 * in the task's details, under **Start with Claude Code** (and under the session card of an ended session): *Claude Code first asks whether you trust the folder: choose “Yes, I trust this folder” in its terminal.*;
 * in the message after starting, resuming or **Request changes**, which ends with the same sentence;
 * on the running session, until the agent checks in: *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.*
 
-A scratch folder is new for every task, so Claude Code asks once for each task without a folder.
+A scratch folder is new for every task, so without the setting Claude Code asks once for each task without a folder.
 
 Every session also gets a branch name, `agent/` and the task key, such as `agent/dev-22`. PacedMind records it with the session; it doesn't create or switch branches itself.
 
 ## The terminal
 
-**Settings → Starting sessions → Terminal** chooses where terminal sessions open. On Windows:
+**Terminal** in **Settings → Sessions** chooses where terminal sessions open. On Windows:
 
 * **Windows Terminal** (the default): a new tab in a Windows Terminal window reserved for PacedMind's sessions. If Windows Terminal can't start, the session opens in a Command Prompt window instead.
 * **Command Prompt**: a new Command Prompt window per session.
@@ -85,43 +87,90 @@ On macOS:
 * **Terminal** (the default): a new Terminal window per session.
 * **iTerm**: a new iTerm window per session. If iTerm isn't installed, the session opens in Terminal instead.
 
-The tab or window is titled with the key and the agent, such as *DEV-22 · Claude Code*, or *DEV-22 · Claude Code on the web* for a cloud session. The terminal starts in the session's folder, with the environment variable `ORGANIZER_TOKEN` set to PacedMind's MCP access token. PacedMind leaves out its own server's variables, such as `PORT` and `NODE_ENV`, so the agent's builds, tests and dev servers behave as they would in any terminal. On macOS the session runs in a login shell, so the agent finds the same `PATH` as in a new Terminal window.
+The tab or window is titled with the key and the agent, such as *DEV-22 · Claude Code*, or *DEV-22 · Claude Code on the web* for a cloud session. The terminal starts in the session's folder, with the environment variable `ORGANIZER_TOKEN` set to the session's own MCP access token, which works only for its task and only while it runs. PacedMind leaves out its own server's variables, such as `PORT` and `NODE_ENV`, so the agent's builds, tests and dev servers behave as they would in any terminal. When PacedMind itself runs inside a Claude Code session, such as a development copy started with `npm run dev` from Claude Code, it also leaves out that session's variables, such as `CLAUDECODE`: the agent then starts as a Claude Code session of its own, which keeps its own conversation. On macOS the session runs in a login shell, so the agent finds the same `PATH` as in a new Terminal window.
 
 ## The agent command
 
-**Settings → Starting sessions** has the command for each agent: `claude` and `codex` by default. Change them to add options or to use a full path, for example when the agent isn't on the `PATH` of programs started from PacedMind. With the default command, PacedMind also looks where the installers put the agents, and uses the one it finds there.
+**Settings → Sessions** has the command for each agent: `claude` and `codex` by default. Change them to add options or to use a full path, for example when the agent isn't on the `PATH` of programs started from PacedMind. With the default command, PacedMind also looks where the installers put the agents, and uses the one it finds there.
 
 **Claude Code** starts with:
 
-* the connection to PacedMind's MCP server, under the name `organizer`;
-* a hook that tells PacedMind when the terminal session ends;
+* the connection to PacedMind's MCP server, under the name `pacedmind`. If your own Claude Code settings still have PacedMind under its earlier name, `organizer`, the session gets that entry replaced by one that doesn't connect, so it only ever uses its own token; **Connect** renames your entry;
+* hooks that tell PacedMind when the agent waits for you, asks for your permission or asks you something in its terminal, when it goes back to work, and when the terminal session ends. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you). Claude Code 2.1.84 or later sends them to PacedMind itself; an older version runs `curl` for each;
 * permission to use PacedMind's everyday tools without asking (below);
 * a conversation id, so that **Resume in terminal** can continue the same conversation;
 * the conversation named after the task, such as *DEV-22 Start sessions from the app*;
 * the first message, which names the task and the session.
 
-**Codex** starts with the first message and, for that session, the connection to PacedMind's MCP server under the name `organizer`, with the token from the `ORGANIZER_TOKEN` variable the terminal sets. The Codex app, and Codex sessions you start yourself, need the `organizer` entry in Codex's own configuration instead. See [Connect Codex](/mcp/connect-codex).
+**Codex** starts with the first message and, for that session, the connection to PacedMind's MCP server under the name `pacedmind`, with the token from the `ORGANIZER_TOKEN` variable the terminal sets. This connection takes the place of the `pacedmind` entry in Codex's own configuration, headers included, and an entry under the earlier name, `organizer`, is switched off for the session, so the session only ever sends its own token, not the one **Connect** wrote there. Codex also gets a `notify` program for the session, which tells PacedMind with `curl` when a turn ends and Codex waits for you; it stands in for your own `notify` setting while the session runs. From Codex 0.150, it gets hooks too, which tell PacedMind when it asks for your permission, when you answer, when it goes back to work and when it ends, and which conversation it runs. They run PacedMind's hook script, `codex-hook.sh` (`codex-hook.cmd` on Windows) in PacedMind's data folder, which reads the session's address and token file from the terminal. Codex runs hooks only once you've trusted them, and asks the first time: *Hooks need review*, where **Trust all and continue** trusts them for every later session on the computer. With **Answer from elsewhere** on, a permission Codex asks for waits in PacedMind too, as for Claude Code. The Codex app, and Codex sessions you start yourself, need the `pacedmind` entry in Codex's own configuration instead. See [Connect Codex](/mcp/connect-codex).
+
+When a project limits the MCP servers its sessions get on this computer, Claude Code starts with only those and PacedMind's, and Codex with the others switched off. See [Other MCP servers, plugins and skills](#other-mcp-servers-plugins-and-skills).
 
 ## What agents may do without asking
 
 Claude Code sessions started by PacedMind in a terminal may use these MCP tools without asking you first:
 
 * reading: `get_overview`, `list_areas`, `list_projects`, `get_project`, `list_tasks`, `get_task`, `list_events`, `get_agenda`, `get_flow`, `list_sessions`, `get_settings`, `get_next_task`;
-* the session protocol: `start_task`, `attach_image`, `finish_task`;
+* the session protocol: `start_task`, `attach_image`, `report_progress`, `ask_user`, `finish_task`;
 * adding and updating tasks: `create_task`, `update_task`.
 
 Everything else, such as deleting, moving calendar events, changing projects, starting other sessions or sending work back with `request_changes`, asks for your approval in the agent's terminal first. For Claude Code in a terminal, PacedMind passes this list at start; Codex, and the sessions in the desktop apps, follow their own approval settings.
+
+## Other MCP servers, plugins and skills
+
+Besides PacedMind's MCP server, a session gets what Claude Code or Codex has on the computer and in the session's folder, as when you start them yourself: other MCP servers, plugins, skills and hooks, and the folder's instructions in `CLAUDE.md` and `AGENTS.md`. PacedMind reads their names from the agents' own settings files, without running anything, and shows them in two places:
+
+* **Computers**, under each computer's Claude Code and Codex: *Besides PacedMind, their sessions also get*, with a line for each agent, such as *MCP servers github, playwright · plugins code-review · 12 skills · hooks on Stop*, or *no other MCP servers*. That's what they have in every folder on that computer: Claude Code's servers for all projects, the plugins and hooks in its `~/.claude/settings.json` and the skills in `~/.claude/skills`, and Codex's servers, hooks and skills in `~/.codex`.
+* **Settings → Projects**, under each project: what the agents get in the project's folder on top of that, and which MCP servers its sessions get. See [Settings](/settings#projects).
+
+Only names are shown. A server's command, address, headers and keys stay in the agents' files, and PacedMind's own `pacedmind` server isn't listed, since every session has it, nor is an entry under its earlier name, `organizer`.
+
+### What a session actually has
+
+What the settings files name isn't always what a session gets: a server can fail to start or wait for you to sign in, the account Claude Code is signed in to adds its claude.ai connectors, and plugins add servers of their own. For a Claude Code session PacedMind started in a terminal, PacedMind reads what the session has from Claude Code's own record of it, the session's transcript, rather than from what the agent says, which can be wrong: an agent told a server failed can still list it.
+
+* When the agent calls `start_task`, PacedMind records the MCP servers the session has tools from, such as *Claude Code says it runs as …, with the MCP servers github; the claude.ai connectors Gmail, Linear; the servers of its plugins episodic-memory*.
+* When a server gave it no tools, PacedMind records *Not available to Claude Code:* and each one with why: *needs you to sign in (/mcp in its terminal)*, *didn't start* with Claude Code's error code, such as *(ENOENT)*, or *hasn't connected yet*. **Sessions** shows it as **Not available**.
+* A server still connecting is looked at again 30 seconds later, and while one is missing, again at the end of each of the agent's turns. Once they're all there, PacedMind records *All its MCP servers are available to Claude Code now*, and **Not available** goes away: for example after you sign in with `/mcp` in the session's terminal.
+
+Claude Code writes that record while it loads MCP tools on demand, its default. Codex's session records don't say how its servers are, so a Codex session, and a session in a desktop app, shows the servers its agent says it has.
+
+The claude.ai connectors come from the Claude account Claude Code is signed in to on that computer, which no settings file names, so they can differ from computer to computer. **Computers** shows them for each computer as *claude.ai connectors* and their names, from the last session PacedMind started there that got all its servers (one of a project that picks its servers gets none of them).
+
+### Choose a project's MCP servers
+
+Each project in **Settings → Projects** says which MCP servers its sessions get on this computer: *MCP servers for its sessions: all they have here*, *only* and their names, or *none besides PacedMind*. **Change** opens the choice, and **Done** closes it:
+
+* **All of them**, the default: *Sessions get every MCP server Claude Code and Codex have in this folder, as when you start them yourself.*
+* **Only these**: a switch for each server Claude Code or Codex has for the project's folder, with the agents that have it. *Claude Code gets only these, and none from plugins or its claude.ai account; Codex has the others switched off. PacedMind's own server always stays.*
+
+The servers to choose from are, for Claude Code, yours for all projects, the ones it keeps for this folder only, and the ones in the folder's `.mcp.json` that you allowed there; for Codex, the ones in `~/.codex/config.toml` and in the folder's `.codex/config.toml`. The choice is this computer's, like the project's folder, and applies to the terminal sessions PacedMind starts, resumes or sends back from then on. For Claude Code, PacedMind copies the chosen servers' settings into the session's own MCP configuration. Sessions in the desktop apps and the cloud get what the app or the cloud has.
+
+**Sessions** shows what a session ran with: **Client**, the name and version its MCP client gave when it connected to PacedMind, such as *Claude Code 2.1.278*, **Agent says**, the model the agent reported with `start_task` and the MCP servers the session has, and **Not available**, the ones it should have but hasn't. See [Session details](/views/sessions#session-details).
+
+## What a task needs
+
+Your computers can differ in what their agents have: each has its own MCP servers and plugins, and Claude Code on each can be signed in to a different Claude account, with other claude.ai connectors. A task's **Needs** says what its agent needs from the computer its session runs on, such as `Gmail` or `supabase`. List only what differs between computers: the MCP servers in a project's own folder, such as its `.mcp.json`, come with the project to every computer that has it.
+
+PacedMind matches the needs against what each computer said its agent has: its MCP servers for all projects and, on this computer, in the task's folder, the claude.ai connectors its sessions got, and its plugins. Names match regardless of case, spaces and dashes, so `google-drive` matches *Google Drive*.
+
+* **Start** on a computer whose agent lacks something the task needs still starts the session, and the message says what's missing, such as *Started DEV-44 in a new terminal. Claude Code doesn't have Gmail here, which DEV-44 needs.* When your data is in PacedMind Cloud and another of your computers has it all, **Start** opens **Run on a computer** with that computer picked instead, and **Start here anyway** to start on this one after all.
+* **A flow** doesn't start such a task on its own: it asks you in the app, like a start it can't make alone, with *It needs Gmail, which the agent doesn't have on this computer.* **Allow** starts it here; **Refuse** leaves it for you to send elsewhere. See [When the flow starts a session](/agents/flows#when-the-flow-starts-a-session).
+* **Run on a computer** shows, under each computer, *Has Gmail* or *Doesn't have Gmail*, and picks one that has everything the task needs, online first.
+* **A request that expired** because its computer didn't answer offers **Try another computer**, which opens **Run on a computer** without that computer picked.
+
+A session in the agent's cloud has the cloud's own servers, so needs aren't checked for it.
 
 ## Resume a session
 
 **Resume in terminal**, in the task's details or in **Sessions**, opens a new terminal in the session's folder for a terminal session that isn't running:
 
 * **Claude Code** continues the same conversation, with its full history.
-* **Codex** continues its most recent session in that folder.
+* **Codex** continues the same conversation, once its hooks said which (shown in **Sessions** as **Codex session**); before that, its most recent session in that folder.
 
 PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. A session an agent reported on its own (*Started outside PacedMind*) resumes too, in its folder, or the task's when it has none. PacedMind doesn't know that agent's conversation, so Claude Code starts a new one on the task, which later resumes continue; Codex continues its most recent session in the folder.
 
-To send finished work back with what should change, use **Request changes** instead: it adds your changes to the agent's report and reopens the session in a new terminal, where the agent reads them first. See [Request changes](/agents/review#request-changes).
+To send finished work back with what should change, use **Request changes** instead, or **Answer its questions** when the agent asked something: it adds what you wrote to the agent's report and reopens the session in a new terminal, in a new conversation, where the agent reads it first. See [Request changes](/agents/review#request-changes).
 
 Sessions elsewhere have their own buttons:
 
@@ -140,7 +189,7 @@ A session in the cloud, or in a desktop app that isn't connected to PacedMind, c
 
 **Close session**, for a running session, asks *Close this session in PacedMind? The terminal stays open.* (in **Sessions**, for a session outside a terminal: *It keeps running where it is.*), then marks the session **Closed** and sets a task in progress back to **Todo**. Use it when:
 
-* a Codex terminal was closed (Codex doesn't report that on its own);
+* a terminal was closed while its agent ran, and the agent couldn't report it (Codex before its hooks are trusted);
 * a session got stuck before the agent checked in;
 * the work should stop and start over.
 

@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS areas (
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(id), name TEXT NOT NULL,
   start_date TEXT, target_date TEXT, folder TEXT, agent TEXT, after_project_id TEXT,
-  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT, device_id TEXT, codex_env TEXT
+  flow_on INTEGER NOT NULL DEFAULT 0, sort INTEGER NOT NULL DEFAULT 0, color TEXT, device_id TEXT, codex_env TEXT, repo TEXT
 );
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
   labels TEXT NOT NULL DEFAULT '[]', reminder TEXT, agent TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
   flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT,
-  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]'
+  run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]', needs TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS subtasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, agent TEXT NOT NULL,
   folder TEXT, branch TEXT, status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, ended_at TEXT,
   note TEXT, cli_session_id TEXT, continues_session_id TEXT,
-  surface TEXT NOT NULL DEFAULT 'terminal', device_id TEXT, url TEXT
+  surface TEXT NOT NULL DEFAULT 'terminal', device_id TEXT, url TEXT, usage TEXT
 );
 CREATE TABLE IF NOT EXISTS session_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS attachments (
   file TEXT NOT NULL, mime TEXT NOT NULL, bytes INTEGER NOT NULL, width INTEGER, height INTEGER,
   caption TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS session_asks (
+  id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE, kind TEXT NOT NULL, tool TEXT,
+  text TEXT NOT NULL, asked_at TEXT NOT NULL, expires_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', answer TEXT,
+  answered_at TEXT
+);
+CREATE INDEX IF NOT EXISTS session_asks_session ON session_asks(session_id);
 CREATE INDEX IF NOT EXISTS reports_task ON reports(task_id);
 CREATE INDEX IF NOT EXISTS attachments_task ON attachments(task_id);
 CREATE TABLE IF NOT EXISTS edges (
@@ -133,9 +139,9 @@ function migrate(conn: DatabaseSync) {
   conn.exec(SCHEMA);
   const added: Record<string, [string, string][]> = {
     areas: [["icon", "TEXT"], ["picture", "TEXT"]],
-    projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"]],
-    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"]],
-    sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],
+    projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"]],
+    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"]],
+    sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"]],
   };
   for (const [table, columns] of Object.entries(added)) {
@@ -241,7 +247,7 @@ export function resetLocal(mode: "sample" | "empty") {
   const projects = (conn.prepare("SELECT id FROM projects").all() as Row[]).map((r) => String(r.id));
   conn.exec("BEGIN");
   try {
-    for (const t of ["attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
+    for (const t of ["session_asks", "attachments", "reports", "session_events", "sessions", "edges", "subtasks", "tasks", "events", "projects", "areas"]) {
       conn.exec(`DELETE FROM ${t}`);
     }
     conn.exec("DELETE FROM sqlite_sequence");

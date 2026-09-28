@@ -88,7 +88,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Settings',
-      description: 'Appearance, the MCP server and its token, how sessions start, project folders, work hours and data.',
+      description: 'The account and data, the theme and work hours, and this computer: its agents, how sessions start, project folders and the MCP server.',
       href: '/settings',
       icon: 'settings',
     },
@@ -106,7 +106,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Accounts and Cloud',
-      description: 'In development: PacedMind accounts, sign-in, cloud data and plans.',
+      description: 'The One device and Cloud plans, the free trial, subscribing, and what happens when Cloud ends.',
       href: '/accounts-and-cloud',
       icon: 'user',
     },

@@ -11,8 +11,10 @@ import { repoRoot } from "./folders";
  * projects[folder].hasTrustDialogAccepted. A folder counts as trusted when it or a folder above it was, up to the root
  * of the repository it's in.
  *
- * PacedMind only reads that, to tell you the question is coming (views.ts, session-list.ts, the launcher's messages).
- * It never answers for you: a yes also lets Claude Code use the folder's own settings, hooks and MCP servers.
+ * With this computer's "Trust session folders" on (device.ts, the default), the launcher gives that answer before it
+ * starts a session (trustForClaude): for the session's folder only, and nothing else in the file. A yes also lets
+ * Claude Code use the folder's own settings, hooks and MCP servers, so with it off PacedMind only reads the file, to
+ * tell you the question is coming (views.ts, session-list.ts, the launcher's messages).
  */
 
 type Json = Record<string, unknown>;
@@ -30,6 +32,33 @@ const fold = (name: string) => (process.platform === "win32" ? name.toLowerCase(
  * and Claude Code doesn't look those up anymore, so they don't count.
  */
 const nameOf = (folder: string) => fold(process.platform === "win32" ? folder.replace(/\\/g, "/") : folder);
+
+const cached = globalThis as unknown as { __pacedmindClaudeConfig?: { stamp: string; config: Json | null } };
+
+/**
+ * Claude Code's config (~/.claude.json), or null when there's none to read. Read again only once the file changed:
+ * Settings asks for it for every project, and the file can be large.
+ */
+export function claudeConfig(): Json | null {
+  try {
+    const stat = fs.statSync(configFile());
+    const stamp = `${stat.mtimeMs}:${stat.size}`;
+    if (cached.__pacedmindClaudeConfig?.stamp === stamp) return cached.__pacedmindClaudeConfig.config;
+    const config: unknown = JSON.parse(fs.readFileSync(configFile(), "utf8"));
+    cached.__pacedmindClaudeConfig = { stamp, config: isObject(config) ? config : null };
+    return cached.__pacedmindClaudeConfig.config;
+  } catch {
+    return null;
+  }
+}
+
+/** Claude Code's own entry for exactly this folder in its config (projects[folder]), matched the way it names folders. */
+export function claudeFolderEntry(config: Json | null, folder: string): Json | null {
+  const projects = config && isObject(config.projects) ? config.projects : {};
+  const want = nameOf(path.resolve(folder));
+  const hit = Object.entries(projects).find(([name]) => fold(name) === want)?.[1];
+  return isObject(hit) ? hit : null;
+}
 
 /**
  * Reads Claude Code's config once and returns whether it will ask about each folder given, as many as needed (a page's
@@ -67,4 +96,63 @@ export function trustCheck(): ((folder: string) => boolean) | null {
     }
     return answer;
   };
+}
+
+/** The names Claude Code may keep a folder by: as the session's terminal changes into it, and as the disk spells it. */
+function namesOf(folder: string): string[] {
+  const slashes = (p: string) => (process.platform === "win32" ? p.replace(/\\/g, "/") : p);
+  let real = folder;
+  try {
+    real = fs.realpathSync.native(folder);
+  } catch {
+    // A folder that's gone gets no session anyway.
+  }
+  return [...new Set([slashes(path.resolve(folder)), slashes(real)])];
+}
+
+/**
+ * Answers "Yes, I trust this folder" for `folder` before a session starts there, as the question itself would. Only
+ * when Claude Code has a config here (it has run) and doesn't trust the folder yet. The file is written next to itself
+ * and moved over, so Claude Code never reads half of it, and written again from a fresh read if it changed meanwhile.
+ * Returns whether it answered.
+ */
+export function trustForClaude(folder: string): boolean {
+  if (!trustCheck()?.(folder)) return false;
+  let file: string;
+  try {
+    // A config linked from elsewhere (a dotfiles folder, say) stays a link.
+    file = fs.realpathSync(configFile());
+  } catch {
+    return false;
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let text: string;
+    let before: number;
+    try {
+      before = fs.statSync(file).mtimeMs;
+      text = fs.readFileSync(file, "utf8");
+    } catch {
+      return false;
+    }
+    let config: unknown;
+    try {
+      config = JSON.parse(text);
+    } catch {
+      return false;
+    }
+    if (!isObject(config)) return false;
+    const projects: Json = isObject(config.projects) ? config.projects : {};
+    for (const name of namesOf(folder)) projects[name] = { ...(isObject(projects[name]) ? projects[name] : {}), hasTrustDialogAccepted: true };
+    config.projects = projects;
+    const indent = text.match(/^\{\r?\n([ \t]+)"/)?.[1] ?? 2;
+    const temp = `${file}.pacedmind-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(temp, JSON.stringify(config, null, indent) + (text.endsWith("\n") ? "\n" : ""), { mode: fs.statSync(file).mode & 0o777 });
+    if (fs.statSync(file).mtimeMs !== before) {
+      fs.rmSync(temp, { force: true });
+      continue;
+    }
+    fs.renameSync(temp, file);
+    return true;
+  }
+  return false;
 }

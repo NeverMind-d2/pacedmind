@@ -1,7 +1,7 @@
 "use client";
 
 import { updateTaskAction } from "@/app/actions";
-import { dueInfo } from "@/lib/dates";
+import { attentionOf, attentionWords, dueInfo } from "@/lib/dates";
 import { AGENT_LABEL, PRIORITY_LABEL, type Task, type TaskContext } from "@/lib/types";
 import { Icon, PriorityIcon, StatusIcon } from "./icons";
 import { cx, useAction } from "./ui";
@@ -24,6 +24,16 @@ export function SessionChip({ task, ctx }: { task: Task; ctx: TaskContext }) {
   if (!s) return null;
   // On a phone only the dot shows; the words would take the title's room.
   if (s.status === "running" || s.status === "starting") {
+    const waits = attentionOf(ctx.sessionEvents[s.id] ?? []);
+    if (waits) {
+      const words = attentionWords(waits.kind);
+      return (
+        <span title={waits.text} className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-fg3">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <span className="max-sm:hidden">{words}</span>
+        </span>
+      );
+    }
     return (
       <span title={`${AGENT_LABEL[s.agent]} running`} className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-mut">
         <span className="h-1.5 w-1.5 rounded-full bg-fg3" />

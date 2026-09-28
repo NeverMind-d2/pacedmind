@@ -3,9 +3,10 @@ import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { nextStep, rememberNext, safeNext } from "@/server/auth-flow";
 
 /**
- * Where links from sign-up and password-reset emails land. Only the PKCE flow: the link carries a one-time
- * code, and only the server that asked for the email holds the matching verifier, so a link made for
- * someone else's account can't sign this app in (no login CSRF).
+ * Where links from sign-up and password-reset emails land, and Google after signing in there (`via=google`). Only
+ * the PKCE flow: the link carries a one-time code, and only the server that asked for the email or started the
+ * Google sign-in holds the matching verifier, so a link made for someone else's account can't sign this app in
+ * (no login CSRF).
  *
  * In the desktop app the email may open in any browser; the session still goes to the app, and that browser
  * gets a page that says to go back to the app's window (which has the key; see proxy.ts).
@@ -18,12 +19,19 @@ const go = (path: string) => new NextResponse(null, { status: 307, headers: { Lo
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const next = safeNext(url.searchParams.get("next"));
+  const google = url.searchParams.get("via") === "google";
   // Sign-up links continue to Today; password resets to choosing a new password.
   const reset = next === "/login/new-password";
   const page = MODE === "desktop" ? "/auth/done" : "/login";
   const failed = (message: string) => go(`${page}?error=${encodeURIComponent(message)}`);
 
   const code = url.searchParams.get("code");
+  if (!code && google) {
+    // Cancelled on Google's page, or Google refused.
+    return failed(url.searchParams.get("error") === "access_denied"
+      ? "Signing in with Google was cancelled."
+      : url.searchParams.get("error_description")?.slice(0, 200) ?? "Google didn't finish signing you in. Try again.");
+  }
   if (!code) {
     // Opened twice, or too late: Supabase says so before sending the browser here.
     if (url.searchParams.get("error_code") === "otp_expired") {
@@ -35,6 +43,11 @@ export async function GET(request: NextRequest) {
   }
   const db = await supabase();
   const { error } = await db.auth.exchangeCodeForSession(code);
+  if (error && google) {
+    return failed(error.code === "pkce_code_verifier_not_found"
+      ? "Finish signing in with Google in the browser PacedMind opened, or start again from its sign-in page."
+      : "Google's sign-in expired or was already used. Try again.");
+  }
   if (error) {
     // Supabase confirmed the email before handing the link over; it only can't sign in here, e.g. in another
     // browser than the one that signed up (the code's verifier stays there, see above).

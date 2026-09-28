@@ -5,7 +5,7 @@ description: Manage the user's PacedMind planner (also called Organizer) through
 
 # PacedMind
 
-PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `organizer`; in Claude Code its tools appear as `mcp__organizer__<tool>`. If those tools aren't available in this session, tell the user and point them to PacedMind → Settings → Connect your agents, which shows how to connect Claude Code and Codex. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
+PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `pacedmind`; in Claude Code its tools appear as `mcp__pacedmind__<tool>`. A setup from before names it `organizer` (`mcp__organizer__<tool>`): the same tools, until the user connects again in PacedMind. If neither is available in this session, tell the user and offer to connect it. With a PacedMind Cloud account, the server is `https://app.pacedmind.com/api/mcp` and you can set it up yourself, with the user allowing it in the browser: follow "Instructions for agents" in https://pacedmind.com/docs/mcp/connect-cloud.mdx (Claude Code: `claude mcp add --transport http --scope user pacedmind https://app.pacedmind.com/api/mcp`, then `claude mcp login pacedmind`; Codex: `codex mcp add pacedmind --url https://app.pacedmind.com/api/mcp`, then `codex mcp login pacedmind`). Without an account, point them to PacedMind → Settings → Connect your agents. Never ask the user for a password, a code or a token. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
 
 ## How the planner is organized
 
@@ -36,6 +36,7 @@ A good task is one the user (or an agent) can pick up weeks later without asking
 - **Title**: a short, concrete action, verb first: "Send Q4 budget to finance", not "Budget".
 - **Description**: the context that won't be obvious later: why it matters, links and constraints.
 - **Done when** (`done_when`): what must be true when the task is finished, one checkable outcome per item: "The PDF is in Documents/Car", not "Look into insurance". For work an agent will do, this is its acceptance criteria: the agent answers each item in its report. When the user wants to see the result, say so in an item, such as "A screenshot of the new settings page".
+- **Needs** (`needs`): for agent work that needs an MCP server or claude.ai connector not every one of the user's computers has, such as `Gmail` or `supabase`, name it. PacedMind then offers a computer whose agent has it. Leave it out otherwise.
 - **Sub-tasks**: steps that are worth ticking off. Keep them to a handful. Sub-tasks are how to get there; Done when is where to end up.
 - **Estimate**: realistic minutes. The auto-planner uses it to fill the calendar.
 - **Dates**: set `due` only for real deadlines and use `planned` for when the user will do it. Don't invent deadlines the user didn't give.

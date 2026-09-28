@@ -4,11 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import pkg from "../../package.json";
 import * as repo from "./repo";
-import { agentCommandFor, deviceConfig, thisPlatform } from "./device";
+import { agentCommandFor, deviceConfig, thisPlatform, updateDevice } from "./device";
+import { agentExtras, folderExtras, serverChoices } from "./extras";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
-import { NO_AGENT_TOOLS, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink } from "@/lib/types";
+import { cloudMcpUrl } from "./supabase-config";
+import { deviceWithNeeds } from "@/lib/needs";
+import {
+  MCP_NAME, NO_AGENT_TOOLS, OLD_MCP_NAME, type AgentExtras, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink,
+} from "@/lib/types";
 
 /*
  * This computer and the others signed in to the account. Each desktop app registers itself in the account's
@@ -61,6 +66,8 @@ export async function thisDevice(): Promise<Device> {
     agents: localTools(), createdAt: row?.createdAt ?? "", lastSeenAt: row?.lastSeenAt ?? null,
     checkedAt: g.__pacedmindToolsAt ?? row?.checkedAt ?? null, revokedAt: row?.revokedAt ?? null,
     isDefault: row ? row.isDefault : !cloud, appVersion: APP_VERSION, flowsOn: flowsOnHere(cloud),
+    // The Sessions page looks for this computer's own itself (other-sessions.ts), more often than it reports them.
+    otherSessions: [],
   };
 }
 
@@ -73,15 +80,29 @@ export const runsHere = (deviceId: string | null) => !deviceId || deviceId === t
 
 /**
  * The computer to offer for a task's session elsewhere (the web app, or a task that runs on another computer): the one
- * the task names, else its project's, else the account's default. `pinned` when the task or its project named it: its
+ * the task names, else its project's, else, for a task that needs something (Task.needs), one whose agent has it
+ * (online first, the default first), else the account's default. `pinned` when the task or its project named it: its
  * sessions start only there, and a request to another computer is refused.
  */
 export function offeredDevice(
-  task: { deviceId: string | null }, project: { deviceId: string | null } | null | undefined, devices: Device[],
+  task: { deviceId: string | null; needs: string[] }, project: { deviceId: string | null } | null | undefined, devices: Device[],
+  agent: AgentId | null = "claude",
 ): { deviceId: string | null; pinned: boolean } {
   const named = deviceIdFor(task.deviceId, project?.deviceId);
   if (named) return { deviceId: named, pinned: true };
-  return { deviceId: devices.find((x) => x.isDefault && !x.revokedAt)?.id ?? null, pinned: false };
+  const fallback = devices.find((x) => x.isDefault && !x.revokedAt)?.id ?? null;
+  const has = task.needs.length && agent ? deviceWithNeeds(task.needs, agent, devices, fallback) : null;
+  return { deviceId: has?.id ?? fallback, pinned: false };
+}
+
+/**
+ * What an agent has on this computer for a session in `folder`, by name: the MCP servers it has everywhere and in the
+ * folder, the claude.ai connectors its sessions got from the account it's signed in to, and its plugins. What a task's
+ * needs are matched against here (src/lib/needs.ts).
+ */
+export function toolsHere(agent: AgentId, folder: string | null): string[] {
+  const x = localTools()[agent].extras;
+  return [...serverChoices(folder)[agent], ...(x?.account ?? []), ...(x?.plugins ?? []), ...(folder ? folderExtras(folder).plugins : [])];
 }
 
 /* ---------- looking for the agents ---------- */
@@ -102,7 +123,12 @@ function cliPlaces(agent: AgentId): string[] {
   const bins = ["/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".local", "bin")];
   return agent === "claude"
     ? [...bins.map((b) => path.join(b, "claude")), path.join(home, ".claude", "local", "claude")]
-    : [...bins.map((b) => path.join(b, "codex")), "/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex"];
+    : [
+      ...bins.map((b) => path.join(b, "codex")),
+      // The ChatGPT app (and the Codex app) carry the CLI inside, where their Codex runs it.
+      "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex", "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex",
+      "/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex",
+    ];
 }
 
 const versionOf = (out: string | null) => out?.match(/\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?/)?.[0] ?? null;
@@ -195,6 +221,12 @@ export function cliCommand(agent: AgentId): string {
   return found && command === agent && QUOTABLE_PATH.test(found) ? `"${found}"` : command;
 }
 
+/** The agent's CLI itself, without the options Settings may add: where PacedMind found it, else its name. */
+export function cliBinary(agent: AgentId): string {
+  const found = localTools()[agent].cli?.path;
+  return found && QUOTABLE_PATH.test(found) ? `"${found}"` : agent;
+}
+
 /** Installed desktop apps by agent, with their versions when the system tells them. */
 async function desktopApps(): Promise<Record<AgentId, AgentTools["app"]>> {
   const found: Record<AgentId, AgentTools["app"]> = { claude: null, codex: null };
@@ -235,34 +267,64 @@ async function desktopApps(): Promise<Record<AgentId, AgentTools["app"]>> {
   return found;
 }
 
-/** Whether Claude Code (and so the Claude app's Code sessions) has PacedMind's MCP server for all projects, with the owner token. */
-function claudeMcp(url: string, token: string): McpLink {
+/** Claude Code's user-scope entry for PacedMind's MCP server under `name`, or undefined. */
+export function claudeMcpEntry(name: string): { url?: unknown; headers?: { Authorization?: unknown } } | undefined {
   try {
     const config = JSON.parse(fs.readFileSync(path.join(claudeDir(), ".claude.json"), "utf8"));
-    const entry = config?.mcpServers?.organizer;
-    if (!entry) return "missing";
-    return entry.url === url && entry.headers?.Authorization === `Bearer ${token}` ? "connected" : "elsewhere";
+    const entry = config?.mcpServers?.[name];
+    return entry && typeof entry === "object" ? entry : undefined;
   } catch {
-    return "missing";
+    return undefined;
   }
 }
 
-/** The [mcp_servers.organizer] table of Codex's config.toml with its sub-tables, or null. */
-export function codexOrganizerTable(): string | null {
+/**
+ * Whether Claude Code (and so the Claude app's Code sessions) has PacedMind's MCP server for all projects: this computer's,
+ * with the owner token, as "pacedmind" or still as "organizer", its old name; or PacedMind Cloud's, which it signs in to
+ * itself (OAuth), while this computer is signed in to the account too.
+ */
+function claudeMcp(url: string, token: string, signedIn: boolean): McpLink {
+  const ours = (e: ReturnType<typeof claudeMcpEntry>) => e?.url === url && e?.headers?.Authorization === `Bearer ${token}`;
+  const now = claudeMcpEntry(MCP_NAME);
+  if (now?.url === cloudMcpUrl()) return signedIn ? "cloud" : "elsewhere";
+  if (now) return ours(now) ? "connected" : "elsewhere";
+  const old = claudeMcpEntry(OLD_MCP_NAME);
+  if (old) return ours(old) ? "old" : "elsewhere";
+  return "missing";
+}
+
+/** The [mcp_servers.<name>] table of Codex's config.toml with its sub-tables, or null. */
+export function codexMcpTable(name: string): string | null {
   try {
     const toml = fs.readFileSync(path.join(/*turbopackIgnore: true*/ codexHome(), "config.toml"), "utf8");
-    return toml.match(/^\[mcp_servers\.organizer\][^\n]*(?:\n(?!\[(?!mcp_servers\.organizer\.))[^\n]*)*/m)?.[0] ?? null;
+    return toml.match(new RegExp(`^\\[mcp_servers\\.${name}\\][^\\n]*(?:\\n(?!\\[(?!mcp_servers\\.${name}\\.))[^\\n]*)*`, "m"))?.[0] ?? null;
   } catch {
     return null;
   }
 }
 
-/** Whether Codex (and so the Codex app) has PacedMind's MCP server with the owner token, so it works without PacedMind's terminal. */
-function codexMcp(url: string, token: string): McpLink {
-  const table = codexOrganizerTable();
-  if (!table) return "missing";
-  const at = table.match(/^\s*url\s*=\s*["']([^"']+)["']/m)?.[1];
-  return at === url && table.includes(token) ? "connected" : "elsewhere";
+/**
+ * Whether Codex (and so the Codex app) has PacedMind's MCP server, so it works without PacedMind's terminal: this
+ * computer's with the owner token, as "pacedmind" or still as "organizer"; or PacedMind Cloud's (OAuth).
+ */
+function codexMcp(url: string, token: string, signedIn: boolean): McpLink {
+  const urlOf = (table: string) => table.match(/^\s*url\s*=\s*["']([^"']+)["']/m)?.[1];
+  const ours = (table: string) => urlOf(table) === url && table.includes(token);
+  const now = codexMcpTable(MCP_NAME);
+  if (now && urlOf(now) === cloudMcpUrl()) return signedIn ? "cloud" : "elsewhere";
+  if (now) return ours(now) ? "connected" : "elsewhere";
+  const old = codexMcpTable(OLD_MCP_NAME);
+  if (old) return ours(old) ? "old" : "elsewhere";
+  return "missing";
+}
+
+/**
+ * How Claude Code and Codex here reach PacedMind right now, from their config files (cheap reads), for Settings and the
+ * offer after signing in: what the last check found can be from before you signed in. `url`: this server's MCP address.
+ */
+export function mcpLinks(url: string, signedIn: boolean): Record<AgentId, McpLink> {
+  const token = deviceConfig().ownerToken;
+  return { claude: claudeMcp(url, token, signedIn), codex: codexMcp(url, token, signedIn) };
 }
 
 /**
@@ -273,13 +335,13 @@ function codexMcp(url: string, token: string): McpLink {
 export function checkThisDevice(url: string): Promise<Device["agents"]> {
   g.__pacedmindCheck ??= (async () => {
     const d = deviceConfig();
-    const [claude, codex, apps] = await Promise.all([
-      cliVersion("claude", agentCommandFor("claude")), cliVersion("codex", agentCommandFor("codex")), desktopApps(),
+    const [claude, codex, apps, signedIn] = await Promise.all([
+      cliVersion("claude", agentCommandFor("claude")), cliVersion("codex", agentCommandFor("codex")), desktopApps(), usesCloud().catch(() => false),
     ]);
     const [claudeIn, codexIn] = await Promise.all([cliLogin("claude", claude), cliLogin("codex", codex)]);
     const agents: Device["agents"] = {
-      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken), login: claudeIn },
-      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken), login: codexIn },
+      claude: { cli: claude, app: apps.claude, mcp: claudeMcp(url, d.ownerToken, signedIn), login: claudeIn, extras: withAccount("claude", agentExtras("claude")) },
+      codex: { cli: codex, app: apps.codex, mcp: codexMcp(url, d.ownerToken, signedIn), login: codexIn, extras: withAccount("codex", agentExtras("codex")) },
     };
     g.__pacedmindTools = agents;
     g.__pacedmindToolsAt = new Date().toISOString();
@@ -290,6 +352,31 @@ export function checkThisDevice(url: string): Promise<Device["agents"]> {
     g.__pacedmindCheck = null;
   });
   return g.__pacedmindCheck;
+}
+
+/** An agent's extras with what its sessions here last got from the account its CLI is signed in to (noteAccountServers). */
+function withAccount(agent: AgentId, extras: AgentExtras): AgentExtras {
+  const seen = deviceConfig().fromAccount?.[agent];
+  return seen ? { ...extras, account: seen.names, accountAt: seen.at } : extras;
+}
+
+/**
+ * A session PacedMind started here, with all the MCP servers its agent has (no project's pick), said which ones come
+ * from the account its CLI is signed in to (Claude Code's claude.ai connectors, sortReported). No file names those, and
+ * the CLI on another computer can be signed in to another account with others, so this computer keeps what its own
+ * sessions got and tells the account's list of computers when it changed.
+ */
+export async function noteAccountServers(agent: AgentId, names: string[]) {
+  const d = deviceConfig();
+  const before = d.fromAccount?.[agent];
+  const at = new Date().toISOString();
+  updateDevice({ fromAccount: { ...(d.fromAccount ?? {}), [agent]: { names, at } } });
+  const tools = g.__pacedmindTools;
+  if (!tools?.[agent].extras) return;
+  g.__pacedmindTools = { ...tools, [agent]: { ...tools[agent], extras: withAccount(agent, tools[agent].extras!) } };
+  if (before && before.names.join("\n") === names.join("\n")) return;
+  g.__pacedmindToolsSaved = undefined;
+  await saveToolsOnce().catch(() => {});
 }
 
 /** Saves what this computer found to its entry in the account, once per check and computer (after signing in, too). */

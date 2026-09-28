@@ -11,12 +11,20 @@ const LOCAL = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const DESKTOP_OPEN = [
   /^\/api\/mcp\/?$/, // agents, with an MCP token (src/server/auth.ts)
   /^\/api\/sessions\/[0-9a-f]{16}\/ended$/, // a session's SessionEnd hook, with that session's token
+  /^\/api\/sessions\/[0-9a-f]{16}\/signal$/, // the hooks that say it waits for you or went on, with that session's token
+  /^\/api\/sessions\/[0-9a-f]{16}\/permission$/, // Claude Code's PermissionRequest hook, with that session's token
+  /^\/api\/sessions\/[0-9a-f]{16}\/usage$/, // Claude Code's usage metrics for that session, with its token
   /^\/api\/health$/, // "is the server up", for the desktop app starting it; no data
   /^\/auth\/callback$/, // email links, which open in any browser; only this server can finish them (PKCE)
   /^\/auth\/done$/,
 ];
 /** Web routes that work without signing in. */
-const WEB_PUBLIC = [/^\/login(\/|$)/, /^\/auth\//, /^\/api\/health$/];
+const WEB_PUBLIC = [
+  /^\/login(\/|$)/, /^\/auth\//, /^\/api\/health$/,
+  /^\/api\/mcp\/?$/, // agents, with their own OAuth token (src/server/auth.ts)
+  /^\/\.well-known\/oauth-(protected-resource|authorization-server)(\/|$)/, // where agents sign in; public
+  /^\/oauth\/consent$/, // approving an agent's sign-in; sends you to sign in first, keeping the request
+];
 
 const LOCKED = `<!doctype html><meta charset="utf-8"><title>PacedMind</title>
 <body style="font:14px system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#111;color:#bbb">
@@ -129,6 +137,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Everything but build output and static files.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/).*)"],
+  // Everything but build output and static files (the service worker and the manifest hold nothing private, and a
+  // browser fetches the manifest without cookies).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/|sw\\.js$|manifest\\.webmanifest$).*)"],
 };

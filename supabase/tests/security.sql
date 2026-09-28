@@ -13,11 +13,17 @@ declare
   sa2 uuid := gen_random_uuid();
   fa uuid := gen_random_uuid(); fa_new uuid := gen_random_uuid(); fb uuid := gen_random_uuid();
   area_a uuid; area_b uuid; dev uuid; dev2 uuid; dev_b uuid; tid bigint; tid2 bigint; tkey text; req uuid; rid bigint;
+  ask_id uuid; ask2 uuid; ask3 uuid;
+  area_del uuid; t_del bigint; t_moved bigint; code text;
   sid text := '0123456789abcdef';
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
   claims_aal1 text; claims_aal2_old text; claims_aal2_fresh text; claims_bad_session text; claims_new_factor text;
   claims_a2_old text; claims_a2_fresh text; claims_b_old text; claims_b_fresh text;
+  -- Agents signed in with OAuth (the hosted MCP server): clients oc_a, oc_x and oc_c, and their sign-ins (see 29).
+  oc_a uuid := gen_random_uuid(); oc_x uuid := gen_random_uuid(); oc_c uuid := gen_random_uuid(); login uuid; ok boolean;
+  sg uuid := gen_random_uuid(); sg_early uuid := gen_random_uuid(); sg_late uuid := gen_random_uuid(); sg_x uuid := gen_random_uuid();
+  sg_b uuid := gen_random_uuid(); sc1 uuid := gen_random_uuid(); sc2 uuid := gen_random_uuid();
 begin
   insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   values ('00000000-0000-0000-0000-000000000000', a, 'authenticated', 'authenticated', 'rls-test-a@example.invalid', '', now(), '{}', '{}', now() - interval '2 days', now()),
@@ -256,6 +262,26 @@ begin
     select count(*) into n from public.attachments; out := out || '17e other account sees images=' || n || ' (want 0)' || E'\n';
     reset role;
   exception when others then out := out || '17d ERROR ' || sqlerrm || E'\n'; end;
+  -- 17u-w. what a session's agent used: a small JSON object, nothing else
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set usage = '{"conversations": {"c1": {"input": 10, "cacheRead": 5, "cacheWrite": 0, "output": 2}}, "costUsd": 0.01, "activeSeconds": 3, "models": ["m"], "at": "2026-09-25T10:00:00.000Z"}'
+      where id = '0123456789abcdef';
+    get diagnostics n = row_count; out := out || '17u session usage saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '17u ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set usage = jsonb_build_object('x', repeat('a', 9000)) where id = '0123456789abcdef';
+    out := out || '17v FAIL an oversized usage accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17v oversized usage rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set usage = '[1, 2]' where id = '0123456789abcdef';
+    out := out || '17w FAIL a usage that is not an object accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17w usage that is not an object rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb,
       'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);
@@ -284,12 +310,50 @@ begin
     out := out || '18b FAIL shell characters in a Codex environment accepted' || E'\n';
     reset role;
   exception when others then out := out || '18b Codex environment rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  -- A project's repository is host/path only: never a URL that could carry a token, a computer's path or markup.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, repo) values (area_a, 'Repo', 'github.com/owner/repo#packages/web');
+    select count(*) into n from public.projects where repo = 'github.com/owner/repo#packages/web'; out := out || '18g repository saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18g ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, repo) values (area_a, 'Repo', 'https://ghp_secret@github.com/owner/repo.git');
+    out := out || '18h FAIL a repository URL with a token accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18h repository URL rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.projects (area_id, name, repo) values (area_a, 'Repo', 'C:/Users/me/code/app');
+    out := out || '18i FAIL a folder as a repository accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18i folder as a repository rejected: ' || left(sqlerrm, 70) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     update public.tasks set run_in = 'shell' where id = tid;
     out := out || '18c FAIL unknown run-in accepted' || E'\n';
     reset role;
   exception when others then out := out || '18c run-in rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  -- A task's needs are names only (what it needs from the computer its session runs on), at most ten.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set needs = '{supabase,"Google Drive",claude.ai-gmail}' where id = tid;
+    select count(*) into n from public.tasks where id = tid and cardinality(needs) = 3; out := out || '18j needs saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18j ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set needs = '{"x; rm -rf ~"}' where id = tid;
+    out := out || '18k FAIL a need with shell characters accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18k need with shell characters rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set needs = (select array_agg('n' || i) from generate_series(1, 11) i) where id = tid;
+    out := out || '18l FAIL eleven needs accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18l eleven needs rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     update public.devices set agents = '{"claude": {"cli": true}}', checked_at = now() where id = dev;
@@ -378,8 +442,27 @@ begin
     reset role;
   exception when others then out := out || '21e another sign-in''s setting refused: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.devices set other_sessions = '[{"harness": "claude-cli", "ref": "x", "title": "Not yours"}]' where id = dev;
+    out := out || '21k FAIL another sign-in changed the computer''s sessions' || E'\n';
+    reset role;
+  exception when others then out := out || '21k another sign-in''s sessions refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    update public.devices set app_version = '0.2.0', flows_on = array[gen_random_uuid()], last_seen_at = now(), remote_start = 'ask', checked_at = now()
+    update public.devices set other_sessions = '{"not": "a list"}' where id = dev;
+    out := out || '21l FAIL sessions that aren''t a list accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '21l sessions that aren''t a list rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set other_sessions = (select jsonb_agg(jsonb_build_object('ref', i)) from generate_series(1, 31) i) where id = dev;
+    out := out || '21m FAIL more than 30 sessions accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '21m more than 30 sessions rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set app_version = '0.2.0', flows_on = array[gen_random_uuid()], last_seen_at = now(), remote_start = 'ask', checked_at = now(),
+      other_sessions = '[{"harness": "codex-cli", "ref": "abc", "title": "Mine", "state": "idle"}]'
       where id = dev;
     get diagnostics n = row_count; out := out || '21f the computer reported on itself=' || n || ' (want 1)' || E'\n';
     reset role;
@@ -569,6 +652,479 @@ begin
     select count(*) into n from public.launch_requests; out := out || '24b other account sees requests=' || n || ' (want 0)' || E'\n';
     reset role;
   exception when others then out := out || '24b ERROR ' || sqlerrm || E'\n'; end;
+
+  -- 26. what a running session waits for you to answer: only its computer asks, an answer comes once, from that computer
+  --     or from elsewhere with a fresh code, before the agent stops waiting; only the computer withdraws it
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.session_asks (session_id, device_id, kind, tool, text, expires_at)
+      values (sid, dev, 'permission', 'Bash', 'npm test', now() + interval '10 minutes') returning id into ask_id;
+    insert into public.session_asks (session_id, device_id, kind, text, expires_at)
+      values (sid, dev, 'question', 'ISO or US?', now() + interval '30 minutes') returning id into ask2;
+    out := out || '26 the session''s computer asked' || E'\n';
+    reset role;
+  exception when others then out := out || '26 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.session_asks (session_id, device_id, kind, text, expires_at) values (sid, dev, 'question', 'Fake?', now() + interval '5 minutes');
+    out := out || '26a FAIL another sign-in asked for the session''s computer' || E'\n';
+    reset role;
+  exception when others then out := out || '26a another sign-in asking refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.session_asks (session_id, device_id, kind, text, expires_at) values (sid, dev, 'question', 'Long?', now() + interval '2 hours');
+    out := out || '26b FAIL an ask open for two hours accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '26b ask open too long rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.session_asks set status = 'answered', answer = 'allow' where id = ask_id;
+    out := out || '26c FAIL answered from elsewhere without a fresh code' || E'\n';
+    reset role;
+  exception when others then out := out || '26c answer from elsewhere without a fresh code refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    update public.session_asks set status = 'answered', answer = 'maybe' where id = ask_id;
+    out := out || '26d FAIL a permission answered with something other than allow or deny' || E'\n';
+    reset role;
+  exception when others then out := out || '26d permission answer that isn''t allow or deny rejected: ' || left(sqlerrm, 40) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    update public.session_asks set status = 'answered', answer = 'allow' where id = ask_id;
+    select count(*) into n from public.session_asks where id = ask_id and status = 'answered' and answered_via = 'elsewhere';
+    out := out || '26e answered from elsewhere with a fresh code=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '26e ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.session_asks set status = 'answered', answer = 'deny' where id = ask_id;
+    out := out || '26f FAIL answered twice' || E'\n';
+    reset role;
+  exception when others then out := out || '26f answering twice refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    update public.session_asks set status = 'withdrawn' where id = ask2;
+    out := out || '26g FAIL another sign-in withdrew the computer''s question' || E'\n';
+    reset role;
+  exception when others then out := out || '26g withdrawing from elsewhere refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.session_asks set status = 'answered', answer = 'ISO' where id = ask2;
+    select count(*) into n from public.session_asks where id = ask2 and status = 'answered' and answered_via = 'computer';
+    out := out || '26h the computer answered without a fresh code=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '26h ERROR ' || sqlerrm || E'\n'; end;
+  -- As the owner (the table's trigger refuses any other change to a waiting ask): the agent stopped waiting five minutes ago.
+  insert into public.session_asks (user_id, session_id, device_id, kind, text, asked_at, expires_at)
+    values (a, sid, dev, 'question', 'Later?', now() - interval '10 minutes', now() - interval '5 minutes') returning id into ask3;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.session_asks set status = 'answered', answer = 'Now' where id = ask3;
+    out := out || '26i FAIL answered after the agent stopped waiting' || E'\n';
+    reset role;
+  exception when others then out := out || '26i answer after the agent stopped waiting refused: ' || left(sqlerrm, 40) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.session_asks set answer = 'Changed' where id = ask3;
+    out := out || '26n FAIL an answer changed without answering' || E'\n';
+    reset role;
+  exception when others then out := out || '26n changing the answer alone refused: ' || left(sqlerrm, 40) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_fresh, true); set local role authenticated;
+    select count(*) into n from public.session_asks; out := out || '26j other account sees asks=' || n || ' (want 0)' || E'\n';
+    update public.session_asks set status = 'answered', answer = 'deny' where id = ask3;
+    get diagnostics n = row_count; out := out || '26k other account answered=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '26j ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    select count(*) into n from public.session_asks; out := out || '26l password-only session sees asks=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '26l ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    select count(*) into n from public.session_asks;
+    out := out || '26m FAIL anon read asks=' || n || E'\n';
+    reset role;
+  exception when others then out := out || '26m anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
+
+  -- 27. web push: the account's own key pair and browsers, only the push services' addresses
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.push_keys (public_key, private_key)
+      values (repeat('A', 87), repeat('B', 43));
+    insert into public.push_subscriptions (endpoint, p256dh, auth, label)
+      values ('https://fcm.googleapis.com/fcm/send/abc:APA91b-test', repeat('C', 87), repeat('D', 22), 'Chrome on Android');
+    insert into public.push_subscriptions (endpoint, p256dh, auth, label)
+      values ('https://wns2-par02p.notify.windows.com/w/?token=BQYAAAB-abc%3d', repeat('C', 87), repeat('D', 22), 'Edge on Windows');
+    insert into public.push_subscriptions (endpoint, p256dh, auth, label)
+      values ('https://web.push.apple.com/QGuQyavXutnMei-abc', repeat('C', 87), repeat('D', 22), 'Safari on iPhone');
+    select count(*) into n from public.push_subscriptions; out := out || '27 own browsers added=' || n || ' (want 3)' || E'\n';
+    reset role;
+  exception when others then out := out || '27 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.push_subscriptions (endpoint, p256dh, auth) values ('https://evil.example.com/push', repeat('C', 87), repeat('D', 22));
+    out := out || '27a FAIL a push address that isn''t a push service accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '27a push address outside the push services rejected: ' || left(sqlerrm, 40) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.push_subscriptions (endpoint, p256dh, auth) values ('https://fcm.googleapis.com.evil.example/x', repeat('C', 87), repeat('D', 22));
+    out := out || '27b FAIL a look-alike push address accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '27b look-alike push address rejected: ' || left(sqlerrm, 40) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.push_keys; out := out || '27c other account sees push keys=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.push_subscriptions; out := out || '27d other account sees browsers=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '27c ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    select count(*) into n from public.push_keys; out := out || '27e password-only session sees push keys=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '27e ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.push_keys set private_key = repeat('Z', 43);
+    out := out || '27f FAIL push keys changed in place' || E'\n';
+    reset role;
+  exception when others then out := out || '27f changing push keys refused: ' || left(sqlerrm, 40) || E'\n'; end;
+
+  -- 28. billing: the account reads its own plan and nobody writes it; once Cloud has ended (the switch on, the trial
+  --     over, no subscription) reads and deletes work and inserts and updates are refused with PT402; comped and paid
+  --     accounts write; an account whose subscription would renew can't be deleted.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    select count(*) into n from public.billing; out := out || '28 own billing rows=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.billing where user_id = b; out := out || '28a other account''s billing=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '28 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    select count(*) into n from public.billing; out := out || '28b password-only session sees billing=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '28b ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    select count(*) into n from public.billing;
+    out := out || '28c FAIL anon read billing=' || n || E'\n';
+    reset role;
+  exception when others then out := out || '28c anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.billing set comped = true;
+    out := out || '28d FAIL an account comped itself' || E'\n';
+    reset role;
+  exception when others then out := out || '28d changing own billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.billing (user_id, trial_ends_at, comped) values (a, now() + interval '1 year', true);
+    out := out || '28e FAIL an account wrote its own billing row' || E'\n';
+    reset role;
+  exception when others then out := out || '28e inserting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    delete from public.billing;
+    out := out || '28f FAIL an account deleted its billing row' || E'\n';
+    reset role;
+  exception when others then out := out || '28f deleting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    out := out || '28r plan before launch: enforced=' || (public.cloud_plan() ->> 'enforced') || ' (want false), writable='
+      || (public.cloud_plan() ->> 'writable') || ' (want true)' || E'\n';
+    reset role;
+  exception when others then out := out || '28r ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    out := out || '28s password-only session gets a plan=' || (public.cloud_plan() is not null) || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '28s ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    perform public.cloud_plan();
+    out := out || '28t FAIL anon read a plan' || E'\n';
+    reset role;
+  exception when others then out := out || '28t anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
+
+  -- Staged as the owner, with no claims (auth.uid() null, as for the service role): Cloud ends for a.
+  perform set_config('request.jwt.claims', '', true);
+  insert into public.areas (user_id, name, key, color) values (a, 'Billing test', 'BIL', '#68AAB9') returning id into area_del;
+  insert into public.tasks (user_id, key, area_id, title, created_at, updated_at)
+    values (a, '', area_del, 'Moves out of its area', '2026-09-28T10:00:00', '2026-09-28T10:00:00') returning id into t_moved;
+  insert into public.tasks (user_id, key, area_id, title, created_at, updated_at)
+    values (a, '', area_a, 'Deleted while read-only', '2026-09-28T10:00:00', '2026-09-28T10:00:00') returning id into t_del;
+  update private.billing_switch set enforce = true;
+  update public.billing set trial_ends_at = now() - interval '1 minute', status = 'canceled' where user_id = a;
+  out := out || '[setup] staged writes without a session while Cloud ended' || E'\n';
+
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    select count(*) into n from public.tasks; out := out || '28g read-only account still reads tasks=' || (n > 0) || ' (want true)' || E'\n';
+    out := out || '28g plan once Cloud ended: enforced=' || (public.cloud_plan() ->> 'enforced') || ' (want true), writable='
+      || (public.cloud_plan() ->> 'writable') || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '28g ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.tasks (key, area_id, title, created_at, updated_at) values ('', area_a, 'Blocked', '2026-09-28T10:00:00', '2026-09-28T10:00:00');
+    out := out || '28h FAIL a read-only account added a task' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28h adding a task refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set title = 'Changed' where id = tid;
+    out := out || '28i FAIL a read-only account changed a task' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28i changing a task refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    delete from public.tasks where id = t_del; get diagnostics n = row_count;
+    out := out || '28j read-only account deleted tasks=' || n || ' (want 1)' || E'\n';
+    -- Deleting an area sets its tasks' area to null: an update nested in the delete, which goes through.
+    delete from public.areas where id = area_del; get diagnostics n = row_count;
+    out := out || '28k read-only account deleted areas=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.tasks where id = t_moved and area_id is null; out := out || '28k task left without its area=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28j ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set last_seen_at = now() where id = dev; get diagnostics n = row_count;
+    out := out || '28l read-only account''s computer still reports in=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28l ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '28m FAIL a read-only account asked a computer to start a session' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28m starting a session refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    update public.areas set name = name where user_id = b; get diagnostics n = row_count;
+    out := out || '28n another account in its trial still writes=' || (n > 0) || ' (want true)' || E'\n';
+    reset role;
+  exception when others then out := out || '28n ERROR ' || sqlerrm || E'\n'; end;
+
+  perform set_config('request.jwt.claims', '', true);
+  update public.billing set comped = true where user_id = a;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set title = 'Comped' where id = tid; get diagnostics n = row_count;
+    out := out || '28o comped account writes=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28o ERROR ' || sqlerrm || E'\n'; end;
+  perform set_config('request.jwt.claims', '', true);
+  update public.billing set comped = false, status = 'past_due', subscription_id = 'sub_test' where user_id = a;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set title = 'Paid' where id = tid; get diagnostics n = row_count;
+    out := out || '28p account whose card is being retried writes=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '28p ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_fresh, true); set local role authenticated;
+    perform public.delete_account();
+    out := out || '28q FAIL an account deleted itself while its subscription would renew' || E'\n';
+    reset role;
+  exception when others then out := out || '28q deleting while renewing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+
+  -- Back as it was for the tests below.
+  perform set_config('request.jwt.claims', '', true);
+  update private.billing_switch set enforce = false;
+  update public.billing set status = 'none', subscription_id = null, trial_ends_at = now() + interval '7 days' where user_id = a;
+
+  -- 29. agents signed in with OAuth count only once a two-factor session approved that very request, and only when the
+  --     sign-in that came of it is the only one it can be
+  insert into auth.oauth_clients (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method)
+  values (oc_a, 'dynamic', 'http://localhost:1/callback', 'authorization_code,refresh_token', 'Test agent', 'public', 'none'),
+         (oc_x, 'dynamic', 'http://localhost:2/callback', 'authorization_code,refresh_token', 'Other agent', 'public', 'none'),
+         (oc_c, 'dynamic', 'http://localhost:3/callback', 'authorization_code,refresh_token', 'Raced agent', 'public', 'none');
+  insert into auth.oauth_authorizations (id, authorization_id, client_id, user_id, redirect_uri, scope, status, created_at, expires_at)
+  values (gen_random_uuid(), 'authz-test-a', oc_a, a, 'http://localhost:1/callback', 'email', 'pending', now(), now() + interval '3 minutes'),
+         (gen_random_uuid(), 'authz-test-old', oc_a, a, 'http://localhost:1/callback', 'email', 'pending', now() - interval '10 minutes', now() - interval '1 minute'),
+         (gen_random_uuid(), 'authz-test-b', oc_a, b, 'http://localhost:1/callback', 'email', 'pending', now(), now() + interval '3 minutes'),
+         (gen_random_uuid(), 'authz-test-c', oc_c, a, 'http://localhost:3/callback', 'email', 'pending', now(), now() + interval '3 minutes');
+  -- sg: the sign-in that comes of authz-test-a; sg_early started before the approval, sg_late after its request expired,
+  -- sg_x is another client's, sg_b another account's; sc1 and sc2 two sign-ins of the raced client in its window.
+  insert into auth.sessions (id, user_id, created_at, updated_at, aal, oauth_client_id)
+  values (sg, a, now() + interval '5 seconds', now(), 'aal1', oc_a),
+         (sg_early, a, now() - interval '1 minute', now(), 'aal1', oc_a),
+         (sg_late, a, now() + interval '4 minutes', now(), 'aal1', oc_a),
+         (sg_x, a, now() + interval '5 seconds', now(), 'aal1', oc_x),
+         (sg_b, b, now() + interval '5 seconds', now(), 'aal1', oc_a),
+         (sc1, a, now() + interval '10 seconds', now(), 'aal1', oc_c),
+         (sc2, a, now() + interval '20 seconds', now(), 'aal1', oc_c);
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a,
+      'amr', json_build_array(json_build_object('method', 'oauth_provider/authorization_code', 'timestamp', now_s)))::text, true);
+    set local role authenticated;
+    select count(*) into n from public.areas; out := out || '29 agent before any approval sees areas=' || n || ' (want 0)' || E'\n';
+    select public.claim_agent_login() into ok; out := out || '29a agent claims without an approval=' || ok || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '29 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    perform public.approve_agent_login('authz-test-a');
+    out := out || '29b FAIL a password-only session approved an agent' || E'\n';
+    reset role;
+  exception when others then out := out || '29b password-only approval refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    perform public.approve_agent_login('authz-test-old');
+    out := out || '29c FAIL an expired sign-in request approved' || E'\n';
+    reset role;
+  exception when others then out := out || '29c expired request refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    perform public.approve_agent_login('authz-test-b');
+    out := out || '29d FAIL another account''s sign-in request approved' || E'\n';
+    reset role;
+  exception when others then out := out || '29d other account''s request refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    select (public.approve_agent_login('authz-test-a') ->> 'login')::uuid into login;
+    select count(*) into n from public.agent_logins where id = login and client_name = 'Test agent' and session_id is null;
+    out := out || '29e approval saved with its client=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.approve_agent_login('authz-test-a') r
+      where r ->> 'redirect_uri' = 'http://localhost:1/callback' and (r ->> 'login')::uuid = login;
+    out := out || '29ea approving again keeps the one approval and names where it goes back to=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.agent_logins; out := out || '29eb approvals=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '29e ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.agent_logins (request_id, client_id, request_expires_at) values ('x', oc_a, now());
+    out := out || '29f FAIL an approval written directly' || E'\n';
+    reset role;
+  exception when others then out := out || '29f writing approvals directly refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    select public.claim_agent_login() into ok; out := out || '29fa sign-in before its request was used claims it=' || ok || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '29fa ERROR ' || sqlerrm || E'\n'; end;
+  -- Supabase exchanges the request's code for the agent's sign-in (sg) and deletes the request.
+  delete from auth.oauth_authorizations where authorization_id = 'authz-test-a';
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg_x, 'client_id', oc_x)::text, true);
+    set local role authenticated;
+    select public.claim_agent_login() into ok; out := out || '29g another client claims the approval=' || ok || ' (want false)' || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg_early, 'client_id', oc_a)::text, true);
+    select public.claim_agent_login() into ok; out := out || '29h a sign-in older than the approval claims it=' || ok || ' (want false)' || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg_late, 'client_id', oc_a)::text, true);
+    select public.claim_agent_login() into ok; out := out || '29ha a sign-in after the request expired claims it=' || ok || ' (want false)' || E'\n';
+    perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg_b, 'client_id', oc_a)::text, true);
+    select public.claim_agent_login() into ok; out := out || '29i another account''s agent claims it=' || ok || ' (want false)' || E'\n';
+    select count(*) into n from public.areas; out := out || '29j that agent sees areas=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '29g ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    select public.claim_agent_login() into ok; out := out || '29k approved agent claims its sign-in=' || ok || ' (want true)' || E'\n';
+    select public.claim_agent_login() into ok; out := out || '29l claiming again=' || ok || ' (want true)' || E'\n';
+    select count(*) into n from public.areas; out := out || '29m approved agent sees areas=' || n || ' (want 5)' || E'\n';
+    insert into public.tasks (key, area_id, title, created_at, updated_at) values ('', area_a, 'agent test task', '2026-09-28T10:00:00', '2026-09-28T10:00:00');
+    select count(*) into n from public.tasks where title = 'agent test task'; out := out || '29n approved agent adds a task=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.devices; out := out || '29o approved agent reads computers=' || sign(n) || ' (want 1)' || E'\n';
+    update public.devices set name = 'renamed by agent';
+    select count(*) into n from public.devices where name = 'renamed by agent'; out := out || '29p agent renamed computers=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.push_keys; out := out || '29q agent sees push keys=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.launch_requests; out := out || '29r agent sees session requests=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.session_asks; out := out || '29s agent sees what agents wait for=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.agent_logins; out := out || '29t agent sees approvals=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '29k ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '29u FAIL an agent asked a computer to start a session' || E'\n';
+    reset role;
+  exception when others then out := out || '29u agent''s session request refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    perform public.register_device('agent computer', 'linux');
+    out := out || '29v FAIL an agent registered a computer' || E'\n';
+    reset role;
+  exception when others then out := out || '29v agent registering a computer refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    perform public.approve_agent_login('authz-test-c');
+    out := out || '29w FAIL an agent approved another agent' || E'\n';
+    reset role;
+  exception when others then out := out || '29w agent approving agents refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  -- An agent's own OAuth sign-in that verified a code (aal2, fresh totp) still isn't a person's two-factor session.
+  update auth.sessions set aal = 'aal2', factor_id = fa where id = sg;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sg, 'client_id', oc_a,
+      'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 10)))::text, true);
+    set local role authenticated;
+    perform public.delete_account();
+    out := out || '29x FAIL an agent deleted the account' || E'\n';
+    reset role;
+  exception when others then out := out || '29x agent with a verified code deleting the account refused: ' || left(sqlerrm, 40) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sg, 'client_id', oc_a,
+      'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 10)))::text, true);
+    set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '29xa FAIL an agent with a verified code asked a computer to start a session' || E'\n';
+    reset role;
+  exception when others then out := out || '29xa agent with a verified code starting a session refused: ' || left(sqlerrm, 30) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sg, 'client_id', oc_a,
+      'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 10)))::text, true);
+    set local role authenticated;
+    perform public.approve_agent_login('authz-test-c');
+    out := out || '29xb FAIL an agent with a verified code approved an agent' || E'\n';
+    reset role;
+  exception when others then out := out || '29xb agent with a verified code approving refused: ' || left(sqlerrm, 40) || E'\n'; end;
+  update auth.sessions set aal = 'aal1', factor_id = null where id = sg;
+  -- Raced: two sign-ins of the same client in the window of one approval. Neither counts, and both are signed out.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    perform public.approve_agent_login('authz-test-c');
+    reset role;
+  exception when others then out := out || '29y ERROR ' || sqlerrm || E'\n'; end;
+  delete from auth.oauth_authorizations where authorization_id = 'authz-test-c';
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sc1, 'client_id', oc_c)::text, true);
+    set local role authenticated;
+    select public.claim_agent_login() into ok; out := out || '29y one of two raced sign-ins claims the approval=' || ok || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '29y ERROR ' || sqlerrm || E'\n'; end;
+  select count(*) into n from auth.sessions where id in (sc1, sc2); out := out || '29ya raced sign-ins left=' || n || ' (want 0)' || E'\n';
+  select count(*) into n from public.agent_logins where client_id = oc_c; out := out || '29yb raced approval left=' || n || ' (want 0)' || E'\n';
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.agent_logins; out := out || '29z another account sees approvals=' || n || ' (want 0)' || E'\n';
+    perform public.revoke_agent_login(login);
+    out := out || '29za FAIL another account disconnected the agent' || E'\n';
+    reset role;
+  exception when others then out := out || '29za other account disconnecting refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    select count(*) into n from public.connected_agents() c where c.claimed_at is not null;
+    out := out || '29zb connected agents while it is signed in=' || n || ' (want 1)' || E'\n';
+    perform public.revoke_agent_login(login);
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    select count(*) into n from public.areas; out := out || '29zc disconnected agent sees areas=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '29zb ERROR ' || sqlerrm || E'\n'; end;
+  select count(*) into n from auth.sessions where id in (sg, sg_early, sg_late);
+  out := out || '29zd sign-ins of the disconnected agent left=' || n || ' (want 0)' || E'\n';
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg_x, 'client_id', oc_x)::text, true);
+    set local role authenticated;
+    perform public.connected_agents();
+    out := out || '29ze FAIL an agent read the connected agents' || E'\n';
+    reset role;
+  exception when others then out := out || '29ze agent reading connected agents refused: ' || left(sqlerrm, 50) || E'\n'; end;
 
   -- 25. a computer that signs out stops being the default, can't become it again, and takes no requests
   begin

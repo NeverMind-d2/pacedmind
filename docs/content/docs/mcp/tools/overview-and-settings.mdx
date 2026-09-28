@@ -40,6 +40,15 @@ Sessions open in: Windows Terminal · Claude Code command: claude · Codex comma
 MCP address: http://127.0.0.1:4319/api/mcp
 ```
 
+On PacedMind Cloud's server, where sessions start is each computer's own setting, so it says:
+
+```text
+Work hours: 09:00–17:00 · Break: 12:30–13:30
+Work days: mon, tue, wed, thu, fri
+Sessions start on the user's computers, as each computer's PacedMind desktop app says.
+MCP address: https://app.pacedmind.com/api/mcp
+```
+
 ## `update_settings`
 
 **Changes data.**
@@ -58,4 +67,4 @@ Returns the new values: *Work hours 09:00–17:00, break 12:30–13:30, work day
 
 Errors: *Work has to start before it ends.*, *The break has to start before it ends.*, *work_start needs a time like 09:00.*, and *Unknown day "…". Use mon, tue, wed, thu, fri, sat or sun.*
 
-The terminal and the agent commands can only be changed in **Settings → Starting sessions**. See [Work hours and days](/planning/work-hours).
+The terminal and the agent commands can only be changed in **Settings → Sessions**. See [Work hours and days](/planning/work-hours).

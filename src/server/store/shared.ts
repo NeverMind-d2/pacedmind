@@ -4,8 +4,9 @@ import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, LaunchRequestKind, LaunchRequestStatus, Priority, ReportCriterion,
-  ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
+  AskKind, PushSubscriptionInput, AgentExtras, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
+  OtherSessionState, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
+  SessionUsage, TokenCounts,
 } from "@/lib/types";
 
 /*
@@ -32,6 +33,7 @@ export interface TaskInput {
   estimateMin?: number;
   labels?: string[];
   doneWhen?: string[];
+  needs?: string[];
   agent?: Doer | null;
 }
 
@@ -72,6 +74,24 @@ export interface LaunchRequestInput {
   changes?: string | null;
 }
 
+/** Something a running session's agent waits for you to answer, as its computer asks it (asks.ts). */
+export interface AskInput {
+  sessionId: string;
+  /** The computer the session runs on; null without an account. */
+  deviceId: string | null;
+  kind: AskKind;
+  tool: string | null;
+  text: string;
+  remoteOk: boolean;
+  /** When the agent stops waiting (ISO time). */
+  expiresAt: string;
+}
+
+/** A browser that asked for notifications, as the account keeps it. */
+export interface PushSubscriptionRow extends PushSubscriptionInput {
+  createdAt: string;
+}
+
 export interface ReportInput {
   sessionId: string;
   taskId: number;
@@ -98,6 +118,46 @@ export function codexEnvProblem(value: string): string | null {
 }
 
 /** "Done when" items without blanks or repeats, as many and as long as the database keeps. */
+/**
+ * A project's repository, the same on every computer (git-remote.ts): its remote as host/path, lowercase, and after
+ * "#" the project's folder inside it when that isn't the repository's root. The database holds it to the same shape.
+ */
+export const REPO = /^[a-z0-9][a-z0-9.-]*(\/[a-z0-9._~-]+)+(#[a-z0-9._ ~-]+(\/[a-z0-9._ ~-]+)*)?$/;
+export const repoOf = (v: unknown): string | null => (typeof v === "string" && v.length <= 300 && REPO.test(v) ? v : null);
+
+const HARNESSES = new Set<string>(["claude-cli", "claude-app", "codex-cli", "codex-app"]);
+const OTHER_STATES = new Set<string>(["working", "waiting", "idle"]);
+/** How many sessions a computer reports that PacedMind didn't start (other-sessions.ts); the database holds it to that too. */
+export const OTHER_SESSIONS_MAX = 30;
+
+/** Text on one line, without control characters, at most `max` long. */
+export const oneLine = (v: unknown, max: number): string =>
+  typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, max) : "";
+
+const isoOf = (v: unknown): string | null => (typeof v === "string" && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : null);
+
+/**
+ * The sessions a computer found that PacedMind didn't start, held to their shape. What's in the cloud another computer
+ * wrote, so every reader keeps only these fields, as plain short text.
+ */
+export function otherSessionsOf(v: unknown): OtherSession[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, OTHER_SESSIONS_MAX).flatMap((x): OtherSession[] => {
+    if (!x || typeof x !== "object") return [];
+    const r = x as Record<string, unknown>;
+    const ref = typeof r.ref === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(r.ref) ? r.ref : null;
+    const startedAt = isoOf(r.startedAt);
+    const activeAt = isoOf(r.activeAt);
+    if (typeof r.harness !== "string" || !HARNESSES.has(r.harness) || typeof r.state !== "string" || !OTHER_STATES.has(r.state)) return [];
+    if (!ref || !startedAt || !activeAt) return [];
+    const projectId = typeof r.projectId === "string" && /^[A-Za-z0-9-]{1,80}$/.test(r.projectId) ? r.projectId : null;
+    return [{
+      harness: r.harness as Harness, ref, title: oneLine(r.title, 100), place: oneLine(r.place, 80), projectId,
+      state: r.state as OtherSessionState, startedAt, activeAt,
+    }];
+  });
+}
+
 export const cleanDoneWhen = (items: string[]) =>
   [...new Set(items.map((x) => x.replace(/\s+/g, " ").trim().slice(0, 400)).filter(Boolean))].slice(0, 50);
 
@@ -114,6 +174,16 @@ export function deriveKey(name: string, taken: Set<string>): string {
   let key = base;
   for (let i = 2; taken.has(key); i++) key = `${base.slice(0, 2)}${i}`;
   return key;
+}
+
+/**
+ * The key of an area renamed to `name`: its `current` one while that is still what the name makes (WR2 stays for
+ * "Work"), else a new one, unique among the other areas' keys (`taken`). Its tasks keep their keys.
+ */
+export function renamedKey(name: string, current: string, taken: Set<string>): string {
+  const base = deriveKey(name, new Set());
+  if (current === base || new RegExp(`^${base.slice(0, 2)}\\d+$`).test(current)) return current;
+  return deriveKey(name, taken);
 }
 
 /* ---------- calendar ---------- */
@@ -220,6 +290,43 @@ export function loginOf(v: unknown): AgentLogin {
   const method = loginWord(l.method);
   const plan = loginWord(l.plan);
   return { state, ...(method ? { method } : {}), ...(plan ? { plan } : {}) };
+}
+
+/**
+ * What a computer says its agent has besides PacedMind (extras.ts), checked the way it's read back from the cloud:
+ * lists of plain names, and a count. Undefined when there's nothing usable.
+ */
+export function extrasOf(v: unknown, max = 12): AgentExtras | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const h = v as Record<string, unknown>;
+  const list = (x: unknown, shape: RegExp) => strings(x).filter((n) => shape.test(n)).slice(0, max);
+  const skills = typeof h.skills === "number" && Number.isInteger(h.skills) && h.skills >= 0 ? Math.min(h.skills, 9999) : 0;
+  const account = list(h.account, /^[\w .@:+-]{1,48}$/);
+  const accountAt = typeof h.accountAt === "string" && /^\d{4}-\d\d-\d\dT[\d:.]{8,12}Z$/.test(h.accountAt) ? h.accountAt : null;
+  return {
+    mcp: list(h.mcp, /^[\w.@:+-]{1,48}$/), plugins: list(h.plugins, /^[\w.@:+-]{1,48}$/), skills, hooks: list(h.hooks, /^[A-Za-z]{1,40}$/),
+    ...(accountAt ? { account, accountAt } : {}),
+  };
+}
+
+/** A session's usage as a store keeps it (JSON), checked: plain numbers, plain model names, at most 20 conversations. */
+export function usageOf(v: unknown): SessionUsage | null {
+  const o = typeof v === "string" ? (() => { try { return JSON.parse(v) as unknown; } catch { return null; } })() : v;
+  if (!o || typeof o !== "object") return null;
+  const u = o as Record<string, unknown>;
+  const count = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(Math.round(x), 1e13) : 0);
+  const conversations: Record<string, TokenCounts> = {};
+  if (u.conversations && typeof u.conversations === "object") {
+    for (const [id, t] of Object.entries(u.conversations as Record<string, unknown>).slice(0, 20)) {
+      if (!/^[\w-]{1,64}$/.test(id) || !t || typeof t !== "object") continue;
+      const c = t as Record<string, unknown>;
+      conversations[id] = { input: count(c.input), cacheRead: count(c.cacheRead), cacheWrite: count(c.cacheWrite), output: count(c.output) };
+    }
+  }
+  const models = strings(u.models).filter((m) => /^[\w.:@/-]{1,80}$/.test(m)).slice(0, 5);
+  const at = typeof u.at === "string" && /^\d{4}-\d\d-\d\dT[\d:.]{8,12}Z$/.test(u.at) ? u.at : null;
+  const amount = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(x, 1e9) : 0);
+  return at ? { conversations, costUsd: amount(u.costUsd), activeSeconds: amount(u.activeSeconds), models, at } : null;
 }
 
 /* ---------- settings ---------- */

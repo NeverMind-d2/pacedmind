@@ -1,7 +1,8 @@
 // Builds PacedMind for the system it runs on and puts it on pacedmind.com, where the site's download
 // buttons point (/download/windows and /download/mac, deploy/Caddyfile):
 //
-//   npm run release -- ubuntu@<server>         build, package and upload
+//   npm run release -- pacedmind               build, package and upload (an ssh alias, deploy/README.md)
+//   npm run release -- ubuntu@<server>         the same, with the server's address
 //   npm run release -- --no-upload             build and package only, into dist/release
 //
 // An upload replaces the download everyone gets, so it refuses a checkout that doesn't contain master or has
@@ -15,7 +16,8 @@
 // notarized, and the disk image too. The one-time keychain setup is in deploy/README.md.
 //
 // The upload goes to /srv/pacedmind/download on the server, with the SSH key deploy/deploy.sh uses
-// (PACEDMIND_KEY, by default ~/Desktop/keys/pacedmind_vps). The previous file stays as <name>.old.
+// (PACEDMIND_KEY, by default ~/.ssh/pacedmind_vps when it exists, else whatever ssh's own config gives the
+// host). The previous file stays as <name>.old.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
@@ -29,7 +31,9 @@ const out = path.join(root, "dist", "release");
 const args = process.argv.slice(2);
 const upload = !args.includes("--no-upload");
 const server = args.find((a) => !a.startsWith("--"));
-const key = process.env.PACEDMIND_KEY || path.join(os.homedir(), "Desktop", "keys", "pacedmind_vps");
+const defaultKey = path.join(os.homedir(), ".ssh", "pacedmind_vps");
+// Without that key, ssh's own config (an alias's IdentityFile) picks one.
+const key = process.env.PACEDMIND_KEY || (fs.existsSync(defaultKey) ? defaultKey : null);
 const notaryProfile = process.env.PACEDMIND_NOTARY_PROFILE || "PacedMind";
 const mac = process.platform === "darwin";
 // The names deploy/Caddyfile sends /download/windows and /download/mac to.
@@ -41,10 +45,10 @@ const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: "inherit"
 
 if (!["win32", "darwin"].includes(process.platform)) throw new Error("Releases are built on Windows or macOS.");
 if (upload && !server) {
-  console.error("Usage: npm run release -- user@server, or npm run release -- --no-upload");
+  console.error("Usage: npm run release -- pacedmind (an ssh alias) or user@server, or npm run release -- --no-upload");
   process.exit(1);
 }
-if (upload && !fs.existsSync(key)) throw new Error(`There's no SSH key at ${key}. Set PACEDMIND_KEY to its path.`);
+if (upload && key && !fs.existsSync(key)) throw new Error(`There's no SSH key at ${key}. Set PACEDMIND_KEY to its path.`);
 if (upload && !args.includes("--allow-unlanded")) assertLanded(root, { committed: true, skip: "--allow-unlanded" });
 
 /** The Developer ID Application certificate to sign with: PACEDMIND_SIGN_IDENTITY, or the keychain's only one. */
@@ -135,7 +139,7 @@ function macDiskImage(identity) {
  * accepts the server's host key (a Mac may never have connected before); a changed key is still refused.
  */
 function remote(command, input) {
-  const ssh = ["-i", key, "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", server, command];
+  const ssh = [...(key ? ["-i", key] : []), "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new", server, command];
   if (!input) return execFileSync("ssh", ssh, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
   const fd = fs.openSync(input, "r");
   try {

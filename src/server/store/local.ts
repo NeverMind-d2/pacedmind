@@ -4,20 +4,23 @@ import { removeImageFiles, type StoredImage } from "../attachments";
 import {
   flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
+import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
-  linksOf, pictureHash, snapshotOf, strings,
-  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
+  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   taskHref,
-  type AgentId, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
+  type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
   type LaunchRequest, type Priority, type Project, type Report, type ReportOutcome, type Session,
-  type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface, type Task,
+  type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
+  type Task,
 } from "@/lib/types";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * This computer's own data (the free One device plan), in the SQLite file local-db.ts opens. repo.ts uses it
@@ -92,12 +95,20 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
 
 /**
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
- * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
+ * new key (`renamedKey`), which only its new tasks get.
  */
-export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null }) {
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
   const values: Record<string, Value> = {};
-  if (patch.name?.trim()) values.name = patch.name.trim();
+  const name = patch.name?.trim();
+  if (name) {
+    values.name = name;
+    const areas = areasNow();
+    const current = areas.find((a) => a.id === id);
+    if (current) values.key = renamedKey(name, current.key, new Set(areas.filter((a) => a.id !== id).map((a) => a.key)));
+  }
   if (patch.color) values.color = patch.color;
+  if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
   if (values.icon) values.picture = null;
@@ -130,7 +141,7 @@ export async function deleteProject(id: string) {
 
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
-  folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), agent: s(r.agent) as AgentId | null,
+  folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), repo: repoOf(r.repo), agent: s(r.agent) as AgentId | null,
   afterProjectId: s(r.after_project_id), flowOn: flowArmed(String(r.id)), sort: Number(r.sort),
 });
 
@@ -156,8 +167,9 @@ export async function createProject(input: {
   let id = base;
   for (let i = 2; get("SELECT 1 FROM projects WHERE id = ?", id); i++) id = `${base}-${i}`;
   const sort = Number(get("SELECT COALESCE(MAX(sort), 0) + 1 AS n FROM projects")!.n);
-  run("INSERT INTO projects (id, area_id, name, start_date, target_date, agent, sort, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.agent ?? null, sort, input.color ?? null);
+  run("INSERT INTO projects (id, area_id, name, start_date, target_date, agent, sort, color, repo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    id, input.areaId, input.name.trim(), toDateStr(new Date()), input.targetDate ?? null, input.agent ?? null, sort, input.color ?? null,
+    input.folder ? repoIdentity(input.folder) : null);
   if (input.folder) setProjectFolder(id, input.folder);
   return projectNow(id)!;
 }
@@ -185,9 +197,40 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
     if (problem) throw new Error(problem);
     patch = { ...patch, codexEnv: env };
   }
-  update("projects", id, columns(patch, PROJECT_COLS));
+  const values = columns(patch, PROJECT_COLS);
+  // The repository of a folder set here; a folder outside one keeps what another computer saw.
+  const found = patch.folder ? repoIdentity(patch.folder) : null;
+  if (found) values.repo = found;
+  update("projects", id, values);
   // A project's tasks always live in the project's area.
   if (patch.areaId) run("UPDATE tasks SET area_id = ? WHERE project_id = ?", patch.areaId, id);
+}
+
+/** Records the repository a project's folder on this computer is in (project-links.ts). */
+export async function setProjectRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (value) run("UPDATE projects SET repo = ? WHERE id = ?", value, id);
+}
+
+/**
+ * Merges `fromId` into `intoId`: its tasks move there, after the project's own, into its area, and keep their keys;
+ * what `intoId` leaves empty (agent, Codex environment, repository) it takes from `fromId`; projects that started
+ * after `fromId` start after `intoId`; then `fromId` is deleted. This computer's folders are project-links.ts's.
+ */
+export async function mergeProject(fromId: string, intoId: string) {
+  const from = projectNow(fromId);
+  const into = projectNow(intoId);
+  if (!from || !into || fromId === intoId) return;
+  const last = Number(get("SELECT COALESCE(MAX(sort_order), 0) AS n FROM tasks WHERE project_id = ?", intoId)!.n);
+  tx(() => {
+    run("UPDATE tasks SET project_id = ?, area_id = ?, sort_order = sort_order + ?, updated_at = ? WHERE project_id = ?",
+      intoId, into.areaId, last, nowStamp(), fromId);
+    run("UPDATE projects SET after_project_id = NULL WHERE id = ? AND after_project_id = ?", intoId, fromId);
+    run("UPDATE projects SET after_project_id = ? WHERE after_project_id = ?", intoId, fromId);
+    run("UPDATE projects SET agent = COALESCE(agent, ?), codex_env = COALESCE(codex_env, ?), repo = COALESCE(repo, ?) WHERE id = ?",
+      from.agent, from.codexEnv, from.repo, intoId);
+    run("DELETE FROM projects WHERE id = ?", fromId);
+  });
 }
 
 /* ---------- tasks ---------- */
@@ -206,7 +249,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
-  doneWhen: strings(json(r.done_when, [])), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
@@ -264,10 +307,11 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, done_when, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
-    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), input.agent ?? project?.agent ?? null, sort, stamp, stamp,
+    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
+    sort, stamp, stamp,
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }
@@ -293,6 +337,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   const values = columns(patch, TASK_COLS);
   if (patch.labels) values.labels = JSON.stringify(patch.labels);
   if (patch.doneWhen) values.done_when = JSON.stringify(cleanDoneWhen(patch.doneWhen));
+  if (patch.needs) values.needs = JSON.stringify(cleanNeeds(patch.needs));
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();
@@ -364,7 +409,7 @@ const toSession = (r: Row): Session => ({
   id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
   deviceId: null, folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
-  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id),
+  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id), usage: usageOf(r.usage),
 });
 
 /** Sessions, newest first. They all ran on this computer: asking for another's finds none. */
@@ -411,12 +456,13 @@ export async function createSession(input: {
 }
 
 export async function updateSession(
-  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url">>,
+  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url" | "usage">>,
 ) {
   const values = columns(patch, {
     status: "status", folder: "folder", finishedAt: "finished_at", endedAt: "ended_at", note: "note", branch: "branch", cliSessionId: "cli_session_id",
     url: "url",
   });
+  if (patch.usage !== undefined) values.usage = patch.usage ? JSON.stringify(patch.usage) : null;
   if (typeof values.url === "string" && !SESSION_URL.test(values.url)) delete values.url;
   update("sessions", id, values);
 }
@@ -720,6 +766,97 @@ export async function createLaunchRequest(): Promise<LaunchRequest> {
 }
 
 export async function settleLaunchRequest() {}
+
+/* ---------- what a running session waits for you to answer (asks.ts) ---------- */
+
+// Without an account there's only this computer, so every answer comes from it and nothing comes from elsewhere.
+
+const toAsk = (r: Row): SessionAsk => ({
+  id: String(r.id), sessionId: String(r.session_id), deviceId: null, kind: r.kind === "permission" ? "permission" : "question",
+  tool: r.tool == null ? null : String(r.tool), text: String(r.text), remoteOk: false, askedAt: String(r.asked_at),
+  expiresAt: String(r.expires_at), status: String(r.status) as AskStatus, answer: r.answer == null ? null : String(r.answer),
+  answeredAt: r.answered_at == null ? null : String(r.answered_at), answeredVia: r.status === "answered" ? "computer" : null,
+});
+
+export async function createAsk(input: AskInput): Promise<SessionAsk> {
+  const id = crypto.randomUUID();
+  run(
+    "INSERT INTO session_asks (id, session_id, kind, tool, text, asked_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    id, input.sessionId, input.kind, input.tool, input.text, new Date().toISOString(), input.expiresAt,
+  );
+  return (await getAsk(id))!;
+}
+
+export async function getAsk(id: string): Promise<SessionAsk | null> {
+  const r = get("SELECT * FROM session_asks WHERE id = ?", id);
+  return r ? toAsk(r) : null;
+}
+
+export async function listAsks(filter: { sessionIds?: string[]; status?: AskStatus[] } = {}): Promise<SessionAsk[]> {
+  if (filter.sessionIds && !filter.sessionIds.length) return [];
+  const where: string[] = [];
+  const args: string[] = [];
+  if (filter.sessionIds) {
+    where.push(`session_id IN (${marks(filter.sessionIds)})`);
+    args.push(...filter.sessionIds);
+  }
+  if (filter.status) {
+    where.push(`status IN (${marks(filter.status)})`);
+    args.push(...filter.status);
+  }
+  return all(`SELECT * FROM session_asks${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY asked_at DESC LIMIT 200`, ...args).map(toAsk);
+}
+
+/** Answers an ask once, before the agent stops waiting. */
+export async function answerAsk(id: string, answer: string): Promise<SessionAsk> {
+  const now = new Date().toISOString();
+  const r = run(
+    "UPDATE session_asks SET status = 'answered', answer = ?, answered_at = ? WHERE id = ? AND status = 'pending' AND expires_at > ?",
+    answer, now, id, now,
+  );
+  if (!Number(r.changes)) throw new Error("This was answered already, or the agent stopped waiting for it.");
+  return (await getAsk(id))!;
+}
+
+export async function settleAsk(id: string, status: "expired" | "withdrawn") {
+  run("UPDATE session_asks SET status = ? WHERE id = ? AND status = 'pending'", status, id);
+}
+
+/* ---------- web push: only with an account, whose web app gets the notifications ---------- */
+
+export async function pushKeys(): Promise<{ publicKey: string; privateKey: string } | null> {
+  return null;
+}
+
+export async function savePushKeys(keys: { publicKey: string; privateKey: string }): Promise<void> {
+  void keys;
+  throw new Error("Notifications on your phone and in the browser come with PacedMind Cloud.");
+}
+
+export async function listPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+  return [];
+}
+
+export async function addPushSubscription(sub: PushSubscriptionInput): Promise<void> {
+  void sub;
+  throw new Error("Notifications on your phone and in the browser come with PacedMind Cloud.");
+}
+
+export async function removePushSubscription(endpoint: string) {
+  void endpoint;
+}
+
+/* ---------- agents signed in to PacedMind Cloud's MCP server ---------- */
+
+/** Agents reach this computer's own data through its own MCP server, with its token: none sign in to the cloud. */
+export async function listConnectedAgents(): Promise<ConnectedAgent[]> {
+  return [];
+}
+
+export async function disconnectAgent(id: string): Promise<void> {
+  void id;
+  throw new Error("Agents sign in to PacedMind Cloud's MCP server with an account.");
+}
 
 /* ---------- live refresh ---------- */
 

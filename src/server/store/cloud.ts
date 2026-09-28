@@ -3,23 +3,27 @@ import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { MODE, NotSignedIn, authState, supabase } from "../supabase";
 import { removeImageFiles, type StoredImage } from "../attachments";
+import { repoIdentity } from "../git-remote";
 import {
   deviceConfig, flowArmed, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, expandOccurrences, linksOf, loginOf, pictureHash, snapshotOf, strings,
-  type LaunchRequestFilter, type LaunchRequestInput, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
+  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
+  type TaskFilter, type TaskInput, type TaskPatch, usageOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
+import { CloudReadOnly } from "@/lib/billing";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
-  type AgentId, type AgentTools, type Area, type Attachment, type CalEvent, type Device, type Doer, type EdgeMode, type EventOccurrence,
-  type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type Priority, type Project, type RemoteStart,
-  type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask,
-  type Surface, type Task,
+  type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence,
+  type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
+  type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
+  type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * The account's data in PacedMind Cloud (Supabase), used while someone is signed in; repo.ts picks this or
@@ -49,18 +53,23 @@ type Result<T> = { data: T | null; error: PostgrestError | null };
 const s = (v: unknown) => (v == null ? null : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));
 
+/** What a failed query throws: CloudReadOnly when the database refused a write because the account's Cloud has ended. */
+function failure(error: PostgrestError): Error {
+  return error.code === "PT402" ? new CloudReadOnly() : new Error(error.message);
+}
+
 function many(res: Result<Row[]>): Row[] {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
   return res.data ?? [];
 }
 
 function one(res: Result<Row>): Row | null {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
   return res.data;
 }
 
 function check(res: { error: PostgrestError | null }) {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
 }
 
 /** Every row of a query, 1000 at a time (the most Supabase returns per request). */
@@ -128,17 +137,26 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
 
 /**
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
- * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
+ * new key (`renamedKey`), which only its new tasks get.
  */
-export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null }) {
+export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
+  if (!isUuid(id)) return;
   const values: Row = {};
-  if (patch.name?.trim()) values.name = patch.name.trim();
+  const name = patch.name?.trim();
+  if (name) {
+    values.name = name;
+    const areas = await listAreas();
+    const current = areas.find((a) => a.id === id);
+    if (current) values.key = renamedKey(name, current.key, new Set(areas.filter((a) => a.id !== id).map((a) => a.key)));
+  }
   if (patch.color) values.color = patch.color;
+  if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
   if (values.icon) values.picture = null;
   if (values.picture) values.icon = null;
-  if (!Object.keys(values).length || !isUuid(id)) return;
+  if (!Object.keys(values).length) return;
   const db = await accountDb();
   check(await db.from("areas").update(values).eq("id", id));
 }
@@ -160,7 +178,7 @@ export async function deleteProject(id: string) {
 
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
-  folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env),
+  folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env), repo: repoOf(r.repo),
   agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id), flowOn: MODE === "desktop" && flowArmed(String(r.id)),
   sort: Number(r.sort),
 });
@@ -187,10 +205,11 @@ export async function createProject(input: {
 }): Promise<Project> {
   const db = await accountDb();
   const last = many(await db.from("projects").select("sort").order("sort", { ascending: false }).limit(1));
+  const repo = input.folder && MODE === "desktop" ? repoIdentity(input.folder) : null;
   const r = one(await db.from("projects").insert({
     area_id: input.areaId, name: input.name.trim(), start_date: toDateStr(new Date()), target_date: input.targetDate ?? null,
     device_id: input.deviceId && isUuid(input.deviceId) ? input.deviceId : null,
-    agent: input.agent ?? null, sort: Number(last[0]?.sort ?? 0) + 1, color: input.color ?? null,
+    agent: input.agent ?? null, sort: Number(last[0]?.sort ?? 0) + 1, color: input.color ?? null, ...(repo ? { repo } : {}),
   }).select().single());
   if (input.folder && MODE === "desktop") setProjectFolder(String(r!.id), input.folder);
   return toProject(r!);
@@ -225,9 +244,48 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
   }
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, PROJECT_COLS);
+  // The repository of a folder set here, for the other computers; a folder outside one keeps what another computer saw.
+  const found = patch.folder ? repoIdentity(patch.folder) : null;
+  if (found) values.repo = found;
   if (!Object.keys(values).length) return;
   const db = await accountDb();
   check(await db.from("projects").update(values).eq("id", id));
+}
+
+/** Records the repository a project's folder on this computer is in (project-links.ts), for the other computers. */
+export async function setProjectRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (!value || !isUuid(id)) return;
+  const db = await accountDb();
+  check(await db.from("projects").update({ repo: value }).eq("id", id));
+}
+
+/**
+ * Merges `fromId` into `intoId`: its tasks move there, after the project's own, into its area, and keep their keys;
+ * what `intoId` leaves empty (agent, Codex environment, repository) it takes from `fromId`; projects that started
+ * after `fromId` start after `intoId`; then `fromId` is deleted. This computer's folders are project-links.ts's.
+ */
+export async function mergeProject(fromId: string, intoId: string) {
+  if (!isUuid(fromId) || !isUuid(intoId) || fromId === intoId) return;
+  const [from, into] = await Promise.all([getProject(fromId), getProject(intoId)]);
+  if (!from || !into) return;
+  const db = await accountDb();
+  const last = many(await db.from("tasks").select("sort_order").eq("project_id", intoId).order("sort_order", { ascending: false }).limit(1));
+  const moving = many(await db.from("tasks").select("id, sort_order").eq("project_id", fromId));
+  check(await db.from("tasks").update({ project_id: intoId, area_id: into.areaId, updated_at: nowStamp() }).eq("project_id", fromId));
+  // After the project's own tasks, in their order. There's no "sort_order + n" through the API, so one by one.
+  const after = Number(last[0]?.sort_order ?? 0);
+  for (const batch of chunks(moving, 20)) {
+    await Promise.all(batch.map(async (t) => check(await db.from("tasks").update({ sort_order: Number(t.sort_order) + after }).eq("id", Number(t.id)))));
+  }
+  if (into.afterProjectId === fromId) check(await db.from("projects").update({ after_project_id: null }).eq("id", intoId));
+  check(await db.from("projects").update({ after_project_id: intoId }).eq("after_project_id", fromId).neq("id", intoId));
+  const fill: Row = {};
+  if (!into.agent && from.agent) fill.agent = from.agent;
+  if (!into.codexEnv && from.codexEnv) fill.codex_env = from.codexEnv;
+  if (!into.repo && from.repo) fill.repo = from.repo;
+  if (Object.keys(fill).length) check(await db.from("projects").update(fill).eq("id", intoId));
+  check(await db.from("projects").delete().eq("id", fromId));
 }
 
 /* ---------- tasks ---------- */
@@ -238,7 +296,7 @@ const toTask = (r: Row): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
-  doneWhen: (r.done_when as string[] | null) ?? [], reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
@@ -290,7 +348,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const r = one(await db.from("tasks").insert({
     key: "", area_id: areaId, project_id: input.projectId ?? null, title: input.title.trim(), description: input.description ?? "",
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
-    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []),
+    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
   }).select(TASK_SELECT).single());
   return toTask(r!);
@@ -320,6 +378,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, TASK_COLS);
   if (patch.doneWhen) values.done_when = cleanDoneWhen(patch.doneWhen);
+  if (patch.needs) values.needs = cleanNeeds(patch.needs);
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();
@@ -404,7 +463,7 @@ const toSession = (r: Row): Session => ({
   id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
   deviceId: s(r.device_id), folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
-  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id),
+  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id), usage: usageOf(r.usage),
 });
 
 
@@ -452,11 +511,11 @@ export async function createSession(input: {
 }
 
 export async function updateSession(
-  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url">>,
+  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url" | "usage">>,
 ) {
   const values = columns(patch, {
     status: "status", folder: "folder", finishedAt: "finished_at", endedAt: "ended_at", note: "note", branch: "branch", cliSessionId: "cli_session_id",
-    url: "url",
+    url: "url", usage: "usage",
   });
   if (typeof values.url === "string" && !SESSION_URL.test(values.url)) delete values.url;
   if (!Object.keys(values).length) return;
@@ -528,7 +587,7 @@ async function attachmentsWhere(column: "report_id" | "session_id", ids: (string
 export async function countSessionImages(sessionId: string): Promise<number> {
   const db = await accountDb();
   const { count, error } = await db.from("attachments").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
   return count ?? 0;
 }
 
@@ -564,7 +623,7 @@ export async function addAttachment(
   }).select(ATTACHMENT_COLS).single();
   if (res.error) {
     removeImageFiles([img.file]);
-    throw new Error(res.error.message);
+    throw failure(res.error);
   }
   return toAttachment(res.data as Row);
 }
@@ -788,7 +847,7 @@ export async function setSettings(patch: Partial<Settings>) {
 
 /* ---------- computers and requests to start sessions ---------- */
 
-const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on";
+const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on, other_sessions";
 
 /**
  * What a computer found of one agent, as the cloud has it: for display only. The launcher uses what this
@@ -799,8 +858,9 @@ function toolsOf(v: unknown): AgentTools {
   const t = v as Row;
   const cli = t.cli && typeof t.cli === "object" && typeof (t.cli as Row).version === "string" ? { version: String((t.cli as Row).version) } : null;
   const app = t.app && typeof t.app === "object" ? { version: s((t.app as Row).version) } : null;
-  const mcp = t.mcp === "connected" || t.mcp === "elsewhere" ? t.mcp : "missing";
-  return { cli, app, mcp, login: loginOf(t.login) };
+  const mcp = t.mcp === "connected" || t.mcp === "old" || t.mcp === "cloud" || t.mcp === "elsewhere" ? t.mcp : "missing";
+  const extras = extrasOf(t.extras);
+  return { cli, app, mcp, login: loginOf(t.login), ...(extras ? { extras } : {}) };
 }
 
 const isUuidValue = (v: unknown): v is string => typeof v === "string" && isUuid(v);
@@ -813,19 +873,24 @@ const toDevice = (r: Row): Device => {
     createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), checkedAt: s(r.checked_at), revokedAt: s(r.revoked_at),
     isDefault: r.is_default === true, appVersion: s(r.app_version),
     flowsOn: Array.isArray(r.flows_on) ? r.flows_on.filter(isUuidValue) : [],
+    otherSessions: otherSessionsOf(r.other_sessions),
   };
 };
 
 /**
  * Records what this computer found of the agents, for Settings on every computer: versions, whether the apps reach
- * PacedMind, and whether each CLI is signed in (the state, and the method and plan as single words). Never where the
- * tools are, and never an email, an organization or a key.
+ * PacedMind, whether each CLI is signed in (the state, and the method and plan as single words), and the names of
+ * what else its sessions get (MCP servers, plugins, hooks, how many skills). Never where the tools are, what a server
+ * runs or where it points, and never an email, an organization or a key. The database keeps it under 4000 bytes, so
+ * long lists get shorter.
  */
 export async function saveDeviceTools(id: string, agents: Device["agents"]) {
   if (!isUuid(id)) return;
-  const plain = Object.fromEntries(Object.entries(agents).map(([agent, t]) => [agent, {
-    cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login),
-  }]));
+  const shape = (max: number) => Object.fromEntries(Object.entries(agents).map(([agent, t]) => {
+    const extras = max > 0 ? extrasOf(t.extras, max) : undefined;
+    return [agent, { cli: t.cli ? { version: t.cli.version } : null, app: t.app, mcp: t.mcp, login: loginOf(t.login), ...(extras ? { extras } : {}) }];
+  }));
+  const plain = [12, 6, 3, 0].map(shape).find((p) => JSON.stringify(p).length <= 3800) ?? shape(0);
   const db = await accountDb();
   check(await db.from("devices").update({ agents: plain, checked_at: new Date().toISOString() }).eq("id", id));
 }
@@ -848,7 +913,7 @@ export async function getDevice(id: string): Promise<Device | null> {
 export async function registerDevice(name: string, platform: Device["platform"]): Promise<string> {
   const db = await accountDb();
   const { data, error } = await db.rpc("register_device", { device_name: cleanDeviceName(name) || "Computer", device_platform: platform });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
   return String(data);
 }
 
@@ -874,7 +939,7 @@ export async function setDefaultDevice(id: string) {
 export async function claimDevice(id: string) {
   const db = await accountDb();
   const { error } = await db.rpc("claim_device", { device: id });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
 }
 
 /** Signs a computer out: its session ends at once and its waiting requests are canceled. */
@@ -882,7 +947,7 @@ export async function revokeDevice(id: string) {
   if (!isUuid(id)) throw new Error("Unknown computer");
   const db = await accountDb();
   const { error } = await db.rpc("revoke_device", { device: id });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
 }
 
 /**
@@ -891,9 +956,10 @@ export async function revokeDevice(id: string) {
  * and the projects whose flow is on here. Values in the wrong shape are left out rather than failing the rest.
  */
 export async function updateDeviceRow(id: string, patch: {
-  name?: string; remoteStart?: RemoteStart; lastSeen?: boolean; appVersion?: string; flowsOn?: string[];
+  name?: string; remoteStart?: RemoteStart; lastSeen?: boolean; appVersion?: string; flowsOn?: string[]; otherSessions?: OtherSession[];
 }) {
   const values: Row = {};
+  if (patch.otherSessions) values.other_sessions = otherSessionsOf(patch.otherSessions);
   const name = patch.name === undefined ? "" : cleanDeviceName(patch.name);
   if (name) values.name = name;
   if (patch.remoteStart) values.remote_start = patch.remoteStart;
@@ -950,6 +1016,116 @@ export async function settleLaunchRequest(
   check(await db.from("launch_requests").update({
     status, decided_at: new Date().toISOString(), session_id: extra.sessionId ?? null, note: extra.note?.slice(0, 500) ?? null,
   }).eq("id", id).eq("status", "pending"));
+}
+
+/* ---------- what a running session waits for you to answer (asks.ts) ---------- */
+
+const ASK_COLS = "id, session_id, device_id, kind, tool, text, remote_ok, asked_at, expires_at, status, answer, answered_at, answered_via";
+
+const toAsk = (r: Row): SessionAsk => ({
+  id: String(r.id), sessionId: String(r.session_id), deviceId: s(r.device_id), kind: r.kind === "permission" ? "permission" : "question",
+  tool: s(r.tool), text: String(r.text), remoteOk: r.remote_ok === true, askedAt: String(r.asked_at), expiresAt: String(r.expires_at),
+  status: String(r.status) as AskStatus, answer: s(r.answer), answeredAt: s(r.answered_at),
+  answeredVia: r.answered_via === "computer" || r.answered_via === "elsewhere" ? r.answered_via : null,
+});
+
+/** Asks for this computer's own session (the database takes it only from the session's computer). */
+export async function createAsk(input: AskInput): Promise<SessionAsk> {
+  const db = await accountDb();
+  const r = one(await db.from("session_asks").insert({
+    session_id: input.sessionId, device_id: input.deviceId, kind: input.kind, tool: input.tool, text: input.text,
+    remote_ok: input.remoteOk, expires_at: input.expiresAt,
+  }).select(ASK_COLS).single());
+  return toAsk(r!);
+}
+
+export async function getAsk(id: string): Promise<SessionAsk | null> {
+  if (!isUuid(id)) return null;
+  const db = await accountDb();
+  const r = one(await db.from("session_asks").select(ASK_COLS).eq("id", id).maybeSingle());
+  return r ? toAsk(r) : null;
+}
+
+export async function listAsks(filter: { sessionIds?: string[]; status?: AskStatus[] } = {}): Promise<SessionAsk[]> {
+  const db = await accountDb();
+  if (filter.sessionIds && !filter.sessionIds.length) return [];
+  const out: SessionAsk[] = [];
+  for (const ids of filter.sessionIds ? chunks(filter.sessionIds) : [null]) {
+    let q = db.from("session_asks").select(ASK_COLS).order("asked_at", { ascending: false }).limit(200);
+    if (ids) q = q.in("session_id", ids);
+    if (filter.status) q = q.in("status", filter.status);
+    out.push(...many(await q).map(toAsk));
+  }
+  return out;
+}
+
+/**
+ * Answers an ask. The database takes it once, before the agent stops waiting: from the session's computer, or from
+ * elsewhere with a two-factor code from the last five minutes.
+ */
+export async function answerAsk(id: string, answer: string): Promise<SessionAsk> {
+  const db = await accountDb();
+  const r = one(await db.from("session_asks").update({ status: "answered", answer }).eq("id", id).select(ASK_COLS).single());
+  return toAsk(r!);
+}
+
+/** The computer stopped waiting for an answer, or took the question back. Only a pending one changes. */
+export async function settleAsk(id: string, status: "expired" | "withdrawn") {
+  const db = await accountDb();
+  check(await db.from("session_asks").update({ status }).eq("id", id).eq("status", "pending"));
+}
+
+/* ---------- web push (push.ts) ---------- */
+
+/** The account's VAPID key pair, or null before a browser first asked for notifications. */
+export async function pushKeys(): Promise<{ publicKey: string; privateKey: string } | null> {
+  const db = await accountDb();
+  const r = one(await db.from("push_keys").select("public_key, private_key").maybeSingle());
+  return r ? { publicKey: String(r.public_key), privateKey: String(r.private_key) } : null;
+}
+
+/** Keeps the account's key pair, unless another device made one first (then that one counts). */
+export async function savePushKeys(keys: { publicKey: string; privateKey: string }) {
+  const db = await accountDb();
+  const { error } = await db.from("push_keys").insert({ public_key: keys.publicKey, private_key: keys.privateKey });
+  if (error && error.code !== "23505") throw failure(error);
+}
+
+export async function listPushSubscriptions(): Promise<PushSubscriptionRow[]> {
+  const db = await accountDb();
+  return many(await db.from("push_subscriptions").select("endpoint, p256dh, auth, label, created_at").order("created_at")).map((r) => ({
+    endpoint: String(r.endpoint), p256dh: String(r.p256dh), auth: String(r.auth), label: String(r.label), createdAt: String(r.created_at),
+  }));
+}
+
+/** Adds a browser; one that's there already is replaced (its keys change when it subscribes again). */
+export async function addPushSubscription(sub: PushSubscriptionInput) {
+  const db = await accountDb();
+  check(await db.from("push_subscriptions").delete().eq("endpoint", sub.endpoint));
+  check(await db.from("push_subscriptions").insert({ endpoint: sub.endpoint, p256dh: sub.p256dh, auth: sub.auth, label: sub.label }));
+}
+
+export async function removePushSubscription(endpoint: string) {
+  const db = await accountDb();
+  check(await db.from("push_subscriptions").delete().eq("endpoint", endpoint));
+}
+
+/* ---------- agents signed in to PacedMind Cloud's MCP server ---------- */
+
+/** The agents you allowed (connected_agents): those signed in, and those you allowed in the last ten minutes. */
+export async function listConnectedAgents(): Promise<ConnectedAgent[]> {
+  const db = await accountDb();
+  const { data, error } = await db.rpc("connected_agents");
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[])
+    .map((r) => ({ id: String(r.id), name: String(r.client_name ?? "").slice(0, 200), approvedAt: String(r.approved_at), claimedAt: s(r.claimed_at) }));
+}
+
+/** Disconnects an agent: its sign-in ends at once (revoke_agent_login). */
+export async function disconnectAgent(id: string): Promise<void> {
+  const db = await accountDb();
+  const { error } = await db.rpc("revoke_agent_login", { login: id });
+  if (error) throw new Error(/already disconnected/i.test(error.message) ? "That agent is already disconnected." : error.message);
 }
 
 /* ---------- live refresh ---------- */

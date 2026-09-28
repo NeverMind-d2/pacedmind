@@ -8,7 +8,7 @@ import { checkDeviceAction, connectAgentAction, renameDeviceAction, setDefaultDe
 import { revokeDeviceAction } from "@/app/auth/actions";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, platformName,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, mcpReaches, platformName,
   type AgentId, type AgentTools, type Device, type RemoteStart, type ReportOutcome, type SessionStatus, type Surface,
 } from "@/lib/types";
 import { ConfirmDialog } from "../dialog";
@@ -53,9 +53,11 @@ const REMOTE_HINT: Record<RemoteStart, string> = {
   auto: "Sessions asked for from the web app or another computer start there right away (asking takes a fresh two-factor code).",
 };
 
-const MCP_TEXT = { connected: "Connected", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
+const MCP_TEXT = { connected: "Connected", old: "Old name", cloud: "PacedMind Cloud", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
 const MCP_HINT = {
   connected: "Sessions in the agent's desktop app, and those you start yourself, report back to PacedMind.",
+  old: "Set up under PacedMind's old MCP name, organizer: it works, and Connect sets it up as pacedmind.",
+  cloud: "Sessions in the agent's desktop app, and those you start yourself, report to PacedMind Cloud's MCP server, signed in with your account.",
   elsewhere: "Set up for another PacedMind (a different address or token), so its desktop app's sessions report there.",
   missing: "Sessions in the agent's desktop app can't report back until it's connected, in the PacedMind desktop app on that computer.",
 } as const;
@@ -88,7 +90,7 @@ function facts(agent: AgentId, t: AgentTools): Record<"cli" | "app" | "cloud" | 
         ? { main: "CLI signed out", sub: cloud, on: false, title: `Sign the ${AGENT_LABEL[agent]} CLI in there to send sessions to ${cloud}` }
         : { main: t.login.state === "in" ? "Ready" : "Available", sub: cloud, on: true,
           title: t.login.state === "in" ? undefined : `Starts from the ${AGENT_LABEL[agent]} CLI; it didn't say whether it's signed in` },
-    mcp: { main: MCP_TEXT[t.mcp], on: t.mcp === "connected", title: MCP_HINT[t.mcp] },
+    mcp: { main: MCP_TEXT[t.mcp], on: mcpReaches(t.mcp), title: MCP_HINT[t.mcp] },
     login: t.login.state === "in"
       ? { main: "Signed in", sub: [methodName(t.login.method), planName(t.login.plan)].filter(Boolean).join(" · ") || null, on: true }
       : t.login.state === "out"
@@ -386,7 +388,7 @@ function RemoteBadge({ value, editable }: { value: RemoteStart; editable: boolea
   const box = "inline-flex h-5 items-center gap-1 rounded border border-line2 px-1.5 text-[11px] text-mut";
   if (!editable) return <span title={`${REMOTE_HINT[value]} It's set in the desktop app on that computer.`} className={box}>{text}</span>;
   return (
-    <Link href="/settings#this-computer" title={`${REMOTE_HINT[value]} Change it in Settings.`} className={cx(box, "hover:bg-hover hover:text-fg2")}>
+    <Link href="/settings/computer" title={`${REMOTE_HINT[value]} Change it in Settings.`} className={cx(box, "hover:bg-hover hover:text-fg2")}>
       {text}<Icon name="chevronRight" size={10} strokeWidth={2.4} />
     </Link>
   );
@@ -510,6 +512,41 @@ function Agents({ d, here, pending, now, onConnect }: {
           </div>
         ))}
       </div>
+      <Extras d={d} />
+    </div>
+  );
+}
+
+/**
+ * What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (extras.ts),
+ * and what its sessions there got from the account its CLI is signed in to, as the last one said: each computer's CLI
+ * can be signed in to another account, with other connectors.
+ */
+function Extras({ d }: { d: Device }) {
+  const lines = AGENTS.flatMap((a) => {
+    const t = d.agents[a];
+    const h = t.extras;
+    if (!h || (!t.cli && !t.app)) return [];
+    const parts = [
+      h.mcp.length ? `MCP servers ${h.mcp.join(", ")}` : "no other MCP servers",
+      h.account?.length ? `${a === "claude" ? "claude.ai connectors" : "connectors from its account"} ${h.account.join(", ")}` : null,
+      h.plugins.length ? `plugins ${h.plugins.join(", ")}` : null,
+      h.skills ? `${h.skills} ${h.skills === 1 ? "skill" : "skills"}` : null,
+      h.hooks.length ? `hooks on ${h.hooks.join(", ")}` : null,
+    ].filter(Boolean);
+    return [{ a, text: parts.join(" · ") }];
+  });
+  if (!lines.length) return null;
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-line px-4 py-2.5 text-[12.5px] max-md:px-3.5"
+      title="Read from Claude Code's and Codex's own settings on that computer; what comes from the account its CLI is signed in to, as the last session PacedMind started there said. A project's folder can add more: see Settings.">
+      <span className="text-[12px] text-mut2">Besides PacedMind, their sessions also get</span>
+      {lines.map(({ a, text }) => (
+        <div key={a} className="flex items-start gap-2">
+          <AgentIcon agent={a} size={13} className="mt-[3px] shrink-0 text-fg3" />
+          <span className="min-w-0 break-words text-fg2">{text}</span>
+        </div>
+      ))}
     </div>
   );
 }

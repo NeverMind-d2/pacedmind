@@ -1,6 +1,6 @@
 ---
 title: Areas and projects
-description: Create, rename, recolor, move and delete areas and projects, give an area an icon or a picture of your own, and set a project's target date, folder, default agent and flow.
+description: Create, rename, recolor, reorder, move, merge and delete areas and projects, select several at once, keep one project across your computers, give an area an icon or a picture of your own, and set a project's target date, folder, default agent and flow.
 ---
 
 Areas are the top level of the planner. Each project belongs to exactly one area, and a project's tasks belong to its area too.
@@ -9,7 +9,7 @@ Areas are the top level of the planner. Each project belongs to exactly one area
 
 An area has a name, a color, an optional icon and a **key**. The key is three letters made from the name's letters A to Z: usually the first letter and the next two consonants, such as **WRK** for Work and **HLT** for Health. A name of three letters or fewer keeps them (**DEV** for Dev), and a name without enough consonants uses its first three letters (**HOM** for Home). If the key is already taken, a number replaces its last letter, such as **WR2**.
 
-The key starts the key of every task in the area (WRK-1, WRK-2, …). It never changes, not even when the area is renamed, so existing task keys stay valid.
+The key starts the key of every task in the area (WRK-1, WRK-2, …). Renaming the area gives it the key of its new name, such as **JOB** when Work becomes Job, and a name that still makes the same key keeps it. Tasks already in the area keep their keys (WRK-12 stays WRK-12); new tasks get the new key (JOB-1).
 
 ### Create an area
 
@@ -52,9 +52,9 @@ A project groups the tasks of one piece of work and adds dates and agent setting
 | Color | Its own color, or the area's. | Project menu → **Color** |
 | Target date | When it should be finished. | **Projects** page, **Target** column |
 | Start date | When work starts. Set to the creation day. | Through an agent over MCP (`update_project`) |
-| Folder | The folder agent sessions work in, usually a code repository. A task can have its own instead. | **Settings → Projects and folders**, or the **Roadmap** panel |
-| Default agent | Claude Code or Codex. New tasks in the project get it as their **Done by**; changing it later affects new tasks and tasks set to the project default. | **Settings → Projects and folders**, or the **Roadmap** panel |
-| Flow | Whether the project's flow may start sessions on its own. | The **Flows** header, the **Roadmap** panel, or **Settings** |
+| Folder | The folder agent sessions work in, usually a code repository. A task can have its own instead. | **Settings → Projects**, or the **Roadmap** panel |
+| Default agent | Claude Code or Codex. New tasks in the project get it as their **Done by**; changing it later affects new tasks and tasks set to the project default. | **Settings → Projects**, or the **Roadmap** panel |
+| Flow | Whether the project's flow may start sessions on its own. | The **Flows** header, the **Roadmap** panel, or **Settings → Projects** |
 | Starts after | Another project that must be finished first. | The **Roadmap** panel |
 
 A project's **progress** is the share of its tasks that are done, not counting canceled ones. It shows as a ring in the sidebar and as a bar on the **Projects** page.
@@ -64,8 +64,8 @@ A project's **progress** is the share of its tasks that are done, not counting c
 * In the sidebar, hover **Projects** and select **+** (**New project**). With more than one area, pick the area first (**New project in**).
 * From an area's menu, select **New project**.
 * On the **Projects** page, select **New project** and pick the area, or use the **+** on an area's row.
-* In **Settings → Projects and folders**, fill in **New project**: a name, the area and an optional folder, then select **Add project**. Projects added there get Claude Code as their default agent, and Settings stays open.
-* In **Settings → Projects and folders**, **Import from Claude and Codex** makes projects, with their folders and default agents, from the folders you work in with Claude Code and Codex. PacedMind offers this the first time it opens. See [Import projects](/settings#import-projects).
+* In **Settings → Projects**, fill in **New project**: a name, the area and an optional folder, then select **Add project**. Projects added there get Claude Code as their default agent, and Settings stays open.
+* In **Settings → Projects**, **Import from Claude and Codex** makes projects, with their folders and default agents, from the folders you work in with Claude Code and Codex. PacedMind offers this the first time it opens. See [Import projects](/settings#import-projects).
 
 In the sidebar and on the **Projects** page, type the name and press <kbd>Enter</kbd>; PacedMind then opens the new project's task list.
 
@@ -81,13 +81,53 @@ Right-click a project in the sidebar or on the **Projects** page, or use its **�
 | **Open flow** | Opens the project in **Flows**. |
 | **Color** | The ten palette colors, plus **Same as** the area to follow the area's color. |
 | **Move to area** | Moves the project, and all its tasks, to another area. |
+| **Merge into…** | Merges the project into another one you pick, after a confirmation. See [Merge projects](#merge-projects). |
 | **Delete project…** | Deletes the project after a confirmation. |
 
 Deleting a project keeps its tasks: they stay in the area without a project. The project's folder, default agent and flow settings are removed.
 
+## Order and select several
+
+Drag an area or a project up or down in the sidebar to put it in your order. A line shows where it lands. Areas move among areas and projects among projects. The order is saved with your data, so the **Projects** page, quick add and the other lists of areas and projects use it too.
+
+To work on several at once, select them in the sidebar:
+
+| Click | Result |
+| --- | --- |
+| <kbd>Ctrl</kbd>-click, on macOS <kbd>⌘</kbd>-click | Adds the area or project to the selection, or takes it out. The one whose page is open counts as selected. |
+| <kbd>Shift</kbd>-click | Selects every row from the last one clicked to this one. |
+| A click without a key | Opens the page and ends the selection, as do <kbd>Esc</kbd> and a click outside the sidebar. |
+
+A selection holds areas or projects, not both. Dragging a selected row moves the whole selection, in its order, to where it's dropped. Right-clicking a selected row, or its **…** button, opens the menu for the selection:
+
+| Item | Result |
+| --- | --- |
+| **Color** | Gives them all the same color. For projects, **Same as their areas** makes each follow its area's color. |
+| **Move to area** | Projects only: moves them, and all their tasks, to another area. |
+| **Merge into…** | Projects only: lists the selected projects; pick the one to keep, and the others merge into it. See [Merge projects](#merge-projects). |
+| **Delete … areas…** or **Delete … projects…** | Deletes them after a confirmation that names them. Their tasks are kept, as when deleting one. |
+
+## Projects on several computers
+
+When your data is on more than one computer (see [Accounts and Cloud](/accounts-and-cloud)), a project is the same project on each of them. Its folder is each computer's own: on each, the folder where that computer's copy of the work is, usually a clone of the same git repository.
+
+Each computer notes which git repository a project's folder holds, as the address of its remote without the user or any password in it, such as `github.com/owner/name`, and with the folder's place inside the repository when that isn't its root. When another computer brings its projects over, a folder of the same repository joins that project instead of becoming a second one; a folder that isn't a repository joins a project of the same name. See [Import projects](/settings#import-projects). A project that ran its sessions only on the computer it was brought over on runs them on both once another computer's folder joins it: where you start them.
+
+On macOS, PacedMind doesn't read the repository of a folder in Desktop, Documents or Downloads, in iCloud Drive or another cloud drive: macOS would first ask whether it may. Such a folder joins a project by its name.
+
+### Merge projects
+
+Two projects for the same work, such as the ones two computers made before they knew of each other, become one with **Merge into…**, from the project menu or from the menu of several selected projects. The confirmation says how many tasks move.
+
+* The tasks move to the project that's kept, after its own tasks and into its area, and keep their keys. Their sessions and reports stay with them.
+* Where the kept project has no default agent, Codex environment or repository, it takes the merged project's. A project that started after the merged one starts after the kept one.
+* On this computer, the kept project gets the merged project's folder when it has none. Your other computers do the same by themselves within a minute, for a folder of the same repository.
+* Projects that ran their sessions on different computers merge into one that runs them where you start them.
+* The merged projects are deleted, and PacedMind opens the kept one.
+
 ### The project page
 
-Selecting a project opens its task list, grouped by status. The header shows the area and the target date, and has **Roadmap** and **Flow** buttons for the project's other views. **New task** adds a task to the project.
+Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens, $3.40 at API prices*; see [What it used](/agents/lifecycle#what-it-used)), and has **Roadmap** and **Flow** buttons for the project's other views. **New task** adds a task to the project.
 
 ## Project folders
 
@@ -97,7 +137,7 @@ A project's folder is where Claude Code or Codex works when PacedMind starts a s
 * an existing folder, not a file;
 * free of the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`, and on macOS of `\`, which can't be passed to a terminal safely.
 
-**Settings** and the **Roadmap** panel save any text. A folder that breaks these rules shows its problem when a session starts, as *Can't use the folder …* with the reason and *Change it in Settings.* Agents setting a folder over MCP get the same check right away.
+**Settings → Projects** and the **Roadmap** panel save any text. A folder that breaks these rules shows its problem when a session starts, as *Can't use the folder …* with the reason and *Change it in Settings.* Agents setting a folder over MCP get the same check right away.
 
 A task can have a folder of its own, such as a second checkout of the repository, set with **Folder** in its details or in the flow editor. Its sessions then work there instead of in the project's folder. That folder is checked as soon as it's set.
 

@@ -86,6 +86,10 @@ The Claude mark in `src/components/icons.tsx`, and the GitHub mark in `site/comp
 
 Claude is a trademark of Anthropic, and Codex of OpenAI. PacedMind uses their names and marks only to show which agent runs a session. GitHub is a trademark of GitHub, Inc.; the website uses its mark only on links to PacedMind's repository.
 
+## Google's "G"
+
+The sign-in page's **Continue with Google** button shows Google's "G" logo (`GoogleMark` in `src/app/login/forms.tsx`). It is a trademark of Google LLC, used in a sign-in button as Google's sign-in branding guidelines allow (https://developers.google.com/identity/branding-guidelines); the AGPL doesn't cover it.
+
 ## Fonts
 
 The app, the website and the documentation use Geist and Geist Mono (by Vercel) and Jost (by Owen Earl), which `next/font/google` downloads from Google Fonts when they're built. The fonts are licensed under the [SIL Open Font License 1.1](https://openfontlicense.org).

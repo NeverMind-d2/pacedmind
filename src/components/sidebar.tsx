@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
-import { createAreaAction, createProjectAction, updateAreaAction, updateProjectAction } from "@/app/actions";
+import { useEffect, useOptimistic, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  createAreaAction, createProjectAction, reorderAreasAction, reorderProjectsAction, updateAreaAction, updateProjectAction,
+} from "@/app/actions";
 import { FALLBACK_COLOR, nextColor, projectColor } from "@/lib/colors";
 import { fmtShort } from "@/lib/dates";
 import type { Area, Project, Usage } from "@/lib/types";
-import { AreaMenu, InlineName, MoreButton, ProjectMenu, type OpenMenu } from "./entity-menu";
+import { AreaMenu, AreasMenu, InlineName, MoreButton, ProjectMenu, ProjectsMenu, type OpenMenu } from "./entity-menu";
 import { AreaIconSvg, AreaMark, AreaPicture, Icon, ProgressRing, type IconName } from "./icons";
 import { Popover, PopoverItem, PopoverLabel, anchorOf, type Anchor } from "./popover";
 import { cx, useAction } from "./ui";
@@ -59,29 +61,55 @@ function SectionHeader({ label, addLabel, onAdd }: { label: string; addLabel: st
   );
 }
 
+type Kind = "area" | "project";
+/** Rows selected together, all areas or all projects. Shift-click selects the rows from `from` to the one clicked. */
+type Selection = { kind: Kind; ids: string[]; from: string } | null;
+/** Where the dragged rows would land: before or after this row. */
+type DropAt = { id: string; after: boolean };
+type RowDrag = { onDragStart: (e: DragEvent) => void; onDragOver: (e: DragEvent) => void; onDragEnd: () => void };
+
+const DRAG_TYPE = "application/x-pacedmind-sidebar";
+
+/** `ids` with `moving` taken out and put back, in their order, before or after `at`. */
+function moveIds(ids: string[], moving: string[], at: DropAt): string[] {
+  const rest = ids.filter((id) => !moving.includes(id));
+  const i = rest.indexOf(at.id) + (at.after ? 1 : 0);
+  return [...rest.slice(0, i), ...moving, ...rest.slice(i)];
+}
+
 /**
  * A sidebar link with a "…" menu on hover and the same menu on right-click. A touch screen has no hover (and iPhones
- * no long-press menu), so there the "…" always shows, beside the key or date.
+ * no long-press menu), so there the "…" always shows, beside the key or date. Ctrl-click (⌘-click on a Mac) and
+ * Shift-click select the row instead of opening it; dragging it moves it in the list.
  */
-function MenuRow({ href, active, open, label, onMenu, onClose, children, trailing }: {
-  href: string; active: boolean; open: boolean; label: string;
-  onMenu: (a: Anchor) => void; onClose: () => void; children: ReactNode; trailing?: ReactNode;
+function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, onClose, onSelect, drag, children, trailing }: {
+  href: string; active: boolean; open: boolean; selected: boolean; dragged: boolean; drop: "before" | "after" | null; label: string;
+  onMenu: (a: Anchor) => void; onClose: () => void; onSelect: (range: boolean) => void; drag: RowDrag;
+  children: ReactNode; trailing?: ReactNode;
 }) {
   const onContextMenu = (e: MouseEvent) => { e.preventDefault(); onMenu({ x: e.clientX, y: e.clientY }); };
+  // With Ctrl, ⌘ or Shift the browser would open the page in a new tab or window.
+  const onClick = (e: MouseEvent) => {
+    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) return;
+    e.preventDefault();
+    onSelect(e.shiftKey);
+  };
   return (
-    <div className="group relative" onContextMenu={onContextMenu}>
-      <Link href={href} className={cx(item, active && "bg-sel text-strong", open && "bg-hover")}>
+    <div className={cx("group relative", dragged && "opacity-40")} onContextMenu={onContextMenu} draggable {...drag}>
+      <Link href={href} draggable={false} onClick={onClick}
+        className={cx(item, active && "bg-sel text-strong", open && "bg-hover", selected && "bg-accent/[0.17] text-strong hover:bg-accent/[0.22]")}>
         {children}
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 pointer-coarse:mr-7 pointer-coarse:opacity-100", open && "opacity-0")}>{trailing}</span>}
       </Link>
       <MoreButton label={`${label} options`} open={open} onOpen={onMenu} onClose={onClose} className="absolute right-1 top-[3px] pointer-coarse:opacity-100" />
+      {drop && <span aria-hidden className={cx("pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-accent", drop === "before" ? "-top-px" : "-bottom-px")} />}
     </div>
   );
 }
 
 type Draft = { kind: "area" } | { kind: "project"; areaId: string } | null;
 
-export function Sidebar({ areas, projects, counts, usage }: {
+export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, usage }: {
   areas: Area[];
   projects: Project[];
   counts: { inbox: number; today: number; sessions: number };
@@ -90,18 +118,31 @@ export function Sidebar({ areas, projects, counts, usage }: {
   const path = usePathname();
   const router = useRouter();
   const { run } = useAction();
+  // A new order shows at once, while it's being saved.
+  const [areas, showAreas] = useOptimistic(savedAreas);
+  const [projects, showProjects] = useOptimistic(savedProjects);
   const [menu, setMenu] = useState<OpenMenu>(null);
+  // The menu of several selected rows, opened on the row `from`.
+  const [bulk, setBulk] = useState<{ kind: Kind; ids: string[]; from: string; anchor: Anchor } | null>(null);
+  const [selection, setSelection] = useState<Selection>(null);
+  const [drag, setDrag] = useState<{ kind: Kind; ids: string[] } | null>(null);
+  const [dropAt, setDropAt] = useState<DropAt | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(null);
   const [pickArea, setPickArea] = useState<Anchor | null>(null);
   // On a phone the sidebar is a panel over the page, opened from the header's menu button (app-header.tsx).
   const [drawer, setDrawer] = useState(false);
+  const nav = useRef<HTMLElement>(null);
   const active = (href: string) => path === href || path.startsWith(`${href}/`);
-  const closeMenu = () => setMenu(null);
+  const closeMenu = () => { setMenu(null); setBulk(null); };
 
   useEffect(() => {
     const toggle = () => setDrawer((open) => !open);
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawer(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setDrawer(false);
+      setSelection(null);
+    };
     window.addEventListener("organizer:menu", toggle);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -109,6 +150,115 @@ export function Sidebar({ areas, projects, counts, usage }: {
       window.removeEventListener("keydown", onKey);
     };
   }, []);
+
+  // A press outside the sidebar ends the selection, unless it's in the selection's menu or its confirmation.
+  useEffect(() => {
+    if (!selection) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as Element;
+      if (!nav.current?.contains(t) && !t.closest('[role="menu"], [role="alertdialog"]')) setSelection(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [selection]);
+
+  const idsOf = (kind: Kind) => (kind === "area" ? areas : projects).map((x) => x.id);
+  const isSelected = (kind: Kind, id: string) => selection?.kind === kind && selection.ids.includes(id);
+
+  /** Ctrl-click (⌘-click) adds the row to the selection or takes it out; Shift-click selects a run of rows. */
+  const select = (kind: Kind, id: string, range: boolean) => {
+    const ids = idsOf(kind);
+    // The row whose page is open counts as selected, as if it had been clicked first.
+    const open = ids.find((x) => active(`/${kind}/${x}`));
+    const mine = selection?.kind === kind ? selection : null;
+    if (range) {
+      const from = mine?.from ?? open ?? id;
+      const [a, b] = [ids.indexOf(from), ids.indexOf(id)].sort((x, y) => x - y);
+      setSelection({ kind, ids: a < 0 ? [id] : ids.slice(a, b + 1), from });
+      return;
+    }
+    const current = mine?.ids ?? (open ? [open] : []);
+    const next = current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+    setSelection(next.length ? { kind, ids: next, from: id } : null);
+  };
+
+  const openMenu = (kind: Kind, id: string, anchor: Anchor) => {
+    if (isSelected(kind, id) && selection!.ids.length > 1) {
+      setMenu(null);
+      setBulk({ kind, ids: selection!.ids, from: id, anchor });
+    } else {
+      setSelection(null);
+      setBulk(null);
+      setMenu({ kind, id, anchor });
+    }
+  };
+
+  const rowDrag = (kind: Kind, id: string): RowDrag => ({
+    onDragStart: (e) => {
+      // A selected row takes the whole selection along, in list order; any other row goes on its own.
+      const together = isSelected(kind, id);
+      const moving = together ? idsOf(kind).filter((x) => selection!.ids.includes(x)) : [id];
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData(DRAG_TYPE, kind);
+      // After the browser has taken its picture of the row: changing it now could cancel the drag.
+      setTimeout(() => {
+        if (!together) setSelection(null);
+        closeMenu();
+        setDrag({ kind, ids: moving });
+      });
+    },
+    onDragOver: (e) => {
+      if (drag?.kind !== kind) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      const at = drag.ids.includes(id) ? null : { id, after: e.clientY > r.top + r.height / 2 };
+      setDropAt((d) => (d?.id === at?.id && d?.after === at?.after ? d : at));
+    },
+    onDragEnd: () => { setDrag(null); setDropAt(null); },
+  });
+
+  /** The list takes the drop, so a row dropped in the gap between two rows still lands where its line shows. */
+  const listDrop = (kind: Kind) => ({
+    onDragOver: (e: DragEvent) => {
+      if (drag?.kind !== kind) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+    },
+    onDragLeave: (e: DragEvent) => {
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropAt(null);
+    },
+    onDrop: (e: DragEvent) => {
+      if (drag?.kind !== kind) return;
+      e.preventDefault();
+      setDrag(null);
+      setDropAt(null);
+      if (!dropAt) return;
+      const before = idsOf(kind);
+      const ids = moveIds(before, drag.ids, dropAt);
+      if (ids.join("\n") === before.join("\n")) return;
+      if (kind === "area") {
+        run(() => {
+          showAreas(ids.map((id) => areas.find((a) => a.id === id)!));
+          return reorderAreasAction(ids);
+        });
+      } else {
+        run(() => {
+          showProjects(ids.map((id) => projects.find((p) => p.id === id)!));
+          return reorderProjectsAction(ids);
+        });
+      }
+    },
+  });
+
+  const rowState = (kind: Kind, id: string) => ({
+    open: (menu?.kind === kind && menu.id === id) || (bulk?.kind === kind && bulk.from === id),
+    selected: isSelected(kind, id),
+    dragged: drag?.kind === kind && drag.ids.includes(id),
+    drop: drag?.kind === kind && dropAt?.id === id ? (dropAt.after ? "after" as const : "before" as const) : null,
+    onClose: closeMenu,
+    onMenu: (anchor: Anchor) => openMenu(kind, id, anchor),
+    onSelect: (range: boolean) => select(kind, id, range),
+    drag: rowDrag(kind, id),
+  });
 
   const newProject = (anchor?: Anchor) => {
     if (!areas.length) setDraft({ kind: "area" });
@@ -135,9 +285,14 @@ export function Sidebar({ areas, projects, counts, usage }: {
   return (
     <>
       {drawer && <div aria-hidden className="fixed inset-0 z-40 bg-overlay md:hidden" onClick={() => setDrawer(false)} />}
-      <nav aria-label="Main"
-        // A link opens its page; on a phone the panel gets out of the way.
-        onClick={(e) => { if ((e.target as HTMLElement).closest("a")) setDrawer(false); }}
+      <nav ref={nav} aria-label="Main"
+        // A link opens its page and ends the selection; on a phone the panel gets out of the way. A click with
+        // Ctrl, ⌘ or Shift selected a row instead.
+        onClick={(e) => {
+          if (e.ctrlKey || e.metaKey || e.shiftKey || !(e.target as HTMLElement).closest("a")) return;
+          setDrawer(false);
+          setSelection(null);
+        }}
         className={cx("flex w-60 shrink-0 flex-col gap-[18px] overflow-y-auto px-2.5 py-3",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[280px] max-md:border-r max-md:border-line max-md:bg-bg max-md:transition-[transform,visibility] max-md:duration-200",
           !drawer && "max-md:invisible max-md:-translate-x-full")}>
@@ -164,7 +319,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
           ))}
         </div>
 
-        <div className="flex flex-col gap-px">
+        <div className="flex flex-col gap-px" {...listDrop("area")}>
           <SectionHeader label="Areas" addLabel="New area" onAdd={() => setDraft({ kind: "area" })} />
           {areas.map((a) =>
             renaming === `area:${a.id}` ? (
@@ -174,9 +329,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
                   onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
               </div>
             ) : (
-              <MenuRow key={a.id} href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name}
-                open={menu?.kind === "area" && menu.id === a.id} onClose={closeMenu}
-                onMenu={(anchor) => setMenu({ kind: "area", id: a.id, anchor })}
+              <MenuRow key={a.id} href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name} {...rowState("area", a.id)}
                 trailing={<span className="font-mono text-[10.5px] text-mut2">{a.key}</span>}>
                 <AreaDot area={a} />
                 <span className="flex-1 truncate">{a.name}</span>
@@ -195,7 +348,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
           )}
         </div>
 
-        <div className="flex flex-col gap-px">
+        <div className="flex flex-col gap-px" {...listDrop("project")}>
           <SectionHeader label="Projects" addLabel="New project" onAdd={newProject} />
           {projects.map((p) =>
             renaming === `project:${p.id}` ? (
@@ -205,9 +358,7 @@ export function Sidebar({ areas, projects, counts, usage }: {
                   onSave={(name) => { setRenaming(null); run(() => updateProjectAction(p.id, { name })); }} />
               </div>
             ) : (
-              <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name}
-                open={menu?.kind === "project" && menu.id === p.id} onClose={closeMenu}
-                onMenu={(anchor) => setMenu({ kind: "project", id: p.id, anchor })}
+              <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)}
                 trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate)}</span>}>
                 <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
                 <span className="flex-1 truncate">{p.name}</span>
@@ -240,8 +391,16 @@ export function Sidebar({ areas, projects, counts, usage }: {
           <AreaMenu area={menuArea} anchor={menu.anchor} usage={usage} onClose={closeMenu}
             onRename={() => setRenaming(`area:${menuArea.id}`)} onNewProject={() => setDraft({ kind: "project", areaId: menuArea.id })} />
         )}
+        {bulk?.kind === "area" && (
+          <AreasMenu areas={areas.filter((a) => bulk.ids.includes(a.id))} anchor={bulk.anchor} usage={usage} onClose={closeMenu}
+            onDeleted={() => setSelection(null)} />
+        )}
+        {bulk?.kind === "project" && (
+          <ProjectsMenu projects={projects.filter((p) => bulk.ids.includes(p.id))} areas={areas} anchor={bulk.anchor} usage={usage}
+            onClose={closeMenu} onDeleted={() => setSelection(null)} />
+        )}
         {menuProject && menu && (
-          <ProjectMenu project={menuProject} areas={areas} anchor={menu.anchor} usage={usage} onClose={closeMenu}
+          <ProjectMenu project={menuProject} projects={projects} areas={areas} anchor={menu.anchor} usage={usage} onClose={closeMenu}
             onRename={() => setRenaming(`project:${menuProject.id}`)} />
         )}
         {pickArea && (

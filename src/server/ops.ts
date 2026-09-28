@@ -2,13 +2,13 @@ import "server-only";
 import * as repo from "./repo";
 import type { StoredImage } from "./attachments";
 import { revokeSessionTokens } from "./device";
-import { afterDone, afterFinished, afterFlowOn } from "./flow";
-import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, startSession, type LaunchResult } from "./launcher";
+import { afterDone, afterFinished, afterFlowOn, startFromFlow } from "./flow";
+import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
 import {
-  AGENT_LABEL, LIVE_STATUSES, isLiveSession,
+  AGENT_LABEL, ANSWERS_HEADING, LIVE_STATUSES, isAnswers, isLiveSession,
   type AgentId, type Project, type Report, type ReportCriterion, type ReportOutcome, type Session, type Task,
 } from "@/lib/types";
 
@@ -89,7 +89,8 @@ export async function finishTask(
     await repo.addSessionEvent(continued.id, "started", `Continues session ${s.id} in the same ${s.surface === "desktop" ? "app session" : "terminal"}`);
     await repo.updateTask(continueWith.id, { status: "progress" });
   } else if (continueWith) {
-    started.push(await startSession(continueWith.id, { agent: s?.agent, reason: "flow" }));
+    const r = await startFromFlow(continueWith, s?.agent);
+    if (r) started.push(r);
   }
   return { session: s, continueWith: continued ? continueWith : null, continued, started };
 }
@@ -174,9 +175,10 @@ export async function changesProblem(s: Session, where: "here" | "remote" = "her
 
 /**
  * The user read an agent's hand-back and wants changes. They go on the session's last report, where start_task
- * finds them, and the session reopens in a new terminal: Claude Code continues its conversation, Codex starts
- * a new one. The task goes back to in progress, also when it was already marked done. From the desktop app's own
- * window, or a request you allowed there (an agent's request_changes waits for you, see requests.ts).
+ * finds them, and the session reopens in a new terminal, in a new conversation (reopenForChanges in launcher.ts).
+ * Answers to the agent's questions go the same way (their text starts with ANSWERS_HEADING). The task goes back to in
+ * progress, also when it was already marked done. From the desktop app's own window, or a request you allowed there
+ * (an agent's request_changes waits for you, see requests.ts).
  */
 export async function requestChanges(sessionId: string, changes: string): Promise<LaunchResult> {
   const text = changes.trim().slice(0, 20000);
@@ -203,7 +205,9 @@ export async function requestChanges(sessionId: string, changes: string): Promis
     else await repo.deleteReport(reportId);
     return r;
   }
-  await repo.addSessionEvent(s.id, "changes_requested", `You asked for changes: ${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}`);
+  const said = isAnswers(text) ? text.slice(ANSWERS_HEADING.length).trim() : text;
+  const short = said.length > 140 ? `${said.slice(0, 140).trimEnd()}…` : said;
+  await repo.addSessionEvent(s.id, "changes_requested", isAnswers(text) ? `You answered its questions: ${short}` : `You asked for changes: ${short}`);
   await repo.updateTask(s.taskId, { status: "progress" });
   return { ok: true, session: (await repo.getSession(s.id))!, message: r.message };
 }

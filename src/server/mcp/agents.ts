@@ -2,7 +2,10 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { ImageError, removeImageFiles, storeImage, type StoredImage } from "../attachments";
-import { deviceConfig, moveSessionToken, revokeSessionTokens } from "../device";
+import { deviceConfig, moveSessionToken, projectServers, revokeSessionTokens } from "../device";
+import { noteAccountServers } from "../devices";
+import { agentExtras, folderExtras, sortReported, type ReportedServers } from "../extras";
+import { noteSessionMcp, sessionMcp } from "../session-mcp";
 import { nextReadyTask } from "../flow";
 import { forgetSessionFiles, plannedFolder, plannedSurface } from "../launcher";
 import { askForChanges, askFromAgent } from "../requests";
@@ -10,11 +13,16 @@ import {
   activeSession, changesProblem, closeSession, edgeWouldLoop, finishTask, flowNeedsTidy, placeInFlow, removeFromFlow, startedLines, tidyFlow,
 } from "../ops";
 import * as repo from "../repo";
+import { MODE } from "../supabase";
+import { cloudOrigin } from "../supabase-config";
 import { callerSession } from "./principal";
+import { QUESTION_CALL_MS, QUESTION_OPEN_MS, answeredText, openAsk, waitForAnswer } from "../asks";
+import { planText } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, STATUS_LABEL, SURFACE_LABEL, agentOf,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, STATUS_LABEL, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
   type AgentId, type EdgeMode, type Report, type ReportCriterion, type Session, type Surface, type Task,
 } from "@/lib/types";
+import { sessionUse, usageText } from "@/lib/usage";
 import {
   agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, imageLine, names, plural, projectRef, reportCounts,
   taskRef, tool, when,
@@ -51,9 +59,10 @@ function sessionLine(s: Session, tasks: Map<number, Task>, reports: Map<string, 
   const working = (s.status === "starting" || s.status === "running") && report?.changesAt ? report.changesAt : null;
   const at = (working ?? s.finishedAt ?? s.endedAt ?? s.startedAt).replace("T", " ");
   const counts = report ? reportCounts(report) : "";
+  const used = usageText(sessionUse(s));
   return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId, devices)} · ` +
     `${SESSION_TEXT[s.status]} · ${at}${report && report.outcome !== "done" ? ` · handed back ${report.outcome}` : ""}` +
-    `${s.note ? ` · ${s.note}` : ""}${counts ? ` (${counts})` : ""}`;
+    `${s.note ? ` · ${s.note}` : ""}${counts ? ` (${counts})` : ""}${used ? ` · used ${used}` : ""}`;
 }
 
 /** Session lines with their reports and computers looked up once. */
@@ -102,11 +111,24 @@ async function reportingSession(taskId: number, sessionId?: string | null): Prom
   return latest?.status === "finished" ? latest : null;
 }
 
+/**
+ * PacedMind Cloud's MCP server (the hosted app) serves agents on any computer, so it knows none of their folders or
+ * files, and nothing it does runs on a computer.
+ */
+const HOSTED = MODE === "web";
+
+/** Where the user sees a task in the web app. */
+const taskLink = (t: Task) => `${cloudOrigin()}/${t.projectId ? `project/${encodeURIComponent(t.projectId)}` : "inbox"}?task=${t.key}`;
+
+const NO_FILES =
+  "PacedMind Cloud's MCP server can't read files from your computer, so it can't attach images. Describe what they'd show in the report's details, or link to it.";
+
 /** A session for an agent that works on a task PacedMind didn't start (your own Claude Code or Codex). */
 async function outsideSession(t: Task, agent?: AgentId): Promise<Session> {
   notYours(t);
   const s = await repo.createSession({
-    taskId: t.id, agent: agent ?? (await agentFor(t)) ?? "claude", folder: plannedFolder(t), deviceId: deviceConfig().deviceId, status: "running",
+    taskId: t.id, agent: agent ?? (await agentFor(t)) ?? "claude", folder: HOSTED ? null : plannedFolder(t),
+    deviceId: HOSTED ? null : deviceConfig().deviceId, status: "running",
   });
   await repo.addSessionEvent(s.id, "started", "Started outside PacedMind");
   return s;
@@ -167,6 +189,46 @@ function releaseCaller() {
 }
 
 const taskMap = async () => new Map((await repo.listTasks()).map((t) => [t.id, t]));
+
+/**
+ * What an agent says it runs with (start_task's environment), as its session shows it: plain names only, the MCP
+ * servers by where they come from (sortReported). Null when it said nothing that can be shown.
+ */
+function environmentText(who: string, model: string | undefined, servers: ReportedServers | null): string | null {
+  const m = (model ?? "").replace(/[^\w .:()/+-]/g, "").trim().slice(0, 80);
+  const parts = servers
+    ? [
+      servers.own.length ? `the MCP servers ${servers.own.join(", ")}` : null,
+      servers.account.length ? `the claude.ai connectors ${servers.account.join(", ")}` : null,
+      servers.plugins.length ? `the servers of its plugins ${servers.plugins.join(", ")}` : null,
+    ].filter((p): p is string => !!p)
+    : [];
+  if (!m && !servers) return null;
+  const list = servers ? `with ${parts.length ? parts.join("; ") : "no other MCP servers"}` : "";
+  return `${who} says it runs${m ? ` as ${m}${list ? `, ${list}` : ""}` : ` ${list}`}`;
+}
+
+/**
+ * Records what a session runs with: the model its agent says, and the MCP servers it has tools from. For a Claude Code
+ * session this computer started in a terminal (it calls with its own token), those come from Claude Code's own record
+ * of the session (session-mcp.ts), with the ones it lacks and why; with no project's pick, what the account its CLI is
+ * signed in to gave it also goes on this computer's entry (noteAccountServers). Other sessions show what their agent
+ * says, which can be wrong: an agent told a server failed can still list it.
+ */
+async function recordEnvironment(s: Session, projectId: string | null, env: { model?: string; mcp_servers?: string[] }) {
+  const own = callerSession()?.sessionId === s.id && s.agent === "claude" && s.folder && s.cliSessionId;
+  const state = own ? sessionMcp(s.folder!, s.cliSessionId!) : null;
+  const servers = state?.servers
+    ?? env.mcp_servers?.map((n) => n.trim()).filter((n) => /^[\w.@:+-]{1,60}$/.test(n) && n !== MCP_NAME && n !== OLD_MCP_NAME);
+  // What the agent's plugins bring, from this computer's config files; PacedMind Cloud's server has none to read (a
+  // session's folder there is a path on the user's computer).
+  const plugins = HOSTED ? [] : [...agentExtras(s.agent).plugins, ...(s.folder ? folderExtras(s.folder).plugins : [])];
+  const sorted = servers ? sortReported(servers, plugins) : null;
+  const text = environmentText(AGENT_LABEL[s.agent], env.model, sorted);
+  if (text) await repo.addSessionEvent(s.id, "environment", text);
+  await noteSessionMcp(s, state, false);
+  if (state && sorted && !projectServers(projectId)) await noteAccountServers(s.agent, sorted.account).catch(() => {});
+}
 
 export function registerAgentTools(server: McpServer) {
   /* ---------- flows ---------- */
@@ -326,6 +388,10 @@ export function registerAgentTools(server: McpServer) {
     const t = await findTask(task);
     notYours(t);
     if ((await repo.listSessions({ taskId: t.id, status: LIVE_STATUSES })).length) fail(`${t.key} already has a running session.`);
+    if (HOSTED) {
+      return `Starting a session runs an agent on one of the user's computers, so the user starts it themselves: with Start on ${t.key} ` +
+        `in the PacedMind desktop app, or at ${taskLink(t)} with a two-factor code. Give the user that link; don't ask again.`;
+    }
     const a = (await askFromAgent(t, agent ?? (await agentFor(t)) ?? "claude", where)) ?? fail(`${t.key} can't run on this computer.`);
     return (
       `Asked the user to allow ${t.key} with ${AGENT_LABEL[a.agent]} (${SURFACE_LABEL[a.surface].toLowerCase()}): PacedMind shows the request in its window ` +
@@ -348,7 +414,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "request_changes", {
     title: "Request changes",
     description:
-      "Ask to send work an agent handed back to the agent again, with what the user wants changed. Once the user allows it in the PacedMind app, the changes go on the agent's last report and its session reopens in a new terminal on the user's computer: Claude Code continues its conversation, Codex starts a new one that reads the report and the changes. The task goes back to in progress. Only when the user asks.",
+      "Ask to send work an agent handed back to the agent again, with what the user wants changed. Once the user allows it in the PacedMind app, the changes go on the agent's last report and its session reopens in a new terminal on the user's computer, in a new conversation that reads the report and the changes. The task goes back to in progress. Only when the user asks.",
     input: z.object({
       task: taskRef,
       changes: z.string().max(20000).describe("What should change, in the user's words. The agent reads it as written"),
@@ -361,6 +427,10 @@ export function registerAgentTools(server: McpServer) {
       fail(`${t.key} has no hand-back to send changes to${s ? `: its latest session is ${SESSION_TEXT[s.status]}` : ""}. start_session starts a new session.`);
     }
     if (!changes.trim()) fail("Write what should change.");
+    if (HOSTED) {
+      return `Sending changes reopens the agent's session on the computer it ran on, so the user sends them themselves: with Request changes on ` +
+        `${t.key} in PacedMind, or at ${taskLink(t)} with a two-factor code. Give the user that link and the changes to paste; don't ask again.`;
+    }
     const problem = await changesProblem(s);
     if (problem) fail(problem);
     const a = (await askForChanges(s, t, changes.trim())) ?? fail(`${t.key} can't run on this computer.`);
@@ -385,17 +455,25 @@ export function registerAgentTools(server: McpServer) {
 
   tool(server, "start_task", {
     title: "Start task",
-    description: "For agents: tell PacedMind you are starting work on a task. Returns the task and what to do when you finish.",
+    description:
+      "For agents: tell PacedMind you are starting work on a task. Returns the task and what to do when you finish. " +
+      "Pass environment too, so the user sees what this session runs with.",
     input: z.object({
       task: taskRef,
       session: z.string().optional().describe("Session id given in your first message, if any"),
       agent: agentSchema.optional(),
+      environment: z.object({
+        model: z.string().max(80).optional().describe("The model you run as"),
+        mcp_servers: z.array(z.string().max(60)).max(30).optional()
+          .describe("Every MCP server you have tools from besides pacedmind, deferred ones too: the part between mcp__ and the next __ in those tools' names. PacedMind tells the user which configured ones you don't have"),
+      }).optional().describe("What you run with. PacedMind shows it on the session as you report it"),
     }),
     kind: "write",
-  }, async ({ task, session, agent }) => {
+  }, async ({ task, session, agent, environment }) => {
     const t = await findTask(task);
     const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session)) ?? (await outsideSession(t, agent));
     await repo.updateSession(s.id, { status: "running" });
+    await recordEnvironment(s, t.projectId, environment ?? {});
     await repo.addSessionEvent(s.id, "picked_up", `${AGENT_LABEL[s.agent]} read the task over MCP`);
     if (t.status !== "progress") await repo.updateTask(t.id, { status: "progress" });
     const after = (await repo.getTask(t.id))!;
@@ -403,16 +481,23 @@ export function registerAgentTools(server: McpServer) {
     const asked = await repo.latestReport(t.id);
     return [
       asked?.changes
-        ? `The user reviewed your last hand-back and asked for changes (${(asked.changesAt ?? "").replace("T", " ")}):\n${asked.changes}\n\n` +
-          "Make these changes first; your last report is at the end of the task below. Then hand the task back again with finish_task " +
-          "and a new report whose summary starts with what you changed.\n"
+        ? `The user reviewed your last hand-back and ${isAnswers(asked.changes) ? "answered your questions" : "asked for changes"} (${(asked.changesAt ?? "").replace("T", " ")}):\n${asked.changes}\n\n` +
+          `${isAnswers(asked.changes) ? "Go on with the task using these answers" : "Make these changes first"}; your last report is at the end of the task below. ` +
+          "Then hand the task back again with finish_task and a new report whose summary starts with what you changed.\n"
         : null,
       await describeTask(after),
       `\nPacedMind session: ${s.id}`,
-      `Work on this task here. When it is ready for the user to check, call finish_task with task ${t.key}, session ${s.id} and a report:`,
+      "Work on this task here. Keep the user posted with report_progress, but only when it matters: your plan once you have one (send it " +
+        "again as steps get done) and anything that changes the scope or the risk (kind issue). Skip routine updates. When you need the " +
+        (HOSTED
+          ? "user to decide something before you can go on, ask in this conversation; report_progress with kind question also shows it on the task."
+          : "user to decide something before you can go on, ask with ask_user: it waits for their answer, which they can give on any device."),
+      `When it is ready for the user to check, call finish_task with task ${t.key}, session ${s.id} and a report:`,
       "- summary: one or two sentences on what changed and what the user should look at first;",
       after.doneWhen.length ? "- criteria: your answer to each Done when item above (met, partly or not_met, with a short note on how you checked);" : null,
-      "- images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;",
+      HOSTED
+        ? null
+        : "- images: screenshots of anything you changed that can be seen. Save each as a PNG, JPEG, GIF or WebP file and pass its path; attach_image adds them while you work;",
       "- verify: steps the user can follow to check the result, and questions: anything the user has to decide;",
       "- details: anything longer, in Markdown.",
       "If you can't finish, still call finish_task, with outcome partial or blocked, and say why. Do not mark the task done yourself.",
@@ -440,6 +525,99 @@ export function registerAgentTools(server: McpServer) {
     const report = s.status === "running" || s.status === "starting" ? null : await repo.latestSessionReport(s.id);
     const a = await repo.addAttachment(img, { taskId: t.id, sessionId: s.id, reportId: report?.id ?? null, caption });
     return `Attached ${imageLine(a)} to ${t.key}${report ? ", in your last report" : ". It will be part of your report when you call finish_task"}.`;
+  });
+
+  tool(server, "report_progress", {
+    title: "Report progress",
+    description:
+      "For agents: keep the user posted while you work on a task, only when it matters: your plan once you have one (send it again as steps get done or it changes), " +
+      "a problem that changes the scope or the risk (kind issue), or a decision you need from the user (kind question: PacedMind notifies them; " +
+      "to wait for their answer in PacedMind, use ask_user instead). " +
+      "Not for routine steps; finish_task hands the work back.",
+    input: z.object({
+      task: taskRef,
+      session: z.string().optional().describe("Your session id"),
+      message: z.string().max(1000).optional().describe("What happened or what you need, in a sentence or two"),
+      kind: z.enum(["progress", "issue", "question"]).optional()
+        .describe("progress (default); issue: something that changes the scope or the risk; question: a decision you need from the user"),
+      plan: z.array(z.object({
+        step: z.string().min(1).max(120).describe("A step, as a short outcome"),
+        done: z.boolean().optional().describe("Whether it's done"),
+      })).max(15).optional().describe("Your whole plan, in order. Send it again when a step is done or the plan changes"),
+    }),
+    kind: "write",
+  }, async ({ task, session, message, kind, plan }) => {
+    const t = await findTask(task);
+    const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session));
+    if (!s || !isLiveSession(s)) fail(`${t.key} has no running session. Call start_task with task ${t.key} first.`);
+    const text = (message ?? "").replace(/\s+/g, " ").trim();
+    const steps = (plan ?? []).map((p) => ({ text: p.step.replace(/\s+/g, " ").trim(), done: !!p.done })).filter((p) => p.text);
+    if (!text && !steps.length) fail("Pass a message, a plan, or both.");
+    const sent = (await repo.sessionEvents(s.id)).filter((e) => e.kind === "plan" || e.kind === "progress" || e.kind === "issue" || e.kind === "question");
+    if (sent.length >= 100) fail("This session already sent 100 updates. Put the rest in your report when you call finish_task.");
+    const who = AGENT_LABEL[s.agent];
+    const out: string[] = [];
+    // The plan first: a question after it stays the latest event, which is what the user is told about (attentionOf).
+    if (steps.length) {
+      await repo.addSessionEvent(s.id, "plan", planText(steps));
+      out.push(`Your plan is on ${t.key}: ${steps.filter((p) => p.done).length} of ${steps.length} steps done.`);
+    }
+    if (text) {
+      const k = kind ?? "progress";
+      await repo.addSessionEvent(s.id, k, k === "question" ? `${who} asks you: ${text}` : k === "issue" ? `${who} ran into a problem: ${text}` : `${who}: ${text}`);
+      out.push(k === "question"
+        ? "PacedMind shows your question on the task and notifies the user. Ask it in this conversation too, then wait for the answer here."
+        : `Noted on ${t.key}.`);
+    }
+    return out.join(" ");
+  });
+
+  tool(server, "ask_user", {
+    title: "Ask the user",
+    description:
+      "For agents: ask the user a question you need answered before you can go on, and wait for the answer. PacedMind shows it " +
+      "on the task, notifies the user on their devices, and they answer in PacedMind. A call waits up to 45 seconds; with no " +
+      "answer yet, call again with the ask it returned to keep waiting (up to 30 minutes in all). Don't ask the question again.",
+    input: z.object({
+      task: taskRef,
+      session: z.string().optional().describe("Your session id"),
+      question: z.string().max(4000).optional().describe("Your question, with the options when there are some"),
+      ask: z.string().max(60).optional().describe("The ask a previous call returned, to keep waiting for its answer"),
+    }),
+    kind: "write",
+  }, async ({ task, session, question, ask: askId }) => {
+    const t = await findTask(task);
+    const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session));
+    if (!s || !isLiveSession(s)) fail(`${t.key} has no running session. Call start_task with task ${t.key} first.`);
+    let ask;
+    if (askId) {
+      ask = await repo.getAsk(askId.trim());
+      if (!ask || ask.sessionId !== s.id || ask.kind !== "question") fail("This session has no such question. Ask it again with question.");
+      // Answered between two calls: nobody was waiting to pass it on yet.
+      if (ask.status === "answered" && ask.answer) {
+        await repo.addSessionEvent(s.id, "working", answeredText(s, "question", ask.answer));
+        return `The user answered:\n${ask.answer}`;
+      }
+      if (ask.status !== "pending") fail("The user didn't answer in time. Ask again, ask in this conversation, or hand the task back as blocked.");
+    } else {
+      const q = (question ?? "").trim();
+      if (!q) fail("Pass your question, or the ask a previous call returned.");
+      ask = await openAsk(s, "question", q, null, QUESTION_OPEN_MS);
+    }
+    const answer = await waitForAnswer(ask, QUESTION_CALL_MS);
+    if (answer !== null) {
+      await repo.addSessionEvent(s.id, "working", answeredText(s, "question", answer));
+      return `The user answered:\n${answer}`;
+    }
+    const now = await repo.getAsk(ask.id);
+    if (now?.status === "answered") {
+      return "An answer came from another device, but this computer takes answers only here. Ask in this conversation instead.";
+    }
+    if (now?.status === "pending" && Date.parse(now.expiresAt) > Date.now()) {
+      return `No answer yet. To keep waiting, call ask_user again with ask ${ask.id} (not the question again), or go on with what you can do meanwhile.`;
+    }
+    if (now?.status === "pending") await repo.settleAsk(ask.id, "expired");
+    return "The user didn't answer within 30 minutes. Hand the task back with finish_task, outcome blocked, and the question in questions.";
   });
 
   const listItem = z.string().max(2000);
@@ -490,9 +668,10 @@ export function registerAgentTools(server: McpServer) {
     const clean = (xs?: string[]) => (xs ?? []).map((x) => x.trim()).filter(Boolean);
     const links = (args.links ?? []).map((l) => ({ label: l.label.trim(), url: l.url.trim() }))
       .filter((l) => /^https?:\/\/\S+$/i.test(l.url)).map((l) => ({ label: l.label || l.url, url: l.url }));
+    if (HOSTED && args.images?.length) fail(`${NO_FILES} Call finish_task again without images.`);
     const mine = await ownSession(t, args.session);
     const reporting = mine ?? (callerSession() ? null : await reportingSession(t.id, args.session));
-    const stored = storeImages(args.images ?? [], plannedFolder(t));
+    const stored = HOSTED ? [] : storeImages(args.images ?? [], plannedFolder(t));
     let result: Awaited<ReturnType<typeof finishTask>>;
     try {
       // A report belongs to a session: the agent's, or a new one when it works on the task outside PacedMind.

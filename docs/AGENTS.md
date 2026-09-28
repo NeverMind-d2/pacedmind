@@ -63,7 +63,7 @@ npm run build                                                    # catches both
 
 - **Prices.** The website (`../site`) owns pricing; link to `https://pacedmind.com/#pricing` instead.
 - **Vendor names** behind the product (hosting, databases, services). Claude Code, Codex, Windows Terminal and the MCP standard are part of the product and may be named.
-- **Roadmap dates**, and features that aren't in the code. The Accounts and Cloud page is a clearly marked placeholder until those features ship.
+- **Roadmap dates**, and features that aren't in the code.
 - **Internal architecture** beyond what users need: file locations and the local server's address are in, implementation details are out.
 - **Personal data**: screenshots come from the development server's sample data, with the folder paths replaced.
 
@@ -76,7 +76,7 @@ npm run build                                                    # catches both
 - New **keyboard shortcuts**: `keyboard-shortcuts/index.mdx`.
 - **Settings**: `settings/index.mdx`.
 - Anything in the **desktop app** (tray, notifications, install): `desktop-app/index.mdx`, `getting-started/`.
-- Accounts and Cloud: replace the placeholder in `accounts-and-cloud/index.mdx` once the features are in the code.
+- Accounts and Cloud: the plans, the trial, subscribing and what happens when Cloud ends (`accounts-and-cloud/`). Signing in, computers and moving data into an account still need their own pages.
 
 ---
 

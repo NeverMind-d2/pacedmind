@@ -4,16 +4,30 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { deviceConfig } from "./device";
-import { mcpUrl } from "./launcher";
+import { mcpUrl, openMcpLogin } from "./launcher";
+import { cloudMcpUrl } from "./supabase-config";
+import { MCP_NAME, OLD_MCP_NAME } from "@/lib/types";
 
 /*
- * Connects your own Claude Code to this computer's PacedMind (user scope, all projects) with the owner token,
- * without the token passing through a clipboard or a terminal's history. Runs the claude CLI the way
- * scripts used to: on Windows it's usually an npm .cmd shim, which only starts through cmd.exe, so every
- * argument is checked for characters cmd.exe would act on.
+ * Settings' "Connect": sets up your own Claude Code (user scope, all projects) and Codex (config.toml, which its app
+ * shares) to reach PacedMind, for the sessions PacedMind doesn't configure itself (their desktop apps, terminals you
+ * open yourself). Sessions PacedMind starts in a terminal always get this computer's server with a token of their own.
+ *
+ * - Signed in to PacedMind Cloud: its MCP server (the hosted app), which each agent signs in to itself with OAuth. No
+ *   token goes into their config: a terminal opens where the agent's own `mcp login` sends you to allow it.
+ * - Without an account: this computer's own server, with the owner token, without the token passing through a
+ *   clipboard or a terminal's history.
+ *
+ * Runs the claude CLI the way scripts used to: on Windows it's usually an npm .cmd shim, which only starts through
+ * cmd.exe, so every argument is checked for characters cmd.exe would act on.
  */
 
-const NAME = "organizer"; // The MCP server id the skills and launched sessions use (mcp__organizer__*).
+// The MCP server's name the skills and launched sessions use (mcp__pacedmind__*); connecting also removes the one it had
+// before (organizer), so an agent never has PacedMind twice.
+const NAME = MCP_NAME;
+
+export type ConnectTarget = "cloud" | "local";
+type Result = { ok: boolean; error?: string; message?: string };
 
 function claude(args: string[]): string {
   const env = { ...process.env };
@@ -24,44 +38,62 @@ function claude(args: string[]): string {
   return execSync(["claude", ...args.map((a) => (/[\s:]/.test(a) ? `"${a}"` : a))].join(" "), opts);
 }
 
-export function connectClaudeCode(): { ok: boolean; error?: string; message?: string } {
+/** After the agent's config names PacedMind Cloud's server: its sign-in, in a terminal. */
+function signIn(agent: "claude" | "codex", what: string): Result {
+  const command = `${agent} mcp login ${NAME}`;
+  const error = openMcpLogin(agent);
+  return error
+    ? { ok: true, message: `${what} Now run ${command} in a terminal and allow it in the browser.` }
+    : { ok: true, message: `${what} Allow it in the browser page the new terminal opens.` };
+}
+
+export function connectClaudeCode(target: ConnectTarget): Result {
   try {
     claude(["--version"]);
   } catch {
     return { ok: false, error: "Claude Code isn't installed, or `claude` isn't on your PATH." };
   }
-  try {
-    claude(["mcp", "remove", NAME, "--scope", "user"]);
-  } catch {
-    // It wasn't configured.
+  for (const name of [NAME, OLD_MCP_NAME]) {
+    try {
+      claude(["mcp", "remove", name, "--scope", "user"]);
+    } catch {
+      // It wasn't configured.
+    }
   }
   try {
-    claude(["mcp", "add", "--transport", "http", "--scope", "user", NAME, mcpUrl(), "--header", `Authorization: Bearer ${deviceConfig().ownerToken}`]);
+    claude(target === "cloud"
+      ? ["mcp", "add", "--transport", "http", "--scope", "user", NAME, cloudMcpUrl()]
+      : ["mcp", "add", "--transport", "http", "--scope", "user", NAME, mcpUrl(), "--header", `Authorization: Bearer ${deviceConfig().ownerToken}`]);
   } catch (e) {
     return { ok: false, error: `Claude Code didn't take it: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}` };
   }
+  if (target === "cloud") return signIn("claude", "Claude Code uses PacedMind Cloud for all your projects.");
   return { ok: true, message: "Connected Claude Code for all your projects. New Claude Code sessions can use PacedMind." };
 }
 
 /**
- * Adds PacedMind's MCP server to Codex's config.toml, which the Codex CLI and app share, with the owner token in
- * a header: the app has no ORGANIZER_TOKEN to read it from. The old file is kept as config.toml.pacedmind-backup.
+ * Sets PacedMind's MCP server in Codex's config.toml, which the Codex CLI and app share: PacedMind Cloud's (Codex signs in
+ * itself), or this computer's with the owner token in a header, since the app has no ORGANIZER_TOKEN to read it from.
+ * The old file is kept as config.toml.pacedmind-backup.
  */
-export function connectCodex(): { ok: boolean; error?: string; message?: string } {
+export function connectCodex(target: ConnectTarget): Result {
   const token = deviceConfig().ownerToken;
-  if (!/^[\w-]+$/.test(token)) return { ok: false, error: "PacedMind's MCP token has characters Codex's config can't take. Make a new one first." };
+  if (target === "local" && !/^[\w-]+$/.test(token)) return { ok: false, error: "PacedMind's MCP token has characters Codex's config can't take. Make a new one first." };
   const file = path.join(/*turbopackIgnore: true*/ process.env.CODEX_HOME || path.join(os.homedir(), ".codex"), "config.toml");
   try {
     const before = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
     const eol = before.includes("\r\n") ? "\r\n" : "\n";
-    // The old [mcp_servers.organizer] table and its sub-tables, up to the next table.
-    const rest = before.replace(/^\[mcp_servers\.organizer(?:\.[^\]\r\n]*)?\][^\n]*(?:\n(?!\[)[^\n]*)*\n?/gm, "").trimEnd();
-    const table = [`[mcp_servers.${NAME}]`, `url = "${mcpUrl()}"`, `http_headers = { Authorization = "Bearer ${token}" }`].join(eol);
+    // The earlier [mcp_servers.pacedmind] table, or the one under the old name, with their sub-tables, up to the next table.
+    const rest = before.replace(/^\[mcp_servers\.(?:pacedmind|organizer)(?:\.[^\]\r\n]*)?\][^\n]*(?:\n(?!\[)[^\n]*)*\n?/gm, "").trimEnd();
+    const table = target === "cloud"
+      ? [`[mcp_servers.${NAME}]`, `url = "${cloudMcpUrl()}"`].join(eol)
+      : [`[mcp_servers.${NAME}]`, `url = "${mcpUrl()}"`, `http_headers = { Authorization = "Bearer ${token}" }`].join(eol);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     if (before) fs.writeFileSync(`${file}.pacedmind-backup`, before);
     fs.writeFileSync(file, `${rest ? rest + eol + eol : ""}${table}${eol}`);
   } catch (e) {
     return { ok: false, error: `Couldn't write ${file}: ${e instanceof Error ? e.message : String(e)}` };
   }
+  if (target === "cloud") return signIn("codex", "Codex and its app use PacedMind Cloud.");
   return { ok: true, message: "Connected Codex, its app included. New Codex sessions can use PacedMind." };
 }

@@ -3,7 +3,8 @@
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
 import { MODE, readAuthState, requireAal2, supabase } from "@/server/supabase";
-import { nextStep, safeNext, takeNext } from "@/server/auth-flow";
+import { supabaseConfig } from "@/server/supabase-config";
+import { nextStep, safeNext, takeNext, withNext } from "@/server/auth-flow";
 import { STEP_UP_REFUSED, refusedStepUp, verifyCode } from "@/server/step-up";
 import { requireDesktopWindow } from "@/server/window";
 import { deviceConfig, updateDevice } from "@/server/device";
@@ -44,13 +45,16 @@ function explain(message: string): string {
   return message;
 }
 
-/** Where email links land: this server's own address (desktop), or the hosted app's (web). */
-function callbackUrl(next: string): string {
+/**
+ * Where email links and Google land: this server's own address (desktop), or the hosted app's (web). `via` tells
+ * the callback it's Google coming back, not an email link.
+ */
+function callbackUrl(next: string, via?: "google"): string {
   const base = MODE === "desktop"
     ? `http://127.0.0.1:${Number(process.env.PORT) || 4319}`
     : (process.env.ORGANIZER_PUBLIC_ORIGIN ?? "").replace(/\/+$/, "");
   if (!base) throw new Error("Set ORGANIZER_PUBLIC_ORIGIN for the hosted app (see .env.example).");
-  return `${base}/auth/callback?next=${encodeURIComponent(next)}`;
+  return `${base}/auth/callback?next=${encodeURIComponent(next)}${via ? `&via=${via}` : ""}`;
 }
 
 /** The desktop app's sign-in pages live in its window only. */
@@ -63,19 +67,49 @@ async function goNext(nextParam?: string | null): Promise<never> {
   // Read again, not from this request's cache: signing in just changed it.
   const state = await readAuthState();
   const step = nextStep(state);
-  if (step) redirect(step);
+  if (step) redirect(MODE === "desktop" ? step : withNext(step, nextParam));
   redirect(MODE === "desktop" ? takeNext() : safeNext(nextParam));
 }
 
 /* ---------- signing in ---------- */
 
-export async function signInAction(email: string, password: string): Promise<AuthResult> {
+/**
+ * Signing in with Google, which also makes the account the first time. Answers Google's page, which the sign-in page
+ * opens: in the desktop app that's the browser (its window sends pages from elsewhere there), and Google comes back to
+ * /auth/callback on this server, which alone holds the PKCE verifier to finish it. The authenticator's code is asked
+ * next, as after a password: Google only stands in for the password.
+ */
+export async function signInWithGoogleAction(next?: string | null): Promise<AuthResult & { url?: string }> {
+  await guard();
+  const db = await supabase();
+  const { data, error } = await db.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: callbackUrl(MODE === "desktop" ? "/today" : safeNext(next), "google"),
+      skipBrowserRedirect: true,
+      // Pick the Google account each time, rather than the browser's current one without asking.
+      queryParams: { prompt: "select_account" },
+    },
+  });
+  // Supabase's own page, which goes on to Google's.
+  if (error || !data?.url?.startsWith(`${supabaseConfig().url}/auth/v1/authorize?`)) {
+    return { ok: false, error: error ? explain(error.message) : "Google sign-in isn't available right now." };
+  }
+  return {
+    ok: true,
+    url: data.url,
+    message: MODE === "desktop" ? "Finish signing in with Google in your browser; PacedMind continues here once you have." : undefined,
+  };
+}
+
+/** `next`: the hosted app's page to continue to once signed in (approving an agent's sign-in). */
+export async function signInAction(email: string, password: string, next?: string | null): Promise<AuthResult> {
   await guard();
   if (!looksLikeEmail(clean(email)) || !password) return { ok: false, error: "Enter your email and password." };
   const db = await supabase();
   const { error } = await db.auth.signInWithPassword({ email: clean(email), password });
   if (error) return { ok: false, error: explain(error.message) };
-  return goNext();
+  return goNext(next);
 }
 
 export async function signUpAction(email: string, password: string): Promise<AuthResult> {

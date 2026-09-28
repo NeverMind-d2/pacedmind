@@ -29,7 +29,7 @@ The app is signed, and notarized by Apple. Its data folder is `~/Library/Applica
 
 ### Why some names say Organizer
 
-Organizer is PacedMind's earlier name. The data folder and the MCP server's identifier (`organizer`) keep that name, and on Windows so do the installation folder and the executable (`Organizer.exe`), so updates keep the existing data and agent connections. Windows shows the app, its shortcuts and its notifications as **PacedMind**; the **Details** tab of Task Manager lists its processes as `Organizer.exe`. On macOS the app itself is called PacedMind.
+Organizer is PacedMind's earlier name. The data folder keeps that name, and on Windows so do the installation folder and the executable (`Organizer.exe`), so updates keep the existing data. The MCP server is called `pacedmind` now; agents connected under its earlier name, `organizer`, keep working until **Connect** in **Settings → MCP server** renames their entry. Windows shows the app, its shortcuts and its notifications as **PacedMind**; the **Details** tab of Task Manager lists its processes as `Organizer.exe`. On macOS the app itself is called PacedMind.
 
 ## Update
 
@@ -55,8 +55,8 @@ Download the installer or the disk image again, and install it the same way. The
 
 If Claude Code or Codex were connected to PacedMind, remove those connections too:
 
-* Claude Code: `claude mcp remove organizer` (add `--scope user` if it was added for all projects).
-* Codex: delete the `[mcp_servers.organizer]` section from `~/.codex/config.toml`.
+* Claude Code: `claude mcp remove pacedmind` (add `--scope user` if it was added for all projects), or `claude mcp remove organizer` for a connection under the earlier name.
+* Codex: delete the `[mcp_servers.pacedmind]` section, or `[mcp_servers.organizer]` under the earlier name, from `~/.codex/config.toml`.
 * Agent skills installed from the source code: `npm run skills -- --remove` in the source folder. See [Agent skills](/skills).
 
 ## Build from the source code
