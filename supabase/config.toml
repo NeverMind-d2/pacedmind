@@ -349,6 +349,20 @@ skip_nonce_check = false
 # If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
 email_optional = false
 
+# Sign in with Google (src/app/login). In PacedMind Cloud it's set in the dashboard (Authentication → Sign In / Providers
+# → Google) with the Google Cloud OAuth client's id and secret; its redirect URI there is
+# https://pyoynjoyhpolijlvoalu.supabase.co/auth/v1/callback. Off here so a local stack starts without them; set both
+# variables and switch it on to try it locally. Before `supabase config push`, set enabled = true and both variables,
+# or the push switches Google off in the project.
+[auth.external.google]
+enabled = false
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+url = ""
+skip_nonce_check = false
+email_optional = false
+
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.
 [auth.web3.solana]
