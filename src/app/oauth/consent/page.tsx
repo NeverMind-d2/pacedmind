@@ -6,6 +6,7 @@ import { cloudMcpUrl } from "@/server/supabase-config";
 import { nextStep, withNext } from "@/server/auth-flow";
 import { AuthShell } from "@/app/login/shell";
 import { ConsentForm } from "./consent-form";
+import { isLoopbackCallback } from "@/lib/oauth-callback";
 
 export const metadata: Metadata = { title: "Connect an agent · PacedMind" };
 
@@ -15,8 +16,7 @@ const REQUEST = /^[A-Za-z0-9_-]{1,200}$/;
 function destination(uri: string): { host: string; local: boolean } {
   try {
     const u = new URL(uri);
-    const host = u.hostname.replace(/^\[|\]$/g, "");
-    return { host: u.host || u.protocol.replace(/:$/, ""), local: host === "localhost" || host === "127.0.0.1" || host === "::1" };
+    return { host: u.host || u.protocol.replace(/:$/, ""), local: isLoopbackCallback(uri) };
   } catch {
     return { host: "an unknown address", local: false };
   }
@@ -76,8 +76,10 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
   const server = new URL(cloudMcpUrl()).host;
 
   return (
-    <AuthShell note={<>Signed in as {state!.user.email}.</>}>
-      <Card title={name ? `Allow ${name} to use PacedMind?` : "Allow this agent to use PacedMind again?"}>
+    // Re-reading a consumed authorization would replace the completion screen with an expired-request error.
+    <AuthShell note={<>Signed in as {state!.user.email}.</>} liveRefresh={false}>
+      <ConsentForm id={id} held={held} name={name} local={to.local}>
+        <h1 className="text-[15px] font-semibold text-strong">{name ? `Allow ${name} to use PacedMind?` : "Allow this agent to use PacedMind again?"}</h1>
         <p className="text-[13px] leading-relaxed text-fg3">
           It will act as you in PacedMind Cloud: read and change your areas, projects, tasks, calendar and flows, and report on
           agent sessions. It can&apos;t start sessions on your computers, answer for you, change your computers or delete your account.
@@ -94,8 +96,7 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
         <p className="text-[12px] leading-relaxed text-mut2">
           Only allow this if you just connected an agent yourself. You can disconnect it any time in Settings.
         </p>
-        <ConsentForm id={id} held={held} />
-      </Card>
+      </ConsentForm>
     </AuthShell>
   );
 }
