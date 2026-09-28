@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
 import { AppHeader } from "@/components/app-header";
+import { ExecutionProvider } from "@/components/execution-context";
 import { QuickAdd } from "@/components/quick-add";
 import { ActivityEditor } from "@/components/activity-editor";
 import { CommandPalette } from "@/components/command-palette";
@@ -14,7 +15,7 @@ import { Toaster } from "@/components/ui";
 import { BillingBanner } from "@/components/billing";
 import * as repo from "@/server/repo";
 import { deviceConfig } from "@/server/device";
-import { localTools, mcpLinks } from "@/server/devices";
+import { localTools, mcpLinks, thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
 import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
@@ -42,6 +43,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   // Where "Start on a computer" can send a session: in the desktop app, the other computers.
   const me = MODE === "desktop" ? deviceConfig().deviceId : null;
   const devices = all.filter((d) => d.id !== me);
+  const here = MODE === "desktop" ? await thisDevice() : null;
+  const executionDevices = [...(here ? [{ ...here, otherSessions: all.find((d) => d.id === here.id)?.otherSessions ?? [] }] : []), ...all.filter((d) => !d.revokedAt && d.id !== here?.id)];
   const today = todayStr();
   const open = (t: (typeof tasks)[number]) => t.status !== "done" && t.status !== "canceled";
   const counts = {
@@ -60,6 +63,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
   }));
   return (
+    <ExecutionProvider devices={executionDevices} hereId={here?.id ?? null} desktop={MODE === "desktop"}>
     <div className="flex h-full flex-col">
       <AppHeader email={user?.email ?? null} />
       {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} />}
@@ -82,5 +86,6 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {/* Once signed in, it offers (once) to connect the agents here to PacedMind Cloud's MCP server. */}
       {cloudOffer.length > 0 && <CloudConnectOffer agents={cloudOffer} />}
     </div>
+    </ExecutionProvider>
   );
 }

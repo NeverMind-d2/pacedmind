@@ -11,6 +11,7 @@ import {
   type Area, type Doer, type Priority, type Project, type Status, type Surface,
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
+import { ComputerPicker, ExecutionInfo, NeedsPicker } from "./execution-context";
 import { DateField } from "./date-field";
 import { ModelSettings } from "./model-picker";
 import type { ModelSelection } from "@/lib/agent-models";
@@ -21,6 +22,7 @@ import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
  * activity would begin, for a click that had a time as well (the week's grid).
  */
 export type QuickAddDefaults = {
+  deviceId?: string | null; agent?: Doer | null; runIn?: Surface | null;
   projectId?: string | null; areaId?: string | null; plannedDate?: string | null; mode?: "task" | "activity"; start?: string | null;
 };
 
@@ -56,7 +58,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [defaults, setDefaults] = useState<QuickAddDefaults>({});
   const [ov, setOv] = useState<{
     areaId?: string | null; projectId?: string | null; status?: Status; priority?: Priority; due?: string | null; planned?: string | null; weekly?: boolean; duration?: number;
-    agent?: Doer | null; runIn?: Surface | null; deviceId?: string | null;
+    agent?: Doer | null; runIn?: Surface | null; deviceId?: string | null; needs?: string[];
     modelSettings?: ModelSelection | null; modelProject?: string | null;
   }>({});
   const input = useRef<HTMLInputElement>(null);
@@ -106,11 +108,12 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     : undefined;
   const projectId = ov.projectId !== undefined ? ov.projectId : (projectFromText?.id ?? defaults.projectId ?? null);
   const project = projects.find((p) => p.id === projectId) ?? null;
-  const doer = ov.agent ?? null;
+  const doer = ov.agent !== undefined ? ov.agent : defaults.agent ?? null;
+  const deviceId = ov.deviceId !== undefined ? ov.deviceId : defaults.deviceId ?? null;
+  const needs = ov.needs ?? [];
   const agent = agentOf({ agent: doer }, project?.agent);
-  const runIn = agent ? ov.runIn ?? null : null;
+  const runIn = agent ? (ov.runIn !== undefined ? ov.runIn : defaults.runIn ?? null) : null;
   const modelSettings = agent && ov.modelSettings?.agent === agent && ov.modelProject === projectId ? ov.modelSettings : null;
-  const deviceId = ov.modelProject === projectId ? ov.deviceId ?? project?.deviceId ?? null : project?.deviceId ?? null;
   const doerLabel = doer ? DOER_LABEL[doer] : `${DOER_LABEL[agent!]} (default)`;
   const placeLabel = (surface: Surface | null) => !surface ? "Automatic"
     : surface === "desktop" ? APP_LABEL[agent!] : surface === "cloud" ? CLOUD_LABEL[agent!] : "Terminal";
@@ -149,7 +152,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         const r = await createTaskAction({
           title, description: desc, areaId, projectId, status, priority, dueDate: due, plannedDate: planned,
           labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined, doneWhen: doneItems,
-          agent: doer, runIn, modelSettings, deviceId,
+          agent: doer, runIn, modelSettings, deviceId: agent ? deviceId : null, needs: agent ? needs : [],
         });
         if (r.ok) toast(`Created ${r.key}`);
         return r.ok ? undefined : r;
@@ -204,7 +207,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
             trigger={<button type="button" className={chip}>{area ? <AreaMark area={area} size={13} /> : <Icon name="inbox" size={13} />}{area?.name ?? "Inbox"}<Icon name="chevronDown" size={12} /></button>}
             items={[{ value: null as string | null, label: "Inbox, no area", icon: <Icon name="inbox" size={13} /> },
               ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={13} /> }))]}
-            onSelect={(v) => setOv((o) => ({ ...o, areaId: v, projectId: v && project?.areaId !== v ? null : o.projectId }))}
+            onSelect={(v) => setOv((o) => ({ ...o, areaId: v, projectId: project?.areaId !== v ? null : o.projectId }))}
           />
           <span className="text-faint">›</span>
           <span className="text-[12.5px] text-mut">{mode === "task" ? "New task" : "New activity"}</span>
@@ -295,7 +298,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
-        {mode === "task" && agent && <section aria-label="Agent" className="mx-5 mb-3.5 border-t border-line pt-3">
+        {mode === "task" && agent && <section aria-label="Agent" className="mx-5 mb-3.5 space-y-2 border-t border-line pt-3">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h3 className="flex items-center gap-2 text-[12px] font-medium text-fg2">
               Agent<span className="flex items-center gap-1.5 font-normal text-mut2"><AgentIcon agent={agent} size={12} />{DOER_LABEL[agent]}</span>
@@ -310,7 +313,12 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
               ]}
               onSelect={(v) => setOv((o) => ({ ...o, runIn: v, ...(v && v !== "terminal" ? { modelSettings: null } : {}) }))} />
           </div>
-          <ModelSettings key={`${agent}:${projectId}`} agent={agent} deviceId={deviceId} surface={runIn} value={modelSettings}
+          <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
+            <div className="space-y-1"><span className="text-[11.5px] text-mut2">Computer</span><ComputerPicker value={deviceId} inherited={project?.deviceId} onChange={(v) => setOv((o) => ({ ...o, deviceId: v, modelSettings: null }))} /></div>
+            <div className="space-y-1"><span className="text-[11.5px] text-mut2">Needs</span><NeedsPicker values={needs} agent={agent} onChange={(v) => setOv((o) => ({ ...o, needs: v }))} /></div>
+          </div>
+          <ExecutionInfo deviceId={deviceId ?? project?.deviceId ?? null} agent={agent} runIn={runIn} folder={project?.folder ?? area?.folder ?? null} needs={needs} />
+          <ModelSettings key={`${agent}:${projectId}`} agent={agent} showComputer={false} deviceId={deviceId ?? project?.deviceId ?? null} surface={runIn} value={modelSettings}
             onChange={(value, computer) => setOv((o) => ({ ...o, modelSettings: value, modelProject: projectId, deviceId: computer, ...(value ? { runIn: "terminal" } : {}) }))}
             onDeviceChange={(computer) => setOv((o) => ({ ...o, deviceId: computer, modelProject: projectId, modelSettings: null }))} />
         </section>}

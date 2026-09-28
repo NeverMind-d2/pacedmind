@@ -13,6 +13,8 @@ export default async function AreaPage(props: PageProps<"/area/[id]">) {
   const tasks = await repo.listTasks({ areaId: id });
   return (
     <TaskList
+      key={area.id}
+      areaDetails={area}
       icon="layers"
       mark={area.picture || area.icon ? <AreaMark area={area} size={16} /> : undefined}
       title={area.name}

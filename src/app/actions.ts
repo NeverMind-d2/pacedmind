@@ -706,6 +706,23 @@ export async function reorderProjectsAction(ids: string[]): Promise<Result> {
   return done();
 }
 
+/** Moves projects and their tasks into an area, then saves the sidebar order. */
+export async function moveProjectsAction(moving: string[], areaId: string, order: string[]): Promise<Result> {
+  await guard();
+  if (!isIdList(moving) || !isIdList(order) || typeof areaId !== "string") return { ok: false, error: "Choose projects and a destination area." };
+  const [areas, projects] = await Promise.all([repo.listAreas(), repo.listProjects()]);
+  const area = areas.find((a) => a.id === areaId);
+  if (!area || moving.some((id) => !projects.some((p) => p.id === id))) return { ok: false, error: "A project or the destination area no longer exists." };
+  try {
+    for (const p of projects.filter((p) => moving.includes(p.id) && p.areaId !== areaId)) await saveProject(p.id, { areaId });
+    const sorted = inOrder(projects, order);
+    for (const [i, p] of sorted.entries()) if (p.sort !== i + 1) await repo.updateProject(p.id, { sort: i + 1 });
+  } catch (e) {
+    return done({ ok: false, error: errorOf(e) });
+  }
+  return done({ ok: true, message: `Moved ${moving.length === 1 ? projects.find((p) => p.id === moving[0])!.name : `${moving.length} projects`} to ${area.name}` });
+}
+
 /** Saves a project. Switching its flow on (desktop app only) starts the sessions it would have started while it was off. */
 export async function updateProjectAction(id: string, patch: Partial<Omit<Project, "id">>): Promise<Result> {
   await guard();

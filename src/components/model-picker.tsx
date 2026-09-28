@@ -12,7 +12,7 @@ type ModelPickerProps = {
   agent: AgentId; deviceId: string | null; surface: Surface | null; value: ModelSelection | null;
   onChange: (value: ModelSelection | null, deviceId: string | null) => void;
   onDeviceChange: (deviceId: string | null) => void;
-  disabled?: boolean;
+  disabled?: boolean; showComputer?: boolean;
 };
 
 export function ModelSettings(props: ModelPickerProps) {
@@ -35,7 +35,7 @@ export function ModelSettings(props: ModelPickerProps) {
   </div>;
 }
 
-function ModelPicker({ agent, deviceId, surface, value, onChange, onDeviceChange, disabled = false }: ModelPickerProps) {
+function ModelPicker({ agent, deviceId, surface, value, onChange, onDeviceChange, disabled = false, showComputer = true }: ModelPickerProps) {
   const [report, setReport] = useState<{ key: string; data: Report } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
@@ -59,7 +59,7 @@ function ModelPicker({ agent, deviceId, surface, value, onChange, onDeviceChange
   const update = (patch: Partial<ModelSelection>) => selection && onChange({ ...selection, ...patch }, data?.deviceId || null);
   return <div className="flex flex-col gap-2">
     <div className="flex flex-wrap gap-1.5">
-      {data && (data.devices.length > 1 || (!data.name && data.devices.length > 0)) && <Menu
+      {showComputer && data && (data.devices.length > 1 || (!data.name && data.devices.length > 0)) && <Menu
         trigger={<button type="button" className={chip} disabled={disabled} aria-label="Computer for model settings">{data.name ?? "Choose computer"}</button>}
         items={data.devices.map((d) => ({ value: d.id, label: d.name }))}
         onSelect={(id) => onDeviceChange(id || null)} />}

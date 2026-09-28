@@ -342,6 +342,7 @@ export async function taskStatuses(): Promise<Map<number, Status>> {
 
 /** Creates a task at the end of its project (or of the loose tasks). The database gives it its key. */
 export async function createTask(input: TaskInput): Promise<Task> {
+  if (input.deviceId != null && !isUuid(input.deviceId)) throw new Error("Unknown computer");
   const db = await accountDb();
   const project = input.projectId ? await getProject(input.projectId) : null;
   const areaId = input.areaId ?? project?.areaId ?? null;
@@ -355,7 +356,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
     estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
     run_in: input.agent === "human" ? null : input.runIn ?? null,
-    model_settings: checkedModelSelection(input.modelSettings), device_id: input.deviceId ?? null,
+    model_settings: checkedModelSelection(input.modelSettings),
+    device_id: input.agent === "human" ? null : input.deviceId ?? null,
   }).select(TASK_SELECT).single());
   return toTask(r!);
 }

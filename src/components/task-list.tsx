@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { fmtTime, toDateTimeStr } from "@/lib/dates";
-import type { EventOccurrence, Task, TaskContext } from "@/lib/types";
+import { AreaDetail } from "./area-detail";
+import type { Area, EventOccurrence, Task, TaskContext } from "@/lib/types";
 import { openActivity } from "./activity-editor";
 import { Icon, type IconName } from "./icons";
 import type { QuickAddDefaults } from "./quick-add";
@@ -24,7 +25,7 @@ export function openAdd(detail: QuickAddDefaults = {}) {
 }
 
 export function TaskList({
-  icon, mark, title, subtitle, groups, schedule, ctx, initialKey, empty, headerRight, addDefaults,
+  icon, mark, title, subtitle, groups, schedule, ctx, initialKey, empty, headerRight, addDefaults, areaDetails,
 }: {
   icon: IconName;
   /** Shown instead of the icon, such as an area's own icon. */
@@ -38,7 +39,9 @@ export function TaskList({
   empty?: ReactNode;
   headerRight?: ReactNode;
   addDefaults?: QuickAddDefaults;
+  areaDetails?: Area;
 }) {
+  const [areaOpen, setAreaOpen] = useState(true);
   const [sel, setSel] = useState<string | null>(initialKey ?? null);
   const [filter, setFilter] = useState<"all" | "tasks" | "activities">("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true, canceled: true });
@@ -54,6 +57,13 @@ export function TaskList({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (!areaDetails) return;
+    const show = (e: Event) => { if ((e as CustomEvent<string>).detail === areaDetails.id) { setAreaOpen(true); setSel(null); } };
+    window.addEventListener("organizer:area-details", show);
+    return () => window.removeEventListener("organizer:area-details", show);
+  }, [areaDetails]);
+
   const open = all.filter((t) => t.status !== "done" && t.status !== "canceled").length;
   const showTasks = filter !== "activities";
   const showSchedule = !!schedule && filter !== "tasks";
@@ -67,6 +77,7 @@ export function TaskList({
           {subtitle && <span className="min-w-0 shrink-[3] truncate text-mut2">{subtitle}</span>}
           <span className="flex-1" />
           {headerRight}
+          {areaDetails && <Button aria-expanded={areaOpen && !selected} onClick={() => { setSel(null); setAreaOpen((v) => !v || !!selected); }}>Area details</Button>}
           <Button onClick={() => openAdd(addDefaults)} aria-label="New task"><Icon name="plus" size={13} /><span className="max-sm:hidden">New task</span></Button>
         </div>
 
@@ -119,6 +130,7 @@ export function TaskList({
           )}
         </div>
       </section>
+      {!selected && areaDetails && areaOpen && <AreaDetail area={areaDetails} projects={ctx.projects} onClose={() => setAreaOpen(false)} />}
       {selected && <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />}
     </div>
   );
