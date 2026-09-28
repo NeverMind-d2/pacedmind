@@ -9,7 +9,7 @@ import {
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, repoOf, snapshotOf, strings,
+  deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
   type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
@@ -130,18 +130,26 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
 
 /**
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
- * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
+ * new key (`renamedKey`), which only its new tasks get.
  */
 export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
+  if (!isUuid(id)) return;
   const values: Row = {};
-  if (patch.name?.trim()) values.name = patch.name.trim();
+  const name = patch.name?.trim();
+  if (name) {
+    values.name = name;
+    const areas = await listAreas();
+    const current = areas.find((a) => a.id === id);
+    if (current) values.key = renamedKey(name, current.key, new Set(areas.filter((a) => a.id !== id).map((a) => a.key)));
+  }
   if (patch.color) values.color = patch.color;
   if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
   if (values.icon) values.picture = null;
   if (values.picture) values.icon = null;
-  if (!Object.keys(values).length || !isUuid(id)) return;
+  if (!Object.keys(values).length) return;
   const db = await accountDb();
   check(await db.from("areas").update(values).eq("id", id));
 }

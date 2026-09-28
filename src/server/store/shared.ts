@@ -174,6 +174,16 @@ export function deriveKey(name: string, taken: Set<string>): string {
   return key;
 }
 
+/**
+ * The key of an area renamed to `name`: its `current` one while that is still what the name makes (WR2 stays for
+ * "Work"), else a new one, unique among the other areas' keys (`taken`). Its tasks keep their keys.
+ */
+export function renamedKey(name: string, current: string, taken: Set<string>): string {
+  const base = deriveKey(name, new Set());
+  if (current === base || new RegExp(`^${base.slice(0, 2)}\\d+$`).test(current)) return current;
+  return deriveKey(name, taken);
+}
+
 /* ---------- calendar ---------- */
 
 const stampMin = (d: Date) => `${toDateStr(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
