@@ -311,6 +311,25 @@ begin
     out := out || '18c FAIL unknown run-in accepted' || E'\n';
     reset role;
   exception when others then out := out || '18c run-in rejected: ' || left(sqlerrm, 70) || E'\n'; end;
+  -- A task's needs are names only (what it needs from the computer its session runs on), at most ten.
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set needs = '{supabase,"Google Drive",claude.ai-gmail}' where id = tid;
+    select count(*) into n from public.tasks where id = tid and cardinality(needs) = 3; out := out || '18j needs saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '18j ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set needs = '{"x; rm -rf ~"}' where id = tid;
+    out := out || '18k FAIL a need with shell characters accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18k need with shell characters rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.tasks set needs = (select array_agg('n' || i) from generate_series(1, 11) i) where id = tid;
+    out := out || '18l FAIL eleven needs accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '18l eleven needs rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     update public.devices set agents = '{"claude": {"cli": true}}', checked_at = now() where id = dev;

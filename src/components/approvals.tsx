@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { approveLaunchAction, denyLaunchAction } from "@/app/actions";
 import type { LaunchRequestKind, Surface } from "@/lib/types";
+import { needList } from "@/lib/needs";
 import { Button, useAction } from "./ui";
 
 export interface ApprovalView {
@@ -18,6 +19,8 @@ export interface ApprovalView {
   from: string;
   /** For kind "changes": what should change, as whoever asked wrote it. */
   changes?: string | null;
+  /** For a start: what the task needs that the agent doesn't have on this computer. */
+  missing?: string[];
   requestedAt: number;
   expiresAt: number;
 }
@@ -68,6 +71,12 @@ export function Approvals({ items }: { items: ApprovalView[] }) {
             <br />
             {a.agent} in <span className="break-all font-mono text-[11.5px] text-fg2">{a.folder}</span>
           </div>
+          {a.missing && a.missing.length > 0 && (
+            <p className="text-[12px] leading-relaxed text-fg3">
+              It needs {needList(a.missing)}, which the agent doesn&apos;t have on this computer. Another of your computers may:
+              refuse this and send it there with Run on a computer.
+            </p>
+          )}
           {a.kind === "changes" && a.changes && (
             <div className="flex flex-col gap-1">
               <span className="text-[11.5px] text-mut2">What the agent is asked to change, as sent:</span>

@@ -20,6 +20,7 @@ import {
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
   type Task,
 } from "@/lib/types";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * This computer's own data (the free One device plan), in the SQLite file local-db.ts opens. repo.ts uses it
@@ -248,7 +249,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
-  doneWhen: strings(json(r.done_when, [])), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
@@ -306,10 +307,11 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, done_when, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
-    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), input.agent ?? project?.agent ?? null, sort, stamp, stamp,
+    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
+    sort, stamp, stamp,
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }
@@ -335,6 +337,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   const values = columns(patch, TASK_COLS);
   if (patch.labels) values.labels = JSON.stringify(patch.labels);
   if (patch.doneWhen) values.done_when = JSON.stringify(cleanDoneWhen(patch.doneWhen));
+  if (patch.needs) values.needs = JSON.stringify(cleanNeeds(patch.needs));
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();

@@ -6,7 +6,8 @@ import {
 } from "./launcher";
 import { deviceConfig, deviceFor, revokeAllSessionTokens, thisPlatform, updateDevice } from "./device";
 import { approvals, clearApprovals, handledRequests, type Approval } from "./approval-store";
-import { APP_VERSION, deviceIdFor, flowsOnHere, runsHere } from "./devices";
+import { APP_VERSION, deviceIdFor, flowsOnHere, runsHere, toolsHere } from "./devices";
+import { missingFrom } from "@/lib/needs";
 import { changesProblem, requestChanges } from "./ops";
 import { scanOtherSessions } from "./other-sessions";
 import { MODE, authState, supabase } from "./supabase";
@@ -54,6 +55,8 @@ export interface ApprovalItem {
   from: string;
   /** For kind "changes": what should change, as the user wrote it (untrusted text, shown as it is). */
   changes: string | null;
+  /** For a start: what the task needs that the agent doesn't have on this computer. */
+  missing: string[];
   requestedAt: number;
   expiresAt: number;
 }
@@ -70,8 +73,10 @@ export function approvalItems(tasks: Task[]): ApprovalItem[] {
     id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
     surface: a.surface, folder: a.folder,
     from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”`
-      : a.resume ? `${FROM_TEXT[a.from]}, resuming its session` : FROM_TEXT[a.from],
-    changes: a.changes?.text ?? null,
+      : a.resume ? `${FROM_TEXT[a.from]}, resuming its session`
+        // A flow that asks because the task needs something the agent lacks here says so itself (missing).
+        : a.from === "flow" && a.missing?.length ? "its flow" : FROM_TEXT[a.from],
+    changes: a.changes?.text ?? null, missing: a.missing ?? [],
     requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
 }
@@ -80,7 +85,10 @@ const excerpt = (text: string) => (text.length > 200 ? `${text.slice(0, 200).tri
 
 type Times = { at: number; until: number };
 
-/** Puts a request to start a session in front of you, with what it would run right now. Null when the task can't run here at all. */
+/**
+ * Puts a request to start a session in front of you, with what it would run right now, and what the task needs that the
+ * agent doesn't have here. Null when the task can't run here at all.
+ */
 async function ask(
   task: Task, agent: AgentId | null, from: Approval["from"], requestId: string | null, times?: Times, surface?: Surface,
 ): Promise<Approval | null> {
@@ -91,9 +99,12 @@ async function ask(
   const same = pendingApprovals().find((a) => a.kind === "start" && a.taskId === task.id && a.from === from && a.requestId === requestId);
   if (same) return same;
   const now = Date.now();
+  const where = surface ?? plannedSurface(task, who);
   const a: Approval = {
     id: requestId ?? crypto.randomUUID(), requestId, from, kind: "start", taskId: task.id, key: task.key, agent: who, folder,
-    surface: surface ?? plannedSurface(task, who), requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
+    surface: where, requestedAt: times?.at ?? now, expiresAt: times?.until ?? now + TTL_MS,
+    // The agent's cloud has its own servers, not this computer's.
+    missing: task.needs.length && where !== "cloud" ? missingFrom(task.needs, toolsHere(who, folder)) : [],
   };
   approvals().set(a.id, a);
   return a;
@@ -102,7 +113,10 @@ async function ask(
 /** An agent asked over MCP to start a session (where it runs, if it said): it waits for you in the app. */
 export const askFromAgent = (task: Task, agent: AgentId | null, surface?: Surface) => ask(task, agent, "agent", null, undefined, surface);
 
-/** A flow wants to start a task along a connection you haven't confirmed on this computer. */
+/**
+ * A flow wants to start a task along a connection you haven't confirmed on this computer, or one that needs something
+ * its agent doesn't have here.
+ */
 export const askFromFlow = (task: Task) => ask(task, null, "flow", null);
 
 /**

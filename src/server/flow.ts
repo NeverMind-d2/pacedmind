@@ -1,10 +1,12 @@
 import "server-only";
 import * as repo from "./repo";
-import { plannedSurface, startSession, type LaunchResult } from "./launcher";
+import { plannedFolder, plannedSurface, startSession, type LaunchResult } from "./launcher";
 import { confirmedFlow } from "./device";
+import { toolsHere } from "./devices";
+import { missingFrom } from "@/lib/needs";
 import { askFromFlow } from "./requests";
 import { toDateTimeStr } from "@/lib/dates";
-import { LIVE_STATUSES, agentOf, type FlowEdge, type Status, type Task } from "@/lib/types";
+import { LIVE_STATUSES, agentOf, type AgentId, type FlowEdge, type Status, type Task } from "@/lib/types";
 
 /*
  * Which session starts after which. Flows only ever start sessions in the desktop app, and only for projects
@@ -45,17 +47,20 @@ function incoming(taskId: number, edges: FlowEdge[]) {
 }
 
 /**
- * Starts a task's session for its flow, or asks you when it would run in the agent's cloud: that sends the
- * project there, and where a task runs can be changed elsewhere (in the web app), which confirming a flow's
- * connections doesn't cover.
+ * Starts a task's session for its flow (with `agent`, else the task's), or asks you: when it would run in the agent's
+ * cloud, since that sends the project there, and where a task runs can be changed elsewhere (in the web app), which
+ * confirming a flow's connections doesn't cover; and when the task needs something (Task.needs) the agent doesn't have
+ * here, since another computer may, and only you can send it there (a request takes a fresh two-factor code).
  */
-async function startFromFlow(task: Task): Promise<LaunchResult | null> {
+export async function startFromFlow(task: Task, agent?: AgentId): Promise<LaunchResult | null> {
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
-  if (plannedSurface(task, agentOf(task, project?.agent) ?? "claude") === "cloud") {
+  const who = agent ?? agentOf(task, project?.agent) ?? "claude";
+  const lacks = task.needs.length ? missingFrom(task.needs, toolsHere(who, plannedFolder(task))) : [];
+  if (plannedSurface(task, who) === "cloud" || lacks.length) {
     await askFromFlow(task);
     return null;
   }
-  return startSession(task.id, { reason: "flow" });
+  return startSession(task.id, { agent, reason: "flow" });
 }
 
 async function snapshot() {

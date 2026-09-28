@@ -17,6 +17,7 @@ import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
 import { nowStamp, toDateStr, toStamp } from "@/lib/dates";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * An account's data as a whole: starting over, sample data, moving over this computer's own data (what
@@ -330,7 +331,8 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       reminder: match(t.reminder, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/), agent: oneOf(t.agent, ["claude", "codex", "human"]),
       sort_order: int(t.sort_order, -1e9, 1e9, 0), flow_x: num(t.flow_x), flow_y: num(t.flow_y),
       created_at: match(t.created_at, STAMP) ?? now, updated_at: match(t.updated_at, STAMP) ?? now, completed_at: match(t.completed_at, STAMP),
-      done_when: cleanDoneWhen(texts(t.done_when, 400)), run_in: oneOf(t.run_in, SURFACES), device_id: t.device_id ? here : null,
+      done_when: cleanDoneWhen(texts(t.done_when, 400)), needs: cleanNeeds(texts(t.needs, 48)), run_in: oneOf(t.run_in, SURFACES),
+      device_id: t.device_id ? here : null,
     });
     const KEY = /^[A-Z][A-Z0-9]{1,7}-[1-9][0-9]{0,8}$/;
     const seen = new Set<string>();
@@ -550,14 +552,14 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const project = (v: unknown) => (v == null ? null : projectId.get(String(v)) ?? null);
 
     const insTask = conn.prepare(`INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date,
-      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when, needs)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const t of tasks) {
       const r = insTask.run(
         String(t.key), area(t.area_id), project(t.project_id), String(t.title), String(t.description ?? ""), String(t.status), Number(t.priority ?? 0),
         s(t.due_date), s(t.planned_date), Number(t.estimate_min ?? 60), json(t.labels), s(t.reminder), s(t.agent), Number(t.sort_order ?? 0),
         t.flow_x == null ? null : Number(t.flow_x), t.flow_y == null ? null : Number(t.flow_y), String(t.created_at), String(t.updated_at),
-        s(t.completed_at), s(t.run_in), json(t.done_when),
+        s(t.completed_at), s(t.run_in), json(t.done_when), json(cleanNeeds(Array.isArray(t.needs) ? t.needs.filter((x): x is string => typeof x === "string") : [])),
       );
       taskId.set(Number(t.id), Number(r.lastInsertRowid));
     }

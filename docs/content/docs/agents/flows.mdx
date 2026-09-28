@@ -31,7 +31,8 @@ With **Flow on**, PacedMind starts a task's session on its own when all of these
 * the task is **Todo** or **Backlog**;
 * the task isn't yours;
 * the task has at least one connection leading to it, none of them **Same session**, and every one is ready;
-* the task has no running session.
+* the task has no running session;
+* the agent has, on this computer, what the task needs (its **Needs**). When it doesn't, PacedMind asks you in the app instead: *It needs Gmail, which the agent doesn't have on this computer.* See [What a task needs](/agents/start-and-manage#what-a-task-needs).
 
 PacedMind checks this when an agent hands a task back, when a session is marked finished, when you mark a task done, and every minute for timed connections. A session started this way notes *Started on its own* in the editor. Switching the flow on checks every task in the project the same way, so tasks that became ready while it was paused start right away. Adding a connection doesn't go back over tasks that are already ready: start those by hand, for example with the start button in the editor's panel.
 

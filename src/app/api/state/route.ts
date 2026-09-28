@@ -71,7 +71,7 @@ export async function GET() {
   const names = recent.length ? new Map((await repo.listDevices()).map((d) => [d.id, d.name])) : new Map<string, string>();
   const now = Date.now();
   const requests: LaunchRequestView[] = recent.map((r) => ({
-    id: r.id, kind: r.kind, taskId: r.taskId, taskKey: byId.get(r.taskId)?.key ?? null, targetSessionId: r.targetSessionId, sessionId: r.sessionId,
+    id: r.id, kind: r.kind, taskId: r.taskId, agent: r.agent, taskKey: byId.get(r.taskId)?.key ?? null, targetSessionId: r.targetSessionId, sessionId: r.sessionId,
     deviceId: r.deviceId, deviceName: names.get(r.deviceId) ?? null,
     // A computer that was off never answered: past its time, a waiting request is as good as expired.
     status: r.status === "pending" && Date.parse(r.expiresAt) <= now ? "expired" : r.status,

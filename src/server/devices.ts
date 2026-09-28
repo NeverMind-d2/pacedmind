@@ -5,10 +5,11 @@ import path from "node:path";
 import pkg from "../../package.json";
 import * as repo from "./repo";
 import { agentCommandFor, deviceConfig, thisPlatform, updateDevice } from "./device";
-import { agentExtras } from "./extras";
+import { agentExtras, folderExtras, serverChoices } from "./extras";
 import { usesCloud } from "./scope";
 import { execLine, plainCommand, runCommand, runFile } from "./shell";
 import { appVersionOk, loginOf } from "./store/shared";
+import { deviceWithNeeds } from "@/lib/needs";
 import {
   MCP_NAME, NO_AGENT_TOOLS, OLD_MCP_NAME, type AgentExtras, type AgentId, type AgentLogin, type AgentTools, type Device, type McpLink,
 } from "@/lib/types";
@@ -78,15 +79,29 @@ export const runsHere = (deviceId: string | null) => !deviceId || deviceId === t
 
 /**
  * The computer to offer for a task's session elsewhere (the web app, or a task that runs on another computer): the one
- * the task names, else its project's, else the account's default. `pinned` when the task or its project named it: its
+ * the task names, else its project's, else, for a task that needs something (Task.needs), one whose agent has it
+ * (online first, the default first), else the account's default. `pinned` when the task or its project named it: its
  * sessions start only there, and a request to another computer is refused.
  */
 export function offeredDevice(
-  task: { deviceId: string | null }, project: { deviceId: string | null } | null | undefined, devices: Device[],
+  task: { deviceId: string | null; needs: string[] }, project: { deviceId: string | null } | null | undefined, devices: Device[],
+  agent: AgentId | null = "claude",
 ): { deviceId: string | null; pinned: boolean } {
   const named = deviceIdFor(task.deviceId, project?.deviceId);
   if (named) return { deviceId: named, pinned: true };
-  return { deviceId: devices.find((x) => x.isDefault && !x.revokedAt)?.id ?? null, pinned: false };
+  const fallback = devices.find((x) => x.isDefault && !x.revokedAt)?.id ?? null;
+  const has = task.needs.length && agent ? deviceWithNeeds(task.needs, agent, devices, fallback) : null;
+  return { deviceId: has?.id ?? fallback, pinned: false };
+}
+
+/**
+ * What an agent has on this computer for a session in `folder`, by name: the MCP servers it has everywhere and in the
+ * folder, the claude.ai connectors its sessions got from the account it's signed in to, and its plugins. What a task's
+ * needs are matched against here (src/lib/needs.ts).
+ */
+export function toolsHere(agent: AgentId, folder: string | null): string[] {
+  const x = localTools()[agent].extras;
+  return [...serverChoices(folder)[agent], ...(x?.account ?? []), ...(x?.plugins ?? []), ...(folder ? folderExtras(folder).plugins : [])];
 }
 
 /* ---------- looking for the agents ---------- */

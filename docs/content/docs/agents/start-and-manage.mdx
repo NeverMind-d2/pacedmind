@@ -148,6 +148,19 @@ The servers to choose from are, for Claude Code, yours for all projects, the one
 
 **Sessions** shows what a session ran with: **Client**, the name and version its MCP client gave when it connected to PacedMind, such as *Claude Code 2.1.278*, **Agent says**, the model the agent reported with `start_task` and the MCP servers the session has, and **Not available**, the ones it should have but hasn't. See [Session details](/views/sessions#session-details).
 
+## What a task needs
+
+Your computers can differ in what their agents have: each has its own MCP servers and plugins, and Claude Code on each can be signed in to a different Claude account, with other claude.ai connectors. A task's **Needs** says what its agent needs from the computer its session runs on, such as `Gmail` or `supabase`. List only what differs between computers: the MCP servers in a project's own folder, such as its `.mcp.json`, come with the project to every computer that has it.
+
+PacedMind matches the needs against what each computer said its agent has: its MCP servers for all projects and, on this computer, in the task's folder, the claude.ai connectors its sessions got, and its plugins. Names match regardless of case, spaces and dashes, so `google-drive` matches *Google Drive*.
+
+* **Start** on a computer whose agent lacks something the task needs still starts the session, and the message says what's missing, such as *Started DEV-44 in a new terminal. Claude Code doesn't have Gmail here, which DEV-44 needs.* When your data is in PacedMind Cloud and another of your computers has it all, **Start** opens **Run on a computer** with that computer picked instead, and **Start here anyway** to start on this one after all.
+* **A flow** doesn't start such a task on its own: it asks you in the app, like a start it can't make alone, with *It needs Gmail, which the agent doesn't have on this computer.* **Allow** starts it here; **Refuse** leaves it for you to send elsewhere. See [When the flow starts a session](/agents/flows#when-the-flow-starts-a-session).
+* **Run on a computer** shows, under each computer, *Has Gmail* or *Doesn't have Gmail*, and picks one that has everything the task needs, online first.
+* **A request that expired** because its computer didn't answer offers **Try another computer**, which opens **Run on a computer** without that computer picked.
+
+A session in the agent's cloud has the cloud's own servers, so needs aren't checked for it.
+
 ## Resume a session
 
 **Resume in terminal**, in the task's details or in **Sessions**, opens a new terminal in the session's folder for a terminal session that isn't running:

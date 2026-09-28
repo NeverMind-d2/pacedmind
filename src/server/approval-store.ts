@@ -25,6 +25,8 @@ export interface Approval {
   changes?: { sessionId: string; text: string };
   /** For resuming a session: which one, and "desktop" when a terminal conversation moves into the Claude app. */
   resume?: { sessionId: string; to?: Surface };
+  /** For starting one: what its task needs that the agent doesn't have here (Task.needs), by name. */
+  missing?: string[];
   requestedAt: number;
   expiresAt: number;
 }

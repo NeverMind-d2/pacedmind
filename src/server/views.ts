@@ -1,7 +1,8 @@
 import "server-only";
 import { trustCheck } from "./claude-trust";
 import { deviceConfig } from "./device";
-import { deviceIdFor, runsHere, thisDeviceId } from "./devices";
+import { deviceIdFor, runsHere, thisDevice, thisDeviceId } from "./devices";
+import { needKey, toolsOn } from "@/lib/needs";
 import { plannedFolder, plannedSurface } from "./launcher";
 import { changesProblemIn, changesViaIn } from "./ops";
 import * as repo from "./repo";
@@ -34,7 +35,31 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
     areas, projects, sessions, sessionEvents, reports: Object.fromEntries(reports), pending: Object.fromEntries(pending), changesOk, changesVia,
     desktop: MODE === "desktop", deviceId: MODE === "desktop" && (await usesCloud()) ? thisDeviceId() : null,
     asksTrust: MODE === "desktop" ? asksTrust(tasks, sessions, projects) : undefined,
+    tools: await accountTools(),
   };
+}
+
+/**
+ * What the account's computers said their agents have, by name (toolsOn), each with the computers that have it: this
+ * computer as it found it just now, and the others as they last said. Sorted by name.
+ */
+async function accountTools(): Promise<{ name: string; on: string[] }[]> {
+  const cloud = await usesCloud();
+  const here = MODE === "desktop" ? await thisDevice() : null;
+  const others = cloud ? (await repo.listDevices()).filter((d) => !d.revokedAt && d.id !== here?.id) : [];
+  const byKey = new Map<string, { name: string; on: Set<string> }>();
+  for (const d of [...(here ? [here] : []), ...others]) {
+    for (const agent of ["claude", "codex"] as const) {
+      for (const name of toolsOn(d, agent) ?? []) {
+        const k = needKey(name);
+        if (!k) continue;
+        const t = byKey.get(k) ?? { name, on: new Set<string>() };
+        t.on.add(d.name);
+        byKey.set(k, t);
+      }
+    }
+  }
+  return [...byKey.values()].map((t) => ({ name: t.name, on: [...t.on] })).sort((a, b) => a.name.localeCompare(b.name)).slice(0, 200);
 }
 
 /**

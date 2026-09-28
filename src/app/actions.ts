@@ -7,8 +7,9 @@ import { importLegacy, moveToThisComputer, resetAccount } from "@/server/account
 import { billingPortal, readPlan, subscribe } from "@/server/billing";
 import { usesCloud } from "@/server/scope";
 import { resetLocal } from "@/server/store/local-db";
-import { checkThisDevice, deviceIdFor, offeredDevice, runsHere } from "@/server/devices";
-import { mcpUrl, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
+import { checkThisDevice, deviceIdFor, offeredDevice, runsHere, thisDeviceId, toolsHere } from "@/server/devices";
+import { deviceWithNeeds, missingFrom, needList } from "@/lib/needs";
+import { mcpUrl, plannedFolder, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
 import {
   afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
 } from "@/server/ops";
@@ -28,7 +29,7 @@ import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
-  LIVE_STATUSES, deviceOnline, isLiveSession,
+  AGENT_LABEL, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
   type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
 } from "@/lib/types";
 
@@ -161,7 +162,11 @@ const SURFACES = new Set<Surface>(["terminal", "desktop", "cloud"]);
  * ran there). The page then asks that computer with a fresh two-factor code: requestSessionAction,
  * requestResumeAction or requestChangesRemoteAction.
  */
-type Remote = { remote?: boolean; deviceId?: string | null; pinned?: boolean };
+type Remote = {
+  remote?: boolean; deviceId?: string | null; pinned?: boolean;
+  /** Offered instead of starting here: what the task needs that the agent doesn't have on this computer. */
+  missingHere?: string[];
+};
 
 /**
  * What a request to a computer answers: the request's id once sent (it shows in /api/state's `requests`), and
@@ -173,21 +178,38 @@ type Requested = Result & { requestId?: string; needCode?: boolean };
 /**
  * Starts a session: in the desktop app, where the task says (a terminal or the agent's app here, or its cloud).
  * The web app can't start anything, and a task that runs on another computer starts there: both answer `remote`,
- * offering the computer the task names, else its project's, else the account's default.
+ * offering the computer the task names, else its project's, else one whose agent has what the task needs, else the
+ * account's default. A task that needs something (Task.needs) the agent doesn't have here, when another computer has
+ * it, answers `remote` too, with that computer and what's missing here (`missingHere`), unless `anyway`.
  */
-export async function startSessionAction(taskId: number, agent?: AgentId | null, surface?: Surface): Promise<Result & Remote> {
+export async function startSessionAction(
+  taskId: number, agent?: AgentId | null, surface?: Surface, anyway = false,
+): Promise<Result & Remote> {
   await guard();
   if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to run the session" };
   const task = await repo.getTask(taskId);
   if (!task) return { ok: false, error: "Task not found" };
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
+  const who = agent ?? agentOf(task, project?.agent);
   if (MODE === "web") {
-    return { ok: false, remote: true, ...offeredDevice(task, project, await repo.listDevices()), error: "Choose a computer to start it on." };
+    return { ok: false, remote: true, ...offeredDevice(task, project, await repo.listDevices(), who), error: "Choose a computer to start it on." };
   }
   const runsOn = deviceIdFor(task.deviceId, project?.deviceId);
   if (runsOn && !runsHere(runsOn)) return { ok: false, remote: true, deviceId: runsOn, pinned: true, error: `${task.key} runs on another computer.` };
+  const missing = who && task.needs.length && surface !== "cloud" ? missingFrom(task.needs, toolsHere(who, plannedFolder(task))) : [];
+  if (missing.length && !anyway && !runsOn && (await usesCloud())) {
+    const other = deviceWithNeeds(task.needs, who!, (await repo.listDevices()).filter((d) => d.id !== thisDeviceId()));
+    if (other) {
+      return {
+        ok: false, remote: true, deviceId: other.id, pinned: false, missingHere: missing,
+        error: `${task.key} needs ${needList(missing)}, which ${AGENT_LABEL[who!]} doesn't have on this computer. ${other.name} has everything it needs.`,
+      };
+    }
+  }
   const r = await startSession(taskId, { agent: agent ?? undefined, surface, reason: "you" });
-  return done(r.ok ? { ok: true, message: r.message ?? "Session started" } : { ok: false, error: r.error });
+  const started = r.message ?? "Session started";
+  const lacks = missing.length ? `${/[.!?]$/.test(started) ? "" : "."} ${AGENT_LABEL[who!]} doesn't have ${needList(missing)} here, which ${task.key} needs.` : "";
+  return done(r.ok ? { ok: true, message: `${started}${lacks}` } : { ok: false, error: r.error });
 }
 
 /**

@@ -106,6 +106,11 @@ export interface Task {
   labels: string[];
   /** What must be true when the task is finished, one checkable outcome per item. Agents answer each when they hand it back. */
   doneWhen: string[];
+  /**
+   * What its agent needs from the computer its session runs on, by name: MCP servers or claude.ai connectors, such as
+   * "supabase" or "Gmail" (src/lib/needs.ts). PacedMind offers a computer that has them.
+   */
+  needs: string[];
   reminder: string | null;
   agent: Doer | null;
   /** Where its agent sessions run; null picks the terminal when the agent's CLI is installed, else its desktop app. */
@@ -494,6 +499,7 @@ export interface LaunchRequestView {
   id: string;
   kind: LaunchRequestKind;
   taskId: number;
+  agent: AgentId;
   /** Null when the task is gone. */
   taskKey: string | null;
   /** The session it resumes or sends back (resume, changes). */
@@ -539,6 +545,11 @@ export interface TaskContext {
    * whether you do (desktop app): the running one's folder, else where the next one would start.
    */
   asksTrust?: Record<number, boolean>;
+  /**
+   * The MCP servers, claude.ai connectors and plugins the account's computers said their agents have (src/lib/needs.ts),
+   * each with the computers that have it: what a task's Needs suggests and says.
+   */
+  tools?: { name: string; on: string[] }[];
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */

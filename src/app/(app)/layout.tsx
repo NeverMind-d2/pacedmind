@@ -61,7 +61,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel max-md:m-0 max-md:rounded-none max-md:border-x-0 max-md:border-b-0">{children}</main>
       </div>
       {approvals.length > 0 && <Approvals items={approvals} />}
-      <RemoteStart devices={devices} tasks={tasks.map((t) => ({ id: t.id, key: t.key, title: t.title }))} />
+      <RemoteStart devices={devices} tasks={tasks.map((t) => ({
+        id: t.id, key: t.key, title: t.title, needs: t.needs, runsOn: t.deviceId ?? projects.find((p) => p.id === t.projectId)?.deviceId ?? null,
+      }))} />
       <QuickAdd areas={areas} projects={projects} />
       <ActivityEditor areas={areas} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />

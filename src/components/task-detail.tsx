@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
+import { MAX_NEEDS, cleanNeeds, needKey } from "@/lib/needs";
 import { format } from "date-fns";
 import {
   addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction, requestChangesAction,
@@ -344,6 +345,12 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 className="h-5 w-16 bg-transparent text-[11.5px] text-mut outline-none placeholder:text-mut2" />
             </div>
           </Prop>
+          {/* What its agent needs from the computer its session runs on: PacedMind offers one that has it. */}
+          {agent && (
+            <Prop label="Needs">
+              <NeedsProp needs={task.needs} tools={ctx.tools ?? []} onSave={(needs) => save({ needs })} />
+            </Prop>
+          )}
           <Prop label="Session">
             {session && session.status !== "failed" ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>
@@ -519,6 +526,48 @@ function Activity({ at, text }: { at: string; text: string }) {
       <span className="h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full bg-faint" />
       <span className="flex-1 text-mut">{text}</span>
       <span className="shrink-0 font-mono text-[11px] text-dim">{format(parseLocal(at), "d MMM HH:mm")}</span>
+    </div>
+  );
+}
+
+/**
+ * What a task's agent needs from the computer its session runs on (Task.needs): MCP servers or claude.ai connectors by
+ * name. Each says which of your computers have it; the field suggests what they have.
+ */
+function NeedsProp({ needs, tools, onSave }: { needs: string[]; tools: { name: string; on: string[] }[]; onSave: (needs: string[]) => void }) {
+  const [text, setText] = useState("");
+  const listId = useId();
+  const on = (n: string) => tools.find((t) => needKey(t.name) === needKey(n))?.on ?? [];
+  const add = () => {
+    const next = cleanNeeds([...needs, text]);
+    if (next.length !== needs.length) onSave(next);
+    setText("");
+  };
+  return (
+    <div className="flex min-h-7 flex-wrap items-center gap-1.5 px-2">
+      {needs.map((n) => {
+        const where = on(n);
+        return (
+          <button key={n} type="button" onClick={() => onSave(needs.filter((x) => x !== n))}
+            title={`${where.length ? `On ${where.join(", ")}` : "None of your computers said it has this"}. Click to remove.`}
+            className={cx("inline-flex h-5 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] hover:border-line-strong",
+              where.length ? "text-mut" : "text-dim")}>
+            <Icon name="plug" size={10} strokeWidth={2} />{n}
+          </button>
+        );
+      })}
+      {needs.length < MAX_NEEDS && (
+        <>
+          <input list={listId} value={text} onChange={(e) => setText(e.target.value)} placeholder={needs.length ? "+ Add" : "+ MCP server or connector"}
+            aria-label="Add what its agent needs from the computer" onKeyDown={(e) => { if (e.key === "Enter" && text.trim()) add(); }}
+            className={cx("h-5 bg-transparent text-[11.5px] text-mut outline-none placeholder:text-mut2", needs.length ? "w-16" : "w-44")} />
+          <datalist id={listId}>
+            {tools.filter((t) => !needs.some((n) => needKey(n) === needKey(t.name))).map((t) => (
+              <option key={t.name} value={t.name}>{t.on.join(", ")}</option>
+            ))}
+          </datalist>
+        </>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { deviceOnline, type AskView, type Device, type LaunchRequestView } from "@/lib/types";
 import { Icon } from "./icons";
+import type { RunAsk } from "./remote-start";
 import { cx } from "./ui";
 
 /*
@@ -93,6 +94,18 @@ export function useClock(ms = 15_000): number {
 
 /** How long a decided request's chip stays where you asked. */
 const SHOWN_MS = 10 * 60_000;
+
+/** The event that opens "Run on a computer" (remote-start.tsx) with a RunAsk. */
+export const RUN_SHEET = "pacedmind:remote-start";
+
+/**
+ * Opens "Run on a computer" for a task whose start request expired on a computer that didn't answer, to send it to
+ * another one: one that's online and has what the task needs, when there is one.
+ */
+export function tryAnotherComputer(r: LaunchRequestView) {
+  const ask: RunAsk = { kind: "start", taskId: r.taskId, agent: r.agent, deviceId: null, pinned: false, avoid: r.deviceId };
+  window.dispatchEvent(new CustomEvent<RunAsk>(RUN_SHEET, { detail: ask }));
+}
 
 /** A request past its time that the computer never answered counts as expired, even before the next poll says so. */
 export const statusAt = (r: LaunchRequestView, now: number) => (r.status === "pending" && Date.parse(r.expiresAt) <= now ? "expired" : r.status);
@@ -201,6 +214,12 @@ export function RequestChip({ request: r, now, computer, link = true, className,
         ? <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 animate-spin rounded-full border-[1.5px] border-mut2 border-t-transparent motion-reduce:animate-none" />
         : <StatusMark status={status} />}
       <span className="min-w-0 wrap-break-word">{text}</span>
+      {status === "expired" && r.kind === "start" && (
+        <button type="button" onClick={() => tryAnotherComputer(r)}
+          className="shrink-0 text-fg2 underline decoration-line-strong underline-offset-2 hover:text-strong">
+          Try another computer
+        </button>
+      )}
       {status === "launched" && link && r.sessionId && (
         <Link href={`/sessions?s=${r.sessionId}`} className="shrink-0 text-fg2 underline decoration-line-strong underline-offset-2 hover:text-strong">
           Open session

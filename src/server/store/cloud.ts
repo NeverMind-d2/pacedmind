@@ -23,6 +23,7 @@ import {
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * The account's data in PacedMind Cloud (Supabase), used while someone is signed in; repo.ts picks this or
@@ -295,7 +296,7 @@ const toTask = (r: Row): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
-  doneWhen: (r.done_when as string[] | null) ?? [], reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
@@ -347,7 +348,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const r = one(await db.from("tasks").insert({
     key: "", area_id: areaId, project_id: input.projectId ?? null, title: input.title.trim(), description: input.description ?? "",
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
-    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []),
+    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
   }).select(TASK_SELECT).single());
   return toTask(r!);
@@ -377,6 +378,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, TASK_COLS);
   if (patch.doneWhen) values.done_when = cleanDoneWhen(patch.doneWhen);
+  if (patch.needs) values.needs = cleanNeeds(patch.needs);
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();

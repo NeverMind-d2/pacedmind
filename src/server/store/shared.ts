@@ -32,6 +32,7 @@ export interface TaskInput {
   estimateMin?: number;
   labels?: string[];
   doneWhen?: string[];
+  needs?: string[];
   agent?: Doer | null;
 }
 

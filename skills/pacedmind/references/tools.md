@@ -2,7 +2,7 @@
 
 Every tool the `pacedmind` MCP server offers, grouped by purpose. The tool descriptions and parameter schemas the client shows you have the details. Tools marked (read) never change anything.
 
-A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
+A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run and what they need), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
 
 ## Orientation
 
@@ -30,8 +30,9 @@ A session that PacedMind started gets a smaller set: the read tools, `create_tas
 
 - `list_tasks` (read): filters for project, area (`"inbox"` for no area), status list, priority list, label, search words, due_from/due_to, planned_from/planned_to, overdue, unscheduled, include_done and limit.
 - `get_task` (read): everything about one task, including its numbered Done when items and sub-tasks, flow connections, the latest session and the latest report an agent handed back.
-- `create_task`: title, project or area, description, done_when, status, priority, due, planned, estimate_minutes, labels, subtasks and agent.
+- `create_task`: title, project or area, description, done_when, needs, status, priority, due, planned, estimate_minutes, labels, subtasks and agent.
   - `done_when` lists what must be true when the task is finished, one checkable outcome per item. Agents answer each item when they hand the task back.
+  - `needs` lists what its agent needs from the computer its session runs on: MCP servers or claude.ai connectors by name, such as `["supabase", "Gmail"]`. PacedMind offers a computer that has them, and a flow asks before it starts the task without them. Only what differs between the user's computers: a project's own folder brings its servers everywhere.
   - `agent` is who does the task: `claude`, `codex`, or `human` when only the user can do it. Tasks that are the user's (`human`) stay out of flows, can't start agent sessions, and the auto-planner puts them in the user's time. Left out, the task gets the project's default agent.
 - `create_tasks`: up to 50 tasks at once in one project or area.
 - `update_task`:
@@ -40,6 +41,7 @@ A session that PacedMind started gets a smaller set: the read tools, `create_tas
   - move to a project or area;
   - agent (`human` also takes the task out of its flow);
   - where its agent sessions run (`runs_in`: `terminal`, `desktop` for the agent's desktop app, or `cloud`) and its own `folder`, when it shouldn't work in the project's folder (null goes back to the project's);
+  - `needs`, what its agent needs from the computer (replaces the list, `[]` clears it);
   - sub-tasks: add, complete, reopen or remove, by number or title.
   - Setting status done may start sessions that wait for the task in a flow.
 - `bulk_update_tasks`: the same status, priority, due, planned, `shift_days`, project, area or label change for up to 100 tasks.
