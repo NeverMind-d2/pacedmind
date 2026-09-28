@@ -9,6 +9,7 @@ import { MODE } from "../supabase";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
+import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
@@ -70,7 +71,7 @@ export function tool<S extends z.ZodObject>(
         if (who.kind === "session" && name !== "ask_user") await noteAgentActivity(who.sessionId).catch(() => {});
         return { content: [{ type: "text" as const, text: await run(args) }] };
       } catch (e) {
-        const text = e instanceof ToolError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
+        const text = e instanceof ToolError || e instanceof CloudReadOnly ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`;
         return { content: [{ type: "text" as const, text }], isError: true };
       }
     }) as never,
@@ -274,6 +275,7 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,
     t.runIn ? `Sessions run in: ${t.runIn === "desktop" ? "the agent's desktop app" : t.runIn === "cloud" ? "the agent's cloud" : "a terminal"}` : null,
+    t.needs.length ? `Needs on its computer: ${t.needs.join(", ")}` : null,
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",
     t.doneWhen.length ? `\nDone when:\n${t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n")}` : null,
     t.subtasks.length ? `\nSub-tasks:\n${t.subtasks.map((s, i) => `${i + 1}. [${s.done ? "x" : " "}] ${s.title}`).join("\n")}` : null,

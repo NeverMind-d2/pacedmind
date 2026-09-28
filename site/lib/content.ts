@@ -72,7 +72,7 @@ export const PLACES = {
     { icon: "appWindow", name: "In the agent's app", body: "The Claude or Codex app opens a new session in the task's folder, with the first message written for you to send." },
     { icon: "cloud", name: "In the agent's cloud", body: "Claude Code on the web and Codex cloud work on a copy of your repository, on a new branch named after the task." },
   ],
-  note: "Until you choose, a task runs in a terminal, or in the agent's app when its command-line tool isn't there. With Cloud, when it arrives, a task can also run on another of your computers.",
+  note: `Until you choose, a task runs in a terminal, or in the agent's app when its command-line tool isn't there. With Cloud${SITE.cloudOpen ? "" : ", when it arrives"}, a task can also run on another of your computers.`,
   harnesses: "Claude Code and Codex today. Support for more agent harnesses is coming soon.",
 } as const;
 
@@ -149,8 +149,9 @@ export const PRICING = {
 export const ONE_DEVICE = ["Tasks, time blocks, calendar and deadlines", "Claude Code and Codex sessions, and flows", "Windows and macOS", "Your plan stays on your computer", "No account needed"];
 export const CLOUD = ["Everything in One device", "Unlimited tasks in the cloud", "All your devices, in sync", "Start sessions on your other computers"];
 /** The price question's answer, also the plans line in /llms.txt. */
-export const COST =
-  "PacedMind is free on one device, without an account. Cloud, with unlimited tasks in the cloud and all your devices in sync, is coming soon for about the price of a music subscription in your country. It starts with 7 days free.";
+export const COST = SITE.cloudOpen
+  ? "PacedMind is free on one device, without an account. Cloud, with unlimited tasks in the cloud and all your devices in sync, costs about the price of a music subscription in your country, monthly, or ten months' worth for a year. It starts with 7 days free, without a card."
+  : "PacedMind is free on one device, without an account. Cloud, with unlimited tasks in the cloud and all your devices in sync, is coming soon for about the price of a music subscription in your country. It starts with 7 days free.";
 
 /** Shown on the page and in its FAQPage data word for word: search engines check that the two match. */
 export const FAQ = [
@@ -184,7 +185,7 @@ export const FAQ = [
   },
   {
     question: "Where is my plan stored?",
-    answer: "On your computer, and you don't need an account. With Cloud, when it arrives, you sign in and your plan stays in sync across all your devices.",
+    answer: `On your computer, and you don't need an account. With Cloud${SITE.cloudOpen ? "" : ", when it arrives"}, you sign in and your plan stays in sync across all your devices.`,
   },
   {
     question: "Is PacedMind open source?",

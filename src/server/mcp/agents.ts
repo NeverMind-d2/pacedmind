@@ -2,7 +2,10 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { ImageError, removeImageFiles, storeImage, type StoredImage } from "../attachments";
-import { deviceConfig, moveSessionToken, revokeSessionTokens } from "../device";
+import { deviceConfig, moveSessionToken, projectServers, revokeSessionTokens } from "../device";
+import { noteAccountServers } from "../devices";
+import { agentExtras, folderExtras, sortReported, type ReportedServers } from "../extras";
+import { noteSessionMcp, sessionMcp } from "../session-mcp";
 import { nextReadyTask } from "../flow";
 import { forgetSessionFiles, plannedFolder, plannedSurface } from "../launcher";
 import { askForChanges, askFromAgent } from "../requests";
@@ -185,11 +188,42 @@ function releaseCaller() {
 
 const taskMap = async () => new Map((await repo.listTasks()).map((t) => [t.id, t]));
 
-/** What an agent says it runs with (start_task's environment), as its session shows it: plain names only. */
-function environmentText(who: string, env: { model?: string; mcp_servers?: string[] }): string {
-  const model = (env.model ?? "").replace(/[^\w .:()/+-]/g, "").trim().slice(0, 80);
-  const servers = [...new Set((env.mcp_servers ?? []).map((n) => n.trim()).filter((n) => /^[\w.@:+-]{1,48}$/.test(n) && n !== MCP_NAME && n !== OLD_MCP_NAME))].slice(0, 30);
-  return `${who} says it runs${model ? ` as ${model}` : ""}, with ${servers.length ? `the MCP servers ${servers.join(", ")}` : "no other MCP servers"}`;
+/**
+ * What an agent says it runs with (start_task's environment), as its session shows it: plain names only, the MCP
+ * servers by where they come from (sortReported). Null when it said nothing that can be shown.
+ */
+function environmentText(who: string, model: string | undefined, servers: ReportedServers | null): string | null {
+  const m = (model ?? "").replace(/[^\w .:()/+-]/g, "").trim().slice(0, 80);
+  const parts = servers
+    ? [
+      servers.own.length ? `the MCP servers ${servers.own.join(", ")}` : null,
+      servers.account.length ? `the claude.ai connectors ${servers.account.join(", ")}` : null,
+      servers.plugins.length ? `the servers of its plugins ${servers.plugins.join(", ")}` : null,
+    ].filter((p): p is string => !!p)
+    : [];
+  if (!m && !servers) return null;
+  const list = servers ? `with ${parts.length ? parts.join("; ") : "no other MCP servers"}` : "";
+  return `${who} says it runs${m ? ` as ${m}${list ? `, ${list}` : ""}` : ` ${list}`}`;
+}
+
+/**
+ * Records what a session runs with: the model its agent says, and the MCP servers it has tools from. For a Claude Code
+ * session this computer started in a terminal (it calls with its own token), those come from Claude Code's own record
+ * of the session (session-mcp.ts), with the ones it lacks and why; with no project's pick, what the account its CLI is
+ * signed in to gave it also goes on this computer's entry (noteAccountServers). Other sessions show what their agent
+ * says, which can be wrong: an agent told a server failed can still list it.
+ */
+async function recordEnvironment(s: Session, projectId: string | null, env: { model?: string; mcp_servers?: string[] }) {
+  const own = callerSession()?.sessionId === s.id && s.agent === "claude" && s.folder && s.cliSessionId;
+  const state = own ? sessionMcp(s.folder!, s.cliSessionId!) : null;
+  const servers = state?.servers
+    ?? env.mcp_servers?.map((n) => n.trim()).filter((n) => /^[\w.@:+-]{1,60}$/.test(n) && n !== MCP_NAME && n !== OLD_MCP_NAME);
+  const plugins = [...agentExtras(s.agent).plugins, ...(s.folder ? folderExtras(s.folder).plugins : [])];
+  const sorted = servers ? sortReported(servers, plugins) : null;
+  const text = environmentText(AGENT_LABEL[s.agent], env.model, sorted);
+  if (text) await repo.addSessionEvent(s.id, "environment", text);
+  await noteSessionMcp(s, state, false);
+  if (state && sorted && !projectServers(projectId)) await noteAccountServers(s.agent, sorted.account).catch(() => {});
 }
 
 export function registerAgentTools(server: McpServer) {
@@ -427,7 +461,7 @@ export function registerAgentTools(server: McpServer) {
       environment: z.object({
         model: z.string().max(80).optional().describe("The model you run as"),
         mcp_servers: z.array(z.string().max(60)).max(30).optional()
-          .describe("The MCP servers you have tools from besides pacedmind: the part between mcp__ and the next __ in those tools' names"),
+          .describe("Every MCP server you have tools from besides pacedmind, deferred ones too: the part between mcp__ and the next __ in those tools' names. PacedMind tells the user which configured ones you don't have"),
       }).optional().describe("What you run with. PacedMind shows it on the session as you report it"),
     }),
     kind: "write",
@@ -435,7 +469,7 @@ export function registerAgentTools(server: McpServer) {
     const t = await findTask(task);
     const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session)) ?? (await outsideSession(t, agent));
     await repo.updateSession(s.id, { status: "running" });
-    if (environment) await repo.addSessionEvent(s.id, "environment", environmentText(AGENT_LABEL[s.agent], environment));
+    await recordEnvironment(s, t.projectId, environment ?? {});
     await repo.addSessionEvent(s.id, "picked_up", `${AGENT_LABEL[s.agent]} read the task over MCP`);
     if (t.status !== "progress") await repo.updateTask(t.id, { status: "progress" });
     const after = (await repo.getTask(t.id))!;

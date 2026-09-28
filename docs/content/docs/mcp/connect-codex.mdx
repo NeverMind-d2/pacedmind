@@ -11,11 +11,11 @@ Connect Codex to PacedMind Cloud instead: it signs in with your account (`codex 
 
 ## With Connect in Settings
 
-In **Settings → Connect your agents**, select **Connect** next to **Codex** and confirm. PacedMind adds the section below to `config.toml`, in place of an earlier `pacedmind` section or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup` (*Connected Codex, its app included. New Codex sessions can use PacedMind.*). **Computers** then shows Codex as *Connected*.
+In **Settings → MCP server**, under **Connect your agents**, select **Connect** next to **Codex** and confirm. PacedMind adds the section below to `config.toml`, in place of an earlier `pacedmind` section or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup` (*Connected Codex, its app included. New Codex sessions can use PacedMind.*). **Computers** then shows Codex as *Connected*.
 
 ## By hand
 
-1. Open **Settings → Connect your agents** and select **Copy config** next to **Codex**. It copies:
+1. Open **Settings → MCP server** and, under **Connect your agents**, select **Copy config** next to **Codex**. It copies:
 
    ```toml
    # ~/.codex/config.toml
@@ -38,7 +38,7 @@ With the [agent skills](/skills) installed in `~/.codex/skills`, Codex also know
 
 ## After regenerating the token
 
-A new token in **Settings → MCP server** disconnects Codex until its configuration has the new one: select **Connect** in **Settings → Connect your agents** again, or copy and paste the section again. Sessions PacedMind starts in a terminal pick up the new token on their own.
+A new token in **Settings → MCP server** disconnects Codex until its configuration has the new one: select **Connect** in **Settings → MCP server** again, or copy and paste the section again. Sessions PacedMind starts in a terminal pick up the new token on their own.
 
 ## Remove the connection
 

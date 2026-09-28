@@ -80,9 +80,11 @@ fi
 
 if [ -z "$PLACEHOLDER" ] && [ -z "$SITE_ONLY" ]; then
 echo "> Uploading the app"
-# The working tree without dependencies, builds, local data, or the separate site and docs projects.
+# The working tree without dependencies, builds, local data, or the separate docs project. The site's sources go too,
+# without its dependencies and builds: the app shows the same Cloud prices (site/prices.json, site/lib/markets.ts).
 tar -C "$root" -czf - --exclude=./node_modules --exclude=./.next --exclude=./data --exclude=./dist --exclude=./.git \
-  --exclude=./.claude --exclude=./site --exclude=./docs --exclude='./.env*' . |
+  --exclude=./.claude --exclude=./site/node_modules --exclude=./site/.next --exclude=./site/out --exclude=./docs \
+  --exclude='./.env*' . |
   remote 'sudo -u pacedmind sh -c "cd /srv/pacedmind && rm -rf app.new && mkdir app.new && tar -xzf - -C app.new"'
 
 echo "> Building on the server"

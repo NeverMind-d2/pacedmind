@@ -11,6 +11,7 @@ import { RemoteStart } from "@/components/remote-start";
 import { ImportOffer } from "@/components/import-projects";
 import { CloudConnectOffer } from "@/components/cloud-connect-offer";
 import { Toaster } from "@/components/ui";
+import { BillingBanner } from "@/components/billing";
 import * as repo from "@/server/repo";
 import { deviceConfig } from "@/server/device";
 import { localTools, mcpLinks } from "@/server/devices";
@@ -18,6 +19,7 @@ import { mcpUrl } from "@/server/launcher";
 import { MODE, authState } from "@/server/supabase";
 import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
+import { readPlan } from "@/server/billing";
 import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
 
@@ -34,8 +36,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const step = state || MODE === "web" ? nextStep(state) : deviceConfig().withoutAccount ? null : "/login";
   if (step) redirect(step);
   const user = state?.user ?? null;
-  const [areas, projects, tasks, waiting, all] = await Promise.all([
-    repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }), repo.listDevices(),
+  const [areas, projects, tasks, waiting, all, plan] = await Promise.all([
+    repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }), repo.listDevices(), readPlan(),
   ]);
   // Where "Start on a computer" can send a session: in the desktop app, the other computers.
   const me = MODE === "desktop" ? deviceConfig().deviceId : null;
@@ -60,13 +62,16 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <div className="flex h-full flex-col">
       <AppHeader email={user?.email ?? null} />
+      {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} />
         {/* On a phone the sidebar is a panel over the page, and the page takes the whole width. */}
         <main className="m-2 ml-0 flex min-w-0 flex-1 overflow-hidden rounded-[10px] border border-line bg-panel max-md:m-0 max-md:rounded-none max-md:border-x-0 max-md:border-b-0">{children}</main>
       </div>
       {approvals.length > 0 && <Approvals items={approvals} />}
-      <RemoteStart devices={devices} tasks={tasks.map((t) => ({ id: t.id, key: t.key, title: t.title }))} />
+      <RemoteStart devices={devices} tasks={tasks.map((t) => ({
+        id: t.id, key: t.key, title: t.title, needs: t.needs, runsOn: t.deviceId ?? projects.find((p) => p.id === t.projectId)?.deviceId ?? null,
+      }))} />
       <QuickAdd areas={areas} projects={projects} />
       <ActivityEditor areas={areas} />
       <CommandPalette tasks={paletteTasks} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />

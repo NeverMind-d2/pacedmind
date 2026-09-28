@@ -9,11 +9,12 @@ import {
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, repoOf, snapshotOf, strings,
+  deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
   type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
+import { CloudReadOnly } from "@/lib/billing";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
@@ -22,6 +23,7 @@ import {
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * The account's data in PacedMind Cloud (Supabase), used while someone is signed in; repo.ts picks this or
@@ -51,18 +53,23 @@ type Result<T> = { data: T | null; error: PostgrestError | null };
 const s = (v: unknown) => (v == null ? null : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));
 
+/** What a failed query throws: CloudReadOnly when the database refused a write because the account's Cloud has ended. */
+function failure(error: PostgrestError): Error {
+  return error.code === "PT402" ? new CloudReadOnly() : new Error(error.message);
+}
+
 function many(res: Result<Row[]>): Row[] {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
   return res.data ?? [];
 }
 
 function one(res: Result<Row>): Row | null {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
   return res.data;
 }
 
 function check(res: { error: PostgrestError | null }) {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
 }
 
 /** Every row of a query, 1000 at a time (the most Supabase returns per request). */
@@ -130,18 +137,26 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
 
 /**
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
- * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
+ * new key (`renamedKey`), which only its new tasks get.
  */
 export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
+  if (!isUuid(id)) return;
   const values: Row = {};
-  if (patch.name?.trim()) values.name = patch.name.trim();
+  const name = patch.name?.trim();
+  if (name) {
+    values.name = name;
+    const areas = await listAreas();
+    const current = areas.find((a) => a.id === id);
+    if (current) values.key = renamedKey(name, current.key, new Set(areas.filter((a) => a.id !== id).map((a) => a.key)));
+  }
   if (patch.color) values.color = patch.color;
   if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
   if (patch.picture !== undefined) values.picture = areaPictureOf(patch.picture);
   if (values.icon) values.picture = null;
   if (values.picture) values.icon = null;
-  if (!Object.keys(values).length || !isUuid(id)) return;
+  if (!Object.keys(values).length) return;
   const db = await accountDb();
   check(await db.from("areas").update(values).eq("id", id));
 }
@@ -281,7 +296,7 @@ const toTask = (r: Row): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
-  doneWhen: (r.done_when as string[] | null) ?? [], reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
@@ -333,7 +348,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const r = one(await db.from("tasks").insert({
     key: "", area_id: areaId, project_id: input.projectId ?? null, title: input.title.trim(), description: input.description ?? "",
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
-    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []),
+    estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
   }).select(TASK_SELECT).single());
   return toTask(r!);
@@ -363,6 +378,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, TASK_COLS);
   if (patch.doneWhen) values.done_when = cleanDoneWhen(patch.doneWhen);
+  if (patch.needs) values.needs = cleanNeeds(patch.needs);
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();
@@ -571,7 +587,7 @@ async function attachmentsWhere(column: "report_id" | "session_id", ids: (string
 export async function countSessionImages(sessionId: string): Promise<number> {
   const db = await accountDb();
   const { count, error } = await db.from("attachments").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
   return count ?? 0;
 }
 
@@ -607,7 +623,7 @@ export async function addAttachment(
   }).select(ATTACHMENT_COLS).single();
   if (res.error) {
     removeImageFiles([img.file]);
-    throw new Error(res.error.message);
+    throw failure(res.error);
   }
   return toAttachment(res.data as Row);
 }
@@ -897,7 +913,7 @@ export async function getDevice(id: string): Promise<Device | null> {
 export async function registerDevice(name: string, platform: Device["platform"]): Promise<string> {
   const db = await accountDb();
   const { data, error } = await db.rpc("register_device", { device_name: cleanDeviceName(name) || "Computer", device_platform: platform });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
   return String(data);
 }
 
@@ -923,7 +939,7 @@ export async function setDefaultDevice(id: string) {
 export async function claimDevice(id: string) {
   const db = await accountDb();
   const { error } = await db.rpc("claim_device", { device: id });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
 }
 
 /** Signs a computer out: its session ends at once and its waiting requests are canceled. */
@@ -931,7 +947,7 @@ export async function revokeDevice(id: string) {
   if (!isUuid(id)) throw new Error("Unknown computer");
   const db = await accountDb();
   const { error } = await db.rpc("revoke_device", { device: id });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
 }
 
 /**
@@ -1072,7 +1088,7 @@ export async function pushKeys(): Promise<{ publicKey: string; privateKey: strin
 export async function savePushKeys(keys: { publicKey: string; privateKey: string }) {
   const db = await accountDb();
   const { error } = await db.from("push_keys").insert({ public_key: keys.publicKey, private_key: keys.privateKey });
-  if (error && error.code !== "23505") throw new Error(error.message);
+  if (error && error.code !== "23505") throw failure(error);
 }
 
 export async function listPushSubscriptions(): Promise<PushSubscriptionRow[]> {

@@ -1,55 +1,110 @@
 ---
 title: Settings
-description: Every section of PacedMind's Settings page, from appearance, devices, the MCP server and connecting agents to how sessions start, project folders, their MCP servers and importing them, work hours and data.
+description: "Every page of PacedMind's Settings, in the order of its menu: the account and the data, the theme and the work hours, and this computer's name and agents, how sessions start, project folders with their MCP servers and importing them, and the MCP server."
 ---
 
-**Settings**, at the bottom of the sidebar, holds *Appearance, sessions, MCP and planning*. Most fields save as soon as they're changed or lose focus, confirmed by *Saved*.
+**Settings**, at the bottom of the sidebar, has a menu of pages on the left. On a narrow window the menu becomes a row above the page, without the group names, and scrolls sideways. Opening **Settings** shows its first page, **Account**. Each page starts with its name and a line on what it holds, and most fields save as soon as they're changed or lose focus, confirmed by *Saved*.
+
+In the desktop app, without an account, the menu has these pages:
+
+| Group | Pages |
+| --- | --- |
+| At the top, without a name | **[Account](#account)**, **[Data](#data)** |
+| **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)** |
+| **This computer** | **[General](#general)**, **[Sessions](#sessions)**, **[Projects](#projects)**, **[MCP server](#mcp-server)** |
+
+Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on) and **[Security](#security)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, and **Projects**, with each project's default agent only (*Folders and flows are set in the desktop app, on the computer where the sessions run.*). See [Accounts and Cloud](/accounts-and-cloud).
+
+## Account
+
+*Use PacedMind on your other computers and in the browser too.*
+
+Without an account, the page has one section, **PacedMind Cloud**. Its **Account** row reads *Not signed in*, and **Sign in** opens the sign-in screen. The note below says: *Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.* See [Accounts and Cloud](/accounts-and-cloud).
+
+Signed in, the page shows who you're signed in as, with **Sign out**, and **Sign out all** for every browser and computer, this one too. A **Computers** section counts the computers signed in to the account and those online, names the default one, and has **Open Computers**, which opens the **Computers** page. **Delete account** deletes the account and everything in it, after you type your email and a two-factor code.
+
+## Plan
+
+*Your PacedMind Cloud trial or subscription, and paying for it.* Only when signed in, once paid plans are on.
+
+The **Plan** row says where the account stands, such as *Free trial, 12 days left* or *Cloud, paid monthly*. Before subscribing, **Prices for** picks the country whose price to show, and **Pay** chooses **Monthly** or **Yearly**, with the price, and **Subscribe**. After subscribing, **Billing** has **Manage billing**, which opens Stripe's page for the card, invoices and cancelling, and while paying monthly or yearly, **Switch to yearly** or **Switch to monthly**. Payments go through Stripe: PacedMind never sees your card.
+
+## Security
+
+*Two-factor sign-in and your password.* Only when signed in.
+
+**Two-factor sign-in** lists your authenticator apps, with **Add authenticator** and, while there's more than one, **Remove**, which needs a code from another one. **Password** changes the password with the current one, the new one twice and a two-factor code (**Change password**), and signs out your other devices.
+
+## Data
+
+*What this computer keeps, and starting over.*
+
+The note says where the data is and counts the sessions recorded so far, such as *Stored on this computer, in PacedMind's data folder. 12 sessions recorded so far.*
+
+**Reset** has two buttons:
+
+| Button | Result |
+| --- | --- |
+| **Load sample data** | Asks *Replace everything with the sample data?*, then replaces everything with an example workspace (*Sample data loaded*). |
+| **Start empty** | Asks *Delete all tasks, projects, activities and sessions?*, then goes back to the five default areas (*Workspace cleared*). |
+
+Both resets replace all areas, projects, tasks, activities and sessions, and can't be undone. Settings, including the work hours and the MCP token, stay. See [Where your data lives](/getting-started/data#reset).
+
+Signed in, the page resets the account's data instead. In the desktop app, while this computer still keeps tasks or projects from before you signed in, a **This computer** row counts them, and **Move to account** moves them into the account. **Your account** → **Move to this computer** copies everything in the account to this computer and signs out, so PacedMind keeps working without an account.
 
 ## Appearance
 
+*How PacedMind looks here.*
+
 **Theme**: **Dark** or **Light**. The sun or moon button next to **Settings** in the sidebar switches it too. The choice is remembered on this computer and also colors the desktop app's title bar.
 
-## Devices
+## Notifications
 
-*Sessions run in a terminal or an agent's desktop app on a computer with PacedMind, or in the agent's cloud. PacedMind looks for Claude Code and Codex when it starts and every half hour. Connected, the desktop apps report back like terminal sessions.*
+*When a session needs you, wherever you are.* Only when signed in.
 
-One block per computer: its name and system, such as *Windows · this computer*, and one row per agent:
+The page lists the browsers, phones included, that get a notification when a session needs you, with **Turn on** and **Turn off**. The desktop app shows its own notifications; see [Notifications](/desktop-app#notifications).
 
-| Part | Shows |
+## Planning
+
+*The time the auto-planner fills with focus blocks.*
+
+The section **Auto-plan** says: *The week view fills free focus time between these hours, around your fixed activities.*
+
+| Row | Meaning |
 | --- | --- |
-| The command-line tool | Its version, such as *CLI 2.1.282*, or *No CLI*. |
-| The desktop app | *Claude app* or *Codex app* with its version, or *No Claude app*. |
-| The connection | *Reports to PacedMind* when sessions PacedMind doesn't start itself, such as those in the desktop app, reach this PacedMind; *Reports to another PacedMind* when they're set up for another copy, such as a development one; *Not connected* otherwise. |
+| **Focus hours** | When work starts and ends, such as 09:00 to 17:00. |
+| **Keep free** | A daily break, such as 12:30 to 13:30. |
+| **Work days** | **Mon** to **Sun**, each switched on or off with a click. |
 
-**Check again** looks for the agents right away (*Checked DESKTOP-1*). Before the first check finishes, a computer shows *Looking for Claude Code and Codex…*.
+**Change**, next to **Rules** in the week view's **Auto-plan** panel, opens this page. See [Work hours and days](/planning/work-hours).
 
-**Connect** appears for an agent that isn't connected to this PacedMind. It asks first, then:
+## General
 
-* for **Claude Code**, adds PacedMind's MCP server to Claude Code for all projects as `pacedmind`, in place of an earlier one or one under PacedMind's earlier name, `organizer`, where the Claude app's Code sessions find it too: the same as running the command under **Connect your agents**;
-* for **Codex**, adds the `[mcp_servers.pacedmind]` section to `~/.codex/config.toml`, which the Codex app and the Codex command-line tool share, in place of an earlier one or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup`.
+*This computer's name, and what it does when asked from elsewhere.* This page and the next three are under **This computer**, in the desktop app.
 
-The message *Claude Code reports to PacedMind now* confirms it. Use **Connect** from the copy of PacedMind the agents should report to, normally the installed app.
+**Name** is the computer's name, the system's own at first, such as *DESKTOP-1*. PacedMind uses it wherever it names the computer, such as *The Codex CLI isn't installed on DESKTOP-1*. It's saved when the field loses focus.
 
-## MCP server
+The note says what stays on the computer: *What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain.*
 
-*Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished.*
+Signed in, **From elsewhere** decides what happens to sessions asked for from the web app or another computer: **Refuse**, **Ask me** or **Start**.
 
-| Row | Shows |
-| --- | --- |
-| **Status** | *Running with this app*. |
-| **Address** | `http://127.0.0.1:4319/api/mcp`, with **Copy**. |
-| **Access token** | The token, masked, with **Show** / **Hide**, **Copy** and **Regenerate**. |
+### Agents found here
 
-**Regenerate** asks *Make a new token? Agents set up with the old one lose access until you update them.* See [MCP server](/mcp#the-access-token).
+*What PacedMind found here; it looks when it starts and every half hour. The Computers page has more: cloud and sign-in for each agent, and this computer's flows and sessions.*
 
-## Connect your agents
+One row each for **Claude Code** and **Codex**, with what PacedMind found of it: the command-line tool's version and the desktop app with its version, such as *CLI 2.1.282 · Claude app 1.4*, only one of them when the other is missing, or *Not found*. Before the first check finishes, the row reads *Looking…*.
 
-*Sessions you start from PacedMind are connected automatically. Set this up once to use PacedMind from sessions you start yourself.* It's the manual way to do what **Connect** under **Devices** does, for example on another computer.
+**Open Computers**, next to the heading, opens the **Computers** page. There, this computer's card has:
 
-* **Claude Code**: the `claude mcp add` command with the address and token, for all projects (`--scope user`), and **Copy command**. See [Connect Claude Code](/mcp/connect-claude-code).
-* **Codex**: the `config.toml` section with the address and the token, and **Copy config**. *The Codex CLI and the Codex app share this file. Sessions started from PacedMind don't need it.* See [Connect Codex](/mcp/connect-codex).
+* for each agent, its **CLI** and **Desktop app**, such as *Not installed*, whether it can send sessions to its **Cloud**, its **Sign-in**, and under **MCP** whether sessions PacedMind doesn't start itself, such as those in the desktop app, report to this PacedMind: *Connected*, *Old name* (connected under PacedMind's earlier name, `organizer`), *Reports elsewhere* (set up for another copy, such as a development one) or *Not connected*;
+* **Check again**, which looks for the agents right away (*Checked DESKTOP-1*);
+* **Connect** under **MCP**, for an agent that isn't connected to this PacedMind, the same as **Connect** under [Connect your agents](#connect-your-agents).
 
-## Starting sessions
+## Sessions
+
+*How agent sessions start on this computer.*
+
+### Starting sessions
 
 | Row | Meaning |
 | --- | --- |
@@ -60,22 +115,24 @@ The message *Claude Code reports to PacedMind now* confirms it. Use **Connect** 
 
 Change a command to use a full path or to add options. PacedMind adds its own options after it and uses the command as typed, so put a path with spaces in double quotes. See [Start, resume and close sessions](/agents/start-and-manage#the-agent-command).
 
-## Tools agents can use
+### Answering agents
 
-The MCP tools by group: **Overview**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Flows** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks without asking; anything else asks in their terminal first. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).
+Signed in, **Answer from elsewhere** decides where you answer what agents in sessions started here ask: *Only on this computer*, in the window or the agent's terminal, or, switched on, *From any of your devices*: their questions, and Claude Code's permission requests for tools, also reach your phone and your other computers.
 
-## Projects and folders
+## Projects
 
-*A session works in its task's own folder, else its project's. Tasks without either get a scratch folder next to the database.*
+*Each project's folder, flow, agent and MCP servers on this computer.*
 
-**Import from Claude and Codex**, next to the heading, brings the folders you work in with Claude Code and Codex over as projects. See [Import projects](#import-projects).
+The note below the list says: *A session works in its task's own folder on this computer, else its project's; without either it gets a scratch folder. A flow only starts sessions by itself when it's on here. Changing a folder turns the flow off.*
+
+**Import from Claude and Codex**, above the list, brings the folders you work in with Claude Code and Codex over as projects. See [Import projects](#import-projects).
 
 One row per project, with:
 
 * the project's color and name;
 * its default agent: **No agent**, **Claude Code** or **Codex**;
 * **Flow**: whether its flow starts sessions on its own (*Flow on* or *Flow paused*). Switching it on also starts the tasks that are already ready (*Started DEV-24*);
-* its folder, such as `C:\path\to\repo`, saved when the field loses focus (*Folder saved*);
+* its folder, such as `C:\path\to\repo` or `/path/to/repo`, saved when the field loses focus (*Folder saved*);
 * what Claude Code and Codex get in that folder on top of what they have everywhere (below);
 * *MCP servers for its sessions:* *all they have here*, *only* and the chosen servers, or *none besides PacedMind*, with **Change**. **Change** offers **All of them** and **Only these**, with a switch for each server under **Only these**. Each change is saved at once (*Saved*), and **Done** closes the choice. See [Choose a project's MCP servers](/agents/start-and-manage#choose-a-projects-mcp-servers).
 
@@ -112,27 +169,30 @@ A folder used by both Claude Code and Codex is listed once. Sessions in a git wo
 
 A folder that is a copy of a project you already have, such as one made on another computer, joins that project instead of becoming another: it holds the same git repository, or else has the same name, and the project has no folder on this computer yet. Its row shows the project's name and **Existing project**, and it's ticked however long ago it was used. Select **Existing project** to make it a new project instead (the tag then reads **New project**, which puts it back). See [Projects on several computers](/concepts/areas-and-projects#projects-on-several-computers).
 
-Choose the area under **Add to**, then select **Add 9 projects** (*Added 9 projects*). Each new project gets its folder, on this computer, and as its default agent the one that worked there last; each project a folder joins gets that folder on this computer (*Linked PacedMind to its folder here*). **Not now** closes the window for good; **Import from Claude and Codex** is always here.
+Choose the area under **Add to**, then select **Add 9 projects** (*Added 9 projects*). Each new project gets its folder, on this computer, and as its default agent the one that worked there last; each project a folder joins gets that folder on this computer (*Linked PacedMind to its folder here*). On the first start, **Not now** closes the window for good; opened from here, the window has **Cancel** instead, and **Import from Claude and Codex** is always here.
 
-## Auto-plan
+## MCP server
 
-*The week view fills free focus time between these hours, around your fixed activities.*
+*How Claude Code and Codex reach PacedMind.*
 
-| Row | Meaning |
+The note below the rows says: *Claude Code and Codex use this to read your tasks and to tell PacedMind when a session picks up a task and when it's finished. Sessions PacedMind starts in a terminal get their own token, which works only for their task and only while they run.*
+
+| Row | Shows |
 | --- | --- |
-| **Focus hours** | When work starts and ends, such as 09:00 to 17:00. |
-| **Keep free** | A daily break, such as 12:30 to 13:30. |
-| **Work days** | **Mon** to **Sun**, each switched on or off with a click. |
+| **Address** | `http://127.0.0.1:4319/api/mcp`, with **Copy**. |
+| **Your token** | The token, masked, with **Show** / **Hide**, **Copy** and **New token**. |
 
-See [Work hours and days](/planning/work-hours).
+**New token** asks *Make a new token? Agents set up with the old one lose access until you connect them again.*, then confirms *New token made. Connect your agents again.* See [MCP server](/mcp#the-access-token).
 
-## Data
+### Connect your agents
 
-*Everything is stored in one SQLite file on this computer.* The note also counts the sessions recorded so far.
+*For Claude Code and Codex you start yourself, and for sessions in their desktop apps. Anyone with your token can use PacedMind from this computer, so keep it out of shared files.* Sessions PacedMind starts in a terminal don't need it.
 
-| Row | Meaning |
-| --- | --- |
-| **Database** | The database file's full path. |
-| **Reset** | **Load sample data** (*Replace everything with the sample data?*) or **Start empty** (*Delete all tasks, projects, activities and sessions?*). |
+* **Claude Code**: **Connect** and **Copy command**. **Connect** asks first, then adds PacedMind's MCP server to Claude Code for all projects as `pacedmind`, with your token, without showing it, in place of an earlier one or one under PacedMind's earlier name, `organizer`; the Claude app's Code sessions use it too (*Connected Claude Code for all your projects. New Claude Code sessions can use PacedMind.*). **Copy command** copies the `claude mcp add` command that does the same by hand, for all projects (`--scope user`). See [Connect Claude Code](/mcp/connect-claude-code).
+* **Codex**: **Connect** and **Copy config**, with the `config.toml` section shown below them, the token masked until **Show**. **Connect** asks first, then adds the `[mcp_servers.pacedmind]` section to `~/.codex/config.toml`, in place of an earlier one or one under PacedMind's earlier name, `organizer`, and keeps the previous file as `config.toml.pacedmind-backup` (*Connected Codex, its app included. New Codex sessions can use PacedMind.*). **Copy config** copies the section. *The Codex CLI and the Codex app share this file. Sessions started from PacedMind don't need it: they get their own token.* See [Connect Codex](/mcp/connect-codex).
 
-Both resets replace all areas, projects, tasks, activities and sessions, and can't be undone. Settings, including the work hours and the MCP token, stay. See [Where your data lives](/getting-started/data).
+Use **Connect** from the copy of PacedMind the agents should report to, normally the installed app. The **Computers** page also offers **Connect** for this computer's agents that aren't connected yet.
+
+### Tools agents can use
+
+The MCP tools by group: **Overview**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Flows** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they're asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).

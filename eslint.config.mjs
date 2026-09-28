@@ -22,6 +22,8 @@ const eslintConfig = defineConfig([
     "site/next-env.d.ts",
     // The docs (docs/, its own Next.js project with its own ESLint config).
     "docs/**",
+    // The billing Edge Functions run on Deno in Supabase (deno check in CI).
+    "supabase/functions/**",
   ]),
 ]);
 

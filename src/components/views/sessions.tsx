@@ -11,7 +11,7 @@ import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, use
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
-import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, mcpProblemsOf, waitingInTerminal } from "@/lib/dates";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
   type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type Surface,
@@ -487,6 +487,9 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   if (client) props.push(["Client", client.text.replace(/^Connected from /, ""), false]);
   const env = s.events.findLast((e) => e.kind === "environment");
   if (env) props.push(["Agent says", env.text.replace(/^.+? says it /, ""), false]);
+  // MCP servers it should have tools from but hasn't, as Claude Code's own record of the session says (session-mcp.ts).
+  const missing = mcpProblemsOf(s.events);
+  if (missing) props.push(["Not available", missing, false]);
   props.push(["Session", s.id, true]);
   if (s.cliSessionId) props.push(["Claude session", s.cliSessionId, true]);
 

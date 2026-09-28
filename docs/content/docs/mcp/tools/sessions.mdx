@@ -125,9 +125,11 @@ Tells PacedMind that the agent is starting work on a task. The session becomes *
 | `task` | string | yes | The task key. |
 | `session` | string | no | The session id from the agent's first message. |
 | `agent` | `claude` or `codex` | no | Used when PacedMind didn't start the session. |
-| `environment` | object | no | What the agent runs with, for the user to see: `model`, the model it runs as (up to 80 characters), and `mcp_servers`, the MCP servers it has tools from besides `pacedmind` (up to 30 names). |
+| `environment` | object | no | What the agent runs with, for the user to see: `model`, the model it runs as (up to 80 characters), and `mcp_servers`, every MCP server it has tools from besides `pacedmind`, deferred ones too (up to 30 names). |
 
-With `environment`, PacedMind records *Claude Code says it runs as …, with the MCP servers github, linear*, or *… with no other MCP servers*, before *Claude Code read the task over MCP*. It keeps up to 30 plain server names: `pacedmind`, its earlier name `organizer`, and names with spaces or other unusual characters are left out. **Sessions** shows it as **Agent says**.
+With `environment`, PacedMind records *Claude Code says it runs as …, with the MCP servers github, linear*, or *… with no other MCP servers*, before *Claude Code read the task over MCP*. It keeps up to 30 plain server names: `pacedmind`, its earlier name `organizer`, and names with spaces or other unusual characters are left out, and it lists claude.ai connectors (`claude_ai_…`) and plugins' servers (`plugin_…`) apart. **Sessions** shows it as **Agent says**.
+
+For a Claude Code session PacedMind started in a terminal, the servers come from Claude Code's own record of the session instead of `mcp_servers`, with the ones that failed, wait for sign-in or are still connecting (*Not available to Claude Code: …*). It's recorded even when the agent leaves out `environment`. See [What a session actually has](/agents/start-and-manage#what-a-session-actually-has).
 
 Returns, in this order:
 

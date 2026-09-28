@@ -87,7 +87,8 @@ Below them come the session's fields:
 | **Started** | When, and how: *from PacedMind*, *outside PacedMind* for a session an agent reported on its own, or *in the same session* for a session that continues another one. |
 | **Duration** | How long the agent worked: until now while it runs, else until it finished or its terminal closed. |
 | **Client** | For a session PacedMind started in a terminal, what it connected to PacedMind from: the name and version its MCP client gave, such as *Claude Code 2.1.278*. |
-| **Agent says** | What the agent said it runs with when it called `start_task`, such as *runs as …, with the MCP servers github, playwright* or *runs as …, with no other MCP servers*. |
+| **Agent says** | What the session runs with, as of when the agent called `start_task`: the model it said, and the MCP servers it has tools from, such as *runs as …, with the MCP servers github, playwright; the claude.ai connectors Gmail* or *runs as …, with no other MCP servers*. For Claude Code in a terminal, the servers come from Claude Code's own record of the session. |
+| **Not available** | For Claude Code in a terminal, MCP servers the session should have but has no tools from, and why, such as *stripe needs you to sign in (/mcp in its terminal)* or *github didn't start (ENOENT)*. See [What a session actually has](/agents/start-and-manage#what-a-session-actually-has). |
 | **Session** | The session's id, which agents use in `start_task` and `finish_task`. |
 | **Claude session** | For Claude Code in a terminal, its own conversation id, used to resume it. |
 | **Continues** | For a session that carries on another one: that session (*DEV-22's session*). Select it to open it. |

@@ -2,8 +2,8 @@ import "server-only";
 import * as repo from "./repo";
 import type { StoredImage } from "./attachments";
 import { revokeSessionTokens } from "./device";
-import { afterDone, afterFinished, afterFlowOn } from "./flow";
-import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, startSession, type LaunchResult } from "./launcher";
+import { afterDone, afterFinished, afterFlowOn, startFromFlow } from "./flow";
+import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
 import { nowStamp } from "@/lib/dates";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
@@ -89,7 +89,8 @@ export async function finishTask(
     await repo.addSessionEvent(continued.id, "started", `Continues session ${s.id} in the same ${s.surface === "desktop" ? "app session" : "terminal"}`);
     await repo.updateTask(continueWith.id, { status: "progress" });
   } else if (continueWith) {
-    started.push(await startSession(continueWith.id, { agent: s?.agent, reason: "flow" }));
+    const r = await startFromFlow(continueWith, s?.agent);
+    if (r) started.push(r);
   }
   return { session: s, continueWith: continued ? continueWith : null, continued, started };
 }

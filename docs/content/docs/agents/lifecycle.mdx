@@ -41,7 +41,7 @@ A cloud session can't call PacedMind's tools, so its first message carries the w
 
 ## 2. Pick up
 
-The agent calls `start_task` with the task key and the session id. PacedMind records *Claude Code read the task over MCP* and keeps the task **In progress**. When the agent also says what it runs with, PacedMind records that first, such as *Claude Code says it runs as …, with the MCP servers github, playwright*. The agent receives:
+The agent calls `start_task` with the task key and the session id. PacedMind records *Claude Code read the task over MCP* and keeps the task **In progress**. PacedMind records what the session runs with first, such as *Claude Code says it runs as …, with the MCP servers github, playwright*, and which MCP servers it should have but hasn't, such as *Not available to Claude Code: stripe needs you to sign in (/mcp in its terminal)*. See [What a session actually has](/agents/start-and-manage#what-a-session-actually-has). The agent receives:
 
 * after **Request changes**, first the changes you asked for, with the instruction to make them before anything else; after **Answer its questions**, your answers, with the instruction to go on with the task using them;
 * the task: title, status, priority, dates, estimate, labels, its folder and where its sessions run, the description, the numbered **Done when** items, the numbered sub-tasks, the tasks it follows and leads to, and its latest report;
@@ -143,7 +143,9 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Sent to Claude Code on the web from a terminal in app* | A terminal sent the task to Claude Code on the web. |
 | *Sending it to Codex cloud*, then *Codex cloud took it on in the my-app environment* | PacedMind sent the task to Codex cloud, and Codex accepted it. |
 | *Connected from Claude Code 2.1.278* | The agent of a session PacedMind started in a terminal connected to PacedMind's MCP server, with the name and version of its MCP client. |
-| *Claude Code says it runs as …, with the MCP servers github, playwright*, or *… with no other MCP servers* | The agent said what it runs with when it called `start_task`. |
+| *Claude Code says it runs as …, with the MCP servers github, playwright; the claude.ai connectors Gmail*, or *… with no other MCP servers* | The agent called `start_task`. The model is what the agent said; for Claude Code in a terminal, the servers come from Claude Code's own record of the session, else from the agent. |
+| *Not available to Claude Code:* and each server with why | An MCP server gave the Claude Code session no tools: it *needs you to sign in (/mcp in its terminal)*, *didn't start*, or *hasn't connected yet*. |
+| *All its MCP servers are available to Claude Code now* | The servers that were missing came, such as after you signed in with `/mcp`. |
 | *Claude Code read the task over MCP* | The agent called `start_task`. |
 | *Plan: 2 of 5 steps done* | The agent sent its plan with `report_progress`. |
 | *Claude Code:* and a message | The agent sent an update with `report_progress`. |

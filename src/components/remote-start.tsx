@@ -9,8 +9,9 @@ import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, isAnswers, mcpReaches, platformName, surfaceOf,
   type AgentId, type AgentTools, type Device, type Doer, type LaunchRequestView, type RemoteStart as Setting, type Surface,
 } from "@/lib/types";
+import { deviceWithNeeds, missingOn, needList, toolsOn } from "@/lib/needs";
 import { AgentIcon, Icon, SurfaceIcon, type IconName } from "./icons";
-import { noteSentRequest, publishComputers, useClock, useLaunchState } from "./request-status";
+import { RUN_SHEET, noteSentRequest, publishComputers, useClock, useLaunchState } from "./request-status";
 import { Button, IconButton, cx, toast } from "./ui";
 
 /*
@@ -19,8 +20,6 @@ import { Button, IconButton, cx, toast } from "./ui";
  * desktop app asks the same way for a task that runs on another computer, or a session that ran on one. The computer
  * then refuses it, asks you there, or acts, as its own setting says (src/server/requests.ts).
  */
-
-const EVENT = "pacedmind:remote-start";
 
 /** What the sheet asks a computer to do, and for which task or session. */
 export type RunAsk =
@@ -35,6 +34,10 @@ export type RunAsk =
     deviceId: string | null;
     /** The task or its project names that computer: its sessions start only there. */
     pinned: boolean;
+    /** Start here found this computer lacks what the task needs (Task.needs), and offers another: here, it can start anyway. */
+    missingHere?: string[];
+    /** A computer not to offer first: the one a request to it expired on (tryAnotherComputer). */
+    avoid?: string | null;
   }
   | {
     kind: "resume" | "changes";
@@ -51,7 +54,7 @@ export type RunAsk =
     text?: string;
   };
 
-const open = (ask: RunAsk) => window.dispatchEvent(new CustomEvent<RunAsk>(EVENT, { detail: ask }));
+const open = (ask: RunAsk) => window.dispatchEvent(new CustomEvent<RunAsk>(RUN_SHEET, { detail: ask }));
 
 /**
  * Starts a session: in the desktop app it opens here, where the task says (or `surface`). The web app can't start
@@ -62,7 +65,7 @@ export async function startSessionOrAsk(taskId: number, agent?: Doer | null, sur
   const wanted = agent === "claude" || agent === "codex" ? agent : null;
   const r = await startSessionAction(taskId, wanted, surface ?? undefined);
   if (!r.remote) return r;
-  open({ kind: "start", taskId, agent: wanted, surface, deviceId: r.deviceId ?? null, pinned: !!r.pinned });
+  open({ kind: "start", taskId, agent: wanted, surface, deviceId: r.deviceId ?? null, pinned: !!r.pinned, missingHere: r.missingHere });
   return { ok: true };
 }
 
@@ -138,13 +141,20 @@ function surfaceText(agent: AgentId, surface: Surface, tools: AgentTools | undef
 let lastPicked: string | null = null;
 const rememberPick = (id: string) => { lastPicked = id; };
 
-/** The computer the sheet opens with: the one it must go to, else the offered one, the last picked, one that's online. */
-function firstPick(ask: RunAsk, devices: Device[]): string {
-  if (ask.kind !== "start" || ask.pinned) return ask.deviceId ?? "";
-  const takers = devices.filter((d) => !d.revokedAt && d.remoteStart !== "off");
+/**
+ * The computer the sheet opens with: the one it must go to; else, for a task that needs something, one whose agent has
+ * it (online first, the offered or last picked one first); else the offered one, the last picked, one that's online.
+ * One a request expired on (`avoid`) comes last.
+ */
+function firstPick(ask: RunAsk, devices: Device[], needs: string[], runsOn: string | null): string {
+  if (ask.kind !== "start" || ask.pinned || runsOn) return runsOn ?? ask.deviceId ?? "";
+  const takers = devices.filter((d) => !d.revokedAt && d.remoteStart !== "off" && d.id !== ask.avoid);
   const offered = ask.deviceId ? takers.find((d) => d.id === ask.deviceId) : undefined;
   const last = lastPicked ? takers.find((d) => d.id === lastPicked) : undefined;
-  return (offered ?? last ?? takers.find((d) => deviceOnline(d)) ?? takers[0])?.id ?? "";
+  const has = needs.length ? deviceWithNeeds(needs, ask.agent ?? "claude", takers, offered?.id ?? last?.id ?? null) : null;
+  const online = takers.find((d) => deviceOnline(d));
+  const pick = has ?? (ask.avoid ? online ?? offered ?? last : offered ?? last ?? online) ?? takers[0];
+  return pick?.id ?? (ask.avoid && devices.some((d) => d.id === ask.avoid) ? ask.avoid : "");
 }
 
 /** The order the computers are listed in: the default, then those online, then the rest; ones that refuse last. */
@@ -162,7 +172,8 @@ function listOrder(devices: Device[]): string[] {
  */
 export function RemoteStart({ devices, tasks, hereId = null }: {
   devices: Device[];
-  tasks: { id: number; key: string; title: string }[];
+  /** `needs`: what its agent needs from the computer (Task.needs); `runsOn`: the computer it or its project names. */
+  tasks: SheetTask[];
   hereId?: string | null;
 }) {
   const [ask, setAsk] = useState<{ n: number; ask: RunAsk } | null>(null);
@@ -171,8 +182,8 @@ export function RemoteStart({ devices, tasks, hereId = null }: {
   useEffect(() => {
     let n = 0;
     const on = (e: Event) => setAsk({ n: ++n, ask: (e as CustomEvent<RunAsk>).detail });
-    window.addEventListener(EVENT, on);
-    return () => window.removeEventListener(EVENT, on);
+    window.addEventListener(RUN_SHEET, on);
+    return () => window.removeEventListener(RUN_SHEET, on);
   }, []);
   if (!ask) return null;
   return (
@@ -181,18 +192,23 @@ export function RemoteStart({ devices, tasks, hereId = null }: {
   );
 }
 
+/** A task as the sheet needs it. */
+type SheetTask = { id: number; key: string; title: string; needs: string[]; runsOn: string | null };
+
 function RunSheet({ ask, devices, task, hereId, onClose }: {
   ask: RunAsk;
   devices: Device[];
-  task: { key: string; title: string } | undefined;
+  task: SheetTask | undefined;
   hereId: string | null;
   onClose: () => void;
 }) {
   const titleId = useId();
   const { codeFreshUntil } = useLaunchState();
   const now = useClock(10_000);
-  const pinned = ask.kind !== "start" || ask.pinned;
-  const [deviceId, setDeviceId] = useState(() => firstPick(ask, devices));
+  const needs = ask.kind === "start" ? task?.needs ?? [] : [];
+  const runsOn = ask.kind === "start" ? task?.runsOn ?? null : null;
+  const pinned = ask.kind !== "start" || ask.pinned || !!runsOn;
+  const [deviceId, setDeviceId] = useState(() => firstPick(ask, devices, needs, runsOn));
   const [order] = useState(() => listOrder(devices));
   const [agent, setAgent] = useState<AgentId | null>(ask.agent);
   const [picked, setPicked] = useState<Surface | null>(ask.kind === "start" ? ask.surface ?? null : null);
@@ -248,6 +264,22 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   const usable = !!device && !refuses && !(ask.kind !== "start" && blocked);
   const ready = usable && !blocked && !busy && !!who && (!showCode || code.length === 6) && (ask.kind !== "changes" || !!text.trim());
   const agentName = who ? AGENT_LABEL[who] : "the agent";
+  const lacks = device && who && needs.length ? missingOn(needs, device, who) : [];
+  const hereLacks = ask.kind === "start" ? ask.missingHere ?? [] : [];
+  const [startingHere, setStartingHere] = useState(false);
+  const startHere = async () => {
+    if (ask.kind !== "start") return;
+    setStartingHere(true);
+    const r: { ok: boolean; error?: string; message?: string } = await startSessionAction(ask.taskId, who, surface ?? undefined, true)
+      .catch(() => ({ ok: false, error: "That didn't go through. Try again." }));
+    setStartingHere(false);
+    if (!r.ok) {
+      setError(r.error ?? "That didn't go through. Try again.");
+      return;
+    }
+    toast(r.message ?? "Session started");
+    onClose();
+  };
 
   const title = ask.kind === "start" ? "Run on a computer"
     : ask.kind === "changes" ? `Send ${isAnswers(text) ? "answers" : "changes"} to ${name}`
@@ -288,6 +320,18 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 
   // What will happen, in plain words: who has to be there, and what waits for whom.
   const hints: { icon: IconName; text: string }[] = [];
+  // What the task needs from the computer (Task.needs): whether this one and the picked one have it.
+  const key = task?.key ?? "the task";
+  if (hereLacks.length) hints.push({ icon: "help", text: `${agentName} on this computer doesn't have ${needList(hereLacks)}, which ${key} needs.` });
+  if (device && who && needs.length) {
+    const said = !!toolsOn(device, who);
+    hints.push({
+      icon: said && !lacks.length ? "check" : "help",
+      text: !said ? `${device.name} hasn't said which MCP servers ${agentName} has there.`
+        : lacks.length ? `${device.name}'s ${agentName} doesn't have ${needList(lacks)}${hereLacks.length ? " either" : `, which ${key} needs`}.`
+          : `${device.name}'s ${agentName} has what ${key} needs: ${needList(needs)}.`,
+    });
+  }
   if (usable) {
     if (!deviceOnline(device, now)) {
       hints.push({ icon: "clock", text: `${device.name} isn't online (${seen(device.lastSeenAt, now).toLowerCase()}). The request waits there for 10 minutes.` });
@@ -380,7 +424,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 
           <Part title="Computer">
             {pinned ? (
-              device ? <DeviceInfo device={device} agent={who} now={now} here={device.id === hereId} boxed /> : null
+              device ? <DeviceInfo device={device} agent={who} now={now} here={device.id === hereId} needs={needs} boxed /> : null
             ) : (
               <div role="radiogroup" aria-label="Computer" className="flex flex-col gap-1.5">
                 {listed.map((d) => {
@@ -392,7 +436,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
                       className={cx("flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left",
                         d.id === deviceId ? "border-accent/55 bg-accent/5" : "border-line2", off ? "cursor-default opacity-60" : d.id !== deviceId && "hover:bg-hover")}>
                       <Radio on={d.id === deviceId} dim={off} />
-                      <DeviceInfo device={d} agent={who} now={now} here={d.id === hereId} />
+                      <DeviceInfo device={d} agent={who} now={now} here={d.id === hereId} needs={needs} />
                     </button>
                   );
                 })}
@@ -401,7 +445,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
             {pinned && device && (
               <p className="text-[12px] leading-relaxed text-mut2">
                 {ask.kind === "start"
-                  ? `${task?.key ?? "This task"} runs only on ${device.name}, as it or its project says.`
+                  ? `${task?.key ?? "This task"} runs only on ${device.name}, as it or its project says.${ask.avoid === device.id ? " Send it there again, or pick another computer in its details." : ""}`
                   : `The conversation is on ${device.name}, so it goes on there.`}
               </p>
             )}
@@ -476,6 +520,11 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-5 py-3 max-md:px-4 max-md:pb-[max(12px,env(safe-area-inset-bottom))]">
           <Button type="button" variant="ghost" onClick={onClose} className="max-md:h-10 max-md:flex-1 max-md:justify-center">Cancel</Button>
+          {hereLacks.length > 0 && (
+            <Button type="button" disabled={startingHere || busy} onClick={() => void startHere()} className="max-md:h-10 max-md:flex-1 max-md:justify-center">
+              {startingHere ? "Starting…" : "Start here anyway"}
+            </Button>
+          )}
           {!stop && (
             <Button type="submit" variant="primary" disabled={!ready} className="min-w-0 max-md:h-10 max-md:flex-[2] max-md:justify-center">
               <span className="truncate">{busy ? "Sending…" : action}</span>
@@ -492,7 +541,7 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
 function sentView(id: string, ask: RunAsk, device: Device, taskKey: string | null): LaunchRequestView {
   const at = Date.now();
   return {
-    id, kind: ask.kind, taskId: ask.taskId, taskKey, targetSessionId: ask.kind === "start" ? null : ask.sessionId, sessionId: null,
+    id, kind: ask.kind, taskId: ask.taskId, agent: ask.agent ?? "claude", taskKey, targetSessionId: ask.kind === "start" ? null : ask.sessionId, sessionId: null,
     deviceId: device.id, deviceName: device.name, status: "pending", note: null,
     createdAt: new Date(at).toISOString(), expiresAt: new Date(at + 10 * 60_000).toISOString(), decidedAt: null,
   };
@@ -526,8 +575,15 @@ function Tag({ children, title }: { children: ReactNode; title?: string }) {
   );
 }
 
-/** A computer: its name and markers, whether it's online, its setting, and what it has of the agent (once there's one). */
-function DeviceInfo({ device, agent, now, here, boxed }: { device: Device; agent: AgentId | null; now: number; here: boolean; boxed?: boolean }) {
+/**
+ * A computer: its name and markers, whether it's online, its setting, what it has of the agent (once there's one), and
+ * whether that agent has what the task needs.
+ */
+function DeviceInfo({ device, agent, now, here, boxed, needs = [] }: {
+  device: Device; agent: AgentId | null; now: number; here: boolean; boxed?: boolean; needs?: string[];
+}) {
+  const has = agent ? toolsOn(device, agent) : null;
+  const lacks = agent ? missingOn(needs, device, agent) : [];
   const online = deviceOnline(device, now);
   return (
     <span className={cx("flex min-w-0 flex-1 flex-col gap-1", boxed && "rounded-lg border border-line2 px-3 py-2.5")}>
@@ -543,6 +599,11 @@ function DeviceInfo({ device, agent, now, here, boxed }: { device: Device; agent
         {online ? "Online" : seen(device.lastSeenAt, now)} · {platformName(device.platform)}
       </span>
       {agent && <Tools agent={agent} tools={device.checkedAt ? device.agents[agent] : undefined} />}
+      {agent && needs.length > 0 && (
+        <span className={cx("text-[12px]", has && !lacks.length ? "text-fg3" : "text-dim")}>
+          {!has ? "Hasn't said which MCP servers it has" : lacks.length ? `Doesn't have ${needList(lacks)}` : `Has ${needList(needs)}`}
+        </span>
+      )}
     </span>
   );
 }

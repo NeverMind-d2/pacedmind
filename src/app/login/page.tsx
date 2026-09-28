@@ -29,7 +29,7 @@ export default async function LoginPage(props: PageProps<"/login">) {
       : MODE === "desktop"
         ? "Sign in to PacedMind Cloud to use your tasks on all your computers, or use PacedMind on this computer without an account."
         : "Sign in to plan your week and follow your agent sessions."}>
-      <LoginForm initialError={typeof sp.error === "string" ? sp.error.slice(0, 300) : null} confirmed={sp.confirmed === "1"} next={next} />
+      <LoginForm initialError={typeof sp.error === "string" ? sp.error.slice(0, 300) : null} confirmed={sp.confirmed === "1"} create={sp.create === "1"} next={next} />
       {MODE === "desktop" && (
         <form action={continueWithoutAccountAction} className="flex flex-col gap-4">
           <div className="flex items-center gap-3 text-[12px] text-mut2" aria-hidden>

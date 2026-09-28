@@ -32,6 +32,7 @@ export interface TaskInput {
   estimateMin?: number;
   labels?: string[];
   doneWhen?: string[];
+  needs?: string[];
   agent?: Doer | null;
 }
 
@@ -174,6 +175,16 @@ export function deriveKey(name: string, taken: Set<string>): string {
   return key;
 }
 
+/**
+ * The key of an area renamed to `name`: its `current` one while that is still what the name makes (WR2 stays for
+ * "Work"), else a new one, unique among the other areas' keys (`taken`). Its tasks keep their keys.
+ */
+export function renamedKey(name: string, current: string, taken: Set<string>): string {
+  const base = deriveKey(name, new Set());
+  if (current === base || new RegExp(`^${base.slice(0, 2)}\\d+$`).test(current)) return current;
+  return deriveKey(name, taken);
+}
+
 /* ---------- calendar ---------- */
 
 const stampMin = (d: Date) => `${toDateStr(d)}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
@@ -289,8 +300,11 @@ export function extrasOf(v: unknown, max = 12): AgentExtras | undefined {
   const h = v as Record<string, unknown>;
   const list = (x: unknown, shape: RegExp) => strings(x).filter((n) => shape.test(n)).slice(0, max);
   const skills = typeof h.skills === "number" && Number.isInteger(h.skills) && h.skills >= 0 ? Math.min(h.skills, 9999) : 0;
+  const account = list(h.account, /^[\w .@:+-]{1,48}$/);
+  const accountAt = typeof h.accountAt === "string" && /^\d{4}-\d\d-\d\dT[\d:.]{8,12}Z$/.test(h.accountAt) ? h.accountAt : null;
   return {
     mcp: list(h.mcp, /^[\w.@:+-]{1,48}$/), plugins: list(h.plugins, /^[\w.@:+-]{1,48}$/), skills, hooks: list(h.hooks, /^[A-Za-z]{1,40}$/),
+    ...(accountAt ? { account, accountAt } : {}),
   };
 }
 

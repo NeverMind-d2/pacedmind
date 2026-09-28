@@ -8,7 +8,7 @@ import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
-  linksOf, pictureHash, repoOf, snapshotOf, strings,
+  linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -20,6 +20,7 @@ import {
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
   type Task,
 } from "@/lib/types";
+import { cleanNeeds } from "@/lib/needs";
 
 /*
  * This computer's own data (the free One device plan), in the SQLite file local-db.ts opens. repo.ts uses it
@@ -94,11 +95,18 @@ export async function createArea(input: { name: string; color: string; icon?: Ar
 
 /**
  * `icon: null` or `picture: null` puts the dot back. An area shows its picture or its icon, so setting one clears
- * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out.
+ * the other; `picture` is base64 PNG (area-picture.ts), and one that isn't stays out. A new name can give the area a
+ * new key (`renamedKey`), which only its new tasks get.
  */
 export async function updateArea(id: string, patch: { name?: string; color?: string; icon?: AreaIcon | null; picture?: string | null; sort?: number }) {
   const values: Record<string, Value> = {};
-  if (patch.name?.trim()) values.name = patch.name.trim();
+  const name = patch.name?.trim();
+  if (name) {
+    values.name = name;
+    const areas = areasNow();
+    const current = areas.find((a) => a.id === id);
+    if (current) values.key = renamedKey(name, current.key, new Set(areas.filter((a) => a.id !== id).map((a) => a.key)));
+  }
   if (patch.color) values.color = patch.color;
   if (patch.sort !== undefined) values.sort = patch.sort;
   if (patch.icon !== undefined) values.icon = areaIconOf(patch.icon);
@@ -241,7 +249,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
   dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
-  doneWhen: strings(json(r.done_when, [])), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
+  doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
   sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
@@ -299,10 +307,11 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, done_when, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
-    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), input.agent ?? project?.agent ?? null, sort, stamp, stamp,
+    JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
+    sort, stamp, stamp,
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }
@@ -328,6 +337,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   const values = columns(patch, TASK_COLS);
   if (patch.labels) values.labels = JSON.stringify(patch.labels);
   if (patch.doneWhen) values.done_when = JSON.stringify(cleanDoneWhen(patch.doneWhen));
+  if (patch.needs) values.needs = JSON.stringify(cleanNeeds(patch.needs));
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;
   if (!Object.keys(values).length) return;
   values.updated_at = nowStamp();

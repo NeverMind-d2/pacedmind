@@ -13,8 +13,9 @@ import { MCP_NAME, OLD_MCP_NAME, type AgentExtras, type AgentId, type FolderExtr
  * since a server's command, address, headers and environment can hold keys; a name that doesn't look like one is left
  * out. PacedMind's own server (pacedmind, before that organizer) isn't listed: every session has it.
  *
- * Also where the launcher gets the definitions of the servers a project lets its sessions have (serversFor), read
- * from the same files when a session starts.
+ * Also where the launcher gets the definitions of the servers a project lets its sessions have (claudeServers,
+ * codexServersOff), read from the same files when a session starts. What a session actually has is session-mcp.ts's;
+ * sortReported sorts it by where each server comes from.
  */
 
 type Json = Record<string, unknown>;
@@ -148,10 +149,42 @@ export function serverChoices(folder: string | null): Record<AgentId, string[]> 
   const f = folder ? folderExtras(folder) : null;
   return {
     claude: names([
-      ...agentExtras("claude").mcp, ...(f?.claudeLocal ?? []), ...(f?.claudeMcp.filter((s) => s.approved).map((s) => s.name) ?? []),
+      ...keysOf(claudeConfig()?.mcpServers), ...(f?.claudeLocal ?? []), ...(f?.claudeMcp.filter((s) => s.approved).map((s) => s.name) ?? []),
     ], 40),
-    codex: names([...agentExtras("codex").mcp, ...(f?.codexMcp ?? [])], 40),
+    codex: names([...tomlServers(readText(path.join(codexHome(), "config.toml"))), ...(f?.codexMcp ?? [])], 40),
   };
+}
+
+/** How Claude Code names a server in its tools' names (mcp__<name>__<tool>): anything but letters, digits, _ and - becomes _. */
+export const toolPrefix = (name: string) => name.replace(/[^A-Za-z0-9_-]/g, "_");
+
+/** The MCP servers a session has tools from, by where each comes from. */
+export interface ReportedServers {
+  /** Its own: configured on the computer, or given some other way, as its tools name them. */
+  own: string[];
+  /** From the account its CLI is signed in to: Claude Code's claude.ai connectors (claude_ai_Gmail), by their names there. */
+  account: string[];
+  /** From its plugins (plugin_<plugin>_<server>), by plugin. */
+  plugins: string[];
+}
+
+/**
+ * Sorts the MCP servers a session has tools from (`servers`, as its tools name them: mcp__<server>__…) by where each
+ * comes from. `plugins`: the plugins turned on for it, whose names can hold _ too.
+ */
+export function sortReported(servers: string[], plugins: string[] = []): ReportedServers {
+  const out: ReportedServers = { own: [], account: [], plugins: [] };
+  for (const name of new Set(servers)) {
+    const p = toolPrefix(name);
+    if (!p || p === MCP_NAME || p === OLD_MCP_NAME) continue;
+    const account = /^claude_ai_(.+)$/.exec(p);
+    const plugin = /^plugin_(.+)$/.exec(p);
+    if (account) out.account.push(account[1].replace(/_/g, " "));
+    else if (plugin) out.plugins.push(plugins.find((n) => plugin[1] === toolPrefix(n) || plugin[1].startsWith(`${toolPrefix(n)}_`)) ?? plugin[1]);
+    else out.own.push(name);
+  }
+  const clean = (xs: string[], shape: RegExp) => [...new Set(xs)].filter((n) => shape.test(n)).sort().slice(0, 30);
+  return { own: clean(out.own, NAME), account: clean(out.account, /^[\w .@:+-]{1,48}$/), plugins: clean(out.plugins, NAME) };
 }
 
 /**

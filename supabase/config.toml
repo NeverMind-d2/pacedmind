@@ -403,6 +403,19 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Billing (supabase/functions). They check the caller themselves rather than through the gateway: checkout and the
+# portal read the caller's own billing row through row level security (a two-factor session that still exists), and
+# the webhook takes only requests Stripe signed. Their secrets: `npx supabase secrets set STRIPE_SECRET_KEY=…
+# STRIPE_WEBHOOK_SECRET=…`.
+[functions.billing-checkout]
+verify_jwt = false
+
+[functions.billing-portal]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

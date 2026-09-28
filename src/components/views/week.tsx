@@ -500,7 +500,7 @@ function AutoPlanPanel({ plan, on, onToggle, current, tasks, areas, rules, today
         <div className="flex flex-col gap-1.5">
           <div className="flex items-baseline text-[12.5px]">
             <span className="flex-1 text-fg2">Rules</span>
-            <Link href="/settings" className="text-[12px] text-mut2 hover:text-fg2">Change</Link>
+            <Link href="/settings/planning" className="text-[12px] text-mut2 hover:text-fg2">Change</Link>
           </div>
           {ruleList.map((r) => (
             <div key={r} className="flex gap-2 text-[12px] leading-[1.45] text-mut">

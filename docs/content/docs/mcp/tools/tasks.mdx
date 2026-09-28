@@ -30,7 +30,7 @@ Returns the number of matches and one line per task. When there are more than th
 
 **Read-only. Allowed without asking.**
 
-Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
+Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -94,6 +94,7 @@ Adds a task. Without `project` and `area`, it goes to the Inbox.
 | `area` | string | no | The area, when there's no project. |
 | `description` | string | no | Why it matters, context, constraints, links. Plain text or Markdown. |
 | `done_when` | string list | no | What must be true when the task is finished, one checkable outcome per item, such as "/reports has a Download CSV button" or "A screenshot of the new page". Up to 20 items; blank and repeated items are left out. Agents answer each item when they hand the task back. See [Done when](/concepts/tasks#done-when). |
+| `needs` | string list | no | What its agent needs from the computer its session runs on: MCP servers or claude.ai connectors by name, such as `["supabase", "Gmail"]`. Up to 10; repeated names, a `claude.ai ` prefix and names with other characters than letters, digits, spaces and `_ . @ : + -` are left out. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
 | `status` | status | no | Defaults to `todo`. |
 | `priority` | priority | no | Defaults to `none`. |
 | `due` | date, optional time | no | The deadline. |
@@ -125,7 +126,7 @@ All dates are checked before anything is created, so one wrong date doesn't leav
 
 **Changes data. Allowed without asking.**
 
-Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`, and an empty list, `[]`, clears `done_when`.
+Changes anything about a task. Parameters left out keep their value; `null` clears a date, the project, the area, the agent, `runs_in` or `folder`, and an empty list, `[]`, clears `done_when` or `needs`. A session PacedMind started can't change its own task's `runs_in`, `folder` or `needs`.
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -134,6 +135,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `description` | string | Replaces the description. |
 | `append_to_description` | string | Adds a paragraph at the end of the description. |
 | `done_when` | string list | Replaces the Done when list, up to 20 items. `[]` clears it. |
+| `needs` | string list | Replaces what its agent needs from the computer, as in `create_task`. `[]` clears it. |
 | `status` | status | The new status. `done` can start the next sessions of a flow. |
 | `priority` | priority | The new priority. |
 | `due` | date with optional time, or `null` | The deadline. |

@@ -65,9 +65,15 @@ function useRun(initial: Note = null) {
 
 type Mode = "signin" | "signup" | "reset";
 
-/** `confirmed`: an email link confirmed the address but couldn't sign in here (opened in another browser). */
-export function LoginForm({ initialError, confirmed, next }: { initialError: string | null; confirmed?: boolean; next?: string | null }) {
-  const [mode, setMode] = useState<Mode>("signin");
+/**
+ * `confirmed`: an email link confirmed the address but couldn't sign in here (opened in another browser). `create`:
+ * opens on creating an account (the site's Cloud button links to /login?create=1). `next`: the hosted app's page to
+ * continue to once signed in (approving an agent's sign-in).
+ */
+export function LoginForm({ initialError, confirmed, create, next }: {
+  initialError: string | null; confirmed?: boolean; create?: boolean; next?: string | null;
+}) {
+  const [mode, setMode] = useState<Mode>(create ? "signup" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -237,7 +243,7 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!enrollment) return;
-    run(() => confirmEnrollAction(enrollment.factorId, code), () => (first ? setDone(true) : router.push("/settings")));
+    run(() => confirmEnrollAction(enrollment.factorId, code), () => (first ? setDone(true) : router.push("/settings/security")));
   };
 
   return (

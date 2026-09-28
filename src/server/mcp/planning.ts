@@ -9,6 +9,7 @@ import { MODE } from "../supabase";
 import { usage } from "../views";
 import { callerSession } from "./principal";
 import { nextColor } from "@/lib/colors";
+import { MAX_NEEDS } from "@/lib/needs";
 import { addDaysStr, dateOnly, timeOf, toDateStr } from "@/lib/dates";
 import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Status, type Task } from "@/lib/types";
 import {
@@ -45,7 +46,7 @@ function sessionMayCreate(status: string | undefined) {
 }
 
 function sessionMayUpdate(
-  t: Task, changes: { status?: unknown; agent?: unknown; project?: unknown; area?: unknown; runs_in?: unknown; folder?: unknown },
+  t: Task, changes: { status?: unknown; agent?: unknown; project?: unknown; area?: unknown; runs_in?: unknown; folder?: unknown; needs?: unknown },
 ) {
   const me = callerSession();
   if (!me) return;
@@ -53,7 +54,9 @@ function sessionMayUpdate(
   if (changes.status !== undefined || changes.agent !== undefined || changes.project !== undefined || changes.area !== undefined) {
     fail("A session can't change its task's status, agent, project or area. Call finish_task when the work is ready to check.");
   }
-  if (changes.runs_in !== undefined || changes.folder !== undefined) fail("A session can't change where or in which folder its task's sessions run.");
+  if (changes.runs_in !== undefined || changes.folder !== undefined || changes.needs !== undefined) {
+    fail("A session can't change where or in which folder its task's sessions run, or what they need.");
+  }
 }
 
 /** For fields that can be cleared: undefined leaves them alone, null or "" clears them. */
@@ -65,9 +68,13 @@ const clearable = <T>(v: string | null | undefined, read: (s: string) => T): T |
 const doneWhenSchema = z.array(z.string()).max(20)
   .describe("What must be true when the task is finished: one checkable outcome per item, e.g. \"/reports has a Download CSV button\" or \"A screenshot of the new page\". Agents answer each item when they hand the task back");
 
+const needsSchema = z.array(z.string().max(48)).max(MAX_NEEDS)
+  .describe("What its agent needs from the computer its session runs on, by name: MCP servers or claude.ai connectors, e.g. [\"supabase\", \"Gmail\"]. PacedMind offers a computer that has them. Only what differs between computers: a project's own folder brings its servers everywhere");
+
 const newTaskFields = {
   description: z.string().optional().describe("Details in plain text or Markdown: why it matters, context, constraints, links"),
   done_when: doneWhenSchema.optional(),
+  needs: needsSchema.optional(),
   status: statusSchema.optional().describe("Defaults to todo"),
   priority: prioritySchema.optional(),
   due: dateTimeInput.optional().describe("Deadline, with an optional time"),
@@ -82,7 +89,7 @@ const newTaskFields = {
 const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim().replace(/^#/, "").toLowerCase()).filter(Boolean))];
 
 type NewTask = {
-  title: string; description?: string; done_when?: string[]; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
+  title: string; description?: string; done_when?: string[]; needs?: string[]; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
   due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: Doer;
 };
 
@@ -93,6 +100,7 @@ async function createOne(input: NewTask, place: { projectId: string | null; area
     title: input.title,
     description: input.description?.trim() ?? "",
     doneWhen: input.done_when,
+    needs: input.needs,
     projectId: place.projectId,
     areaId: place.areaId,
     status: input.status ? statusOf(input.status) : "todo",
@@ -233,7 +241,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "update_area", {
     title: "Update area",
-    description: `Rename an area, or change its color or icon. Its key stays the same, so existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}. An icon replaces the area's own picture, which only the app sets.`,
+    description: `Rename an area, or change its color or icon. A new name gives the area the key made from it, which its new tasks get; existing task keys don't change. Icons: Lucide names such as ${AREA_ICON_EXAMPLES}. An icon replaces the area's own picture, which only the app sets.`,
     input: z.object({
       area: areaRef, name: z.string().optional(), color: z.string().optional().describe(`${PALETTE_NAMES}, or a hex color`),
       icon: z.string().optional().describe("One of the icons, or none to show the dot again"),
@@ -497,13 +505,14 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "update_task", {
     title: "Update task",
     description:
-      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run and their folder, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
+      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run, their folder and what they need from the computer, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
       description: z.string().optional().describe("Replaces the description"),
       append_to_description: z.string().optional().describe("Adds a paragraph at the end of the description"),
       done_when: doneWhenSchema.optional().describe("Replaces the Done when list; [] clears it"),
+      needs: needsSchema.optional().describe("Replaces what its agent needs from the computer its session runs on; [] clears it"),
       status: statusSchema.optional(),
       priority: prioritySchema.optional(),
       due: dateTimeInput.nullable().optional(),
@@ -552,6 +561,7 @@ export function registerPlanningTools(server: McpServer) {
       title: args.title?.trim(),
       description,
       doneWhen: args.done_when,
+      needs: args.needs,
       status,
       priority: args.priority ? priorityOf(args.priority) : undefined,
       dueDate,
