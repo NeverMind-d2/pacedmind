@@ -1593,7 +1593,7 @@ function Inspector({
           {surface === "desktop" && mcp !== null && mcp !== "connected" && (
             <p className="text-[12px] leading-relaxed text-mut2">
               The {APP_LABEL[task.agent]} can&apos;t tell PacedMind when it&apos;s done until {AGENT_LABEL[task.agent]} is{" "}
-              <Link href="/computers" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
+              <Link href="/settings/computers" className="text-fg3 underline decoration-line-strong underline-offset-2 hover:text-strong">connected to PacedMind</Link>.
               Until then, mark the session finished here.
             </p>
           )}

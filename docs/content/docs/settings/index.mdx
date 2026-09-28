@@ -9,7 +9,7 @@ In the desktop app, without an account, the menu has these pages:
 
 | Group | Pages |
 | --- | --- |
-| At the top, without a name | **[Account](#account)**, **[Data](#data)** |
+| At the top, without a name | **[Account](#account)**, **[Computers](#computers)**, **[Data](#data)** |
 | **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)** |
 | **This computer** | **[General](#general)**, **[Sessions](#sessions)**, **[Projects](#projects)**, **[MCP server](#mcp-server)** |
 
@@ -21,7 +21,7 @@ Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans a
 
 Without an account, the page has one section, **PacedMind Cloud**. Its **Account** row reads *Not signed in*, and **Sign in** opens the sign-in screen. The note below says: *Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.* See [Accounts and Cloud](/accounts-and-cloud).
 
-Signed in, the page shows who you're signed in as, with **Sign out**, and **Sign out all** for every browser and computer, this one too. A **Computers** section counts the computers signed in to the account and those online, names the default one, and has **Open Computers**, which opens the **Computers** page. **Delete account** deletes the account and everything in it, after you type your email and a two-factor code.
+Signed in, the page shows who you're signed in as, with **Sign out**, and **Sign out all** for every browser and computer, this one too. A **Computers** section counts the computers signed in to the account and those online, names the default one, and has **Open Computers**, which opens **Settings → Computers**. **Delete account** deletes the account and everything in it, after you type your email and a two-factor code.
 
 ## Plan
 
@@ -34,6 +34,16 @@ The **Plan** row says where the account stands, such as *Free trial, 12 days lef
 *Two-factor sign-in and your password.* Only when signed in.
 
 **Two-factor sign-in** lists your authenticator apps, with **Add authenticator** and, while there's more than one, **Remove**, which needs a code from another one. **Password** changes the password with the current one, the new one twice and a two-factor code (**Change password**), and signs out your other devices.
+
+## Computers
+
+*Your computers, their agents, flows and sessions.*
+
+Open **Settings → Computers** to see each computer's agents, active flows and sessions. This page is available in the desktop app with or without an account, and in the web app. Without an account it shows this computer only. Signed in, it shows the computers signed in to your account and how many are online.
+
+Use the pencil beside a computer's name to rename it. Signed in, **Make default** chooses where sessions go when neither their task nor project names a computer, and **Sign out** disconnects that computer. In the desktop app, this computer also has **Check again** to refresh its detected agents, and **Connect** for agents that need connecting.
+
+Computers is in the Settings menu. Search for **Computers** in the command menu to open it directly. Older links to the Computers page also open it here.
 
 ## Data
 
@@ -94,7 +104,7 @@ Signed in, **From elsewhere** decides what happens to sessions asked for from th
 
 One row each for **Claude Code** and **Codex**, with what PacedMind found of it: the command-line tool's version and the desktop app with its version, such as *CLI 2.1.282 · Claude app 1.4*, only one of them when the other is missing, or *Not found*. Before the first check finishes, the row reads *Looking…*.
 
-**Open Computers**, next to the heading, opens the **Computers** page. There, this computer's card has:
+**Open Computers**, next to the heading, opens **Settings → Computers**. There, this computer's card has:
 
 * for each agent, its **CLI** and **Desktop app**, such as *Not installed*, whether it can send sessions to its **Cloud**, its **Sign-in**, and under **MCP** whether sessions PacedMind doesn't start itself, such as those in the desktop app, report to this PacedMind: *Connected*, *Old name* (connected under PacedMind's earlier name, `organizer`), *Reports elsewhere* (set up for another copy, such as a development one) or *Not connected*;
 * **Check again**, which looks for the agents right away (*Checked DESKTOP-1*);
