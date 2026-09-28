@@ -3,6 +3,7 @@
 import { clsx } from "clsx";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { failedMessage } from "./plan-state";
 
 export const cx = clsx;
 
@@ -195,7 +196,7 @@ export function useAction() {
         else if (r && r.message) toast(r.message);
         else if (success) toast(success);
       } catch (e) {
-        toast(e instanceof Error ? e.message : "Something went wrong", "error");
+        toast(failedMessage(e instanceof Error ? e.message : "Something went wrong"), "error");
       }
     });
   }, []);

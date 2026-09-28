@@ -14,6 +14,7 @@ import {
   type TaskFilter, type TaskInput, type TaskPatch,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
+import { CloudReadOnly } from "@/lib/billing";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, taskHref,
@@ -51,18 +52,23 @@ type Result<T> = { data: T | null; error: PostgrestError | null };
 const s = (v: unknown) => (v == null ? null : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));
 
+/** What a failed query throws: CloudReadOnly when the database refused a write because the account's Cloud has ended. */
+function failure(error: PostgrestError): Error {
+  return error.code === "PT402" ? new CloudReadOnly() : new Error(error.message);
+}
+
 function many(res: Result<Row[]>): Row[] {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
   return res.data ?? [];
 }
 
 function one(res: Result<Row>): Row | null {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
   return res.data;
 }
 
 function check(res: { error: PostgrestError | null }) {
-  if (res.error) throw new Error(res.error.message);
+  if (res.error) throw failure(res.error);
 }
 
 /** Every row of a query, 1000 at a time (the most Supabase returns per request). */
@@ -571,7 +577,7 @@ async function attachmentsWhere(column: "report_id" | "session_id", ids: (string
 export async function countSessionImages(sessionId: string): Promise<number> {
   const db = await accountDb();
   const { count, error } = await db.from("attachments").select("id", { count: "exact", head: true }).eq("session_id", sessionId);
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
   return count ?? 0;
 }
 
@@ -607,7 +613,7 @@ export async function addAttachment(
   }).select(ATTACHMENT_COLS).single();
   if (res.error) {
     removeImageFiles([img.file]);
-    throw new Error(res.error.message);
+    throw failure(res.error);
   }
   return toAttachment(res.data as Row);
 }
@@ -897,7 +903,7 @@ export async function getDevice(id: string): Promise<Device | null> {
 export async function registerDevice(name: string, platform: Device["platform"]): Promise<string> {
   const db = await accountDb();
   const { data, error } = await db.rpc("register_device", { device_name: cleanDeviceName(name) || "Computer", device_platform: platform });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
   return String(data);
 }
 
@@ -923,7 +929,7 @@ export async function setDefaultDevice(id: string) {
 export async function claimDevice(id: string) {
   const db = await accountDb();
   const { error } = await db.rpc("claim_device", { device: id });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
 }
 
 /** Signs a computer out: its session ends at once and its waiting requests are canceled. */
@@ -931,7 +937,7 @@ export async function revokeDevice(id: string) {
   if (!isUuid(id)) throw new Error("Unknown computer");
   const db = await accountDb();
   const { error } = await db.rpc("revoke_device", { device: id });
-  if (error) throw new Error(error.message);
+  if (error) throw failure(error);
 }
 
 /**
@@ -1072,7 +1078,7 @@ export async function pushKeys(): Promise<{ publicKey: string; privateKey: strin
 export async function savePushKeys(keys: { publicKey: string; privateKey: string }) {
   const db = await accountDb();
   const { error } = await db.from("push_keys").insert({ public_key: keys.publicKey, private_key: keys.privateKey });
-  if (error && error.code !== "23505") throw new Error(error.message);
+  if (error && error.code !== "23505") throw failure(error);
 }
 
 export async function listPushSubscriptions(): Promise<PushSubscriptionRow[]> {

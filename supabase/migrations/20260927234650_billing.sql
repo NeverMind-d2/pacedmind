@@ -93,6 +93,32 @@ language sql stable security definer set search_path = '' as $$
       )
 $$;
 
+-- The signed-in account's plan as the app shows it, with whether billing is on yet and whether the account may write.
+-- Only for a two-factor session that still exists, like every table.
+create function public.cloud_plan() returns jsonb
+language sql stable security definer set search_path = '' as $$
+  select case when private.session_ok() then (
+    select jsonb_build_object(
+      'enforced', coalesce((select s.enforce from private.billing_switch s), false),
+      'writable', private.cloud_writable(),
+      'trial_ends_at', b.trial_ends_at,
+      'comped', b.comped,
+      'customer', b.customer_id is not null,
+      'status', b.status,
+      'market', b.market,
+      'period', b.period,
+      'currency', b.currency,
+      'amount', b.amount,
+      'period_end', b.period_end,
+      'cancel_at_period_end', b.cancel_at_period_end
+    )
+    from public.billing b where b.user_id = auth.uid()
+  ) end
+$$;
+
+revoke execute on function public.cloud_plan() from public, anon;
+grant execute on function public.cloud_plan() to authenticated;
+
 /* ---------- 3. read-only once Cloud has ended ---------- */
 
 -- Only statements a session sends itself: auth.uid() is null for the service role and the sign-up trigger, and

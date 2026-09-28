@@ -787,6 +787,23 @@ begin
     out := out || '28f FAIL an account deleted its billing row' || E'\n';
     reset role;
   exception when others then out := out || '28f deleting billing refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    out := out || '28r plan before launch: enforced=' || (public.cloud_plan() ->> 'enforced') || ' (want false), writable='
+      || (public.cloud_plan() ->> 'writable') || ' (want true)' || E'\n';
+    reset role;
+  exception when others then out := out || '28r ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    out := out || '28s password-only session gets a plan=' || (public.cloud_plan() is not null) || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '28s ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    perform public.cloud_plan();
+    out := out || '28t FAIL anon read a plan' || E'\n';
+    reset role;
+  exception when others then out := out || '28t anon refused: ' || left(sqlerrm, 60) || E'\n'; end;
 
   -- Staged as the owner, with no claims (auth.uid() null, as for the service role): Cloud ends for a.
   perform set_config('request.jwt.claims', '', true);
@@ -802,6 +819,8 @@ begin
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     select count(*) into n from public.tasks; out := out || '28g read-only account still reads tasks=' || (n > 0) || ' (want true)' || E'\n';
+    out := out || '28g plan once Cloud ended: enforced=' || (public.cloud_plan() ->> 'enforced') || ' (want true), writable='
+      || (public.cloud_plan() ->> 'writable') || ' (want false)' || E'\n';
     reset role;
   exception when others then out := out || '28g ERROR ' || sqlerrm || E'\n'; end;
   begin
