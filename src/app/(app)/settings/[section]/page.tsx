@@ -36,7 +36,7 @@ function deviceSettings(): DeviceSettings {
   const d = deviceConfig();
   return {
     name: d.name, terminal: d.terminal, claudeCommand: d.claudeCommand, codexCommand: d.codexCommand, remoteStart: d.remoteStart,
-    trustFolders: d.trustFolders, remoteAnswers: !!d.remoteAnswers, deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
+    remoteCode: d.remoteCode !== false, trustFolders: d.trustFolders, remoteAnswers: !!d.remoteAnswers, deviceId: d.deviceId, encrypted: encryptedAtRest(), importOffered: d.importOffered,
   };
 }
 

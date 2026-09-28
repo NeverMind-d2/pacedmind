@@ -13,6 +13,7 @@ declare
   sa2 uuid := gen_random_uuid();
   fa uuid := gen_random_uuid(); fa_new uuid := gen_random_uuid(); fb uuid := gen_random_uuid();
   area_a uuid; area_b uuid; dev uuid; dev2 uuid; dev_b uuid; tid bigint; tid2 bigint; tkey text; req uuid; rid bigint;
+  req_nc uuid; req_fc uuid; req_ch uuid;
   ask_id uuid; ask2 uuid; ask3 uuid;
   area_del uuid; t_del bigint; t_moved bigint; code text;
   sid text := '0123456789abcdef';
@@ -700,6 +701,99 @@ begin
     select count(*) into n from public.launch_requests; out := out || '24b other account sees requests=' || n || ' (want 0)' || E'\n';
     reset role;
   exception when others then out := out || '24b ERROR ' || sqlerrm || E'\n'; end;
+
+  -- 30. a computer can take requests from elsewhere without a fresh code, when it says so itself: only its own sign-in
+  --     switches the code off, and the requests still come only from a live two-factor session of the account. The
+  --     database records whether each came with a code. (The computer switches the code back on, and the requests
+  --     made here are deleted at the end, so the later checks see the computer as before.)
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    select count(*) into n from public.devices where id = dev and remote_code; out := out || '30 a computer asks for a code at first=' || n || ' (want 1)' || E'\n';
+    update public.devices set remote_code = false where id = dev;
+    out := out || '30a FAIL another sign-in switched the computer''s code off' || E'\n';
+    reset role;
+  exception when others then out := out || '30a another sign-in switching the code off refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set remote_code = false where id = dev;
+    get diagnostics n = row_count; out := out || '30b the computer switched its code off itself=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '30b ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude') returning id, fresh_code into req_nc, ok;
+    out := out || '30c request without a code accepted, fresh_code=' || ok || ' (want false)' || E'\n';
+    reset role;
+  exception when others then out := out || '30c ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_fresh, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude') returning id, fresh_code into req_fc, ok;
+    out := out || '30d request with a fresh code accepted, fresh_code=' || ok || ' (want true)' || E'\n';
+    reset role;
+  exception when others then out := out || '30d ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, 'Blue')
+      returning id into req_ch;
+    get diagnostics n = row_count; out := out || '30e changes without a code accepted=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '30e ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev2, tid, 'claude');
+    out := out || '30f FAIL a computer that asks for a code took a request without one' || E'\n';
+    reset role;
+  exception when others then out := out || '30f another computer still asks for a code: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, fresh_code) values (dev, tid, 'claude', true);
+    out := out || '30g FAIL a request said itself that it came with a code' || E'\n';
+    reset role;
+  exception when others then out := out || '30g a request''s own fresh_code refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.launch_requests set fresh_code = true where id = req_nc;
+    out := out || '30h FAIL a request''s fresh_code changed afterwards' || E'\n';
+    reset role;
+  exception when others then out := out || '30h changing fresh_code refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '30i FAIL a password-only session asked a computer that takes requests without a code' || E'\n';
+    reset role;
+  exception when others then out := out || '30i password-only session refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sa2, 'client_id', gen_random_uuid(),
+      'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);
+    set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '30j FAIL an agent''s sign-in asked a computer that takes requests without a code' || E'\n';
+    reset role;
+  exception when others then out := out || '30j agent''s sign-in refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '30k FAIL another account asked a computer that takes requests without a code' || E'\n';
+    reset role;
+  exception when others then out := out || '30k another account refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set remote_code = true where id = dev;
+    get diagnostics n = row_count; out := out || '30l the computer switched its code back on=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '30l ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '30m FAIL the computer asks for a code again but took a request without one' || E'\n';
+    reset role;
+  exception when others then out := out || '30m code back on, request without one refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    delete from public.launch_requests where id in (req_nc, req_fc, req_ch);
+    get diagnostics n = row_count; out := out || '30n requests made for these checks deleted=' || n || ' (want 3)' || E'\n';
+    reset role;
+  exception when others then out := out || '30n ERROR ' || sqlerrm || E'\n'; end;
 
   -- 26. what a running session waits for you to answer: only its computer asks, an answer comes once, from that computer
   --     or from elsewhere with a fresh code, before the agent stops waiting; only the computer withdraws it

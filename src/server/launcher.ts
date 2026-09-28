@@ -611,13 +611,14 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Why the session was started, for its history. */
-export type LaunchReason = "you" | "flow" | "approved" | "remote";
+export type LaunchReason = "you" | "flow" | "approved" | "remote" | "remoteNoCode";
 
 const REASON_TEXT: Record<LaunchReason, string> = {
   you: "you started it here",
   flow: "its flow started it",
   approved: "you allowed a request",
   remote: "a request with a fresh 2FA code",
+  remoteNoCode: "a request without a 2FA code, as this computer allows",
 };
 
 /**

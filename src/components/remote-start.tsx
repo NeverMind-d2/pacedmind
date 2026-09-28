@@ -9,6 +9,7 @@ import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, isAnswers, mcpReaches, platformName, surfaceOf,
   type AgentId, type AgentTools, type Device, type Doer, type LaunchRequestView, type RemoteStart as Setting, type Surface,
 } from "@/lib/types";
+import { REMOTE_START_LABEL } from "@/lib/from-elsewhere";
 import { deviceWithNeeds, missingOn, needList, toolsOn } from "@/lib/needs";
 import { AgentIcon, Icon, SurfaceIcon, type IconName } from "./icons";
 import { RUN_SHEET, noteSentRequest, publishComputers, useClock, useLaunchState } from "./request-status";
@@ -16,9 +17,10 @@ import { Button, IconButton, cx, toast } from "./ui";
 
 /*
  * "Run on a computer": the web app (also on a phone) has no computer of its own, so every session it starts, resumes
- * or sends back with changes goes to one of the account's computers, as a request with a fresh two-factor code. The
- * desktop app asks the same way for a task that runs on another computer, or a session that ran on one. The computer
- * then refuses it, asks you there, or acts, as its own setting says (src/server/requests.ts).
+ * or sends back with changes goes to one of the account's computers, as a request with a fresh two-factor code (none
+ * for a computer that takes requests without one). The desktop app asks the same way for a task that runs on another
+ * computer, or a session that ran on one. The computer then refuses it, asks you there, or acts, as its own setting
+ * says (src/server/requests.ts).
  */
 
 /** What the sheet asks a computer to do, and for which task or session. */
@@ -98,8 +100,6 @@ const AGENTS: AgentId[] = ["claude", "codex"];
 const SURFACES: Surface[] = ["terminal", "desktop", "cloud"];
 const CLI_NAME: Record<AgentId, string> = { claude: "Claude Code CLI", codex: "Codex CLI" };
 const MAKER: Record<AgentId, string> = { claude: "Anthropic", codex: "OpenAI" };
-/** A computer's setting for requests from elsewhere, as its Settings name it. */
-const SETTING_LABEL: Record<Setting, string> = { off: "Refuse", ask: "Ask me", auto: "Start" };
 const SETTING_TITLE: Record<Setting, string> = {
   off: "Refuses sessions asked for from elsewhere",
   ask: "Asks you at that computer first",
@@ -260,7 +260,9 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
   // The computer's setting decides, except that anything in the agent's cloud always waits for you there.
   const asks = !device || device.remoteStart !== "auto" || surface === "cloud";
   const fresh = !!codeFreshUntil && codeFreshUntil > now + 5_000;
-  const showCode = needCode || !fresh;
+  // A computer that takes requests without a code gets none, unless it asked for one again since this page read it.
+  const codeFree = !!device && !device.remoteCode;
+  const showCode = needCode || (!fresh && !codeFree);
   const usable = !!device && !refuses && !(ask.kind !== "start" && blocked);
   const ready = usable && !blocked && !busy && !!who && (!showCode || code.length === 6) && (ask.kind !== "changes" || !!text.trim());
   const agentName = who ? AGENT_LABEL[who] : "the agent";
@@ -511,7 +513,8 @@ function RunSheet({ ask, devices, task, hereId, onClose }: {
             </label>
           ) : (
             <p className="flex items-center gap-2 text-[12px] text-mut2">
-              <Icon name="check" size={12} strokeWidth={2.2} className="shrink-0" />No code needed: you entered one in the last few minutes.
+              <Icon name="check" size={12} strokeWidth={2.2} className="shrink-0" />
+              {codeFree ? `No code needed: ${name} takes requests without one.` : "No code needed: you entered one in the last few minutes."}
             </p>
           ))}
 
@@ -592,7 +595,8 @@ function DeviceInfo({ device, agent, now, here, boxed, needs = [] }: {
         {here && <Tag>This computer</Tag>}
         {device.isDefault && <Tag>Default</Tag>}
         <span className="flex-1" />
-        <Tag title={SETTING_TITLE[device.remoteStart]}>{SETTING_LABEL[device.remoteStart]}</Tag>
+        {!device.remoteCode && device.remoteStart !== "off" && <Tag title="Asking it for a session needs no two-factor code">No code</Tag>}
+        <Tag title={SETTING_TITLE[device.remoteStart]}>{REMOTE_START_LABEL[device.remoteStart]}</Tag>
       </span>
       <span className="flex items-center gap-1.5 text-[12px] text-mut2">
         <span aria-hidden="true" className={cx("h-[7px] w-[7px] shrink-0 rounded-full", online ? "bg-fg2" : "border border-dim")} />

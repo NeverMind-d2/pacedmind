@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { checkDeviceAction, connectAgentAction, renameDeviceAction, setDefaultDeviceAction } from "@/app/actions";
+import { checkDeviceAction, connectAgentAction, renameDeviceAction, setDefaultDeviceAction, updateDeviceSettingsAction } from "@/app/actions";
 import { revokeDeviceAction } from "@/app/auth/actions";
 import { parseLocal, toDateStr } from "@/lib/dates";
+import { REMOTE_START_LABEL, REMOTE_START_OPTIONS, fromElsewhereText, remoteCodeLabel } from "@/lib/from-elsewhere";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, deviceOnline, mcpReaches, platformName,
   type AgentId, type AgentTools, type Device, type RemoteStart, type ReportOutcome, type SessionStatus, type Surface,
@@ -14,7 +15,7 @@ import {
 import { ConfirmDialog } from "../dialog";
 import { InlineName } from "../entity-menu";
 import { AgentIcon, Icon, SurfaceIcon } from "../icons";
-import { Button, Dot, cx, useAction } from "../ui";
+import { Button, Dot, Segmented, Switch, cx, useAction } from "../ui";
 
 /* ---------- data from the server ---------- */
 
@@ -44,13 +45,6 @@ export interface FlowProject {
 /* ---------- words ---------- */
 
 const AGENTS: AgentId[] = ["claude", "codex"];
-
-const REMOTE_LABEL: Record<RemoteStart, string> = { off: "Refuse", ask: "Ask me", auto: "Start" };
-const REMOTE_HINT: Record<RemoteStart, string> = {
-  off: "Sessions asked for from the web app or another computer are refused there.",
-  ask: "Sessions asked for from the web app or another computer wait there until you allow them.",
-  auto: "Sessions asked for from the web app or another computer start there right away (asking takes a fresh two-factor code).",
-};
 
 const MCP_TEXT = { connected: "Connected", old: "Old name", cloud: "PacedMind Cloud", elsewhere: "Reports elsewhere", missing: "Not connected" } as const;
 const MCP_HINT = {
@@ -201,6 +195,7 @@ export function ComputersView({ devices, hereId, account, registering, projects,
           onDefault={() => run(() => setDefaultDeviceAction(d.id))}
           onCheck={() => run(() => checkDeviceAction())}
           onConnect={connect}
+          onRemote={(patch) => run(() => updateDeviceSettingsAction(patch))}
           onSignOut={() => setLeaving(d)} />
       ))}
 
@@ -240,9 +235,9 @@ export function ComputersView({ devices, hereId, account, registering, projects,
 
       {account && devices.length > 0 && (
         <p className="text-[12px] leading-relaxed text-mut2">
-          What runs on a computer is decided there: its agent commands, folders, flow switches and whether it takes sessions from
-          elsewhere are set in its desktop app. A computer is online when it checked in during the last two minutes; what it has of
-          the agents, it looks for when it starts and every half hour.
+          What runs on a computer is decided there: its agent commands, folders, flow switches, what it does with sessions asked
+          for from elsewhere and whether asking needs a two-factor code are set in its desktop app. A computer is online when it
+          checked in during the last two minutes; what it has of the agents, it looks for when it starts and every half hour.
         </p>
       )}
 
@@ -261,7 +256,7 @@ export function ComputersView({ devices, hereId, account, registering, projects,
 
 /* ---------- one computer ---------- */
 
-function Computer({ d, here, desktop, account, online, now, flows, sessions, renaming, pending, onRename, onRenamed, onSave, onDefault, onCheck, onConnect, onSignOut }: {
+function Computer({ d, here, desktop, account, online, now, flows, sessions, renaming, pending, onRename, onRenamed, onSave, onDefault, onCheck, onConnect, onRemote, onSignOut }: {
   d: Device; here: boolean;
   /** Seen in the desktop app (which has a computer of its own), not the web app. */
   desktop: boolean;
@@ -269,7 +264,10 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
   flows: FlowProject[]; sessions: ComputerSession[];
   renaming: boolean; pending: boolean;
   onRename: () => void; onRenamed: () => void; onSave: (name: string) => void;
-  onDefault: () => void; onCheck: () => void; onConnect: (agent: AgentId) => void; onSignOut: () => void;
+  onDefault: () => void; onCheck: () => void; onConnect: (agent: AgentId) => void;
+  /** Changes this computer's settings for sessions asked for from elsewhere (its own window only). */
+  onRemote: (patch: { remoteStart?: RemoteStart; remoteCode?: boolean }) => void;
+  onSignOut: () => void;
 }) {
   // Waiting for you first, then what runs, oldest first.
   const list = [...sessions].sort((a, b) =>
@@ -313,7 +311,6 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
               <span>{platformName(d.platform)}</span>
               <Sep />
               <span>{d.appVersion ? `PacedMind ${d.appVersion}` : "PacedMind version unknown"}</span>
-              {account && <RemoteBadge value={d.remoteStart} editable={here && desktop} />}
             </div>
           </div>
         </div>
@@ -335,6 +332,11 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
       <Agents d={d} here={here && desktop} pending={pending} now={now} onConnect={onConnect} />
 
       <div className="flex flex-col gap-3 border-t border-line px-4 py-3.5 max-md:px-3.5">
+        {account && (
+          <Line label="From elsewhere" title="Sessions asked for from the web app or another computer. Each computer sets this itself, in its desktop app.">
+            <FromElsewhere d={d} editable={here && desktop} onChange={onRemote} />
+          </Line>
+        )}
         <Line label="Flows on" title="Projects whose flow may start sessions by itself on this computer. Each computer switches its own.">
           {flows.length ? (
             <div className="flex min-h-8 flex-wrap items-center gap-1.5">
@@ -377,15 +379,33 @@ function Badge({ title, children }: { title?: string; children: ReactNode }) {
   );
 }
 
-/** What the computer does with sessions asked for from elsewhere. It decides that itself, so only its own window changes it. */
-function RemoteBadge({ value, editable }: { value: RemoteStart; editable: boolean }) {
-  const text = <>From elsewhere: <span className="text-fg3">{REMOTE_LABEL[value]}</span></>;
-  const box = "inline-flex h-5 items-center gap-1 rounded border border-line2 px-1.5 text-[11px] text-mut";
-  if (!editable) return <span title={`${REMOTE_HINT[value]} It's set in the desktop app on that computer.`} className={box}>{text}</span>;
+/**
+ * What the computer does with sessions asked for from the web app or another computer, and whether asking needs a
+ * two-factor code. It decides both itself, so only its own window changes them: there they can be changed here too.
+ */
+function FromElsewhere({ d, editable, onChange }: {
+  d: Device; editable: boolean; onChange: (patch: { remoteStart?: RemoteStart; remoteCode?: boolean }) => void;
+}) {
+  if (!editable) {
+    return (
+      <p title={`${fromElsewhereText(d.remoteStart, d.remoteCode, "there")} It's set in PacedMind on that computer.`}
+        className="flex min-h-8 flex-wrap items-center gap-x-1.5 text-[12.5px] text-fg2 @max-xl:min-h-0">
+        {REMOTE_START_LABEL[d.remoteStart]}
+        {d.remoteStart !== "off" && <><span aria-hidden className="text-faint">·</span><span className="text-mut">{remoteCodeLabel(d.remoteCode)}</span></>}
+      </p>
+    );
+  }
   return (
-    <Link href="/settings/computer" title={`${REMOTE_HINT[value]} Change it in Settings.`} className={cx(box, "hover:bg-hover hover:text-fg2")}>
-      {text}<Icon name="chevronRight" size={10} strokeWidth={2.4} />
-    </Link>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <div className="flex min-h-8 flex-wrap items-center gap-x-4 gap-y-2">
+        <Segmented value={d.remoteStart} options={REMOTE_START_OPTIONS} onChange={(v) => onChange({ remoteStart: v })} />
+        <label className="flex items-center gap-2 text-[12.5px] text-fg3">
+          <Switch on={d.remoteCode} label="Ask for a two-factor code" onChange={(v) => onChange({ remoteCode: v })} />
+          Two-factor code
+        </label>
+      </div>
+      <p className="text-[12px] leading-relaxed text-mut2">{fromElsewhereText(d.remoteStart, d.remoteCode, "here")}</p>
+    </div>
   );
 }
 

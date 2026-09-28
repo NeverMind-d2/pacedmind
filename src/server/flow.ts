@@ -56,7 +56,7 @@ function incoming(taskId: number, edges: FlowEdge[]) {
  * Starts a task's session for its flow (with `agent`, else the task's), or asks you: when it would run in the agent's
  * cloud, since that sends the project there, and where a task runs can be changed elsewhere (in the web app), which
  * confirming a flow's connections doesn't cover; and when the task needs something (Task.needs) the agent doesn't have
- * here, since another computer may, and only you can send it there (a request takes a fresh two-factor code).
+ * here, since another computer may, and only you can send it there.
  */
 export async function startFromFlow(task: Task, agent?: AgentId): Promise<LaunchResult | null> {
   const project = task.projectId ? await repo.getProject(task.projectId) : null;

@@ -161,8 +161,8 @@ const SURFACES = new Set<Surface>(["terminal", "desktop", "cloud"]);
  * What start, resume and changes answer when they can't run on this computer (the web app has none, and a task or
  * session can belong to another computer): `remote`, with the computer to offer (`deviceId`, null when there's none to
  * suggest) and whether it's the only one that can take it (`pinned`: the task or its project names it, or the session
- * ran there). The page then asks that computer with a fresh two-factor code: requestSessionAction,
- * requestResumeAction or requestChangesRemoteAction.
+ * ran there). The page then asks that computer, with a fresh two-factor code unless it takes requests without one:
+ * requestSessionAction, requestResumeAction or requestChangesRemoteAction.
  */
 type Remote = {
   remote?: boolean; deviceId?: string | null; pinned?: boolean;
@@ -172,8 +172,8 @@ type Remote = {
 
 /**
  * What a request to a computer answers: the request's id once sent (it shows in /api/state's `requests`), and
- * `needCode` when it needs a current two-factor code first (none was given, and none was entered in the last four
- * minutes), or the one given didn't do.
+ * `needCode` when it needs a current two-factor code first (none was given, none was entered in the last four minutes,
+ * and the computer doesn't take requests without one), or the one given didn't do.
  */
 type Requested = Result & { requestId?: string; needCode?: boolean };
 
@@ -248,25 +248,35 @@ function sentMessage(device: Device, kind: LaunchRequestKind, asks: boolean): st
   return `Sent to ${device.name}: ${now}.${away}`;
 }
 
-/** Sends a request, after its fresh code. */
+/**
+ * Sends a request, after its fresh code: `code`, one entered in the last four minutes, or none for a computer that takes
+ * requests without one (as its entry says; the database checks that entry itself).
+ */
 async function sendRequest(input: repo.LaunchRequestInput, device: Device, code: string, asks: boolean): Promise<Requested> {
-  const stale = await stepUp(code);
-  if (stale) return stale;
+  const given = !!(code ?? "").trim();
+  if (device.remoteCode || given) {
+    const stale = await stepUp(code);
+    if (stale) return stale;
+  }
   try {
     const r = await repo.createLaunchRequest(input);
     return done({ ok: true, requestId: r.id, message: sentMessage(device, input.kind ?? "start", asks) });
   } catch (e) {
     const message = errorOf(e);
     if (!refusedStepUp(message)) return { ok: false, error: message };
-    // A code from an authenticator added in this session doesn't count (SECURITY.md), and neither does an old one.
-    return { ok: false, needCode: true, error: (code ?? "").trim() ? STEP_UP_REFUSED : "Enter a current two-factor code." };
+    // A code from an authenticator added in this session doesn't count (SECURITY.md), and neither does an old one. A
+    // computer that took requests without a code may have switched that off since the page read it.
+    return {
+      ok: false, needCode: true,
+      error: given ? STEP_UP_REFUSED : device.remoteCode ? "Enter a current two-factor code." : `${device.name} asks for a two-factor code now. Enter a current one.`,
+    };
   }
 }
 
 /**
- * Asks a computer to start a session for a task, where the task says or on `surface`. Needs a fresh two-factor code:
- * `code`, or "" to use one entered in the last four minutes. A task or project that names its computer starts only
- * there, so another computer is refused here already.
+ * Asks a computer to start a session for a task, where the task says or on `surface`. Needs a fresh two-factor code,
+ * unless the computer takes requests without one: `code`, or "" to use one entered in the last four minutes (or none).
+ * A task or project that names its computer starts only there, so another computer is refused here already.
  */
 export async function requestSessionAction(
   taskId: number, agent: AgentId, deviceId: string, code: string, surface?: Surface | null,
@@ -811,10 +821,14 @@ export async function updateSettingsAction(patch: Partial<Settings>) {
 
 const TERMINAL_IDS = new Set<TerminalId>(["wt", "cmd", "terminal", "iterm"]);
 
-/** How sessions start on this computer; only its own window changes it. */
+/**
+ * How sessions start on this computer; only its own window changes it. `remoteCode` false lets requests from elsewhere
+ * come without a two-factor code: the account's entry for this computer says so (the database takes requests by it), and
+ * this computer checks its own setting again for each one.
+ */
 export async function updateDeviceSettingsAction(patch: {
-  name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart; trustFolders?: boolean;
-  remoteAnswers?: boolean;
+  name?: string; terminal?: TerminalId; claudeCommand?: string; codexCommand?: string; remoteStart?: RemoteStart; remoteCode?: boolean;
+  trustFolders?: boolean; remoteAnswers?: boolean;
 }): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "These are set in the PacedMind desktop app." };
@@ -824,6 +838,7 @@ export async function updateDeviceSettingsAction(patch: {
   }
   if (patch.terminal && !TERMINAL_IDS.has(patch.terminal)) return { ok: false, error: "Unknown terminal" };
   if (patch.remoteStart && !["off", "ask", "auto"].includes(patch.remoteStart)) return { ok: false, error: "Unknown setting" };
+  if (patch.remoteCode !== undefined && typeof patch.remoteCode !== "boolean") return { ok: false, error: "Unknown setting" };
   const name = patch.name === undefined ? undefined : repo.cleanDeviceName(patch.name);
   updateDevice({
     ...(name ? { name } : {}),
@@ -831,13 +846,17 @@ export async function updateDeviceSettingsAction(patch: {
     ...(patch.claudeCommand ? { claudeCommand: patch.claudeCommand.trim() } : {}),
     ...(patch.codexCommand ? { codexCommand: patch.codexCommand.trim() } : {}),
     ...(patch.remoteStart ? { remoteStart: patch.remoteStart } : {}),
+    ...(typeof patch.remoteCode === "boolean" ? { remoteCode: patch.remoteCode } : {}),
     ...(typeof patch.trustFolders === "boolean" ? { trustFolders: patch.trustFolders } : {}),
     ...(typeof patch.remoteAnswers === "boolean" ? { remoteAnswers: patch.remoteAnswers } : {}),
   });
   const id = deviceConfig().deviceId;
-  // The account's copy, for Settings elsewhere. What counts is saved above already: if the copy doesn't go through now
-  // (offline, or just signed in again), the account sync sends it within a minute (requests.ts).
-  if (id && (name || patch.remoteStart)) await repo.updateDeviceRow(id, { name, remoteStart: patch.remoteStart }).catch(() => {});
+  // The account's copy, for Settings elsewhere and, for the code, the database. What counts here is saved above already:
+  // if the copy doesn't go through now (offline, or just signed in again), the account sync sends it within a minute
+  // (requests.ts), and until then a request without a code is refused here anyway.
+  if (id && (name || patch.remoteStart || typeof patch.remoteCode === "boolean")) {
+    await repo.updateDeviceRow(id, { name, remoteStart: patch.remoteStart, remoteCode: patch.remoteCode }).catch(() => {});
+  }
   // A new command can find a different tool: look again.
   if (patch.claudeCommand || patch.codexCommand) void checkThisDevice(mcpUrl()).catch(() => {});
   return done({ ok: true, message: "Saved" });

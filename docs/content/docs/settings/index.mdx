@@ -43,6 +43,8 @@ Open **Settings → Computers** to see each computer's agents, active flows and 
 
 Use the pencil beside a computer's name to rename it. Signed in, **Make default** chooses where sessions go when neither their task nor project names a computer, and **Sign out** disconnects that computer. In the desktop app, this computer also has **Check again** to refresh its detected agents, and **Connect** for agents that need connecting.
 
+Signed in, each computer's **From elsewhere** line shows what it does with sessions asked for from the web app or another computer (**Refuse**, **Ask me** or **Start**) and whether asking needs a two-factor code (*Code needed* or *No code needed*). In the desktop app, this computer's line has the same controls as [General](#general); another computer's settings change only in PacedMind on that computer.
+
 Computers is in the Settings menu. Search for **Computers** in the command menu to open it directly. Older links to the Computers page also open it here.
 
 ## Data
@@ -96,7 +98,14 @@ The section **Auto-plan** says: *The week view fills free focus time between the
 
 The note says what stays on the computer: *What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain.*
 
-Signed in, **From elsewhere** decides what happens to sessions asked for from the web app or another computer: **Refuse**, **Ask me** or **Start**.
+Signed in, two rows decide what happens to sessions asked for from the web app or another computer, such as your phone. They're this computer's own settings: only this computer's PacedMind changes them, here or on its card in **Computers**.
+
+| Row | Meaning |
+| --- | --- |
+| **From elsewhere** | **Refuse**: such sessions are refused. **Ask me** (the default): they wait on this computer until you allow them. **Start**: they start right away, without you here, except a session that would run in the agent's cloud, which still waits for you. |
+| **Two-factor code** | On (the default, *Needed to ask*): asking for a session here takes a current code from your authenticator app, entered in the last few minutes. Off (*Not needed*): any browser or computer signed in to your account can ask without one. |
+
+With **Start** and the code off, anyone signed in to your account can start an agent on this computer in your projects' folders, without a code and without you there. Keep that for a computer whose projects you'd let an agent work on alone. Agents asking over MCP always wait for you.
 
 ### Agents found here
 

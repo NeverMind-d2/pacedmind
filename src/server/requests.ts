@@ -20,14 +20,15 @@ import {
 
 /*
  * Sessions asked for from outside this computer's PacedMind window: from the web app or another computer
- * (a launch request in the cloud, which the database only accepts with a two-factor code from the last five
- * minutes, from an authenticator older than the asking session), from an agent over MCP, or from a flow along
- * a connection you haven't confirmed here. A request from elsewhere starts a session, resumes one that ran here,
- * or sends one that ran here back to its agent with changes. What happens to it is this computer's setting
- * (device.ts):
+ * (a launch request in the cloud, which the database only accepts from a live two-factor session, with a code from
+ * the last five minutes from an authenticator older than the asking session unless this computer takes requests
+ * without one), from an agent over MCP, or from a flow along a connection you haven't confirmed here. A request from
+ * elsewhere starts a session, resumes one that ran here, or sends one that ran here back to its agent with changes.
+ * What happens to it is this computer's setting (device.ts):
  * - off: refused;
  * - ask (the default): the request waits here until you allow or refuse it in the app;
  * - auto: acted on right away, except anything that runs in the agent's cloud, which always waits for you.
+ * A request that came without a fresh code is refused while this computer's own setting asks for one (remoteCode).
  * Agents over MCP and unconfirmed flow connections always wait for you. Each approval keeps the task, agent,
  * folder and way it runs that you were shown, and acting refuses if any of them changed in between.
  */
@@ -267,6 +268,7 @@ export async function syncDevice(): Promise<void> {
     await repo.updateDeviceRow(d.deviceId!, {
       lastSeen: true,
       ...(me.remoteStart !== d.remoteStart ? { remoteStart: d.remoteStart } : {}),
+      ...(me.remoteCode !== (d.remoteCode !== false) ? { remoteCode: d.remoteCode !== false } : {}),
       ...(pushName ? { name: d.name } : {}),
       ...(APP_VERSION && me.appVersion !== APP_VERSION ? { appVersion: APP_VERSION } : {}),
       ...(sendOthers ? { otherSessions: others } : {}),
@@ -296,19 +298,23 @@ export async function syncDevice(): Promise<void> {
     }
     // Whatever happens next, this request is this computer's to decide once.
     handledRequests().add(r.id);
-    await handle(r, d.remoteStart, d.deviceId!, now);
+    await handle(r, d, d.deviceId!, now);
   }
 }
 
 /**
- * Decides one request from elsewhere by this computer's setting, after checking it can run here at all. Everything is
+ * Decides one request from elsewhere by this computer's settings, after checking it can run here at all. Everything is
  * checked again when it runs (startSession, resumeSession, requestChanges), and the outcome goes back to the request.
  */
-async function handle(r: LaunchRequest, setting: RemoteStart, here: string, now: number) {
+async function handle(r: LaunchRequest, settings: { remoteStart: RemoteStart; remoteCode: boolean }, here: string, now: number) {
+  const setting = settings.remoteStart;
   const settle = (status: "launched" | "failed" | "denied" | "expired", extra?: { sessionId?: string | null; note?: string | null }) =>
     repo.settleLaunchRequest(r.id, status, extra);
   if (Date.parse(r.expiresAt) <= now) return settle("expired");
   if (setting === "off") return settle("denied", { note: "Taking sessions from elsewhere is off on this computer" });
+  // The database takes a request without a fresh code only while this computer's entry says it may. What counts is the
+  // setting here: switched back on, it refuses them at once, before the entry has caught up.
+  if (!r.freshCode && settings.remoteCode !== false) return settle("denied", { note: "This computer takes sessions from elsewhere only with a two-factor code" });
   const task = await repo.getTask(r.taskId);
   if (!task) return settle("failed", { note: "The task is gone" });
   if (task.agent === "human") return settle("failed", { note: `${task.key} is marked as yours` });
@@ -323,7 +329,10 @@ async function handle(r: LaunchRequest, setting: RemoteStart, here: string, now:
     const folder = plannedFolder(task);
     // A session in the agent's cloud sends the project there, so it always waits for you, whatever the setting.
     if (setting === "auto" && surface !== "cloud" && folder) {
-      return done(await startSession(task.id, { agent: r.agent, surface, reason: "remote", expect: { key: task.key, agent: r.agent, folder, surface, modelSettings: task.modelSettings } }));
+      return done(await startSession(task.id, {
+        agent: r.agent, surface, reason: r.freshCode ? "remote" : "remoteNoCode",
+        expect: { key: task.key, agent: r.agent, folder, surface, modelSettings: task.modelSettings },
+      }));
     }
     if (!(await ask(task, r.agent, "elsewhere", r.id, times, surface))) await settle("failed", { note: "That task can't run on this computer" });
     return;

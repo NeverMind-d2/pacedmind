@@ -68,7 +68,7 @@ export async function thisDevice(): Promise<Device> {
   const row = d.deviceId && cloud ? await repo.getDevice(d.deviceId).catch(() => null) : null;
   return {
     id: d.deviceId ?? "", name: row?.name ?? d.name, platform: row?.platform ?? thisPlatform(), remoteStart: d.remoteStart,
-    agents: localTools(), createdAt: row?.createdAt ?? "", lastSeenAt: row?.lastSeenAt ?? null,
+    remoteCode: d.remoteCode !== false, agents: localTools(), createdAt: row?.createdAt ?? "", lastSeenAt: row?.lastSeenAt ?? null,
     checkedAt: g.__pacedmindToolsAt ?? row?.checkedAt ?? null, revokedAt: row?.revokedAt ?? null,
     isDefault: row ? row.isDefault : !cloud, appVersion: APP_VERSION, flowsOn: flowsOnHere(cloud),
     // The Sessions page looks for this computer's own itself (other-sessions.ts), more often than it reports them.

@@ -41,7 +41,8 @@ export const LIVE_STATUSES: SessionStatus[] = ["starting", "running"];
 
 /**
  * What a desktop app does with a session asked for from elsewhere (the web app, another computer): refuse
- * it, ask you on that computer first, or start it right away (the request always needs a fresh 2FA code).
+ * it, ask you on that computer first, or start it right away. Whether asking takes a fresh 2FA code is the
+ * computer's other setting (`remoteCode`).
  */
 export type RemoteStart = "off" | "ask" | "auto";
 
@@ -355,6 +356,8 @@ export interface DeviceSettings {
   claudeCommand: string;
   codexCommand: string;
   remoteStart: RemoteStart;
+  /** Whether sessions asked for from elsewhere need a two-factor code from the last five minutes. */
+  remoteCode: boolean;
   /** Whether PacedMind answers Claude Code's and Codex's question whether you trust a session's folder, before it starts. */
   trustFolders: boolean;
   /** Whether this computer's sessions wait for answers from PacedMind on your other devices too (asks.ts). */
@@ -454,6 +457,11 @@ export interface Device {
   platform: "windows" | "macos" | "linux";
   /** What it does with sessions asked for from elsewhere, as it last said (it decides on the computer itself). */
   remoteStart: RemoteStart;
+  /**
+   * Whether asking it for a session needs a two-factor code from the last five minutes, as it last said. The database
+   * takes requests without one only while this is off, and the computer checks its own setting again.
+   */
+  remoteCode: boolean;
   /** What it found for each agent when it last looked; nothing found until the first check finished. */
   agents: Record<AgentId, AgentTools>;
   createdAt: string;
@@ -541,6 +549,8 @@ export interface LaunchRequest {
   targetSessionId: string | null;
   /** What should change, as the user wrote it (changes only). Untrusted: the agent reads it, nothing runs it. */
   changes: string | null;
+  /** Whether it came with a two-factor code from the last five minutes, as the database found when it took it. */
+  freshCode: boolean;
   requestedVia: string;
   requestedAt: string;
   expiresAt: string;

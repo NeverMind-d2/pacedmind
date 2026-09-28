@@ -51,6 +51,13 @@ export interface DeviceConfig {
   confirmed: Record<string, { edges: string[]; after: string | null; areaId?: string | null }>;
   remoteStart: RemoteStart;
   /**
+   * Whether sessions asked for from elsewhere need a two-factor code entered in the last five minutes (on by default).
+   * Off, any two-factor session of the account can ask: the account's entry for this computer says so (remote_code, which
+   * the database takes only from this computer's own sign-in), and requests.ts refuses a request without a code while
+   * this is on, whatever that entry said.
+   */
+  remoteCode: boolean;
+  /**
    * Whether the launcher answers Claude Code's and Codex's question whether you trust a session's folder before the
    * session starts there (claude-trust.ts, codex-trust.ts), so a session never waits for it in its terminal.
    */
@@ -117,6 +124,7 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     servers: {},
     confirmed: {},
     remoteStart: "ask",
+    remoteCode: true,
     trustFolders: keep?.trustFolders ?? true,
     remoteAnswers: keep?.remoteAnswers ?? false,
     ownerToken: newOwnerToken(),

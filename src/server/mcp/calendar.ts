@@ -284,10 +284,11 @@ export function registerCalendarTools(server: McpServer) {
     }
     const d = deviceConfig();
     const asked = { off: "refused", ask: "wait for the user to allow them on this computer", auto: "start right away" }[d.remoteStart];
+    const code = d.remoteStart === "off" ? "" : d.remoteCode !== false ? ", asked with a two-factor code" : ", asked without a two-factor code";
     return [
       ...hours,
       `Sessions on this computer open in: ${terminalFor(d.terminal, process.platform).label} · Claude Code command: ${agentCommandFor("claude")} · Codex command: ${agentCommandFor("codex")}`,
-      `Sessions asked for over MCP wait for the user to allow them in PacedMind. Requests from the web app or another computer: ${asked}.`,
+      `Sessions asked for over MCP wait for the user to allow them in PacedMind. Requests from the web app or another computer: ${asked}${code}.`,
       `MCP address: ${mcpUrl()}`,
     ].join("\n");
   });

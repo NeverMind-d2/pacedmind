@@ -16,13 +16,13 @@ import {
 } from "@/lib/billing";
 import { projectColor } from "@/lib/colors";
 import { toDateStr } from "@/lib/dates";
+import { REMOTE_START_OPTIONS, fromElsewhereText } from "@/lib/from-elsewhere";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
   AGENT_LABEL, APP_LABEL, deviceOnline,
   type AgentId, type AgentTools, type Area, type ConnectedAgent, type Device, type DeviceSettings, type FolderExtras, type McpLink, type Project,
-  type ProjectAgentsView,
-  type RemoteStart, type Settings,
+  type ProjectAgentsView, type Settings,
 } from "@/lib/types";
 import { guessCountry } from "../../../site/lib/markets";
 import { useOpenBilling } from "../billing";
@@ -106,12 +106,6 @@ function ProjectAgents({ name, view, onServers }: { name: string; view: ProjectA
     </div>
   );
 }
-
-const REMOTE_TEXT: Record<RemoteStart, string> = {
-  off: "Sessions asked for from the web app or another computer are refused.",
-  ask: "Sessions asked for from the web app or another computer wait here until you allow them.",
-  auto: "Sessions asked for from the web app or another computer start right away. Asking always takes a fresh two-factor code.",
-};
 
 /** A group of rows on a Settings page; the first on a page often goes without a title, which the page has. */
 function Section({ title, action, children, note }: { title?: string; action?: ReactNode; children: ReactNode; note?: ReactNode }) {
@@ -542,10 +536,13 @@ export function ComputerSettings({ device, account, found }: {
       </Row>
       {account && <>
         <Row label="From elsewhere">
-          <Segmented value={device.remoteStart} onChange={(v) => saveDevice({ remoteStart: v })}
-            options={[{ value: "off", label: "Refuse" }, { value: "ask", label: "Ask me" }, { value: "auto", label: "Start" }]} />
+          <Segmented value={device.remoteStart} onChange={(v) => saveDevice({ remoteStart: v })} options={REMOTE_START_OPTIONS} />
         </Row>
-        <Hint>{REMOTE_TEXT[device.remoteStart]} Agents asking over MCP always wait for you.</Hint>
+        <Row label="Two-factor code">
+          <span className="flex-1 text-[12.5px] text-fg3">{device.remoteCode ? "Needed to ask" : "Not needed"}</span>
+          <Switch on={device.remoteCode} label="Ask for a two-factor code" onChange={(v) => saveDevice({ remoteCode: v })} />
+        </Row>
+        <Hint>{fromElsewhereText(device.remoteStart, device.remoteCode, "here")} Agents asking over MCP always wait for you.</Hint>
       </>}
     </Section>
 
@@ -572,7 +569,7 @@ export function SessionSettings({ device, account, platform }: {
   const saveDevice = (patch: Parameters<typeof updateDeviceSettingsAction>[0]) => run(() => updateDeviceSettingsAction(patch));
   if (!device) {
     return (
-      <Section title="Agent sessions" note="Claude Code and Codex run in terminals on your computers, so they connect to the PacedMind desktop app. From here you can ask a computer to start a session; it needs a fresh two-factor code, and the computer decides by its own setting.">
+      <Section title="Agent sessions" note="Claude Code and Codex run in terminals on your computers, so they connect to the PacedMind desktop app. From here you can ask a computer to start a session; each computer's own settings say whether asking needs a fresh two-factor code and whether it waits for you there (Settings → Computers).">
         <Row label="Status"><span className="text-[12.5px] text-fg3">Handled by the desktop app</span></Row>
       </Section>
     );

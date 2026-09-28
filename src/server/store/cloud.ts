@@ -870,7 +870,7 @@ export async function setSettings(patch: Partial<Settings>) {
 
 /* ---------- computers and requests to start sessions ---------- */
 
-const DEVICE_COLS = "id, name, platform, remote_start, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on, other_sessions";
+const DEVICE_COLS = "id, name, platform, remote_start, remote_code, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on, other_sessions";
 
 /**
  * What a computer found of one agent, as the cloud has it: for display only. The launcher uses what this
@@ -892,6 +892,7 @@ const toDevice = (r: Row): Device => {
   const agents = (r.agents && typeof r.agents === "object" ? r.agents : {}) as Row;
   return {
     id: String(r.id), name: String(r.name), platform: String(r.platform) as Device["platform"], remoteStart: String(r.remote_start) as RemoteStart,
+    remoteCode: r.remote_code !== false,
     agents: { claude: toolsOf(agents.claude), codex: toolsOf(agents.codex) },
     createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), checkedAt: s(r.checked_at), revokedAt: s(r.revoked_at),
     isDefault: r.is_default === true, appVersion: s(r.app_version),
@@ -977,17 +978,20 @@ export async function revokeDevice(id: string) {
 
 /**
  * What this computer reports about its own entry (the database takes these only from the computer's own sign-in):
- * its name as set in its window, its setting for requests from elsewhere, that it's still there, PacedMind's version,
- * and the projects whose flow is on here. Values in the wrong shape are left out rather than failing the rest.
+ * its name as set in its window, its settings for requests from elsewhere (whether asking needs a code, which the
+ * database checks requests against), that it's still there, PacedMind's version, and the projects whose flow is on here.
+ * Values in the wrong shape are left out rather than failing the rest.
  */
 export async function updateDeviceRow(id: string, patch: {
-  name?: string; remoteStart?: RemoteStart; lastSeen?: boolean; appVersion?: string; flowsOn?: string[]; otherSessions?: OtherSession[];
+  name?: string; remoteStart?: RemoteStart; remoteCode?: boolean; lastSeen?: boolean; appVersion?: string; flowsOn?: string[];
+  otherSessions?: OtherSession[];
 }) {
   const values: Row = {};
   if (patch.otherSessions) values.other_sessions = otherSessionsOf(patch.otherSessions);
   const name = patch.name === undefined ? "" : cleanDeviceName(patch.name);
   if (name) values.name = name;
   if (patch.remoteStart) values.remote_start = patch.remoteStart;
+  if (typeof patch.remoteCode === "boolean") values.remote_code = patch.remoteCode;
   if (patch.lastSeen) values.last_seen_at = new Date().toISOString();
   if (patch.appVersion !== undefined && appVersionOk(patch.appVersion)) values.app_version = patch.appVersion;
   if (patch.flowsOn) values.flows_on = [...new Set(patch.flowsOn.filter(isUuid))].sort().slice(0, 200);
@@ -1004,6 +1008,8 @@ const toRequest = (r: Row): LaunchRequest => ({
   deviceId: String(r.device_id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId,
   surface: SURFACES.has(String(r.surface)) ? (String(r.surface) as Surface) : null,
   targetSessionId: s(r.target_session_id), changes: s(r.changes),
+  // Set by the database. One without the column (before the remote_code migration) took requests only with a fresh code.
+  freshCode: r.fresh_code !== false,
   requestedVia: String(r.requested_via), requestedAt: String(r.requested_at), expiresAt: String(r.expires_at),
   status: String(r.status) as LaunchRequestStatus, decidedAt: s(r.decided_at), sessionId: s(r.session_id), note: s(r.note),
 });
@@ -1021,8 +1027,9 @@ export async function listLaunchRequests(filter: LaunchRequestFilter = {}): Prom
 
 /**
  * Asks a computer to start a session, resume one, or send one back with changes. The database only accepts it from
- * a session whose second factor was verified in the last five minutes, only for a session that ran on that computer
- * (resume, changes), and sets its status and expiry itself.
+ * a session whose second factor was verified in the last five minutes, unless that computer takes requests without a
+ * code, only for a session that ran on that computer (resume, changes), and sets its status, expiry and whether it came
+ * with a fresh code itself.
  */
 export async function createLaunchRequest(input: LaunchRequestInput): Promise<LaunchRequest> {
   const db = await accountDb();
