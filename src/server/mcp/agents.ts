@@ -218,7 +218,9 @@ async function recordEnvironment(s: Session, projectId: string | null, env: { mo
   const state = own ? sessionMcp(s.folder!, s.cliSessionId!) : null;
   const servers = state?.servers
     ?? env.mcp_servers?.map((n) => n.trim()).filter((n) => /^[\w.@:+-]{1,60}$/.test(n) && n !== MCP_NAME && n !== OLD_MCP_NAME);
-  const plugins = [...agentExtras(s.agent).plugins, ...(s.folder ? folderExtras(s.folder).plugins : [])];
+  // What the agent's plugins bring, from this computer's config files; PacedMind Cloud's server has none to read (a
+  // session's folder there is a path on the user's computer).
+  const plugins = HOSTED ? [] : [...agentExtras(s.agent).plugins, ...(s.folder ? folderExtras(s.folder).plugins : [])];
   const sorted = servers ? sortReported(servers, plugins) : null;
   const text = environmentText(AGENT_LABEL[s.agent], env.model, sorted);
   if (text) await repo.addSessionEvent(s.id, "environment", text);
