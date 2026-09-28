@@ -60,7 +60,11 @@ A running session notifies you too when its agent waits for you, in its terminal
 | *DEV-22 is waiting for you* | The agent's turn ended in its terminal, and it waits for your next message. |
 | *DEV-22 asks for your permission* | The agent asks in its terminal for your permission, such as to run a command. |
 | *DEV-22 has a question for you* | The agent asks you something, in its terminal or with `report_progress`. |
-| *DEV-22 stopped at a usage limit* | Claude Code stopped at a usage limit of your plan or your API credit. |
+| *DEV-22 stopped at a usage limit* | The agent stopped at a usage limit of your plan or your API credit. |
+| *DEV-22: model at capacity* | The selected model is temporarily unavailable. Choose another available model in the existing terminal or retry later. |
+| *DEV-22: check agent startup* | Claude Code or Codex has not checked in after about 90 seconds. Check its terminal for setup choices. |
+| *DEV-22: send the first message* | The Claude app or Codex app has the prepared message. Press Enter or select Send there to start. |
+| *DEV-22: agent stopped on an error* | Check the existing terminal to resolve the error and retry. |
 
 Below the title come the task's title and the line that the task's details show, such as *Claude Code asks for your permission in its terminal: …*. Click the notification to open the session in **Sessions**. Each time the agent starts waiting, it notifies once. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
 

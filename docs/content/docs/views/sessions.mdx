@@ -12,6 +12,8 @@ description: The Sessions view lists Claude Code and Codex sessions by state, sh
 | Group | Contains |
 | --- | --- |
 | **Finished, waiting for you** | Sessions whose agent handed the task back, including hand-backs that are partly done or blocked. Newest first. |
+| **Needs attention** | Sessions waiting for an answer, startup choice or first message, or paused on a limit or error. |
+| **Starting** | Sessions waiting for the agent to check in, without a notice that needs attention yet. |
 | **Running** | Sessions in progress, oldest first. |
 | **Ended today** | Sessions that ended today: marked done, closed or failed. |
 | **Earlier** | Older ended sessions, the latest 30. Collapsed unless the selected session is in it. |
@@ -21,7 +23,8 @@ Each row shows the session's state dot, the task's key and title, the project an
 | State | Row text |
 | --- | --- |
 | Finished | *finished 12:22*; handed back partly done, *partly done 12:22*; blocked, *stuck 12:22* |
-| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*, or *answers since 14:05* after you answered its questions. When the agent hasn't checked in after 90 seconds, or Claude Code is asking whether you trust the folder: *waiting in its terminal*, or *waiting in the Claude app*. When the agent waits for you: *waiting for you*, *asks your permission*, *has a question* or *paused: usage limit*, with a navy dot |
+| Starting | *starting · waiting for check-in* in a terminal, or *send the first message* in the Claude app or Codex app. After about 90 seconds without a terminal check-in: *check agent startup*, with instructions and a notification |
+| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*, or *answers since 14:05* after you answered its questions. When the agent waits for you: *waiting for you*, *asks your permission*, *has a question*, *paused: usage limit*, *paused: model at capacity* or *paused: agent error*, with a navy dot |
 | Done | *done yesterday 18:10* |
 | Closed | *closed before finishing* |
 | Failed | *couldn't start* |

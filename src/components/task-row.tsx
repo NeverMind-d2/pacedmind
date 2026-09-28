@@ -35,9 +35,9 @@ export function SessionChip({ task, ctx }: { task: Task; ctx: TaskContext }) {
       );
     }
     return (
-      <span title={`${AGENT_LABEL[s.agent]} running`} className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-mut">
+      <span title={`${AGENT_LABEL[s.agent]} ${s.status}`} className="inline-flex shrink-0 items-center gap-1.5 text-[11.5px] text-mut">
         <span className="h-1.5 w-1.5 rounded-full bg-fg3" />
-        <span className="max-sm:hidden">{AGENT_LABEL[s.agent]} running</span>
+        <span className="max-sm:hidden">{AGENT_LABEL[s.agent]} {s.status}</span>
       </span>
     );
   }

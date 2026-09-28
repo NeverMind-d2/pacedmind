@@ -8,7 +8,7 @@ import { scanOtherSessions } from "./other-sessions";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
-import { dateOnly, todayStr } from "@/lib/dates";
+import { attentionOf, dateOnly, todayStr } from "@/lib/dates";
 import type { AttachableTask, OtherGroup, SessionGroup, SessionItem, StartableTask } from "@/components/views/sessions";
 import { agentOf, deviceOnline, outsideConversation, taskHref, type OtherSession, type Report, type Session, type Status, type Task } from "@/lib/types";
 
@@ -131,10 +131,13 @@ export async function sessionList(selected: string | null): Promise<{
     };
   };
 
+  const needsAttention = (s: Session) => !!attentionOf(eventsOf[s.id] ?? []);
   const groups: SessionGroup[] = (
     [
       { id: "finished", name: "Finished, waiting for you", items: finished.map(item) },
-      { id: "running", name: "Running", items: running.map(item) },
+      { id: "attention", name: "Needs attention", items: running.filter(needsAttention).map(item) },
+      { id: "starting", name: "Starting", items: running.filter((s) => s.status === "starting" && !needsAttention(s)).map(item) },
+      { id: "running", name: "Running", items: running.filter((s) => s.status === "running" && !needsAttention(s)).map(item) },
       { id: "today", name: "Ended today", items: endedToday.map(item) },
       { id: "earlier", name: "Earlier", items: shownEarlier.map(item) },
     ] satisfies SessionGroup[]
@@ -143,7 +146,7 @@ export async function sessionList(selected: string | null): Promise<{
   const shown = groups.flatMap((g) => g.items);
   const newest = [...shown].sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0];
   const initialId = (selected && shown.some((s) => s.id === selected) ? selected : null)
-    ?? finished[0]?.id ?? running[0]?.id ?? newest?.id ?? null;
+    ?? finished[0]?.id ?? running.find(needsAttention)?.id ?? running[0]?.id ?? newest?.id ?? null;
 
   // Tasks an agent could pick up right now, for the "Start session" menu.
   const rank: Partial<Record<Status, number>> = { progress: 0, todo: 1, backlog: 2 };

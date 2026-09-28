@@ -10,6 +10,7 @@ import * as repo from "./repo";
 import { syncDevice } from "./requests";
 import { usesCloud } from "./scope";
 import { MODE, NotSignedIn, authState } from "./supabase";
+import { checkSessionHealth } from "./session-health";
 
 const CHECK_EVERY = 30 * 60_000;
 
@@ -57,6 +58,7 @@ export function startBackground() {
     }, ms);
   };
   // Other computers get current account capabilities, even when nobody opens this computer's task picker.
+  every(10_000, "session health", checkSessionHealth, { writes: true });
   every(5 * 60_000, "agent models", () => Promise.all([refreshAgentModels("claude"), refreshAgentModels("codex")]));
   // What the agents here reach depends on the sign-in (PacedMind Cloud's MCP server counts only with it), so they're
   // checked again when that changes.

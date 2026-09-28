@@ -16,7 +16,7 @@ A session can start from several places:
 | A flow | Automatically, when the task's turn comes and the flow is on. See [Automate with flows](/agents/flows). |
 | An agent | With the MCP tool `start_session`, when you ask it to. Agents ask first, because it starts an agent on your computer or in its cloud. |
 
-A message confirms the start, such as *Started DEV-22 in a new terminal*, *Opened DEV-22 in the Claude app. Send the first message there to start.*, *Sending DEV-22 to Claude Code on the web. The terminal shows its link.* or *Sending DEV-24 to Codex cloud*. A session can't start when:
+A message confirms the start, such as *Started DEV-22 in a new terminal*, *Opened DEV-22 in the Claude app. Press Enter or select Send there to start.*, *Sending DEV-22 to Claude Code on the web. The terminal shows its link.* or *Sending DEV-24 to Codex cloud*. A session can't start when:
 
 * the task already has a running session (*DEV-22 already has a running session*);
 * the task is yours (*DEV-22 is marked as yours. Hand it to Claude Code or Codex before starting a session.*);
@@ -42,6 +42,18 @@ A session runs in one of three places, chosen per task under **Runs in** in the 
 Until a task's place is chosen, it runs in a terminal when the agent's command-line tool is installed on the computer, else in the agent's desktop app. PacedMind finds out what the computer has on its own, when it starts and every half hour.
 
 A cloud session works on a copy of a repository. Claude Code on the web uses the folder's repository, from GitHub or uploaded when it has none there. Codex cloud uses the repository of the project's Codex environment, starting from the folder's current branch. The whole task goes with the first message, its title, description, **Done when** list and sub-tasks, with the instruction to work on a new branch named `agent/` and the task key, and to open a pull request when it's ready. Starting a cloud session needs the agent's command-line tool on the computer, and sends the task to that agent's cloud.
+
+## Complete startup
+
+A new terminal session stays **Starting** until its agent checks in with PacedMind. Both Claude Code and Codex can first need sign-in, folder trust, hook review or another choice. Answer those prompts in the existing terminal. If the agent has not checked in after about 90 seconds, PacedMind shows **Check agent startup** in the task, **Sessions** and **Flows**, and sends a notification. If setup is complete, ask the agent to call PacedMind's `start_task`.
+
+A session opened in the **Claude app** or **Codex app** immediately shows **Send the first message** and sends a notification. Open that app, complete any setup prompts and send the prepared message by pressing Enter or selecting Send. The launch link fills in the message; it does not submit it. For a first message submitted automatically, choose **Terminal** under **Runs in**. Terminal setup prompts can still need an answer.
+
+If the agent stops because its model is unavailable, PacedMind shows **Paused: model at capacity**, separately from **Paused: usage limit**. In the existing terminal, use `/model` to choose another available model and retry, or wait and retry later. PacedMind does not change the model automatically. Other failures show **Paused: agent error** with directions to check the terminal. A successful retry clears the notice when the agent starts another turn or uses a tool.
+
+If the terminal says the conversation is open in another app, close that other view of the conversation and retry in the existing terminal. Use **Reopen in terminal** only after the old terminal has closed; opening more copies does not resolve the lock.
+
+PacedMind reads Codex's local failed-turn records even when its hooks have not been trusted yet. Claude Code reports errors through its hooks. When neither source reports an exact cause, the startup notice asks to check the terminal rather than claiming to know which prompt is shown.
 
 ## Where a session works
 
@@ -168,9 +180,9 @@ A session in the agent's cloud has the cloud's own servers, so needs aren't chec
 **Resume in terminal**, in the task's details or in **Sessions**, opens a new terminal in the session's folder for a terminal session that isn't running:
 
 * **Claude Code** continues the same conversation, with its full history.
-* **Codex** continues the same conversation, once its hooks said which (shown in **Sessions** as **Codex session**); before that, its most recent session in that folder.
+* **Codex** continues the same conversation, once its hooks or local session record identified it (shown in **Sessions** as **Codex session**). If startup stopped before it created an identifiable conversation, PacedMind opens a fresh conversation with this task's first message.
 
-PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. A session an agent reported on its own (*Started outside PacedMind*) resumes too, in its folder, or the task's when it has none. PacedMind doesn't know that agent's conversation, so Claude Code starts a new one on the task, which later resumes continue; Codex continues its most recent session in the folder.
+PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. A session an agent reported on its own (*Started outside PacedMind*) resumes too, in its folder, or the task's when it has none. If PacedMind doesn't know that agent's conversation, it starts a new one on the task.
 
 A session that still runs in PacedMind but whose terminal is gone (closed, crashed, or the computer restarted), or whose agent lost PacedMind and you closed its terminal, gets **Reopen in terminal** instead, on the computer it runs on. It asks first: *Reopen this session in a new terminal? Do it when its terminal is gone. If it's still open, close it first: two terminals on one conversation get in each other's way.* Then the conversation goes on in a new terminal, the same way, and PacedMind records *Reopened in a new terminal*. The new terminal gets a new access token for the session, so a terminal left behind can't report on it anymore, and a question the old terminal still waited on in PacedMind is withdrawn.
 

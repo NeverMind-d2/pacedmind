@@ -4,7 +4,7 @@ import { thisDevice } from "@/server/devices";
 import * as repo from "@/server/repo";
 import { MODE } from "@/server/supabase";
 import { projectColor } from "@/lib/colors";
-import { nowStamp, parseLocal } from "@/lib/dates";
+import { attentionOf, nowStamp, parseLocal } from "@/lib/dates";
 import { agentOf, isLiveSession } from "@/lib/types";
 
 const ms = (stamp: string) => parseLocal(stamp).getTime();
@@ -44,8 +44,9 @@ export default async function FlowsPage(props: PageProps<"/flows">) {
   for (const s of sessions) if (!newest.has(s.taskId)) newest.set(s.taskId, s);
   // A session sent back with Request changes works on them since the user asked (the time is on its report).
   const latest: Record<number, FlowSession> = {};
+  const liveEvents = await repo.sessionEventsFor([...newest.values()].filter(isLiveSession).map((s) => s.id));
   await Promise.all([...newest.values()].map(async (s) => {
-    latest[s.taskId] = { ...s, changesSince: isLiveSession(s) ? (await repo.latestSessionReport(s.id))?.changesAt ?? null : null };
+    latest[s.taskId] = { ...s, attention: attentionOf(liveEvents[s.id] ?? []), changesSince: isLiveSession(s) ? (await repo.latestSessionReport(s.id))?.changesAt ?? null : null };
   }));
 
   // Sessions that carry on another task's terminal session ("same session" connections).
