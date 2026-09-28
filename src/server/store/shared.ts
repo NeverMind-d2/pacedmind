@@ -36,6 +36,7 @@ export interface TaskInput {
   needs?: string[];
   agent?: Doer | null;
   runIn?: Surface | null;
+  deviceId?: string | null;
 }
 
 export type TaskPatch = Partial<TaskInput & {

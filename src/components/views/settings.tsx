@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Picker } from "../picker";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -90,13 +91,9 @@ function ProjectAgents({ name, view, onServers }: { name: string; view: ProjectA
           <Segmented value={chosen === null ? "all" : "some"}
             options={[{ value: "all", label: "All of them" }, { value: "some", label: "Only these" }]}
             onChange={(v) => onServers(v === "all" ? null : chosen ?? [])} />
-          {chosen !== null && (all.length ? all.map((n) => (
-            <div key={n} className="flex items-center gap-2.5">
-              <Switch on={chosen.includes(n)} label={`${n} for ${name}`} onChange={(on) => onServers(on ? [...chosen, n] : chosen.filter((x) => x !== n))} />
-              <span className="font-mono text-[11.5px] text-fg2">{n}</span>
-              <span className="text-[11.5px] text-mut2">{whose(n)}</span>
-            </div>
-          )) : <span>Claude Code and Codex have no other MCP servers here.</span>)}
+          {chosen !== null && <Picker label={`MCP servers for ${name}`} multiple values={chosen}
+            options={all.map((n) => ({ value: n, label: n, detail: whose(n) }))} onChange={onServers}
+            placeholder="No servers besides PacedMind" />}
           <span className="text-[11.5px]">
             {chosen === null
               ? "Sessions get every MCP server Claude Code and Codex have in this folder, as when you start them yourself."

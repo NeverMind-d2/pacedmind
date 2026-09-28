@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useOptimistic, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import {
-  createAreaAction, createProjectAction, reorderAreasAction, reorderProjectsAction, updateAreaAction, updateProjectAction,
+  createAreaAction, createProjectAction, moveProjectsAction, reorderAreasAction, reorderProjectsAction, updateAreaAction, updateProjectAction,
 } from "@/app/actions";
 import { nextColor, projectColor } from "@/lib/colors";
 import { fmtShort } from "@/lib/dates";
@@ -89,7 +89,10 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
   const onContextMenu = (e: MouseEvent) => { e.preventDefault(); onMenu({ x: e.clientX, y: e.clientY }); };
   // With Ctrl, ⌘ or Shift the browser would open the page in a new tab or window.
   const onClick = (e: MouseEvent) => {
-    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) return;
+    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (href.startsWith("/area/")) window.dispatchEvent(new CustomEvent("organizer:area-details", { detail: href.slice(6) }));
+      return;
+    }
     e.preventDefault();
     onSelect(e.shiftKey);
   };
@@ -99,7 +102,7 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
         onClick={group.onToggle} className="flex h-6 w-5 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2">
         <Icon name={group.expanded ? "chevronDown" : "chevronRight"} size={12} />
       </button>}
-      <Link href={href} draggable={false} onClick={onClick} title={group ? `${label} · Drag to reorder area` : label}
+      <Link href={href} draggable onClick={onClick} title={group ? `${label} · Drag to reorder area` : label}
         className={cx(item, group && "min-w-0 flex-1 gap-2 px-1 text-[12px] font-medium", active && "bg-sel text-strong", open && "bg-hover", selected && "bg-accent/[0.17] text-strong hover:bg-accent/[0.22]")}>
         {children}
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 pointer-coarse:mr-7 pointer-coarse:opacity-100", open && "opacity-0")}>{trailing}</span>}
@@ -135,6 +138,8 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   const [bulk, setBulk] = useState<{ kind: Kind; ids: string[]; from: string; anchor: Anchor } | null>(null);
   const [selection, setSelection] = useState<Selection>(null);
   const [drag, setDrag] = useState<{ kind: Kind; ids: string[] } | null>(null);
+  const dragging = useRef<{ kind: Kind; ids: string[] } | null>(null);
+  const [dropArea, setDropArea] = useState<string | null>(null);
   const [dropAt, setDropAt] = useState<DropAt | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft>(null);
@@ -212,49 +217,77 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
       const moving = together ? idsOf(kind).filter((x) => selection!.ids.includes(x)) : [id];
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData(DRAG_TYPE, kind);
+      const started = { kind, ids: moving };
+      dragging.current = started;
       // After the browser has taken its picture of the row: changing it now could cancel the drag.
       setTimeout(() => {
+        if (dragging.current !== started) return;
         if (!together) setSelection(null);
         closeMenu();
         setDrag({ kind, ids: moving });
       });
     },
     onDragOver: (e) => {
+      const drag = dragging.current;
+      if (drag?.kind === "project" && kind === "area") {
+        e.stopPropagation(); e.preventDefault(); e.dataTransfer.dropEffect = "move";
+        setDropArea(id); setDropAt(null); return;
+      }
       if (drag?.kind !== kind) return;
       e.stopPropagation();
-      // Reordering a project stays within its area. Moving to another area is explicit in its menu.
-      if (kind === "project" && !drag.ids.every((x) => projects.find((p) => p.id === x)?.areaId === projects.find((p) => p.id === id)?.areaId)) {
-        setDropAt(null);
-        return;
-      }
+      if (kind === "project") setDropArea(projects.find((p) => p.id === id)?.areaId ?? null);
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
       const r = e.currentTarget.getBoundingClientRect();
       const at = drag.ids.includes(id) ? null : { id, after: e.clientY > r.top + r.height / 2 };
       setDropAt((d) => (d?.id === at?.id && d?.after === at?.after ? d : at));
     },
-    onDragEnd: () => { setDrag(null); setDropAt(null); },
+    onDragEnd: () => { dragging.current = null; setDrag(null); setDropAt(null); setDropArea(null); },
   });
+
+  const dropProjects = (e: DragEvent, areaId: string) => {
+    const drag = dragging.current;
+    if (drag?.kind !== "project") return;
+    e.stopPropagation(); e.preventDefault();
+    const moving = drag.ids;
+    const at = dropArea === areaId ? dropAt : null;
+    const before = projects.map((p) => p.id);
+    const last = projects.filter((p) => p.areaId === areaId && !moving.includes(p.id)).at(-1);
+    const target = at && projects.some((p) => p.id === at.id && p.areaId === areaId) ? at : last ? { id: last.id, after: true } : null;
+    const ids = target ? moveIds(before, moving, target) : [...before.filter((id) => !moving.includes(id)), ...moving];
+    dragging.current = null;
+    setDrag(null); setDropAt(null); setDropArea(null); setSelection(null);
+    setCollapsed((c) => ({ ...c, [areaId]: false }));
+    if (ids.join() === before.join() && moving.every((id) => projects.find((p) => p.id === id)?.areaId === areaId)) return;
+    run(() => {
+      showProjects(ids.map((id) => { const p = projects.find((p) => p.id === id)!; return moving.includes(id) ? { ...p, areaId } : p; }));
+      return moveProjectsAction(moving, areaId, ids);
+    });
+  };
 
   /** The list takes the drop, so a row dropped in the gap between two rows still lands where its line shows. */
   const listDrop = (kind: Kind, areaId?: string) => ({
     onDragOver: (e: DragEvent) => {
+      const drag = dragging.current;
       if (drag?.kind !== kind) return;
       e.stopPropagation();
-      if (kind === "project" && !drag.ids.every((id) => projects.find((p) => p.id === id)?.areaId === areaId)) {
-        setDropAt(null);
-        return;
+      if (kind === "project" && areaId) {
+        if (dropArea !== areaId) setDropAt(null);
+        setDropArea(areaId);
       }
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
     },
     onDragLeave: (e: DragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropAt(null);
+      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) { setDropAt(null); setDropArea(null); }
     },
     onDrop: (e: DragEvent) => {
+      const drag = dragging.current;
+      if (kind === "project" && areaId) { dropProjects(e, areaId); return; }
       if (drag?.kind !== kind) return;
       e.stopPropagation();
       e.preventDefault();
+      dragging.current = null;
       setDrag(null);
       setDropAt(null);
       if (!dropAt) return;
@@ -282,7 +315,6 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
     onClose: closeMenu,
     onMenu: (anchor: Anchor) => openMenu(kind, id, anchor),
     onSelect: (range: boolean) => select(kind, id, range),
-    drag: rowDrag(kind, id),
   });
 
   const saveAreaOrder = (ids: string[]) => {
@@ -362,8 +394,8 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
             const state = rowState("area", a.id);
             return (
               <section key={a.id} aria-label={`${a.name} projects`}
-                className={cx("relative pb-1", index > 0 && "mt-1 border-t border-line pt-2", state.dragged && "opacity-40")}
-                onDragOver={state.drag.onDragOver}>
+                className={cx("relative pb-1", index > 0 && "mt-1 border-t border-line pt-2", state.dragged && "opacity-40", dropArea === a.id && "rounded-md bg-accent/10 ring-1 ring-inset ring-accent/40")}
+                onDrop={(e) => dropProjects(e, a.id)} onDragOver={(e) => rowDrag("area", a.id).onDragOver(e)}>
                 {renaming === `area:${a.id}` ? (
                   <div className={cx(editing, "pl-6")}>
                     <AreaDot area={a} />
@@ -371,7 +403,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                       onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
                   </div>
                 ) : (
-                  <MenuRow href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name} {...state} drop={null} dragged={false}
+                  <MenuRow href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name} {...state} drag={rowDrag("area", a.id)} drop={null} dragged={false}
                     group={{ expanded: !shut, onToggle: () => setCollapsed((c) => ({ ...c, [a.id]: !shut })), onAdd: () => newProject(a.id) }}>
                     <AreaDot area={a} />
                     <span className="flex-1 truncate">{a.name}</span>
@@ -385,7 +417,7 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                         onSave={(name) => { setRenaming(null); run(() => updateProjectAction(p.id, { name })); }} />
                     </div>
                   ) : (
-                    <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)}
+                    <MenuRow key={p.id} href={`/project/${p.id}`} active={active(`/project/${p.id}`)} label={p.name} {...rowState("project", p.id)} drag={rowDrag("project", p.id)}
                       trailing={p.targetDate && <span className="text-[11.5px] text-mut2">{fmtShort(p.targetDate)}</span>}>
                       <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />
                       <span className="flex-1 truncate">{p.name}</span>

@@ -46,9 +46,9 @@ export function Popover({ anchor, onClose, children, width = 232, className }: {
 
   useEffect(() => {
     // Pointer, not mouse: Safari on a phone sends no mouse events for a tap on something that isn't clickable.
-    const onDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
+    const onDown = (e: PointerEvent) => { if (!ref.current?.contains(e.target as Node) && !(e.target instanceof Element && e.target.closest("[data-picker-popup]"))) onClose(); };
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    const onScroll = (e: Event) => { if (!ref.current?.contains(e.target as Node)) onClose(); };
+    const onScroll = (e: Event) => { if (!ref.current?.contains(e.target as Node) && !(e.target instanceof Element && e.target.closest("[data-picker-popup]"))) onClose(); };
     document.addEventListener("pointerdown", onDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", onClose);

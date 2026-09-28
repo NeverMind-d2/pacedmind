@@ -1,13 +1,13 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import { setAreaFolderAction } from "@/app/actions";
 import type { Area, Project } from "@/lib/types";
+import { Picker } from "./picker";
 import { Button, useAction } from "./ui";
 
 /** A local folder shared by this area's tasks, with existing project folders offered as choices. */
 export function AreaWorkspace({ area, projects, onSaved, compact = false }: { area: Area; projects: Project[]; onSaved?: () => void; compact?: boolean }) {
-  const id = useId();
   const [folder, setFolder] = useState(area.folder ?? "");
   const { pending, run } = useAction();
   const folders = [...new Set(projects.map((p) => p.folder).filter((f): f is string => !!f))];
@@ -20,14 +20,14 @@ export function AreaWorkspace({ area, projects, onSaved, compact = false }: { ar
         return result;
       });
     }}>
-      <label htmlFor={id} className="col-span-2 text-[12px] text-fg2">Workspace for {area.name}</label>
-      <input id={id} list={`${id}-folders`} value={folder} onChange={(e) => setFolder(e.target.value)}
-        placeholder="Absolute path to an existing folder" autoComplete="off"
-        className="h-8 w-full min-w-0 rounded-md border border-line2 bg-input px-2 font-mono text-[11.5px] text-fg2 outline-none focus:border-line-strong" />
-      <datalist id={`${id}-folders`}>{folders.map((f) => <option key={f} value={f} />)}</datalist>
+      <span className="col-span-2 text-[12px] text-fg2">Workspace for {area.name}</span>
+      <Picker label={`Workspace for ${area.name}`} values={[folder]} options={[
+        { value: "", label: "No area workspace" }, ...folders.map((f) => ({ value: f, label: f })),
+        ...(folder && !folders.includes(folder) ? [{ value: folder, label: folder }] : []),
+      ]} custom={(text) => text || null} onChange={([value]) => setFolder(value)} placeholder="Choose or enter a folder" />
       {!compact && <p className="text-[11.5px] leading-relaxed text-mut2">
         Tasks use this folder unless the task or its project has its own. Choose the same folder as your project in Codex or Claude.
-        Clear it to remove the area&apos;s default. Saved only on this computer.
+        Choose No area workspace to remove the default. Saved only on this computer.
       </p>}
       <Button type="submit" size="sm" disabled={pending || (folder.trim() || null) === area.folder} className="self-end">Save workspace</Button>
     </form>

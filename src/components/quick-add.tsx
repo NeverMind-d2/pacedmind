@@ -11,6 +11,7 @@ import {
   type Area, type Doer, type Priority, type Project, type Status, type Surface,
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
+import { ComputerPicker, ExecutionInfo, NeedsPicker } from "./execution-context";
 import { DateField } from "./date-field";
 import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
 
@@ -19,6 +20,7 @@ import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
  * activity would begin, for a click that had a time as well (the week's grid).
  */
 export type QuickAddDefaults = {
+  deviceId?: string | null; agent?: Doer | null; runIn?: Surface | null;
   projectId?: string | null; areaId?: string | null; plannedDate?: string | null; mode?: "task" | "activity"; start?: string | null;
 };
 
@@ -54,7 +56,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [defaults, setDefaults] = useState<QuickAddDefaults>({});
   const [ov, setOv] = useState<{
     areaId?: string | null; projectId?: string | null; status?: Status; priority?: Priority; due?: string | null; planned?: string | null; weekly?: boolean; duration?: number;
-    agent?: Doer | null; runIn?: Surface | null;
+    agent?: Doer | null; runIn?: Surface | null; deviceId?: string | null; needs?: string[];
   }>({});
   const input = useRef<HTMLInputElement>(null);
   const { pending, run } = useAction();
@@ -103,9 +105,11 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     : undefined;
   const projectId = ov.projectId !== undefined ? ov.projectId : (projectFromText?.id ?? defaults.projectId ?? null);
   const project = projects.find((p) => p.id === projectId) ?? null;
-  const doer = ov.agent ?? null;
+  const doer = ov.agent !== undefined ? ov.agent : defaults.agent ?? null;
+  const deviceId = ov.deviceId !== undefined ? ov.deviceId : defaults.deviceId ?? null;
+  const needs = ov.needs ?? [];
   const agent = agentOf({ agent: doer }, project?.agent);
-  const runIn = agent ? ov.runIn ?? null : null;
+  const runIn = agent ? (ov.runIn !== undefined ? ov.runIn : defaults.runIn ?? null) : null;
   const doerLabel = doer ? DOER_LABEL[doer] : `${DOER_LABEL[agent!]} (default)`;
   const placeLabel = (surface: Surface | null) => !surface ? "Automatic"
     : surface === "desktop" ? APP_LABEL[agent!] : surface === "cloud" ? CLOUD_LABEL[agent!] : "Terminal";
@@ -144,7 +148,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         const r = await createTaskAction({
           title, description: desc, areaId, projectId, status, priority, dueDate: due, plannedDate: planned,
           labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined, doneWhen: doneItems,
-          agent: doer, runIn,
+          agent: doer, runIn, deviceId: agent ? deviceId : null, needs: agent ? needs : [],
         });
         if (r.ok) toast(`Created ${r.key}`);
         return r.ok ? undefined : r;
@@ -189,7 +193,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   return (
     <div className="fixed inset-0 z-50 flex justify-center bg-overlay pt-24 max-md:px-3 max-md:pt-3" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div role="dialog" aria-label={mode === "task" ? "New task" : "New activity"}
-        className="flex h-fit w-[640px] max-w-full flex-col rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]"
+        className="flex max-h-[calc(100dvh-7rem)] h-fit w-[640px] max-w-full flex-col overflow-y-auto max-md:max-h-[calc(100dvh-1.5rem)] rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]"
         onKeyDown={(e) => {
           if (e.key === "Escape") close();
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); submit(); }
@@ -199,7 +203,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
             trigger={<button type="button" className={chip}>{area ? <AreaMark area={area} size={13} /> : <Icon name="inbox" size={13} />}{area?.name ?? "Inbox"}<Icon name="chevronDown" size={12} /></button>}
             items={[{ value: null as string | null, label: "Inbox, no area", icon: <Icon name="inbox" size={13} /> },
               ...areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={13} /> }))]}
-            onSelect={(v) => setOv((o) => ({ ...o, areaId: v, projectId: v && project?.areaId !== v ? null : o.projectId }))}
+            onSelect={(v) => setOv((o) => ({ ...o, areaId: v, projectId: project?.areaId !== v ? null : o.projectId }))}
           />
           <span className="text-faint">›</span>
           <span className="text-[12.5px] text-mut">{mode === "task" ? "New task" : "New activity"}</span>
@@ -297,6 +301,13 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
+        {mode === "task" && agent && <div className="space-y-2 border-t border-line px-5 py-3">
+          <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
+            <div className="space-y-1"><span className="text-[11.5px] text-mut2">Computer</span><ComputerPicker value={deviceId} inherited={project?.deviceId} onChange={(v) => setOv((o) => ({ ...o, deviceId: v }))} /></div>
+            <div className="space-y-1"><span className="text-[11.5px] text-mut2">Needs</span><NeedsPicker values={needs} agent={agent} onChange={(v) => setOv((o) => ({ ...o, needs: v }))} /></div>
+          </div>
+          <ExecutionInfo deviceId={deviceId ?? project?.deviceId ?? null} agent={agent} runIn={runIn} folder={project?.folder ?? area?.folder ?? null} needs={needs} />
+        </div>}
         {summary && (
           <div className="flex h-9 items-center gap-2 border-t border-line px-5 text-[12px] text-mut2">
             <Icon name="check" size={13} className="text-accent" />

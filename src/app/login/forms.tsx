@@ -6,6 +6,7 @@ import {
   confirmEnrollAction, recoveryCodeAction, sendResetAction, setNewPasswordAction, signInAction, signInWithGoogleAction, signOutAction,
   signUpAction, startEnrollAction, verifyAction, type Enrollment,
 } from "../auth/actions";
+import { Picker } from "@/components/picker";
 import { Button, cx } from "@/components/ui";
 
 type Result = { ok: boolean; error?: string; message?: string } | undefined;
@@ -184,9 +185,8 @@ export function VerifyForm({ factors, backupCodes, next }: { factors: { id: stri
     <Card title="Two-factor code" onSubmit={submit}>
       {factors.length > 1 && !useBackup && (
         <Field label="Authenticator">
-          <select value={factorId} onChange={(e) => setFactorId(e.target.value)} className={field}>
-            {factors.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
+          <Picker label="Authenticator" values={[factorId]} options={factors.map((f) => ({ value: f.id, label: f.name }))}
+            onChange={([id]) => setFactorId(id)} className="h-9" />
         </Field>
       )}
       <Field label={useBackup ? "Backup code" : "Code from your authenticator app"}>
