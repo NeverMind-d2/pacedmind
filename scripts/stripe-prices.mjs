@@ -2,26 +2,33 @@
 // and a yearly one (prices.json's yearlyMonths times the monthly), found by their lookup keys (cloud_monthly_PL,
 // cloud_yearly_PL), which the billing-checkout function asks for. Prices include tax, like Spotify's.
 //
-//   STRIPE_SECRET_KEY=sk_test_… npm run stripe:prices              shows what it would change
-//   STRIPE_SECRET_KEY=sk_test_… npm run stripe:prices -- --write   changes it
+//   npm run stripe:prices -- --keys ~/.config/pacedmind/stripe-sandbox.env            shows what it would change
+//   npm run stripe:prices -- --keys ~/.config/pacedmind/stripe-sandbox.env --write    changes it
 //
+// The key is STRIPE_SECRET_KEY in the env file (the one scripts/stripe-setup.mjs uses), or in the environment.
 // A live key (sk_live_, rk_live_) also needs --live. A price in Stripe can't change its amount: a new one takes over
 // the lookup key (transfer_lookup_key) and the old one is archived. Subscriptions keep the price they were bought at.
 // The product has no tax code of its own: set the account's default (software as a service) in Stripe Tax.
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const data = JSON.parse(fs.readFileSync(path.join(root, "site", "prices.json"), "utf8"));
 const args = process.argv.slice(2);
 const write = args.includes("--write");
-const key = process.env.STRIPE_SECRET_KEY ?? "";
+const envAt = args.indexOf("--keys");
+const envFile = envAt >= 0 ? args[envAt + 1]?.replace(/^~(?=\/)/, os.homedir()) : undefined;
+const fromFile = envFile && fs.existsSync(envFile)
+  ? /^STRIPE_SECRET_KEY=(.*)$/m.exec(fs.readFileSync(envFile, "utf8"))?.[1]?.trim()
+  : undefined;
+const key = fromFile ?? process.env.STRIPE_SECRET_KEY ?? "";
 const PRODUCT = "pacedmind_cloud";
 // Currencies Stripe counts in whole units; every other one here is in hundredths.
 const ZERO_DECIMAL = new Set(["JPY"]);
 
 if (!/^(sk|rk)_(test|live)_\w+$/.test(key)) {
-  console.error("Set STRIPE_SECRET_KEY to the Stripe account's secret key (sk_test_… for the sandbox).");
+  console.error("Name the env file with the Stripe account's secret key (--keys <file>, STRIPE_SECRET_KEY=sk_test_… for the sandbox).");
   process.exit(1);
 }
 if (/_live_/.test(key) && !args.includes("--live")) {
