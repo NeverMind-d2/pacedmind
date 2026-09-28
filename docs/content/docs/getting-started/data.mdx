@@ -20,10 +20,7 @@ PacedMind keeps everything in one SQLite database on the computer: areas, projec
 
 On macOS, the same files are in `~/Library/Application Support/Organizer` instead of `%APPDATA%\Organizer`, for example `~/Library/Application Support/Organizer/data/organizer.db`. The server log is `~/Library/Logs/PacedMind/server.log`, and the app is `PacedMind.app` in the Applications folder.
 
-Two shortcuts help:
-
-* **Settings → Data** shows the database's full path and how many sessions it has recorded.
-* The menu of the tray icon (the menu bar icon on macOS) has **Open data folder** and **Open server log**.
+The menu of the tray icon (the menu bar icon on macOS) has **Open data folder** and **Open server log**. **Settings → Data** counts the sessions recorded so far.
 
 ## Who can reach it
 
@@ -43,7 +40,7 @@ The database is written continuously while PacedMind runs, so copy it only while
 
 To restore, quit PacedMind, delete the `organizer.db*` files and the `attachments` folder in the `data` folder, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
 
-The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects and folders** afterwards, and tasks' own folders in their details.
+The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects** afterwards, and tasks' own folders in their details.
 
 ## Reset
 

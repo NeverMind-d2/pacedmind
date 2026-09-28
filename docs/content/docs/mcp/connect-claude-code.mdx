@@ -7,11 +7,11 @@ Claude Code sessions that PacedMind starts in a terminal are connected automatic
 
 ## With Connect in Settings
 
-In **Settings → Connect your agents**, select **Connect** next to **Claude Code** and confirm. PacedMind replaces an earlier registration for all projects, under the name `pacedmind` or PacedMind's earlier name `organizer`, with one for this PacedMind, with the current token, without showing it (*Connected Claude Code for all your projects. New Claude Code sessions can use PacedMind.*). **Computers** then shows Claude Code as *Connected*.
+In **Settings → MCP server**, under **Connect your agents**, select **Connect** next to **Claude Code** and confirm. PacedMind replaces an earlier registration for all projects, under the name `pacedmind` or PacedMind's earlier name `organizer`, with one for this PacedMind, with the current token, without showing it (*Connected Claude Code for all your projects. New Claude Code sessions can use PacedMind.*). **Computers** then shows Claude Code as *Connected*.
 
 ## With the command from Settings
 
-1. Open **Settings → Connect your agents** and select **Copy command** next to **Claude Code**. The command contains the address and the access token:
+1. Open **Settings → MCP server** and, under **Connect your agents**, select **Copy command** next to **Claude Code**. The command contains the address and the access token:
 
    ```powershell
    claude mcp add --transport http --scope user pacedmind http://127.0.0.1:4319/api/mcp --header "Authorization: Bearer org_..."
@@ -43,9 +43,9 @@ Ask something that needs the planner to try it, such as *What's on my plate toda
 A new token in **Settings → MCP server** disconnects Claude Code until it has the new one:
 
 1. Remove the old registration with `claude mcp remove pacedmind`, adding `--scope user` if it was registered for all projects.
-2. Run the updated command from **Settings → Connect your agents**.
+2. Run the updated command from **Settings → MCP server**.
 
-For a registration made for all projects, **Connect** in **Settings → Connect your agents** does both steps at once.
+For a registration made for all projects, **Connect** in **Settings → MCP server** does both steps at once.
 
 ## Remove the connection
 

@@ -299,8 +299,11 @@ export function extrasOf(v: unknown, max = 12): AgentExtras | undefined {
   const h = v as Record<string, unknown>;
   const list = (x: unknown, shape: RegExp) => strings(x).filter((n) => shape.test(n)).slice(0, max);
   const skills = typeof h.skills === "number" && Number.isInteger(h.skills) && h.skills >= 0 ? Math.min(h.skills, 9999) : 0;
+  const account = list(h.account, /^[\w .@:+-]{1,48}$/);
+  const accountAt = typeof h.accountAt === "string" && /^\d{4}-\d\d-\d\dT[\d:.]{8,12}Z$/.test(h.accountAt) ? h.accountAt : null;
   return {
     mcp: list(h.mcp, /^[\w.@:+-]{1,48}$/), plugins: list(h.plugins, /^[\w.@:+-]{1,48}$/), skills, hooks: list(h.hooks, /^[A-Za-z]{1,40}$/),
+    ...(accountAt ? { account, accountAt } : {}),
   };
 }
 

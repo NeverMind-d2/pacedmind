@@ -123,7 +123,36 @@ export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 export const isAttention = (kind: string): kind is AttentionKind => (ATTENTION_KINDS as readonly string[]).includes(kind);
 
 /** Events that say what a session runs with, not what it does: they don't end a wait. */
-export const isNeutralEvent = (kind: string) => kind === "connected" || kind === "environment";
+export const isNeutralEvent = (kind: string) => kind === "connected" || kind === "environment" || kind === "mcp_status";
+
+/** An MCP server a session should have tools from but hasn't, and why, as an `mcp_status` event says it. */
+export interface McpProblem {
+  name: string;
+  why: "auth" | "failed" | "connecting";
+  /** The error code Claude Code gave for a failure, such as ENOENT. */
+  code?: string | null;
+}
+
+const WHY: Record<McpProblem["why"], string> = {
+  auth: "needs you to sign in (/mcp in its terminal)",
+  failed: "didn't start",
+  connecting: "hasn't connected yet",
+};
+
+/**
+ * An `mcp_status` event: what the session's own records say about its MCP servers (session-mcp.ts), when one is
+ * missing, and again once they're all there. The list comes after the colon, so mcpProblemsOf reads it back.
+ */
+export function mcpStatusText(who: string, problems: McpProblem[]): string {
+  if (!problems.length) return `All its MCP servers are available to ${who} now`;
+  return `Not available to ${who}: ${problems.map((p) => `${p.name} ${WHY[p.why]}${p.code ? ` (${p.code})` : ""}`).join("; ")}`;
+}
+
+/** What a session's latest `mcp_status` event says isn't available to it, as its text lists it; null when nothing. */
+export function mcpProblemsOf(events: { kind: string; text: string }[]): string | null {
+  const e = events.findLast((x) => x.kind === "mcp_status");
+  return e ? (/^Not available to [^:]+: (.+)$/.exec(e.text)?.[1] ?? null) : null;
+}
 
 /**
  * What a session waits for you about: its latest event, when that's one of ATTENTION_KINDS. Anything after it (the

@@ -18,9 +18,8 @@ The server runs inside the desktop app, whenever PacedMind is running, including
 
 **Settings → MCP server** shows:
 
-* **Status**: *Running with this app*.
 * **Address**, with **Copy**.
-* **Access token**, masked, with **Show**, **Copy** and **Regenerate**.
+* **Your token**, masked, with **Show**, **Copy** and **New token**.
 
 Requests without the correct token get `401 Unauthorized`.
 
@@ -28,13 +27,13 @@ Requests without the correct token get `401 Unauthorized`.
 
 Every installation creates its own token, starting with `org_`. It's stored in PacedMind's database, so updates keep it.
 
-**Regenerate** makes a new token after the confirmation *Make a new token? Agents set up with the old one lose access until you update them.* Afterwards:
+**New token** makes a new token after the confirmation *Make a new token? Agents set up with the old one lose access until you connect them again.* Afterwards:
 
 * sessions that PacedMind starts or resumes use the new token automatically;
-* sessions already running keep the old one, so their screenshots (`attach_image`), their hand-back (`finish_task`) and Claude Code's report of a closed terminal are refused. Regenerate while no session runs; a running session gets the new token by closing it (**Close session**) and reopening it with **Resume in terminal**;
-* Claude Code and Codex, connected for the desktop apps and the sessions you start yourself, need the new token: select **Connect** for each in **Settings → Devices** again.
+* sessions already running keep the old one, so their screenshots (`attach_image`), their hand-back (`finish_task`) and Claude Code's report of a closed terminal are refused. Make a new token while no session runs; a running session gets the new token by closing it (**Close session**) and reopening it with **Resume in terminal**;
+* Claude Code and Codex, connected for the desktop apps and the sessions you start yourself, need the new token: select **Connect** for each in **Settings → MCP server** again.
 
-Regenerate the token if it was shared by mistake, for example in a screenshot or a log.
+Make a new token if the old one was shared by mistake, for example in a screenshot or a log.
 
 ## Security
 
@@ -45,9 +44,9 @@ Regenerate the token if it was shared by mistake, for example in a screenshot or
 
 ## Connect an agent
 
-Sessions that PacedMind starts in a terminal are connected automatically. For sessions in the Claude and Codex apps, and agent sessions you start yourself, select **Connect** for each agent in **Settings → Devices**, or set it up by hand:
+Sessions that PacedMind starts in a terminal are connected automatically. For sessions in the Claude and Codex apps, and agent sessions you start yourself, select **Connect** for each agent in **Settings → MCP server**, under **Connect your agents**, or set it up by hand:
 
-* **[Connect Claude Code](/mcp/connect-claude-code)**: one command, copied from **Settings → Connect your agents**.
+* **[Connect Claude Code](/mcp/connect-claude-code)**: one command, copied from **Settings → MCP server**.
 * **[Connect Codex](/mcp/connect-codex)**: a section in `~/.codex/config.toml`, copied from the same place.
 
 Other MCP clients that support streamable HTTP with a bearer token can connect the same way.
@@ -71,7 +70,7 @@ The [agent skills](/skills) go into more detail.
 
 ## The tools
 
-The server has 41 tools in seven groups, listed in **Settings → Tools agents can use**:
+The server has 41 tools in seven groups, listed in **Settings → MCP server**, under **Tools agents can use**:
 
 | Group | Tools |
 | --- | --- |

@@ -294,6 +294,13 @@ export interface AgentExtras {
   plugins: string[];
   skills: number;
   hooks: string[];
+  /**
+   * The MCP servers its sessions get from the account its CLI is signed in to (Claude Code's claude.ai connectors,
+   * such as Gmail), which no config file names: as the last session PacedMind started here without a project's
+   * pick reported them (start_task), and when. Missing until one did.
+   */
+  account?: string[];
+  accountAt?: string;
 }
 
 /** An MCP server a project's folder names for Claude Code (.mcp.json): whether Claude Code may use it there, or asks you first (null). */

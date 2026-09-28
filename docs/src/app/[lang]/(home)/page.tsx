@@ -88,7 +88,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Settings',
-      description: 'Appearance, the MCP server and its token, how sessions start, project folders, work hours and data.',
+      description: 'The account and data, the theme and work hours, and this computer: its agents, how sessions start, project folders and the MCP server.',
       href: '/settings',
       icon: 'settings',
     },

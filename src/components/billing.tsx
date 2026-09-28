@@ -36,7 +36,7 @@ export function BillingBanner({ plan, desktop }: { plan: Plan; desktop: boolean 
   let actions: ReactNode;
   if (plan.state === "trial" && days <= 3) {
     text = <span suppressHydrationWarning>Your free trial of PacedMind Cloud ends {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}. After that it{"'"}s read-only until you subscribe.</span>;
-    actions = <Button size="sm" variant="primary" onClick={() => router.push("/settings#plan")}>Subscribe</Button>;
+    actions = <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>Subscribe</Button>;
   } else if (plan.state === "past_due") {
     text = "The last payment for PacedMind Cloud didn't go through. Cloud keeps working while the card is tried again.";
     actions = <Button size="sm" disabled={pending} onClick={() => open(() => manageBillingAction())}>Update payment</Button>;
@@ -45,8 +45,8 @@ export function BillingBanner({ plan, desktop }: { plan: Plan; desktop: boolean 
       ? "PacedMind Cloud is read-only: you can see and delete what's in it, but not change it. Subscribe, or move it to this computer."
       : "PacedMind Cloud is read-only: you can see and delete what's in it, but not change it.";
     actions = <>
-      {desktop && <Button size="sm" onClick={() => router.push("/settings#data")}>Move to this computer</Button>}
-      <Button size="sm" variant="primary" onClick={() => router.push("/settings#plan")}>Subscribe</Button>
+      {desktop && <Button size="sm" onClick={() => router.push("/settings/data")}>Move to this computer</Button>}
+      <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>Subscribe</Button>
     </>;
   } else {
     return null;
