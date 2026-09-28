@@ -3,6 +3,7 @@ import webpush from "web-push";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
+import { ATTENTION_KINDS, attentionWords, isAttention } from "@/lib/dates";
 
 /*
  * Web push for the moments a session needs you, to the browsers where you turned notifications on (Settings in the
@@ -13,7 +14,7 @@ import { MODE } from "./supabase";
  */
 
 /** Session events that notify: the agent waits for you, asks for permission or asks you something, or handed back. */
-export const PUSH_KINDS = new Set(["waiting", "permission", "input", "question", "limit", "finished"]);
+export const PUSH_KINDS = new Set<string>([...ATTENTION_KINDS, "finished"]);
 
 /** The push services' addresses: Google, Mozilla, Apple and Microsoft (the database checks the same). */
 export const PUSH_ENDPOINT =
@@ -47,6 +48,7 @@ async function messageFor(sessionId: string, kind: string, text: string) {
   else if (kind === "question" || kind === "input") title = `${key} has a question for you`;
   else if (kind === "waiting") title = `${key} is waiting for you`;
   else if (kind === "limit") title = `${key} stopped at a usage limit`;
+  else if (isAttention(kind)) title = `${key} · ${attentionWords(kind)}`;
   else {
     const outcome = (await repo.latestSessionReport(sessionId))?.outcome;
     title = outcome === "blocked" ? `${key} is blocked` : outcome === "partial" ? `${key} is partly done` : `${key} is finished`;

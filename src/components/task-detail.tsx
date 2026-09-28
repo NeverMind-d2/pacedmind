@@ -13,6 +13,7 @@ import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote
 import { AskCard } from "./ask-card";
 import { RequestStatus, useComputer } from "./request-status";
 import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
+import { desktopStartText } from "@/lib/session-health";
 import { agentUseLine, hasUse } from "@/lib/usage";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, REOPEN_CONFIRM, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
@@ -58,6 +59,7 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
       // Its terminal's hooks, or the agent itself, said it waits for you.
       const waits = attentionOf(events);
       if (waits) return { dot: "var(--color-accent)", text: waits.text };
+      if (s.status === "starting" && s.surface === "desktop") return { dot: "var(--color-accent)", text: desktopStartText(s.agent) };
       if (asksTrust && s.surface === "terminal" && !checkedIn(events)) return { dot: "var(--color-accent)", text: TRUST_WAITING };
       if (s.surface !== "cloud" && waitingInTerminal(s, events)) {
         return {
@@ -67,6 +69,7 @@ function sessionHead(s: Session, events: SessionEvent[], report: Report | null, 
             : `${who} hasn't checked in yet. It may be waiting for you in its terminal.`,
         };
       }
+      if (s.status === "starting") return { dot: "var(--color-fg3)", text: `Starting ${who} · waiting for the agent to check in` };
       if (report?.changes && report.changesAt) {
         return { dot: "var(--color-fg3)", text: `${who} is working ${isAnswers(report.changes) ? "with your answers" : "on your changes"} since ${fmtTime(report.changesAt)}` };
       }

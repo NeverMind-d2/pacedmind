@@ -6,6 +6,7 @@ import { knownAttention, noteSessionEvent } from "./attention";
 import { attentionOf, type AttentionKind } from "@/lib/dates";
 import { AGENT_LABEL, isLiveSession, type Session } from "@/lib/types";
 import { deviceConfig, updateDevice } from "./device";
+import { issueEvent, sessionIssue } from "@/lib/session-health";
 
 /*
  * What the hooks the launcher installs in a session's terminal say (the signal route), and what its agent does over
@@ -20,8 +21,7 @@ import { deviceConfig, updateDevice } from "./device";
 
 export const HOOK_KINDS = ["stop", "notify", "prompt", "tool", "turn", "start", "failure"] as const;
 
-/** StopFailure's error types that mean a limit of the account: its usage limit, or its credit. */
-const LIMIT_ERRORS = new Set(["rate_limit", "billing_error"]);
+const TOOL_RESOLVES = new Set<AttentionKind>(["permission", "limit", "capacity", "locked", "error", "setup", "send_prompt"]);
 export type HookKind = (typeof HOOK_KINDS)[number];
 
 /** At most this many events from hooks per session while this process runs, so a runaway loop can't fill its history. */
@@ -55,7 +55,8 @@ async function sameTerminal(s: Session, hookedId: string): Promise<boolean> {
 }
 
 /** The event a hook adds, given what the session waits for now; null for none. `who` names the agent. */
-function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind | null, who: string): { kind: string; text: string } | null {
+function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind | null, agent: Session["agent"]): { kind: string; text: string } | null {
+  const who = AGENT_LABEL[agent];
   const quote = (v: unknown) => (said(v) ? `: “${said(v)}”` : "");
   const plain = (v: unknown) => (said(v) ? `: ${said(v)}` : "");
   switch (kind) {
@@ -81,17 +82,14 @@ function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind
     }
     case "failure": {
       // An error from the API ended its turn (StopFailure; Claude Code tried again first where that helps).
-      const why = plain(p.details ?? p.error_message);
-      if (typeof p.error_type === "string" && LIMIT_ERRORS.has(p.error_type)) {
-        return now === "limit" ? null : { kind: "limit", text: `${who} stopped at a usage limit${why}` };
-      }
-      return now && now !== "permission" ? null : { kind: "waiting", text: `${who} stopped on an error and waits for you in its terminal${why}` };
+      const issue = sessionIssue(p.error ?? p.error_type, p.error_details ?? p.details ?? p.error_message ?? p.last_assistant_message);
+      return now === issue ? null : issueEvent(agent, issue);
     }
     case "prompt":
       if (now === "limit") return { kind: "working", text: `You wrote in its terminal, and ${who} went on` };
       return now ? { kind: "working", text: `You answered in its terminal, and ${who} went on` } : null;
     case "tool":
-      if (now === "limit") return { kind: "working", text: `${who} went on` };
+      if (now && TOOL_RESOLVES.has(now) && now !== "permission") return { kind: "working", text: `${who} went on` };
       return now === "permission" ? { kind: "working", text: `You allowed it in its terminal, and ${who} went on` } : null;
     case "start":
       return null;
@@ -111,7 +109,7 @@ export async function recordSignal(o: { sessionId: string; hookedId: string; kin
   }
   if (o.kind === "tool" || o.kind === "prompt") {
     const now = await attentionNow(o.sessionId);
-    if (!now || (o.kind === "tool" && now !== "permission" && now !== "limit")) return;
+    if (!now || (o.kind === "tool" && !TOOL_RESOLVES.has(now))) return;
   }
   const s = await hookSession(o.sessionId, o.hookedId, o.cli);
   if (!s) return;
@@ -119,7 +117,7 @@ export async function recordSignal(o: { sessionId: string; hookedId: string; kin
   if (o.kind === "turn" && !ownTurn(s, o.payload)) return;
   // Its turn ended while an MCP server was missing: signing in through /mcp may have brought it.
   if (o.kind === "stop" && watchesMcp(s.id)) await recheckSessionMcp(s.id).catch(() => {});
-  const e = eventFor(o.kind, o.payload, await attentionNow(s.id), AGENT_LABEL[s.agent]);
+  const e = eventFor(o.kind, o.payload, await attentionNow(s.id), s.agent);
   if (!e) return;
   const n = counts().get(s.id) ?? 0;
   if (n >= LIMIT) return;

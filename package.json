@@ -4,6 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
+    "test:sessions": "node --conditions=react-server --import tsx --test tests/session-health.test.ts",
     "test:models": "node --conditions=react-server --import tsx --test tests/agent-models.test.ts",
     "dev": "next dev -p 4320 -H 127.0.0.1",
     "build": "next build",
