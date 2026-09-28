@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "./icons";
 import { cx } from "./ui";
 
 export type PickerOption = { value: string; label: string; detail?: string };
 
-/** Searchable single or multiple choice, with a themed popup and keyboard navigation. */
-export function Picker({ label, values: savedValues, options, onChange, multiple = false, deferred = false, custom, max = Infinity, placeholder = "Choose…", className }: {
+/**
+ * Searchable single or multiple choice, with a themed popup and keyboard navigation. The trigger looks like a field;
+ * `trigger` replaces its look (a chip, say) and `content` what it shows.
+ */
+export function Picker({ label, values: savedValues, options, onChange, multiple = false, deferred = false, custom, max = Infinity, placeholder = "Choose…", className, trigger: triggerClass, content, title }: {
   label: string; values: string[]; options: PickerOption[]; onChange: (values: string[]) => void;
   multiple?: boolean; deferred?: boolean; custom?: (text: string) => string | null; max?: number; placeholder?: string; className?: string;
+  trigger?: string; content?: ReactNode; title?: string;
 }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
@@ -66,12 +70,14 @@ export function Picker({ label, values: savedValues, options, onChange, multiple
   useEffect(() => { if (open) document.getElementById(`${id}-${index}`)?.scrollIntoView({ block: "nearest" }); }, [id, index, open]);
 
   return <div className="min-w-0">
-    <button ref={trigger} type="button" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? id : undefined}
+    <button ref={trigger} type="button" aria-label={label} title={title} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? id : undefined}
       onClick={() => { if (open) close(); else { setDraft(savedValues); setQuery(""); setActive(0); setOpen(true); } }}
-      className={cx("flex min-h-7 w-full items-center gap-2 rounded-md border border-ctl bg-input px-2 py-1 text-left text-[12px] text-fg2 hover:bg-hover focus-visible:outline-accent", className)}>
-      <span className="min-w-0 flex-1 truncate">{selected.length ? selected.join(", ") : placeholder}</span>
-      {multiple && values.length > 0 && <span className="text-mut2">{values.length}</span>}
-      <Icon name="chevronDown" size={12} />
+      className={triggerClass ?? cx("flex min-h-7 w-full items-center gap-2 rounded-md border border-ctl bg-input px-2 py-1 text-left text-[12px] text-fg2 hover:bg-hover focus-visible:outline-accent", className)}>
+      {content ?? <>
+        <span className="min-w-0 flex-1 truncate">{selected.length ? selected.join(", ") : placeholder}</span>
+        {multiple && values.length > 0 && <span className="text-mut2">{values.length}</span>}
+        <Icon name="chevronDown" size={12} />
+      </>}
     </button>
     {open && createPortal(<div ref={popup} data-picker-popup style={position} className="fixed z-[90] flex flex-col overflow-hidden rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]"
       onKeyDown={(e) => {

@@ -7,13 +7,13 @@ import { createEventAction, createTaskAction } from "@/app/actions";
 import { parseQuickAdd } from "@/lib/parse";
 import { hhmm, parseLocal, timeOf, toDateTimeStr, dateOnly } from "@/lib/dates";
 import {
-  APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf,
+  APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, agentOf, surfaceOf,
   type Area, type Doer, type Priority, type Project, type Status, type Surface,
 } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
-import { ComputerPicker, ExecutionInfo, NeedsPicker } from "./execution-context";
+import { ComputerPicker, Issues, NeedsPicker, useComputerChoice, useExecutionIssues, useTaskDevice } from "./execution-context";
 import { DateField } from "./date-field";
-import { ModelSettings } from "./model-picker";
+import { ModelChips, useModelProblem } from "./model-picker";
 import type { ModelSelection } from "@/lib/agent-models";
 import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
 
@@ -114,9 +114,16 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const agent = agentOf({ agent: doer }, project?.agent);
   const runIn = agent ? (ov.runIn !== undefined ? ov.runIn : defaults.runIn ?? null) : null;
   const modelSettings = agent && ov.modelSettings?.agent === agent && ov.modelProject === projectId ? ov.modelSettings : null;
-  const doerLabel = doer ? DOER_LABEL[doer] : `${DOER_LABEL[agent!]} (default)`;
-  const placeLabel = (surface: Surface | null) => !surface ? "Automatic"
-    : surface === "desktop" ? APP_LABEL[agent!] : surface === "cloud" ? CLOUD_LABEL[agent!] : "Terminal";
+  const doerLabel = DOER_LABEL[doer ?? agent!];
+  // Where its sessions go: the task's computer, else its project's, else the one PacedMind picks.
+  const runsOn = deviceId ?? project?.deviceId ?? null;
+  const { device } = useTaskDevice(runsOn, agent ?? "claude", needs);
+  const place = runIn ?? surfaceOf(null, device?.checkedAt ? device.agents[agent ?? "claude"] : undefined);
+  const chooseComputer = useComputerChoice(deviceId);
+  const issues = [
+    ...useExecutionIssues(runsOn, agent ?? "claude", runIn, needs),
+    useModelProblem(agent ?? "claude", runsOn, needs, runIn, modelSettings),
+  ];
   const areaId = ov.areaId !== undefined ? ov.areaId : (project?.areaId ?? defaults.areaId ?? null);
   const area = areas.find((a) => a.id === areaId) ?? null;
   const status = ov.status ?? "todo";
@@ -192,6 +199,9 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     : [start ? format(parseLocal(start), "EEE d MMM, HH:mm") : "Starts now", `${duration} min`, weekly && "repeats weekly"].filter(Boolean).join(", ");
 
   const chip = "flex h-7 items-center gap-1.5 rounded-md border border-ctl bg-hover px-2 text-[12.5px] text-fg3 hover:bg-sel";
+  // For values that can be long (computer, servers, model): they shorten instead of taking the row.
+  const wide = cx(chip, "max-w-[220px]");
+  const placeLabel = (surface: Surface) => surface === "desktop" ? APP_LABEL[agent!] : surface === "cloud" ? "Cloud" : "Terminal";
   const found = "border-accent/45 bg-accent/10 text-accent-fg";
 
   return (
@@ -248,7 +258,6 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
-        {mode === "task" && <h3 className="px-5 pb-2 text-[12px] font-medium text-fg2">General</h3>}
         <div className="flex flex-wrap gap-1.5 px-5 pb-3.5">
           {mode === "task" ? (
             <>
@@ -266,16 +275,6 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
                 items={[{ value: null as string | null, label: "No project" },
                   ...projects.filter((p) => !areaId || p.areaId === areaId).map((p) => ({ value: p.id as string | null, label: p.name }))]}
                 onSelect={(v) => setOv((o) => ({ ...o, projectId: v, areaId: v ? projects.find((p) => p.id === v)?.areaId ?? o.areaId : o.areaId }))} />
-              <Menu width={260}
-                trigger={<button type="button" aria-label={`Done by: ${doerLabel}`} className={chip}>
-                  {agent ? <AgentIcon agent={agent} size={12} /> : <Icon name="user" size={13} />}Done by: {doerLabel}
-                </button>}
-                items={[
-                  { value: "human" as Doer | null, label: DOER_LABEL.human, icon: <Icon name="user" size={13} />, hint: "Stays out of flows" },
-                  ...(["claude", "codex"] as const).map((a) => ({ value: a as Doer | null, label: DOER_LABEL[a], icon: <AgentIcon agent={a} size={12} /> })),
-                  { value: null, label: project?.agent ? `Project default, ${DOER_LABEL[project.agent]}` : "Default, Claude Code", icon: <Icon name="layers" size={13} /> },
-                ]}
-                onSelect={(v) => setOv((o) => ({ ...o, agent: v, modelSettings: null, ...(v === "human" ? { runIn: null } : {}) }))} />
               {parsed.labels.map((l) => (
                 <span key={l} className={cx(chip, found)}><Icon name="tag" size={13} />{l}</span>
               ))}
@@ -298,29 +297,38 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
           )}
         </div>
 
-        {mode === "task" && agent && <section aria-label="Agent" className="mx-5 mb-3.5 space-y-2 border-t border-line pt-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="flex items-center gap-2 text-[12px] font-medium text-fg2">
-              Agent<span className="flex items-center gap-1.5 font-normal text-mut2"><AgentIcon agent={agent} size={12} />{DOER_LABEL[agent]}</span>
-            </h3>
-            <Menu width={280}
-              trigger={<button type="button" aria-label={`Run in: ${placeLabel(runIn)}`} className={chip}>
-                <SurfaceIcon surface={runIn ?? "terminal"} size={13} />Run in: {placeLabel(runIn)}
+        {/* Who does it and, for an agent, where its sessions run. */}
+        {mode === "task" && <section aria-label="Done by" className="-mt-1.5 px-5 pb-3.5">
+          <div className="flex flex-wrap gap-1.5">
+            <Menu width={260}
+              trigger={<button type="button" aria-label={`Done by: ${doerLabel}`} title={doer ? undefined : "The project's default"} className={chip}>
+                {agent ? <AgentIcon agent={agent} size={12} /> : <Icon name="user" size={13} />}{doerLabel}
               </button>}
               items={[
-                { value: null as Surface | null, label: "Automatic", hint: "Terminal if installed, else the desktop app", icon: <Icon name="laptop" size={13} /> },
-                ...(["terminal", "desktop", "cloud"] as const).map((s) => ({ value: s as Surface | null, label: placeLabel(s), icon: <SurfaceIcon surface={s} size={13} /> })),
+                { value: "human" as Doer | null, label: DOER_LABEL.human, icon: <Icon name="user" size={13} />, hint: "Stays out of flows" },
+                ...(["claude", "codex"] as const).map((a) => ({ value: a as Doer | null, label: DOER_LABEL[a], icon: <AgentIcon agent={a} size={12} /> })),
+                { value: null, label: project?.agent ? `Project default, ${DOER_LABEL[project.agent]}` : "Default, Claude Code", icon: <Icon name="layers" size={13} /> },
               ]}
-              onSelect={(v) => setOv((o) => ({ ...o, runIn: v, ...(v && v !== "terminal" ? { modelSettings: null } : {}) }))} />
+              onSelect={(v) => setOv((o) => ({ ...o, agent: v, modelSettings: null, ...(v === "human" ? { runIn: null } : {}) }))} />
+            {agent && <>
+              <Menu width={280}
+                trigger={<button type="button" aria-label={`Run in: ${runIn ? placeLabel(runIn) : "Automatic"}`} className={chip}
+                  title={runIn ? undefined : "Picked automatically: the terminal when the CLI is installed, else the app"}>
+                  <SurfaceIcon surface={place} size={13} />{placeLabel(place)}{!runIn && <span className="text-[11px] text-mut2">auto</span>}
+                </button>}
+                items={[
+                  { value: null as Surface | null, label: "Automatic", hint: "Terminal, else the app", icon: <Icon name="laptop" size={13} /> },
+                  ...(["terminal", "desktop", "cloud"] as const).map((s) => ({ value: s as Surface | null, label: s === "cloud" ? CLOUD_LABEL[agent] : placeLabel(s), icon: <SurfaceIcon surface={s} size={13} /> })),
+                ]}
+                onSelect={(v) => setOv((o) => ({ ...o, runIn: v, ...(v && v !== "terminal" ? { modelSettings: null } : {}) }))} />
+              {chooseComputer && <ComputerPicker value={deviceId} inherited={project?.deviceId} agent={agent} needs={needs} trigger={wide}
+                onChange={(v) => setOv((o) => ({ ...o, deviceId: v, modelSettings: null }))} />}
+              <NeedsPicker values={needs} agent={agent} trigger={wide} onChange={(v) => setOv((o) => ({ ...o, needs: v }))} />
+              <ModelChips agent={agent} deviceId={runsOn} needs={needs} surface={runIn} value={modelSettings} trigger={wide}
+                onChange={(value, pin) => setOv((o) => ({ ...o, modelSettings: value, modelProject: projectId, ...(pin !== undefined ? { deviceId: pin } : {}), ...(value ? { runIn: "terminal" } : {}) }))} />
+            </>}
           </div>
-          <div className="grid grid-cols-2 gap-2 max-sm:grid-cols-1">
-            <div className="space-y-1"><span className="text-[11.5px] text-mut2">Computer</span><ComputerPicker value={deviceId} inherited={project?.deviceId} onChange={(v) => setOv((o) => ({ ...o, deviceId: v, modelSettings: null }))} /></div>
-            <div className="space-y-1"><span className="text-[11.5px] text-mut2">Needs</span><NeedsPicker values={needs} agent={agent} onChange={(v) => setOv((o) => ({ ...o, needs: v }))} /></div>
-          </div>
-          <ExecutionInfo deviceId={deviceId ?? project?.deviceId ?? null} agent={agent} runIn={runIn} folder={project?.folder ?? area?.folder ?? null} needs={needs} />
-          <ModelSettings key={`${agent}:${projectId}`} agent={agent} showComputer={false} deviceId={deviceId ?? project?.deviceId ?? null} surface={runIn} value={modelSettings}
-            onChange={(value, computer) => setOv((o) => ({ ...o, modelSettings: value, modelProject: projectId, deviceId: computer, ...(value ? { runIn: "terminal" } : {}) }))}
-            onDeviceChange={(computer) => setOv((o) => ({ ...o, deviceId: computer, modelProject: projectId, modelSettings: null }))} />
+          {agent && <Issues items={issues} className="mt-2" />}
         </section>}
 
         {summary && (

@@ -1,89 +1,77 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
+import { useState } from "react";
 import { taskModelsAction } from "@/app/model-actions";
 import { modelSelectionProblem, type ModelSelection } from "@/lib/agent-models";
-import type { AgentId, Surface } from "@/lib/types";
+import { fmtTime, toDateTimeStr } from "@/lib/dates";
+import { AGENT_LABEL, type AgentId, type Surface } from "@/lib/types";
+import { useTaskDevice } from "./execution-context";
 import { Icon } from "./icons";
-import { Menu, cx } from "./ui";
+import { Menu, toast } from "./ui";
 
-type Report = Awaited<ReturnType<typeof taskModelsAction>>;
-type ModelPickerProps = {
-  agent: AgentId; deviceId: string | null; surface: Surface | null; value: ModelSelection | null;
-  onChange: (value: ModelSelection | null, deviceId: string | null) => void;
-  onDeviceChange: (deviceId: string | null) => void;
-  disabled?: boolean; showComputer?: boolean;
+type ModelProps = {
+  agent: AgentId; deviceId: string | null; needs?: string[]; surface: Surface | null; value: ModelSelection | null;
+  /** `pin`: the computer whose agent account offered the model, when one was chosen (models differ by account). */
+  onChange: (value: ModelSelection | null, pin?: string | null) => void;
+  /** The trigger's classes (a chip in quick add, a property in the task's details), and what it says for the default. */
+  trigger: string; empty?: string; disabled?: boolean;
 };
 
-export function ModelSettings(props: ModelPickerProps) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  const value = props.value?.agent === props.agent ? props.value : null;
-  const summary = value
-    ? [value.model, value.effort && `${value.effort} thinking`, value.speed && `${value.speed} speed`].filter(Boolean).join(" · ")
-    : "Agent defaults";
-  return <div className="min-w-0">
-    <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)}
-      className="flex w-full min-w-0 items-center gap-2 rounded-md py-2 text-left text-[12.5px] text-fg2 hover:bg-hover">
-      <Icon name="chevronDown" size={13} className={cx("shrink-0 text-mut2 transition-transform", !open && "-rotate-90")} />
-      <span className="shrink-0">Model settings</span>
-      <span className="min-w-0 flex-1 truncate text-right text-mut2" title={summary}>{summary}</span>
-    </button>
-    <div id={id} hidden={!open}>
-      {open && <div className="pb-1 pt-2"><ModelPicker {...props} /></div>}
-    </div>
-  </div>;
-}
+const REFRESH = "\u0000refresh";
 
-function ModelPicker({ agent, deviceId, surface, value, onChange, onDeviceChange, disabled = false, showComputer = true }: ModelPickerProps) {
-  const [report, setReport] = useState<{ key: string; data: Report } | null>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-  const [revision, setRevision] = useState(0);
-  const key = `${agent}:${deviceId ?? "auto"}:${revision}`;
-  useEffect(() => {
-    let current = true;
-    taskModelsAction(agent, deviceId).then((data) => {
-      if (current) setReport({ key, data });
-    }).catch(() => { if (current) setFailed(key); });
-    return () => { current = false; };
-  }, [agent, deviceId, key]);
-  const data = report?.key === key ? report.data : null;
-  const waiting = !data && failed !== key;
-  const catalog = data?.catalog;
+/**
+ * Model, thinking and speed for the task's terminal sessions, from the models its computer's agent account reported.
+ * Nothing when it runs in the agent's app or cloud, which pick their own.
+ */
+export function ModelChips({ agent, deviceId, needs, surface, value, onChange, trigger, empty: unset = "Model", disabled = false }: ModelProps) {
+  const { device } = useTaskDevice(deviceId, agent, needs);
+  const [checking, setChecking] = useState(false);
+  if (surface && surface !== "terminal") return null;
+  const catalog = device?.agents[agent]?.models;
   const models = catalog?.available ? catalog.models : [];
   const selection = value?.agent === agent ? value : null;
   const model = models.find((m) => m.id === selection?.model);
-  const terminal = !surface || surface === "terminal";
-  const problem = value && data ? modelSelectionProblem(value, agent, surface ?? "terminal", catalog ?? undefined) : null;
-  const chip = "flex h-7 items-center gap-1.5 rounded-md border border-ctl bg-hover px-2 text-[12.5px] text-fg3 hover:bg-sel disabled:opacity-50";
-  const update = (patch: Partial<ModelSelection>) => selection && onChange({ ...selection, ...patch }, data?.deviceId || null);
-  return <div className="flex flex-col gap-2">
-    <div className="flex flex-wrap gap-1.5">
-      {showComputer && data && (data.devices.length > 1 || (!data.name && data.devices.length > 0)) && <Menu
-        trigger={<button type="button" className={chip} disabled={disabled} aria-label="Computer for model settings">{data.name ?? "Choose computer"}</button>}
-        items={data.devices.map((d) => ({ value: d.id, label: d.name }))}
-        onSelect={(id) => onDeviceChange(id || null)} />}
-      <Menu trigger={<button type="button" className={chip} aria-label="Model" disabled={disabled || waiting || !terminal}>
-        Model: {selection ? model?.name ?? selection.model : "Default"}
+  const update = (patch: Partial<ModelSelection>) => selection && onChange({ ...selection, ...patch });
+  // A fresh list from this computer's CLI, or the other computer's latest report; the page refreshes with it.
+  const refresh = () => {
+    setChecking(true);
+    taskModelsAction(agent, device ? device.id : deviceId)
+      .then((r) => { if (!r.catalog?.available) toast(`Sign in to ${AGENT_LABEL[agent]}${r.name ? ` on ${r.name}` : ""} to list its models`, "error"); })
+      .catch(() => toast("Couldn't check the models", "error"))
+      .finally(() => setChecking(false));
+  };
+  const empty = !device ? "No computer to ask" : checking ? "Checking…"
+    : catalog && !catalog.available ? `Sign in to ${AGENT_LABEL[agent]} on ${device.name}` : !catalog ? "Not checked yet" : null;
+  return <>
+    <Menu width={260}
+      trigger={<button type="button" className={trigger} aria-label="Model" disabled={disabled}
+        title={selection ? undefined : "The agent's own model settings"}>
+        <Icon name="cpu" size={13} className="shrink-0" /><span className="truncate">{selection ? model?.name ?? selection.model : unset}</span>
       </button>}
-        items={[{ value: "", label: "Default", hint: "Use the agent's own configuration" }, ...models.map((m) => ({ value: m.id, label: m.name }))]}
-        onSelect={(id) => onChange(id ? { agent, model: id, effort: null, speed: null } : null, data?.deviceId || null)} />
-      {model && model.efforts.length > 0 && <Menu
-        trigger={<button type="button" className={chip} aria-label="Thinking" disabled={disabled || !terminal}>Thinking: {selection?.effort ?? "Default"}</button>}
-        items={[{ value: "", label: "Default" }, ...model.efforts.map((e) => ({ value: e, label: e }))]}
-        onSelect={(effort) => update({ effort: effort || null })} />}
-      {model && model.speeds.length > 0 && <Menu
-        trigger={<button type="button" className={chip} aria-label="Speed" disabled={disabled || !terminal}>Speed: {model.speeds.find((s) => s.id === selection?.speed)?.name ?? selection?.speed ?? "Default"}</button>}
-        items={[{ value: "", label: "Default" }, ...model.speeds.map((s) => ({ value: s.id, label: s.name }))]}
-        onSelect={(speed) => update({ speed: speed || null })} />}
-      <button type="button" className={chip} disabled={waiting} onClick={() => setRevision((n) => n + 1)}>Refresh models</button>
-      {value && <button type="button" className={chip} disabled={disabled} onClick={() => onChange(null, deviceId)}>Reset to defaults</button>}
-    </div>
-    <p aria-live="polite" className="text-[12px] text-mut2">
-      {!terminal ? "Choose model settings in the agent's app or cloud. PacedMind applies them to terminal sessions."
-        : waiting ? "Checking the selected computer's agent account…"
-        : problem ?? (!catalog?.available ? "Model list unavailable. Sign in to the agent on the selected computer, then refresh. Default uses its own settings."
-        : `${data?.name ?? "This computer"} · ${data?.local ? "Current agent account" : `${data?.online ? "Last reported" : "Offline · last reported"} ${new Date(catalog.checkedAt).toLocaleString()}`}`)}
-    </p>
-  </div>;
+      items={[
+        { value: "", label: "Default", hint: "Agent's own" },
+        ...models.map((m) => ({ value: m.id, label: m.name })),
+        ...(empty ? [{ value: "", label: empty, disabled: true }] : []),
+        ...(device ? [{ value: REFRESH, label: "Refresh list", icon: <Icon name="refresh" size={13} />, hint: catalog ? fmtTime(toDateTimeStr(new Date(catalog.checkedAt))) : undefined, disabled: checking }] : []),
+      ]}
+      onSelect={(id) => {
+        if (id === REFRESH) refresh();
+        else if (!id) { if (selection) onChange(null); }
+        else onChange({ agent, model: id, effort: null, speed: null }, device?.id || null);
+      }} />
+    {model && model.efforts.length > 0 && <Menu
+      trigger={<button type="button" className={trigger} aria-label="Thinking" disabled={disabled}>{selection?.effort ? `Thinking: ${selection.effort}` : "Thinking"}</button>}
+      items={[{ value: "", label: "Default" }, ...model.efforts.map((e) => ({ value: e, label: e }))]}
+      onSelect={(effort) => update({ effort: effort || null })} />}
+    {model && model.speeds.length > 0 && <Menu
+      trigger={<button type="button" className={trigger} aria-label="Speed" disabled={disabled}>{selection?.speed ? model.speeds.find((s) => s.id === selection.speed)?.name ?? selection.speed : "Speed"}</button>}
+      items={[{ value: "", label: "Default" }, ...model.speeds.map((s) => ({ value: s.id, label: s.name }))]}
+      onSelect={(speed) => update({ speed: speed || null })} />}
+  </>;
+}
+
+/** Why the chosen model settings wouldn't apply where the task runs, if they wouldn't. */
+export function useModelProblem(agent: AgentId, deviceId: string | null, needs: string[] | undefined, surface: Surface | null, value: ModelSelection | null) {
+  const { device } = useTaskDevice(deviceId, agent, needs);
+  return value ? modelSelectionProblem(value, agent, surface ?? "terminal", device?.agents[agent]?.models) : null;
 }

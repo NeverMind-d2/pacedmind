@@ -76,6 +76,8 @@ export interface MenuItem<V> {
   label: ReactNode;
   icon?: ReactNode;
   hint?: ReactNode;
+  /** A line that only says something (why the list is empty, say): it can't be chosen. */
+  disabled?: boolean;
 }
 
 export function Menu<V>({
@@ -135,8 +137,8 @@ export function Menu<V>({
         <div ref={list} role="menu" style={{ width: pos?.width ?? width, left: pos?.left ?? -9999, top: pos?.top ?? -9999, maxHeight: pos?.maxHeight ?? 320 }}
           className="fixed z-[80] overflow-auto rounded-lg border border-line2 bg-raised p-1 shadow-[var(--shadow-popover)]">
           {items.map((it, i) => (
-            <button key={i} type="button" role="menuitem" onClick={() => { onSelect(it.value); setOpen(false); }}
-              className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel">
+            <button key={i} type="button" role="menuitem" disabled={it.disabled} onClick={() => { onSelect(it.value); setOpen(false); }}
+              className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[12.5px] text-fg2 hover:bg-sel disabled:text-mut2 disabled:hover:bg-transparent">
               {it.icon}
               <span className="min-w-0 flex-1 truncate">{it.label}</span>
               {it.hint && <span className="text-[11.5px] text-mut2">{it.hint}</span>}

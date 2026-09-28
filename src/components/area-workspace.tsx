@@ -26,8 +26,7 @@ export function AreaWorkspace({ area, projects, onSaved, compact = false }: { ar
         ...(folder && !folders.includes(folder) ? [{ value: folder, label: folder }] : []),
       ]} custom={(text) => text || null} onChange={([value]) => setFolder(value)} placeholder="Choose or enter a folder" />
       {!compact && <p className="text-[11.5px] leading-relaxed text-mut2">
-        Tasks use this folder unless the task or its project has its own. Choose the same folder as your project in Codex or Claude.
-        Choose No area workspace to remove the default. Saved only on this computer.
+        Tasks use this folder unless their project or the task has its own. Saved on this computer only.
       </p>}
       <Button type="submit" size="sm" disabled={pending || (folder.trim() || null) === area.folder} className="self-end">Save workspace</Button>
     </form>

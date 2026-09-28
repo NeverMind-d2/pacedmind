@@ -1,8 +1,8 @@
 "use client";
-import { ModelSettings } from "./model-picker";
 
 import { useState, type ReactNode } from "react";
-import { ComputerPicker, ExecutionInfo, NeedsPicker } from "./execution-context";
+import { ComputerPicker, Issues, NeedsPicker, useComputerChoice, useExecutionIssues } from "./execution-context";
+import { ModelChips, useModelProblem } from "./model-picker";
 import { format } from "date-fns";
 import {
   addSubtaskAction, closeSessionAction, deleteSubtaskAction, deleteTaskAction, finishSessionAction, markSessionDoneAction, requestChangesAction,
@@ -99,6 +99,12 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const events = session ? ctx.sessionEvents[session.id] ?? [] : [];
   // Null when the task is yours: then it never starts an agent session.
   const agent = agentOf(task, project?.agent);
+  const runsOn = task.deviceId ?? project?.deviceId ?? null;
+  const chooseComputer = useComputerChoice(task.deviceId);
+  const issues = [
+    ...useExecutionIssues(runsOn, agent ?? "claude", task.runIn, task.needs),
+    useModelProblem(agent ?? "claude", runsOn, task.needs, task.runIn, task.modelSettings),
+  ];
   const doers: { value: Doer | null; label: string; hint?: string }[] = [
     { value: "human", label: DOER_LABEL.human, hint: "Stays out of flows" },
     { value: "claude", label: DOER_LABEL.claude },
@@ -347,18 +353,20 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             {agent ? <>Agent<span className="flex items-center gap-1.5 font-normal text-mut2"><AgentIcon agent={agent} size={12} />{AGENT_LABEL[agent]}</span></> : "Session history"}
           </h3>}
           {agent && <>
-            <Prop label="Computer"><ComputerPicker value={task.deviceId} inherited={project?.deviceId} onChange={(deviceId) => save({ deviceId, modelSettings: null })} /></Prop>
+            {chooseComputer && <Prop label="Computer">
+              <ComputerPicker value={task.deviceId} inherited={project?.deviceId} agent={agent} needs={task.needs} trigger={pv}
+                onChange={(deviceId) => save({ deviceId, modelSettings: null })} />
+            </Prop>}
             <Prop label="Run in"><Menu trigger={<button type="button" className={pv}>{task.runIn ? placeOf(agent, task.runIn) : "Automatic"}</button>}
               items={[{ value: null as Surface | null, label: "Automatic" }, ...(["terminal", "desktop", "cloud"] as const).map((s) => ({ value: s as Surface | null, label: placeOf(agent, s) }))]}
               onSelect={(runIn) => save({ runIn, ...(runIn && runIn !== "terminal" ? { modelSettings: null } : {}) })} /></Prop>
-            <Prop label="Workspace"><ExecutionInfo deviceId={task.deviceId ?? project?.deviceId ?? null} agent={agent} runIn={task.runIn} folder={task.folder ?? project?.folder ?? area?.folder ?? null} needs={task.needs} /></Prop>
+            {(!task.runIn || task.runIn === "terminal") && <Prop label="Model">
+              <div className="flex flex-wrap items-center">
+                <ModelChips agent={agent} deviceId={runsOn} needs={task.needs} surface={task.runIn} value={task.modelSettings} disabled={pending} trigger={pv} empty="Default"
+                  onChange={(modelSettings, pin) => save({ modelSettings, ...(pin !== undefined ? { deviceId: pin } : {}), ...(modelSettings ? { runIn: "terminal" } : {}) })} />
+              </div>
+            </Prop>}
           </>}
-          {agent && <div className="col-span-2 mb-2">
-            <ModelSettings key={`${task.id}:${agent}:${task.projectId}`} agent={agent} deviceId={task.deviceId ?? project?.deviceId ?? null}
-              showComputer={false} surface={task.runIn} value={task.modelSettings} disabled={pending}
-              onChange={(modelSettings, deviceId) => save({ modelSettings, deviceId, ...(modelSettings ? { runIn: "terminal" } : {}) })}
-              onDeviceChange={(deviceId) => save({ deviceId, modelSettings: null })} />
-          </div>}
           {/* Folders are this computer's: the desktop app sets them, for the sessions that run here. */}
           {agent && ctx.desktop && (
             <Prop label="Folder">
@@ -369,9 +377,10 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           {/* What its agent needs from the computer its session runs on: PacedMind offers one that has it. */}
           {agent && (
             <Prop label="Needs">
-              <NeedsPicker deferred values={task.needs} agent={agent} onChange={(needs) => save({ needs })} />
+              <NeedsPicker deferred values={task.needs} agent={agent} trigger={pv} empty="None" onChange={(needs) => save({ needs })} />
             </Prop>
           )}
+          {agent && <Issues items={issues} className="col-start-2 px-2 pb-1" />}
           {(agent || session) && <Prop label="Session">
             {session && session.status !== "failed" ? (
               <a href={`/sessions?s=${session.id}`} className={pv}>

@@ -43,7 +43,7 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 
 ## Fields
 
-**General** groups the planning fields and **Done by**. For agent tasks, a separate **Agent** section contains **Model settings**, **Folder**, **Needs**, **Session** and **Usage**. **Model settings** starts collapsed, showing *Agent defaults* or the saved choices; select it to change the model, thinking or speed. Choosing **You** hides the agent controls. Earlier sessions and their usage remain under **Session history**.
+**General** groups the planning fields and **Done by**. For agent tasks, a separate **Agent** section contains **Computer** (with more than one computer), **Run in**, **Model**, **Folder**, **Needs**, **Session** and **Usage**. When something would keep a session from starting where it goes, a line under **Needs** says so, as in [quick add](/tasks/quick-add#the-chips). Choosing **You** hides the agent controls. Earlier sessions and their usage remain under **Session history**.
 
 | Field | Choices |
 | --- | --- |
@@ -55,13 +55,12 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 | **Area** | **Inbox, no area**, or an area. |
 | **Project** | *Add to project*: **No project**, or a project. Choosing a project also sets the area. |
 | **Done by** | **You**, **Claude Code**, **Codex**, or the project default, each with its icon or the agent's mark. See [Who does a task](/concepts/done-by). |
-| **Model settings** | For agent tasks: the computer, **Model**, and the selected model's available **Thinking** and **Speed** choices. **Default** keeps the agent's configuration. **Refresh models** updates the list; **Reset to defaults** clears the overrides. See [Model, thinking and speed](/tasks/quick-add#model-thinking-and-speed). Changes apply when a terminal session next starts or resumes, including when sending changes back. |
 | **Folder** | For a task an agent does: the folder its sessions work in, the task's own (*own*) or the project's (*project's*), or *PacedMind workspace*. Click it to give the task its own folder, and leave it empty to go back to the project's. |
-| **Computer** | A specific computer or the project/default choice. |
+| **Computer** | With more than one computer: the one its sessions go to, marked *project* or *auto* when the task doesn't choose one. **Automatic**, or a computer. |
 | **Run in** | Automatic, a terminal, the agent's desktop app, or its cloud. |
-| **Workspace** | Available harnesses and the inherited local folder; remote folders are set on their own computer. |
+| **Model** | For terminal sessions: *Default*, or the chosen model with its **Thinking** and **Speed**. **Refresh list** checks the models again. See [Model, thinking and speed](/tasks/quick-add#model-thinking-and-speed). Changes apply when a terminal session next starts or resumes, including when sending changes back. |
 | **Labels** | The labels, and **+ Add**: type a label and press <kbd>Enter</kbd>. Click a label to remove it. |
-| **Needs** | For a task an agent does: up to 10 MCP servers or connectors it needs. Open the searchable picker, select or deselect tools, and select **Done** to save the choices together. Each option lists the computers reporting it. Type a custom name and press <kbd>Enter</kbd> to add it. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
+| **Needs** | For a task an agent does: *None*, or up to 10 MCP servers or connectors it needs. Open the searchable picker, select or deselect tools, and select **Done** to save the choices together. Each option lists the computers reporting it. Type a custom name and press <kbd>Enter</kbd> to add it. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
 | **Session** | The latest agent session, or a button to start one. See below. |
 | **Usage** | Once an agent reported it: what all the task's sessions used, such as *262k tokens · $0.31 at API prices · 1 min working · 1 session*. Hover over it for what the price means. See [What it used](/agents/lifecycle#what-it-used). |
 
