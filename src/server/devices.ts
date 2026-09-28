@@ -123,7 +123,12 @@ function cliPlaces(agent: AgentId): string[] {
   const bins = ["/opt/homebrew/bin", "/usr/local/bin", path.join(home, ".local", "bin")];
   return agent === "claude"
     ? [...bins.map((b) => path.join(b, "claude")), path.join(home, ".claude", "local", "claude")]
-    : [...bins.map((b) => path.join(b, "codex")), "/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex"];
+    : [
+      ...bins.map((b) => path.join(b, "codex")),
+      // The ChatGPT app (and the Codex app) carry the CLI inside, where their Codex runs it.
+      "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex", "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex",
+      "/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex",
+    ];
 }
 
 const versionOf = (out: string | null) => out?.match(/\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?/)?.[0] ?? null;

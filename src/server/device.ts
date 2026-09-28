@@ -65,6 +65,11 @@ export interface DeviceConfig {
    * reported them (start_task), and when. Each computer's CLI can be signed in to another account, with others.
    */
   fromAccount?: Partial<Record<AgentId, { names: string[]; at: string }>>;
+  /**
+   * Whether a Codex session here has run PacedMind's hooks (its SessionStart said so): once you've trusted them, which
+   * Codex asks the first time. Until then, a Codex session's start says what to answer.
+   */
+  codexHooksSeen?: boolean;
   /** For Claude Code and Codex that you start yourself (Settings shows it). */
   ownerToken: string;
   /**

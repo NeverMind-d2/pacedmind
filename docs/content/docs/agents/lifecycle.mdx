@@ -25,7 +25,7 @@ When a session starts, from a task, from **Sessions**, from a flow or at an agen
 1. checks that the task has no running session, that it isn't yours, that the computer has what the session needs, and that the task's folder is usable;
 2. creates the session record, with an eight-character id, the agent, where it runs, the folder and a branch name such as `agent/dev-22`;
 3. starts it where the task runs:
-   * **in a terminal**: writes a start script, and for Claude Code the MCP connection and hooks that report when the agent waits for you and when the terminal closes (for Codex, a `notify` program that reports when its turn ends), then opens a terminal titled with the key and the agent, such as *DEV-22 · Claude Code*, in the folder, runs the agent with its first message, and marks the session **Running** (*Started Claude Code in a terminal on DESKTOP-1*);
+   * **in a terminal**: writes a start script, and for Claude Code the MCP connection and hooks that report when the agent waits for you and when the terminal closes (for Codex, hooks and a `notify` program that report the same), then opens a terminal titled with the key and the agent, such as *DEV-22 · Claude Code*, in the folder, runs the agent with its first message, and marks the session **Running** (*Started Claude Code in a terminal on DESKTOP-1*);
    * **in a desktop app**: opens the app with a new session in the folder and the first message written (*Opened in the Claude app on DESKTOP-1. Send the first message there to start.*). The session stays **Starting** until the agent calls `start_task`;
    * **in Claude Code on the web**: opens a terminal in the folder that sends the task with `claude --cloud`, and marks the session **Running** (*Sent to Claude Code on the web from a terminal in app*);
    * **in Codex cloud**: sends the task with `codex cloud exec` (*Sending it to Codex cloud*), and marks the session **Running** with the task's link once Codex takes it on (*Codex cloud took it on in the my-app environment*);
@@ -109,7 +109,7 @@ The session is back at work as soon as the agent is: when you answer in its term
 How PacedMind hears it depends on the agent:
 
 * **Claude Code in a terminal**: the hooks PacedMind installs for the session report when its turn ends, when it shows a permission prompt or a question, or a reminder that it's still waiting, when you send it a message, and, while it waits for your permission, when it runs the tool.
-* **Codex in a terminal**: the session's `notify` program reports when a turn ends. Codex doesn't report your messages or its permission prompts, so PacedMind hears it went on when it next calls PacedMind.
+* **Codex in a terminal**: the hooks PacedMind gives the session report when its turn ends, when it asks for your permission, when you send it a message, and, while it waits for your permission, when it runs the tool. Codex runs them once you've trusted them: the first time, it asks *Hooks need review* in its terminal; choose **Trust all and continue**. They're the same in every session, so it asks once per computer. Until then, and with a Codex older than 0.150, only the end of a turn shows (its `notify` program), and PacedMind hears it went on when it next calls PacedMind. Codex has no hook for a question it asks in its terminal.
 * **Desktop apps** have no such hooks: only the questions the agent asks with `ask_user` or `report_progress` show there. Sessions in **the cloud** can't reach PacedMind.
 
 ## Answer while it works
@@ -123,7 +123,7 @@ Without an answer in time, the question goes away and the agent is told to hand 
 ## When the terminal closes
 
 * **Claude Code** reports its own exit through the hook PacedMind installed for the session, one per conversation: after **Request changes**, the terminal of the earlier conversation can close without affecting the session. A running session becomes **Closed** (*Terminal closed before the agent finished*); a finished one keeps its state and records *Terminal closed*. The task keeps its status, so a task that was **In progress** stays there until you change it or close the session.
-* **Codex** has no such hook: its session stays **Running** until it's closed in PacedMind with **Close session**.
+* **Codex** reports its exit through the hook PacedMind gives the session, and, when that isn't trusted yet, through the session's start script once Codex exits: a running session becomes **Closed** (*Terminal closed before the agent finished*). A terminal window closed while Codex runs, before Codex's hooks are trusted, reports nothing: select **Close session** then.
 * **Desktop apps and the cloud** don't report closing either. Their sessions stay open in PacedMind until they're marked finished or closed with **Close session**. Marking the task done also ends a cloud session.
 
 **Close session** marks a session closed without touching the terminal (*You closed the session*) and sets a task in progress back to **Todo**.

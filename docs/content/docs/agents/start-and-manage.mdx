@@ -102,7 +102,7 @@ The tab or window is titled with the key and the agent, such as *DEV-22 · Claud
 * the conversation named after the task, such as *DEV-22 Start sessions from the app*;
 * the first message, which names the task and the session.
 
-**Codex** starts with the first message and, for that session, the connection to PacedMind's MCP server under the name `pacedmind`, with the token from the `ORGANIZER_TOKEN` variable the terminal sets. This connection takes the place of the `pacedmind` entry in Codex's own configuration, headers included, and an entry under the earlier name, `organizer`, is switched off for the session, so the session only ever sends its own token, not the one **Connect** wrote there. Codex also gets a `notify` program for the session, which tells PacedMind with `curl` when a turn ends and Codex waits for you; it stands in for your own `notify` setting while the session runs. The Codex app, and Codex sessions you start yourself, need the `pacedmind` entry in Codex's own configuration instead. See [Connect Codex](/mcp/connect-codex).
+**Codex** starts with the first message and, for that session, the connection to PacedMind's MCP server under the name `pacedmind`, with the token from the `ORGANIZER_TOKEN` variable the terminal sets. This connection takes the place of the `pacedmind` entry in Codex's own configuration, headers included, and an entry under the earlier name, `organizer`, is switched off for the session, so the session only ever sends its own token, not the one **Connect** wrote there. Codex also gets a `notify` program for the session, which tells PacedMind with `curl` when a turn ends and Codex waits for you; it stands in for your own `notify` setting while the session runs. From Codex 0.150, it gets hooks too, which tell PacedMind when it asks for your permission, when you answer, when it goes back to work and when it ends, and which conversation it runs. They run PacedMind's hook script, `codex-hook.sh` (`codex-hook.cmd` on Windows) in PacedMind's data folder, which reads the session's address and token file from the terminal. Codex runs hooks only once you've trusted them, and asks the first time: *Hooks need review*, where **Trust all and continue** trusts them for every later session on the computer. With **Answer from elsewhere** on, a permission Codex asks for waits in PacedMind too, as for Claude Code. The Codex app, and Codex sessions you start yourself, need the `pacedmind` entry in Codex's own configuration instead. See [Connect Codex](/mcp/connect-codex).
 
 When a project limits the MCP servers its sessions get on this computer, Claude Code starts with only those and PacedMind's, and Codex with the others switched off. See [Other MCP servers, plugins and skills](#other-mcp-servers-plugins-and-skills).
 
@@ -166,7 +166,7 @@ A session in the agent's cloud has the cloud's own servers, so needs aren't chec
 **Resume in terminal**, in the task's details or in **Sessions**, opens a new terminal in the session's folder for a terminal session that isn't running:
 
 * **Claude Code** continues the same conversation, with its full history.
-* **Codex** continues its most recent session in that folder.
+* **Codex** continues the same conversation, once its hooks said which (shown in **Sessions** as **Codex session**); before that, its most recent session in that folder.
 
 PacedMind records *Reopened in a terminal*. A resumed session gets the current MCP access token, even if it was regenerated since. A session an agent reported on its own (*Started outside PacedMind*) resumes too, in its folder, or the task's when it has none. PacedMind doesn't know that agent's conversation, so Claude Code starts a new one on the task, which later resumes continue; Codex continues its most recent session in the folder.
 
@@ -189,7 +189,7 @@ A session in the cloud, or in a desktop app that isn't connected to PacedMind, c
 
 **Close session**, for a running session, asks *Close this session in PacedMind? The terminal stays open.* (in **Sessions**, for a session outside a terminal: *It keeps running where it is.*), then marks the session **Closed** and sets a task in progress back to **Todo**. Use it when:
 
-* a Codex terminal was closed (Codex doesn't report that on its own);
+* a terminal was closed while its agent ran, and the agent couldn't report it (Codex before its hooks are trusted);
 * a session got stuck before the agent checked in;
 * the work should stop and start over.
 

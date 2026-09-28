@@ -491,7 +491,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   const missing = mcpProblemsOf(s.events);
   if (missing) props.push(["Not available", missing, false]);
   props.push(["Session", s.id, true]);
-  if (s.cliSessionId) props.push(["Claude session", s.cliSessionId, true]);
+  if (s.cliSessionId) props.push([s.agent === "codex" ? "Codex session" : "Claude session", s.cliSessionId, true]);
 
   return (
     <aside aria-label="Session details" className={cx("flex w-[420px] shrink-0 flex-col border-l border-line",

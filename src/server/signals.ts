@@ -5,6 +5,7 @@ import { recheckSessionMcp, watchesMcp } from "./session-mcp";
 import { knownAttention, noteSessionEvent } from "./attention";
 import { attentionOf, type AttentionKind } from "@/lib/dates";
 import { AGENT_LABEL, isLiveSession, type Session } from "@/lib/types";
+import { deviceConfig, updateDevice } from "./device";
 
 /*
  * What the hooks the launcher installs in a session's terminal say (the signal route), and what its agent does over
@@ -17,7 +18,7 @@ import { AGENT_LABEL, isLiveSession, type Session } from "@/lib/types";
  * memory (attention.ts) without reading the store.
  */
 
-export const HOOK_KINDS = ["stop", "notify", "prompt", "tool", "turn"] as const;
+export const HOOK_KINDS = ["stop", "notify", "prompt", "tool", "turn", "start"] as const;
 export type HookKind = (typeof HOOK_KINDS)[number];
 
 /** At most this many events from hooks per session while this process runs, so a runaway loop can't fill its history. */
@@ -77,6 +78,8 @@ function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind
       return now ? { kind: "working", text: `You answered in its terminal, and ${who} went on` } : null;
     case "tool":
       return now === "permission" ? { kind: "working", text: `You allowed it in its terminal, and ${who} went on` } : null;
+    case "start":
+      return null;
   }
 }
 
@@ -97,6 +100,8 @@ export async function recordSignal(o: { sessionId: string; hookedId: string; kin
   }
   const s = await hookSession(o.sessionId, o.hookedId, o.cli);
   if (!s) return;
+  if (o.kind === "start") return codexStarted(s, o.payload);
+  if (o.kind === "turn" && !ownTurn(s, o.payload)) return;
   // Its turn ended while an MCP server was missing: signing in through /mcp may have brought it.
   if (o.kind === "stop" && watchesMcp(s.id)) await recheckSessionMcp(s.id).catch(() => {});
   const e = eventFor(o.kind, o.payload, await attentionNow(s.id), AGENT_LABEL[s.agent]);
@@ -105,6 +110,40 @@ export async function recordSignal(o: { sessionId: string; hookedId: string; kin
   if (n >= LIMIT) return;
   counts().set(s.id, n + 1);
   await repo.addSessionEvent(s.id, e.kind, e.text.slice(0, 2000));
+}
+
+const CODEX_SESSION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Codex's SessionStart hook: the conversation the session runs, which a resume goes back into and which tells its own
+ * turns from others' in what notify says; and that this computer's Codex runs PacedMind's hooks (trusted).
+ */
+async function codexStarted(s: Session, p: Record<string, unknown>) {
+  if (!deviceConfig().codexHooksSeen) updateDevice({ codexHooksSeen: true });
+  const id = typeof p.session_id === "string" ? p.session_id.toLowerCase() : "";
+  if (s.agent === "codex" && CODEX_SESSION.test(id) && id !== s.cliSessionId) await repo.updateSession(s.id, { cliSessionId: id });
+}
+
+/**
+ * Whether what Codex's notify says is about the session's own turn. Codex also runs short turns of its own on the side,
+ * such as naming the conversation, and notifies about those too: their thread isn't the session's (once its
+ * SessionStart said which), and their answer is a small JSON object ({"title": …}).
+ */
+function ownTurn(s: Session, p: Record<string, unknown>): boolean {
+  const thread = typeof p["thread-id"] === "string" ? p["thread-id"].toLowerCase() : "";
+  if (s.cliSessionId && thread && thread !== s.cliSessionId) return false;
+  const said = typeof p["last-assistant-message"] === "string" ? p["last-assistant-message"].trim() : "";
+  if (/^\{\s*"title"\s*:\s*"[^"]*"\s*\}$/.test(said)) return false;
+  return true;
+}
+
+/**
+ * A permission Codex asks for in its terminal (its PermissionRequest hook), when PacedMind doesn't hold it for an answer
+ * from elsewhere: the session waits for you there. Claude Code says the same through its Notification hook.
+ */
+export async function notePermissionAsked(s: Session, what: string) {
+  if ((await attentionNow(s.id)) === "permission") return;
+  await repo.addSessionEvent(s.id, "permission", `${AGENT_LABEL[s.agent]} asks for your permission in its terminal: ${said(what)}`.slice(0, 2000));
 }
 
 /**
