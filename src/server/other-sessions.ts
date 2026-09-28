@@ -111,7 +111,7 @@ function stateOf(ended: boolean, activeAt: number, now: number): OtherSessionSta
   return !ended && now - activeAt < WORKING_MS ? "working" : "waiting";
 }
 
-type Found = { harness: Harness; ref: string; title: string; folder: string; ended: boolean; startedAt: number; activeAt: number };
+type Found = { harness: Harness; ref: string; cli?: string; title: string; folder: string; ended: boolean; startedAt: number; activeAt: number };
 
 /**
  * Whether a transcript is a conversation someone had in a terminal or an editor, going by its first message: not the
@@ -169,7 +169,7 @@ function claudeSessions(since: number): Found[] {
     if (!folder || (read?.first && PACEDMIND.test(read.first)) || (typeof s.title === "string" && PACEDMIND.test(s.title))) continue;
     const activeAt = Math.max(typeof s.lastActivityAt === "number" ? s.lastActivityAt : 0, t?.mtime ?? 0, read ? 0 : mtime);
     out.push({
-      harness: "claude-app", ref: s.sessionId, folder, ended: read?.ended ?? true,
+      harness: "claude-app", ref: s.sessionId, ...(cli ? { cli } : {}), folder, ended: read?.ended ?? true,
       title: (typeof s.title === "string" && s.title) || read?.title || read?.first || "",
       startedAt: typeof s.createdAt === "number" ? s.createdAt : read?.startedAt ?? activeAt, activeAt,
     });
@@ -237,18 +237,22 @@ const keyOf = (folder: string) => {
 
 const g = globalThis as unknown as { __pacedmindOthers?: { at: number; projects: string; list: OtherSession[] } };
 
+const clean = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
+
 /**
  * This computer's sessions that PacedMind didn't start, active in the last three days, the latest first. Each gets the
  * project whose folder here holds its folder, else the project of its repository (a worktree kept elsewhere, say).
- * Looked for again after 20 seconds at the most.
+ * `attached`: the conversations PacedMind's sessions have (Session.cliSessionId), so one attached to a task is
+ * PacedMind's now and leaves this list. Looked for again after 20 seconds at the most.
  */
-export function scanOtherSessions(projects: Project[], now = Date.now()): OtherSession[] {
-  const signature = projects.map((p) => `${p.id}:${p.folder ?? ""}:${p.repo ?? ""}`).join("|");
+export function scanOtherSessions(projects: Project[], attached: Set<string>, now = Date.now()): OtherSession[] {
+  const signature = `${projects.map((p) => `${p.id}:${p.folder ?? ""}:${p.repo ?? ""}`).join("|")}#${[...attached].sort().join(",")}`;
   const cached = g.__pacedmindOthers;
   if (cached && now - cached.at < 20_000 && cached.projects === signature) return cached.list;
   const since = now - WINDOW;
   const found = [...claudeSessions(since), ...codexSessions(since)]
-    .filter((f) => f.activeAt >= since).sort((a, b) => b.activeAt - a.activeAt).slice(0, OTHER_SESSIONS_MAX);
+    .filter((f) => f.activeAt >= since && !attached.has(clean(f.ref)) && !(f.cli && attached.has(clean(f.cli))))
+    .sort((a, b) => b.activeAt - a.activeAt).slice(0, OTHER_SESSIONS_MAX);
   const byFolder = projects.flatMap((p) => (p.folder ? [{ id: p.id, key: keyOf(p.folder) }] : [])).sort((a, b) => b.key.length - a.key.length);
   const repos = new Map<string, string | null>();
   const projectOf = (folder: string): string | null => {
@@ -260,10 +264,91 @@ export function scanOtherSessions(projects: Project[], now = Date.now()): OtherS
     return (repo && projects.find((p) => p.repo?.split("#")[0] === repo)?.id) || null;
   };
   const list = found.map((f): OtherSession => ({
-    harness: f.harness, ref: f.ref.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80), title: oneLine(f.title, 100), place: oneLine(path.basename(f.folder), 80),
+    harness: f.harness, ref: clean(f.ref), ...(f.cli && clean(f.cli) ? { cli: clean(f.cli) } : {}), title: oneLine(f.title, 100),
+    place: oneLine(path.basename(f.folder), 80),
     projectId: projectOf(f.folder), state: stateOf(f.ended, f.activeAt, now),
     startedAt: new Date(Math.min(f.startedAt, f.activeAt)).toISOString(), activeAt: new Date(f.activeAt).toISOString(),
   })).filter((s) => s.ref);
   g.__pacedmindOthers = { at: now, projects: signature, list };
   return list;
+}
+
+/**
+ * One of this computer's sessions that PacedMind didn't start, with its folder, to attach it to a task (attach.ts):
+ * looked for again now, among those of the last three days. Null when it isn't there (any more).
+ */
+export function otherSessionHere(harness: Harness, ref: string, now = Date.now()): { session: OtherSession; folder: string } | null {
+  const since = now - WINDOW;
+  const f = (harness.startsWith("claude") ? claudeSessions(since) : codexSessions(since)).find((x) => x.harness === harness && clean(x.ref) === ref);
+  if (!f) return null;
+  return {
+    folder: f.folder,
+    session: {
+      harness: f.harness, ref: clean(f.ref), ...(f.cli && clean(f.cli) ? { cli: clean(f.cli) } : {}), title: oneLine(f.title, 100),
+      place: oneLine(path.basename(f.folder), 80), projectId: null, state: stateOf(f.ended, f.activeAt, now),
+      startedAt: new Date(Math.min(f.startedAt, f.activeAt)).toISOString(), activeAt: new Date(f.activeAt).toISOString(),
+    },
+  };
+}
+
+const CONVERSATION = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * The folder a Claude Code transcript started in: its first line that names one. Its first lines can be file snapshots
+ * only, so it reads on, 64 KB at a time, up to 4 MB; later lines name the folder of each resume, wherever that ran.
+ */
+function firstFolder(file: string): string | null {
+  let fd: number;
+  try {
+    fd = fs.openSync(file, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const buf = Buffer.alloc(65_536);
+    let rest = "";
+    for (let pos = 0; pos < 4 << 20; ) {
+      const n = fs.readSync(fd, buf, 0, buf.length, pos);
+      if (!n) break;
+      pos += n;
+      const lines = (rest + buf.toString("utf8", 0, n)).split("\n");
+      rest = lines.pop() ?? "";
+      for (const l of lines) {
+        if (!l.includes('"cwd"')) continue;
+        try {
+          const j: unknown = JSON.parse(l);
+          if (isObject(j) && typeof j.cwd === "string") return j.cwd;
+        } catch {
+          // Not a whole line.
+        }
+      }
+    }
+    return null;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+/**
+ * The folder a Claude Code or Codex conversation on this computer ran in, from the agent's own record of it: where a
+ * resume has to run, since Claude Code finds a conversation only from its own folder. Null when this computer has no
+ * record of it. Read-only, like the rest of this file.
+ */
+export function conversationFolder(agent: "claude" | "codex", id: string): string | null {
+  if (!CONVERSATION.test(id)) return null;
+  if (agent === "claude") {
+    const projects = path.join(claudeDir(), ".claude", "projects");
+    for (const d of entries(projects)) {
+      if (!d.isDirectory()) continue;
+      const file = path.join(projects, d.name, `${id}.jsonl`);
+      if (fs.existsSync(file)) return firstFolder(file);
+    }
+    return null;
+  }
+  for (const t of recent(path.join(codexHome(), "sessions"), 3, (f) => f.startsWith("rollout-") && f.endsWith(`${id}.jsonl`), 0)) {
+    const meta = ends(t.file, t.size).head.find((j) => j.type === "session_meta");
+    const m = isObject(meta?.payload) ? meta.payload : null;
+    if (m && m.id === id && typeof m.cwd === "string") return m.cwd;
+  }
+  return null;
 }

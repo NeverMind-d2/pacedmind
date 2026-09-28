@@ -44,7 +44,24 @@ Each row shows a dot for the state, the session's title (its own, else its first
 | Its turn ended, or it stopped in the middle of one, such as for a permission | *Waiting for you · 22:26* |
 | Nothing for six hours | *Idle since 11:33* |
 
-A session's project is the one whose folder on that computer holds the session's folder, else the project of the same git repository, such as for a worktree kept elsewhere. These rows only show the sessions: open them in their own terminal or app.
+A session's project is the one whose folder on that computer holds the session's folder, else the project of the same git repository, such as for a worktree kept elsewhere. Open these sessions in their own terminal or app.
+
+### Attach a session to a task
+
+To bring a session you started yourself under a task, point at its row and select the link button (**Attach to a task**), then pick:
+
+* **New task:** and the session's title: a new task with that title, in the session's project, else the Inbox;
+* one of the open tasks, the session's project's first. Type to search them by key or title.
+
+The session becomes one of the task's sessions, with the same conversation, on the computer it runs on, and leaves the list above. *Attached to DEV-12* says so, and its details show *Started … outside PacedMind* and, in **What PacedMind heard**, *Attached to DEV-12: it ran outside PacedMind, in Claude Code in my-app*.
+
+* A session that's working or waiting for you is **Running**, and the task goes to **In progress**. A task that already has a running session isn't offered for it.
+* A session that has been quiet for six hours is **finished, waiting for you**, with its title as its note, and the task goes to **In review**: check the work, then **Mark done**, **Request changes** or **Resume in terminal**.
+* A task that's yours can't take a session: hand it to Claude Code or Codex first.
+
+From then on it's a session like the ones PacedMind starts. It has no hooks until PacedMind opens it itself: **Resume in terminal** (after **Close session**, while its own terminal still runs it) reopens that same conversation in the folder it ran in, with PacedMind's hooks and its own token, so PacedMind hears when it waits for you or ends. When its agent calls `start_task` or `finish_task` for the task with your own connection to PacedMind, it reports on this session. A session in the Claude or Codex app opens in its app.
+
+You can attach another computer's session from any computer, and from the web app. It keeps running on its own computer, where **Resume in terminal** works.
 
 ## Start a session
 

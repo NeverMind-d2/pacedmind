@@ -156,8 +156,9 @@ export function otherSessionsOf(v: unknown): OtherSession[] {
     if (typeof r.harness !== "string" || !HARNESSES.has(r.harness) || typeof r.state !== "string" || !OTHER_STATES.has(r.state)) return [];
     if (!ref || !startedAt || !activeAt) return [];
     const projectId = typeof r.projectId === "string" && /^[A-Za-z0-9-]{1,80}$/.test(r.projectId) ? r.projectId : null;
+    const cli = typeof r.cli === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(r.cli) ? r.cli : null;
     return [{
-      harness: r.harness as Harness, ref, title: oneLine(r.title, 100), place: oneLine(r.place, 80), projectId,
+      harness: r.harness as Harness, ref, ...(cli ? { cli } : {}), title: oneLine(r.title, 100), place: oneLine(r.place, 80), projectId,
       state: r.state as OtherSessionState, startedAt, activeAt,
     }];
   });

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
+import { attachSessionAction, closeSessionAction, finishSessionAction, markSessionDoneAction, requestChangesAction } from "@/app/actions";
+import { Popover, PopoverItem, anchorOf, type Anchor } from "@/components/popover";
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "@/components/remote-start";
 import { AskCard } from "@/components/ask-card";
 import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, useClock, useLaunchState } from "@/components/request-status";
@@ -78,6 +79,15 @@ export interface StartableTask {
   key: string;
   title: string;
   agent: AgentId;
+}
+
+/** A task a session PacedMind didn't start can be attached to; `busy` when it has a running session. */
+export interface AttachableTask {
+  id: number;
+  key: string;
+  title: string;
+  projectId: string | null;
+  busy: boolean;
 }
 
 /** A session PacedMind didn't start, with its project's name. */
@@ -237,11 +247,12 @@ function useNow(initial: string): number {
 
 /* ---------- the view ---------- */
 
-export function SessionsView({ groups, others, initialId, startable, now: serverNow }: {
+export function SessionsView({ groups, others, initialId, startable, attachable, now: serverNow }: {
   groups: SessionGroup[];
   others: OtherGroup[];
   initialId: string | null;
   startable: StartableTask[];
+  attachable: AttachableTask[];
   now: string;
 }) {
   const now = useNow(serverNow);
@@ -308,7 +319,10 @@ export function SessionsView({ groups, others, initialId, startable, now: server
               <div key={key}>
                 <GroupHeader name={`Not from PacedMind, on ${g.here ? `this computer (${g.computer})` : g.computer}${g.online ? "" : " · offline"}`}
                   count={g.sessions.length} collapsed={!!collapsed[key]} onToggle={() => setCollapsed((c) => ({ ...c, [key]: !c[key] }))} />
-                {!collapsed[key] && g.sessions.map((s) => <OtherRow key={`${s.harness}:${s.ref}`} s={s} now={now} />)}
+                {!collapsed[key] && g.sessions.map((s) => (
+                  <OtherRow key={`${s.harness}:${s.ref}`} s={s} now={now} computer={g.here ? "here" : g.id} tasks={attachable}
+                    onAttached={(id) => router.push(`/sessions?s=${id}`)} />
+                ))}
               </div>
             );
           })}
@@ -393,14 +407,75 @@ function otherMeta(s: OtherItem, now: number): string {
 }
 
 /**
- * A session PacedMind didn't start, as its computer found it: nothing to open or manage here, it lives in its own
- * terminal or app. Its title, its project (or folder's name), where it runs and what it's doing.
+ * Attaching a session PacedMind didn't start to a task (attach.ts): a new task made from its title, in its project,
+ * or one of the open tasks, its project's first. One at work can't join a task that has a running session.
  */
-function OtherRow({ s, now }: { s: OtherItem; now: number }) {
+function AttachPicker({ s, computer, tasks, anchor, onClose, onAttached }: {
+  s: OtherItem;
+  computer: string;
+  tasks: AttachableTask[];
+  anchor: Anchor;
+  onClose: () => void;
+  onAttached: (sessionId: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const { run, pending } = useAction();
+  const q = query.trim().toLowerCase();
+  const live = s.state !== "idle";
+  const list = tasks
+    .filter((t) => !(live && t.busy) && (!q || t.key.toLowerCase().includes(q) || t.title.toLowerCase().includes(q)))
+    .sort((a, b) => Number(b.projectId === s.projectId && !!s.projectId) - Number(a.projectId === s.projectId && !!s.projectId))
+    .slice(0, 60);
+  const attach = (taskId: number | null) => {
+    if (pending) return;
+    run(async () => {
+      const r = await attachSessionAction({ computer, harness: s.harness, ref: s.ref, taskId, title: s.title, projectId: s.projectId });
+      if (r.ok) {
+        onClose();
+        if (r.sessionId) onAttached(r.sessionId);
+      }
+      return r;
+    });
+  };
+  return (
+    <Popover anchor={anchor} onClose={onClose} width={360}>
+      <div className="flex flex-col gap-1">
+        <div className="px-2 pb-0.5 pt-1.5 text-[12px] font-medium text-fg3">Attach to a task</div>
+        <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search tasks" placeholder="Search tasks"
+          className="mx-1 h-[30px] rounded-md border border-line2 bg-input px-2.5 text-[12.5px] text-fg2 outline-none placeholder:text-dim focus:border-ctl" />
+        {!q && (
+          <PopoverItem icon={<Icon name="plus" size={13} />} onClick={() => attach(null)} hint={s.project ?? "Inbox"}>
+            New task: {s.title || "Untitled session"}
+          </PopoverItem>
+        )}
+        {list.map((t) => (
+          <PopoverItem key={t.id} onClick={() => attach(t.id)}>
+            <span className="mr-2 font-mono text-[11px] text-mut2">{t.key}</span>{t.title}
+          </PopoverItem>
+        ))}
+        {!list.length && q && <p className="px-2 py-1.5 text-[12px] text-mut2">No open tasks match.</p>}
+        {live && <p className="px-2 pb-1 pt-0.5 text-[11.5px] leading-[1.45] text-mut2">It&apos;s still going, so tasks with a running session aren&apos;t offered.</p>}
+      </div>
+    </Popover>
+  );
+}
+
+/**
+ * A session PacedMind didn't start, as its computer found it: it lives in its own terminal or app. Its title, its
+ * project (or folder's name), where it runs and what it's doing, and a button that attaches it to a task.
+ */
+function OtherRow({ s, now, computer, tasks, onAttached }: {
+  s: OtherItem;
+  now: number;
+  computer: string;
+  tasks: AttachableTask[];
+  onAttached: (sessionId: string) => void;
+}) {
   const d = OTHER_DOT[s.state];
   const where = `${HARNESS_LABEL[s.harness]}${s.project ? ` · ${s.project}` : ""} · ${s.place}`;
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
   return (
-    <div title={`${s.title || "Untitled session"}\n${where}`} className="flex h-[42px] w-full items-center gap-3 border-b border-hover px-5">
+    <div title={`${s.title || "Untitled session"}\n${where}`} className="group flex h-[42px] w-full items-center gap-3 border-b border-hover px-5">
       <span className="flex w-3.5 shrink-0 justify-center">
         <span className="inline-block h-[7px] w-[7px] shrink-0 rounded-full border" style={{ background: d.fill, borderColor: d.ring }} />
       </span>
@@ -410,10 +485,17 @@ function OtherRow({ s, now }: { s: OtherItem; now: number }) {
       <span className="hidden w-[110px] shrink-0 items-center gap-1.5 truncate text-[12px] text-mut2 @2xl:flex">
         <AgentIcon agent={harnessAgent(s.harness)} size={12} className="text-mut" />{HARNESS_LABEL[s.harness]}
       </span>
-      <span className="w-9 shrink-0 @max-md:w-auto" />
+      <span className="flex w-9 shrink-0 justify-center @max-md:w-auto">
+        <button type="button" aria-label="Attach to a task" title="Attach to a task" onClick={(e) => setAnchor(anchorOf(e.currentTarget))}
+          className={cx("flex h-6 w-6 items-center justify-center rounded-md text-mut2 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 pointer-coarse:opacity-100",
+            anchor ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+          <Icon name="link" size={13} />
+        </button>
+      </span>
       <span className={cx("w-[150px] shrink-0 truncate text-right text-[12px] @max-md:w-[108px]", s.state === "waiting" ? "text-fg2" : "text-mut2")}>
         {otherMeta(s, now)}
       </span>
+      {anchor && <AttachPicker s={s} computer={computer} tasks={tasks} anchor={anchor} onClose={() => setAnchor(null)} onAttached={onAttached} />}
     </div>
   );
 }
