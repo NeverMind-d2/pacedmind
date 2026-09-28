@@ -9,6 +9,7 @@ import { approvals, clearApprovals, handledRequests, type Approval } from "./app
 import { APP_VERSION, deviceIdFor, flowsOnHere, runsHere, toolsHere } from "./devices";
 import { missingFrom } from "@/lib/needs";
 import { changesProblem, requestChanges } from "./ops";
+import { attachedConversations } from "./attach";
 import { scanOtherSessions } from "./other-sessions";
 import { MODE, authState, supabase } from "./supabase";
 import { cleanDeviceName } from "./store/shared";
@@ -208,7 +209,8 @@ const g = globalThis as unknown as {
 async function othersToReport(): Promise<OtherSession[] | null> {
   try {
     const five = 5 * 60_000;
-    return scanOtherSessions(await repo.listProjects())
+    const [projects, attached] = await Promise.all([repo.listProjects(), attachedConversations()]);
+    return scanOtherSessions(projects, attached)
       .map((s) => ({ ...s, activeAt: new Date(Math.floor(Date.parse(s.activeAt) / five) * five).toISOString() }));
   } catch (e) {
     console.error("[organizer] looking for other sessions failed", e);

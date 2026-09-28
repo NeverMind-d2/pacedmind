@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AreaMark } from "@/components/icons";
+import { RepoLink } from "@/components/repo-link";
 import { TaskList } from "@/components/task-list";
 import * as repo from "@/server/repo";
 import { groupByStatus, taskContext } from "@/server/views";
@@ -23,6 +24,7 @@ export default async function AreaPage(props: PageProps<"/area/[id]">) {
       ctx={await taskContext(tasks)}
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ areaId: id }}
+      headerRight={<RepoLink repo={area.repo} />}
       empty={`No tasks in ${area.name} yet`}
     />
   );

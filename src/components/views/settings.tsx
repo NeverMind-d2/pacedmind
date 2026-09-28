@@ -617,9 +617,11 @@ export function SessionSettings({ device, account, platform }: {
 }
 
 /** Settings → Projects: each project's agent, and in the desktop app its folder, flow and MCP servers here. */
-export function ProjectSettings({ projects, areas, desktop, agents, platform }: {
+export function ProjectSettings({ projects, areas, desktop, agents, platform, copies = {} }: {
   projects: Project[]; areas: Area[];
   desktop: boolean;
+  /** This computer's copies of the repositories areas' workspaces hold elsewhere, by repository (Area.repo). */
+  copies?: Record<string, string[]>;
   /** By project: what agents get in its folder here and which MCP servers its sessions get; null in the web app. */
   agents: Record<string, ProjectAgentsView> | null;
   platform: NodeJS.Platform;
@@ -631,7 +633,7 @@ export function ProjectSettings({ projects, areas, desktop, agents, platform }: 
   return <>
     {desktop && <Section title="Area workspaces" note="Connect an area to an existing Codex or Claude project by choosing its folder on this computer. Tasks and projects without their own folder inherit it.">
       {areas.map((area) => <div key={`${area.id}:${area.folder ?? ""}`} className="border-b border-line px-3.5 py-3 last:border-b-0">
-        <AreaWorkspace area={area} projects={projects} compact />
+        <AreaWorkspace area={area} projects={projects} compact found={area.repo ? copies[area.repo] ?? [] : []} />
       </div>)}
     </Section>}
     <Section

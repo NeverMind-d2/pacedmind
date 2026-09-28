@@ -10,7 +10,8 @@ import type { Project } from "@/lib/types";
 /*
  * One project on all your computers. A project is the account's, but its folder is each computer's own (device.ts), so
  * the computers tell each other which repository it is (Project.repo, git-remote.ts) and each finds its own copy by it:
- * when importing (import.ts), and here, when a project was merged into another elsewhere.
+ * when importing (import.ts), and here, when a project was merged into another elsewhere. An area's workspace is the
+ * same (Area.repo): another computer offers its copy of the repository when you pick the area's workspace there.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +31,10 @@ export async function linkProjects() {
       await repo.setProjectRepo(p.id, found);
       p.repo = found;
     }
+  }
+  for (const a of await repo.listAreas()) {
+    const found = a.folder && !a.repo ? repoIdentity(a.folder) : null;
+    if (found) await repo.setAreaRepo(a.id, found);
   }
   // Only folders of the data in use: the account's projects have UUIDs, this computer's own have names.
   const cloud = await usesCloud();

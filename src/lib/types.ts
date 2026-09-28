@@ -60,6 +60,23 @@ export interface Area {
    */
   picture: string | null;
   sort: number;
+  /**
+   * The git repository its workspace holds, as host/owner/name (and "#subfolder" inside one), like Project.repo: read
+   * from its workspace on a computer, so your other computers can offer their copy of it. Null until one saw it.
+   */
+  repo: string | null;
+}
+
+/**
+ * A repository's page on the web, from Project.repo or Area.repo: https://host/owner/name, and the subfolder within
+ * it on GitHub. The label is the repository as host/owner/name.
+ */
+export function repoLink(repo: string | null | undefined): { label: string; url: string } | null {
+  if (!repo) return null;
+  const [path, sub] = repo.split("#");
+  if (!/^[a-z0-9][a-z0-9.-]*(\/[a-z0-9._~-]+)+$/.test(path)) return null;
+  const tree = sub && path.startsWith("github.com/") ? `/tree/HEAD/${sub.split("/").map(encodeURIComponent).join("/")}` : "";
+  return { label: path, url: `https://${path}${tree}` };
 }
 
 export interface Project {
@@ -446,6 +463,10 @@ export const HARNESS_LABEL: Record<Harness, string> = {
 
 export const harnessAgent = (h: Harness): AgentId => (h.startsWith("claude") ? "claude" : "codex");
 
+/** The conversation a PacedMind session keeps for an outside session attached to a task (Session.cliSessionId). */
+export const outsideConversation = (s: Pick<OtherSession, "harness" | "ref" | "cli">): string | null =>
+  s.harness === "claude-app" ? s.cli ?? null : s.ref;
+
 /**
  * What a session is doing, as its own record shows: at work right now, waiting for you (its turn ended, or it stopped
  * in the middle of one, such as for a permission), or quiet for hours.
@@ -457,6 +478,8 @@ export interface OtherSession {
   harness: Harness;
   /** The tool's own id for the session. */
   ref: string;
+  /** For a Claude app session, the id of the Claude Code conversation it runs. */
+  cli?: string;
   /** Its own title, else its first message, on one line and short. */
   title: string;
   /** The name of its folder (never the path). */

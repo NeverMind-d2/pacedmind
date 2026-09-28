@@ -106,7 +106,7 @@ function chunks<T>(xs: T[], size = 100): T[][] {
 
 const toArea = (r: Row): Area => ({
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
-  picture: pictureHash(r.picture), sort: Number(r.sort), folder: MODE === "desktop" ? areaFolder(String(r.id)) : null,
+  picture: pictureHash(r.picture), sort: Number(r.sort), folder: MODE === "desktop" ? areaFolder(String(r.id)) : null, repo: repoOf(r.repo),
 });
 
 export async function listAreas(): Promise<Area[]> {
@@ -256,6 +256,14 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
 }
 
 /** Records the repository a project's folder on this computer is in (project-links.ts), for the other computers. */
+/** The repository an area's workspace holds (project-links.ts), for your other computers. */
+export async function setAreaRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (!value || !isUuid(id)) return;
+  const db = await accountDb();
+  check(await db.from("areas").update({ repo: value }).eq("id", id));
+}
+
 export async function setProjectRepo(id: string, repo: string) {
   const value = repoOf(repo);
   if (!value || !isUuid(id)) return;
@@ -512,12 +520,13 @@ export async function latestSession(taskId: number): Promise<Session | null> {
 
 export async function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; deviceId?: string | null; branch?: string | null; status?: SessionStatus;
-  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null;
+  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
 }): Promise<Session> {
   const db = await accountDb();
   const r = one(await db.from("sessions").insert({
     id: crypto.randomBytes(8).toString("hex"), task_id: input.taskId, agent: input.agent, surface: input.surface ?? "terminal",
-    device_id: input.deviceId ?? null, folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting", started_at: nowStamp(),
+    device_id: input.deviceId ?? null, folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting",
+    started_at: input.startedAt ?? nowStamp(), finished_at: input.finishedAt ?? null,
     cli_session_id: input.cliSessionId ?? null, continues_session_id: input.continuesSessionId ?? null,
   }).select().single());
   return toSession(r!);

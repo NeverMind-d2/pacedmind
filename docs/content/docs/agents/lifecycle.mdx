@@ -156,6 +156,10 @@ Without an answer in time, the question goes away and the agent is told to hand 
 
 An agent that was started by hand, and connected to PacedMind over MCP, can report on a task too. When it calls `start_task` without a session id of that task, and the task has no running session, PacedMind creates a session record for it (*Started outside PacedMind*), with the project's folder, and the session appears in **Sessions** like any other. An agent that hands a task back with `finish_task` without a session to report on gets such a session too. PacedMind refuses this for tasks that are yours. **Resume in terminal** reopens such a session in its folder, or the task's when it has none. Claude Code starts a new conversation there, because PacedMind doesn't know the one the agent was in. See [Resume a session](/agents/start-and-manage#resume-a-session).
 
+A session you started yourself can also be attached to a task from **Sessions**, with the conversation it had. See [Attach a session to a task](/views/sessions#attach-a-session-to-a-task).
+
+**Resume in terminal** and **Request changes** reopen a session in the folder its conversation ran in, as Claude Code's or Codex's own record of it on that computer says, since Claude Code finds a conversation only from there. When that folder is gone, they use the task's folder.
+
 ## What PacedMind records
 
 Each session keeps a list of events, shown in **Sessions** under **What PacedMind heard** and at the bottom of the task's details:

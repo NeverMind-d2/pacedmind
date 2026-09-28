@@ -70,7 +70,7 @@ const slug = (name: string, fallback: string) => name.toLowerCase().replace(/[^a
 
 const toArea = (r: Row): Area => ({
   id: String(r.id), name: String(r.name), key: String(r.key), color: String(r.color), icon: areaIconOf(r.icon),
-  picture: pictureHash(r.picture), sort: Number(r.sort), folder: areaFolder(String(r.id)),
+  picture: pictureHash(r.picture), sort: Number(r.sort), folder: areaFolder(String(r.id)), repo: repoOf(r.repo),
 });
 const areasNow = () => all("SELECT * FROM areas ORDER BY sort").map(toArea);
 
@@ -210,6 +210,12 @@ export async function updateProject(id: string, patch: Partial<Omit<Project, "id
 }
 
 /** Records the repository a project's folder on this computer is in (project-links.ts). */
+/** The repository an area's workspace holds (project-links.ts), for your other computers. */
+export async function setAreaRepo(id: string, repo: string) {
+  const value = repoOf(repo);
+  if (value) run("UPDATE areas SET repo = ? WHERE id = ?", value, id);
+}
+
 export async function setProjectRepo(id: string, repo: string) {
   const value = repoOf(repo);
   if (value) run("UPDATE projects SET repo = ? WHERE id = ?", value, id);
@@ -451,14 +457,14 @@ export async function latestSession(taskId: number): Promise<Session | null> {
 
 export async function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; deviceId?: string | null; branch?: string | null; status?: SessionStatus;
-  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null;
+  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
 }): Promise<Session> {
   const id = crypto.randomBytes(8).toString("hex");
   run(
-    `INSERT INTO sessions (id, task_id, agent, surface, folder, branch, status, started_at, cli_session_id, continues_session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    id, input.taskId, input.agent, input.surface ?? "terminal", input.folder, input.branch ?? null, input.status ?? "starting", nowStamp(),
-    input.cliSessionId ?? null, input.continuesSessionId ?? null,
+    `INSERT INTO sessions (id, task_id, agent, surface, folder, branch, status, started_at, finished_at, cli_session_id, continues_session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id, input.taskId, input.agent, input.surface ?? "terminal", input.folder, input.branch ?? null, input.status ?? "starting",
+    input.startedAt ?? nowStamp(), input.finishedAt ?? null, input.cliSessionId ?? null, input.continuesSessionId ?? null,
   );
   return (await getSession(id))!;
 }

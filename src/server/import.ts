@@ -8,6 +8,7 @@ import { folderProblem } from "./folders";
 import { mainCheckout, repoIdentity } from "./git-remote";
 import { linkFolder, linkProjects } from "./project-links";
 import * as repo from "./repo";
+import { MODE } from "./supabase";
 import type { AgentId, Project } from "@/lib/types";
 
 /*
@@ -324,4 +325,23 @@ export async function importProjects(items: ImportItem[], areaId: string): Promi
     }
   }
   return { created, linked, skipped };
+}
+
+/**
+ * This computer's copies of these repositories, for picking an area's workspace here: the folders of projects here
+ * and the folders you work in with Claude Code and Codex (import.ts) that hold one of them, by repository.
+ */
+export async function foldersOfRepos(repos: string[]): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  if (MODE !== "desktop" || !repos.length) return out;
+  const wanted = new Set(repos);
+  const seen = new Set<string>();
+  const found = await findProjects().catch((): FoundProject[] => []);
+  for (const folder of [...(await repo.listProjects()).flatMap((p) => (p.folder ? [p.folder] : [])), ...found.map((f) => f.folder)]) {
+    if (seen.has(folder)) continue;
+    seen.add(folder);
+    const id = repoIdentity(folder);
+    if (id && wanted.has(id)) (out[id] ??= []).push(folder);
+  }
+  return out;
 }

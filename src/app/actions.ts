@@ -24,6 +24,8 @@ import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
 import { answerHere, askedHere, withdrawHere } from "@/server/asks";
 import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
+import { repoIdentity } from "@/server/git-remote";
+import { attachOutsideSession, type AttachInput } from "@/server/attach";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
@@ -341,6 +343,21 @@ export async function finishSessionAction(sessionId: string): Promise<Result> {
   return done({ ok: true, message: (await launched(started)) ?? `${(await repo.getTask(s.taskId))?.key ?? "The task"} waits for your check` });
 }
 
+/**
+ * Attaches a session PacedMind didn't start to a task, or to a new one made from its title (attach.ts). From the app,
+ * for this computer's sessions; for another computer's, from anywhere: the session keeps running on that computer.
+ */
+export async function attachSessionAction(input: AttachInput): Promise<Result & { sessionId?: string }> {
+  await guard();
+  const r = await attachOutsideSession({
+    computer: String(input.computer), harness: input.harness, ref: String(input.ref),
+    taskId: typeof input.taskId === "number" ? input.taskId : null, title: typeof input.title === "string" ? input.title.slice(0, 200) : undefined,
+    projectId: typeof input.projectId === "string" ? input.projectId : null,
+  });
+  if (!r.ok) return { ok: false, error: r.error };
+  return done({ ok: true, message: r.message, sessionId: r.session.id });
+}
+
 /** Closes a session by hand, e.g. when its terminal was closed or it got stuck before the agent checked in. */
 export async function closeSessionAction(sessionId: string): Promise<Result> {
   await guard();
@@ -622,6 +639,9 @@ export async function setAreaFolderAction(id: string, folder: string | null): Pr
   const changed = area.folder !== next;
   const error = setAreaFolder(id, next, inheriting.map((p) => p.id));
   if (error) return { ok: false, error };
+  // The repository it holds, so your other computers can offer their copy of it.
+  const holds = next ? repoIdentity(next) : null;
+  if (holds && holds !== area.repo) await repo.setAreaRepo(id, holds);
   return done({ ok: true, message: changed && inheriting.some((p) => p.flowOn)
     ? "Workspace saved. Flows that inherit it are paused; switch them on again to use the new folder."
     : "Workspace saved" });

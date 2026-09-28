@@ -9,7 +9,8 @@ import { execFileSync, spawn } from "node:child_process";
 import { trustCheck, trustForClaude } from "./claude-trust";
 import { trustForCodex } from "./codex-trust";
 import { claudeMcpEntry, cliBinary, cliCommand, codexMcpTable, deviceIdFor, localTools, runsHere, thisDeviceId, toolsCheckedAt } from "./devices";
-import { repoRoot } from "./folders";
+import { folderProblem, repoRoot } from "./folders";
+import { conversationFolder } from "./other-sessions";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { MODE } from "./supabase";
@@ -741,6 +742,18 @@ export function resumeProblem(session: Session, to?: Surface): string | null {
 }
 
 /**
+ * Where a session picks up again: the folder its conversation ran in, as the agent's own record on this computer says
+ * (Claude Code finds a conversation only from there; for a session attached from outside PacedMind, that's the only
+ * folder it knows), else the task's. `own` when it's the conversation's: that folder is where you ran the agent
+ * yourself, so its trust isn't answered for you.
+ */
+function resumeFolder(session: Session, task: Task): { folder?: string; error?: string; own?: boolean } {
+  const cli = session.cliSessionId && session.surface === "terminal" ? conversationFolder(session.agent, session.cliSessionId) : null;
+  if (cli && !folderProblem(cli)) return { folder: cli, own: true };
+  return resolveFolder(task);
+}
+
+/**
  * Picks a session up again: a terminal session reopens its terminal (Claude resumes the same conversation), a
  * desktop session shows its app, and a cloud session opens in a terminal with `claude --teleport` (Claude) or on
  * the web (Codex). The folder comes from this computer, never from the session's record in the cloud.
@@ -758,14 +771,14 @@ export function resumeSession(sessionId: string, to?: Surface): Promise<LaunchRe
     if (!task) return { ok: false, error: "The task is gone" };
     const bad = checkTask(task);
     if (bad) return { ok: false, error: bad };
-    const { folder, error } = resolveFolder(task);
+    const { folder, error, own } = resumeFolder(session, task);
     if (!folder) return { ok: false, error };
     const dir = sessionDir(session.id);
     const title = safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60);
     const surface = to ?? session.surface;
     const modelProblem = await checkModelSettings(task, session.agent, surface);
     if (modelProblem) return { ok: false, error: modelProblem };
-    trustAhead(session.agent, folder);
+    if (!own) trustAhead(session.agent, folder);
     const trust = surface !== "desktop" && asksTrust(session.agent, folder);
     let failed: string | null;
     let text: string;
@@ -843,7 +856,7 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     if (elsewhere) return { ok: false, error: elsewhere };
     const modelProblem = await checkModelSettings(task, session.agent, "terminal");
     if (modelProblem) return { ok: false, error: modelProblem };
-    const { folder, error } = resolveFolder(task);
+    const { folder, error, own } = resumeFolder(session, task);
     if (!folder) return { ok: false, error };
     const dir = sessionDir(session.id);
     const token = issueSessionToken(session.id, task.id);
@@ -852,7 +865,7 @@ export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
     // The new conversation counts before its terminal opens, so a terminal still open on the old one can't end the
     // session. Codex's new one says its id through its SessionStart hook.
     if (conversation !== session.cliSessionId) await repo.updateSession(session.id, { cliSessionId: conversation });
-    trustAhead(session.agent, folder);
+    if (!own) trustAhead(session.agent, folder);
     const trust = asksTrust(session.agent, folder);
     const failed = openTerminal(dir, folder, safe(`${task.key} · ${AGENT_LABEL[session.agent]}`, 60), a.command, token, device.terminal, a);
     if (failed) {

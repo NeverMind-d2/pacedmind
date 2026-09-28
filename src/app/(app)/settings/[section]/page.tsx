@@ -15,6 +15,7 @@ import { folderExtras, serverChoices } from "@/server/extras";
 import { encryptedAtRest } from "@/server/secure-file";
 import { MODE, authState } from "@/server/supabase";
 import { cloudMcpUrl } from "@/server/supabase-config";
+import { foldersOfRepos } from "@/server/import";
 import { settingsMenu, type SettingsSection } from "@/lib/settings-menu";
 import type { DeviceSettings, ProjectAgentsView } from "@/lib/types";
 
@@ -92,7 +93,9 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
         const folder = p.folder ?? areas.find((a) => a.id === p.areaId)?.folder ?? null;
         return [p.id, { extras: folder ? folderExtras(folder) : null, choices: serverChoices(folder), servers: projectServers(p.id) }];
       })) : null;
-      return <ProjectSettings projects={projects} areas={areas} desktop={desktop} agents={agents} platform={process.platform} />;
+      // This computer's copies of the repositories areas' workspaces hold elsewhere, for areas without a workspace here.
+      const copies = desktop ? await foldersOfRepos(areas.flatMap((a) => (a.repo && !a.folder ? [a.repo] : []))) : {};
+      return <ProjectSettings projects={projects} areas={areas} desktop={desktop} agents={agents} platform={process.platform} copies={copies} />;
     }
     case "mcp": {
       // Your own agents use PacedMind Cloud's MCP server once there's an account; this computer's without one. And the

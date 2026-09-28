@@ -37,6 +37,8 @@ An area's icon or picture replaces its dot in the sidebar, on the **Projects** p
 
 An area's workspace can be the same folder as an existing project in Codex or Claude. Its sessions then use that folder instead of creating one per task. The setting also appears under **Settings → Projects → Area workspaces**, and stays on this computer. A task's own folder takes priority, followed by its project's folder, then its area's workspace.
 
+When the workspace is in a git repository, PacedMind notes which one, as it does for a project's folder: `github.com/owner/name`, shown next to *Workspace for …* as a link to it. Your other computers see it: when an area has no workspace on a computer yet, **Settings → Projects → Area workspaces** there says *On your other computers this workspace holds github.com/owner/name. It's at … here.* and lists that computer's copies of the repository first, found among its projects' folders and the folders you work in with Claude Code and Codex. Pick one and select **Save workspace**; nothing is set without you.
+
 A picture is made small on your computer before it's saved, as a square of 64 pixels at most with the whole picture fitted in, so a square one, such as a company's app icon, shows best. It's saved with the area, so it shows on your other computers and in the web app too. Anything but a picture is refused with *Pick a picture: PNG, JPEG, WebP, GIF or SVG.*
 
 Deleting an area also deletes its projects. Their tasks, and the area's own tasks, are kept and move to the Inbox; the confirmation says how many. Activities in the area stay in the calendar without an area.
@@ -140,7 +142,7 @@ Two projects for the same work, such as the ones two computers made before they 
 
 ### The project page
 
-Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens, $3.40 at API prices*; see [What it used](/agents/lifecycle#what-it-used)), and has **Roadmap** and **Flow** buttons for the project's other views. **New task** adds a task to the project.
+Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens, $3.40 at API prices*; see [What it used](/agents/lifecycle#what-it-used)), and has **Roadmap** and **Flow** buttons for the project's other views. When PacedMind knows the project's repository, or else its area's, a link such as **github.com/owner/name** opens it; in a narrow window it shows its icon only. An area's page has the same link for its workspace's repository. **New task** adds a task to the project.
 
 ## Project folders
 
