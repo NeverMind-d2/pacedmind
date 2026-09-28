@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { MODE, authState, supabase } from "@/server/supabase";
+import { cloudMcpUrl } from "@/server/supabase-config";
 import { nextStep, withNext } from "@/server/auth-flow";
 import { AuthShell } from "@/app/login/shell";
 import { ConsentForm } from "./consent-form";
@@ -71,6 +72,8 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
   const held = "redirect_url" in data ? data.redirect_url : null;
   const name = details?.client.name?.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 100).trim() || null;
   const to = destination(details?.redirect_uri ?? held ?? "");
+  // The MCP server the agent gets: this app's own. Where the sign-in goes back to (`to`) is the agent's, not the server.
+  const server = new URL(cloudMcpUrl()).host;
 
   return (
     <AuthShell note={<>Signed in as {state!.user.email}.</>}>
@@ -80,7 +83,12 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
           agent sessions. It can&apos;t start sessions on your computers, answer for you, change your computers or delete your account.
         </p>
         <div className="flex flex-col gap-1.5 rounded-md border border-line2 px-3 py-2.5 text-[12.5px] text-fg3">
-          <span>Returns to <span className="font-mono text-fg2">{to.host}</span>{to.local ? " (this computer)" : ""}</span>
+          <span>Connects to <span className="font-mono text-fg2">{server}</span> (PacedMind Cloud)</span>
+          <span>
+            {to.local ? "Hands the sign-in back to the agent on this computer" : "Hands the sign-in back to"}
+            {" "}<span className="font-mono text-fg2">{to.host}</span>
+            {to.local ? ", where it waits for it only while it signs in" : ""}
+          </span>
           {!to.local && <span className="text-fg">Only allow an agent that returns somewhere you recognize.</span>}
         </div>
         <p className="text-[12px] leading-relaxed text-mut2">
