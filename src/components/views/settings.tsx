@@ -338,7 +338,7 @@ export function PlanSettings({ plan }: { plan: Plan }) {
   };
   return (
     <Section
-      note={`Cloud keeps your tasks, plans and sessions on all your computers and in the browser. A year costs ${YEARLY_MONTHS} months' worth. Payments go through Stripe: PacedMind never sees your card.`}>
+      note={`Cloud stores your tasks, plans and sessions in your PacedMind account, so you have them on every computer and in the web app. A year costs ${YEARLY_MONTHS} months' worth. Payments go through Stripe: PacedMind never sees your card.`}>
       <Row label="Plan">
         <span className="flex-1 text-[12.5px] text-fg2" suppressHydrationWarning>{status[plan.state]}</span>
       </Row>

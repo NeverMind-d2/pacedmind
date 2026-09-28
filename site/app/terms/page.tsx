@@ -67,8 +67,10 @@ export default function Terms() {
 
       <H2>Payments</H2>
       <p>
-        Payments are handled by Stripe. You enter your card on Stripe&rsquo;s page; we never see or store it. Invoices and receipts are
-        in <strong>Manage billing</strong>. A business can give its VAT ID when subscribing.
+        Stripe sells the subscription to you as the merchant of record: it takes the payment, charges and pays the VAT, and sends the
+        receipts and invoices, which are also in <strong>Manage billing</strong>. You enter your card on Stripe&rsquo;s page; we never see
+        or store it. A business can give its VAT ID when subscribing. These terms still govern PacedMind and Cloud themselves, and our
+        refund promise below.
       </p>
 
       <H2>Right of withdrawal and refunds</H2>
