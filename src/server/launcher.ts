@@ -74,8 +74,14 @@ const CODEX_TASK_URL = /^https:\/\/chatgpt\.com\/codex\/tasks\/[\w-]+$/;
  */
 const safe = (s: string, max = 400) => s.replace(/\s+/g, " ").replace(/[^\p{L}\p{N} .,:_\-·/]/gu, "").replace(/ {2,}/g, " ").trim().slice(0, max);
 
+/** Lead with the task title for the agent's session name, bounded separately so it cannot cut off start_task. */
+function sessionTitlePrompt(task: Task): string {
+  const title = safe(task.title, 200) || safe(task.key, 20);
+  return `Task title: ${title}. Use the task title as the session name. `;
+}
+
 export function kickoffPrompt(task: Task, sessionId: string): string {
-  return safe(
+  return sessionTitlePrompt(task) + safe(
     `PacedMind task ${task.key}, session ${sessionId}. Call the ${MCP_NAME} MCP tool start_task with task ${task.key} and session ${sessionId}, then follow the instructions it returns.`,
   );
 }
@@ -85,7 +91,7 @@ export function kickoffPrompt(task: Task, sessionId: string): string {
  * (see requestChanges in ops.ts).
  */
 export function changesPrompt(task: Task, sessionId: string): string {
-  return safe(
+  return sessionTitlePrompt(task) + safe(
     `PacedMind task ${task.key}, session ${sessionId}: the user reviewed your work and wrote back. Call the ${MCP_NAME} MCP tool start_task with task ${task.key} and session ${sessionId} to read it, then follow the instructions it returns.`,
   );
 }

@@ -31,11 +31,13 @@ When a session starts, from a task, from **Sessions**, from a flow or at an agen
    * **in Codex cloud**: sends the task with `codex cloud exec` (*Sending it to Codex cloud*), and marks the session **Running** with the task's link once Codex takes it on (*Codex cloud took it on in the my-app environment*);
 4. sets the task's **Done by** to that agent, and moves a task in **Todo** or **Backlog** to **In progress**.
 
-The agent's first message names the task and the session:
+The agent's first message starts with the task title and asks the agent to use it as the session name, then identifies the task and session for PacedMind:
 
 ```text
-PacedMind task DEV-22, session 3f2a9c1b. Call the pacedmind MCP tool start_task with task DEV-22 and session 3f2a9c1b, then follow the instructions it returns.
+Task title: Start sessions from the app. Use the task title as the session name. PacedMind task DEV-22, session 3f2a9c1b. Call the pacedmind MCP tool start_task with task DEV-22 and session 3f2a9c1b, then follow the instructions it returns.
 ```
+
+New conversations opened through **Request changes** or **Answer its questions** receive the same title instruction. The agent controls the name it displays; existing conversations keep their names.
 
 A cloud session can't call PacedMind's tools, so its first message carries the whole task instead: the key and title, the description, the **Done when** list, the sub-tasks as a checklist, and the instruction to work on a new branch named after the key, such as `agent/dev-22`, and to open a pull request when the work is ready for review.
 

@@ -22,8 +22,8 @@ const WINDOW = 3 * 86_400_000;
 const WORKING_MS = 2 * 60_000;
 /** Nothing for six hours: idle. */
 const IDLE_MS = 6 * 3_600_000;
-/** The first message of a session PacedMind started (launcher.ts): it shows among PacedMind's own. */
-const PACEDMIND = /^PacedMind task [A-Z][A-Z0-9]{1,7}-\d+, session [0-9a-f]{16}/;
+/** The first message of a session PacedMind started, with or without the task title (launcher.ts). */
+const PACEDMIND = /^(?:Task title: .{1,200}\. Use the task title as the session name\. )?PacedMind task [A-Z][A-Z0-9]{1,7}-\d+, session [0-9a-f]{16}/;
 
 const claudeDir = () => process.env.CLAUDE_CONFIG_DIR || home;
 const codexHome = () => process.env.CODEX_HOME || path.join(home, ".codex");

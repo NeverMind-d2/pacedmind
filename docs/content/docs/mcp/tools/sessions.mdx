@@ -79,7 +79,7 @@ The task's latest session must have handed the task back: it's **Finished**, or 
 Claude Code and Codex both start a new conversation, with the changes and the last report from `start_task`. Claude Code doesn't resume its earlier conversation, so that PacedMind's tools are connected when it reads its first message. The new conversation has its own id, so closing a terminal still open on the old one doesn't close the reopened session. The first message reads:
 
 ```text
-PacedMind task DEV-22, session 3f2a9c1b: the user reviewed your work and wrote back. Call the pacedmind MCP tool start_task with task DEV-22 and session 3f2a9c1b to read it, then follow the instructions it returns.
+Task title: Start sessions from the app. Use the task title as the session name. PacedMind task DEV-22, session 3f2a9c1b: the user reviewed your work and wrote back. Call the pacedmind MCP tool start_task with task DEV-22 and session 3f2a9c1b to read it, then follow the instructions it returns.
 ```
 
 Answers to the agent's questions, sent with **Answer its questions** in the app, go back the same way. See [Answer the agent's questions](/agents/review#answer-the-agents-questions).
