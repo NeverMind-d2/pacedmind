@@ -106,13 +106,14 @@ Everything else is the same as on the desktop app's server, with 39 of the 41 [t
 
 ## Connected agents
 
-**Settings → Connected agents** lists the agents you allowed: each with its name and *Signed in* with the date, or *Allowed, waiting for it to sign in* in the minutes after you allowed it. **Disconnect** ends an agent's sign-in at once, after the confirmation *Disconnect Claude Code? It loses access to PacedMind at once.*; to use PacedMind again, it signs in and you allow it again.
+**Settings → Connected agents** lists the agents you allowed: each with its name and *Signed in* with the date, or *Allowed, waiting for it to sign in* until its sign-in is confirmed. **Disconnect** ends every sign-in of that agent at once, after the confirmation *Disconnect Claude Code? It loses access to PacedMind at once.*; to use PacedMind again, it signs in and you allow it again.
 
 Signing out everywhere (**Settings → Account → Sign out all**) also ends every agent's sign-in.
 
 ## Security
 
-* An agent's sign-in counts only once you allowed it on PacedMind's page from a browser signed in with your two-factor code. A password alone can't allow an agent, and each approval works for one sign-in of that agent, within ten minutes.
+* An agent's sign-in counts only once you allowed it on PacedMind's page from a browser signed in with your two-factor code. A password alone can't allow an agent, and each approval works for the one sign-in that comes of the request you allowed.
+* If another sign-in of the same agent starts in the same few minutes, as when someone who has your password tries to slip in, neither counts: both are signed out, and connecting the agent again asks you again. If that happens without a reason you know of, change your password.
 * The database itself checks every request against that approval, so a sign-in you didn't allow reads nothing, and one you disconnected stops working at once, not when its token expires.
 * Agents keep their sign-in in their own credential store; nothing about it goes into their settings files.
 * Requests from web pages (with an `Origin` header) are refused.

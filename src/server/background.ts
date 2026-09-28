@@ -4,7 +4,9 @@ import { checkThisDevice, saveToolsOnce } from "./devices";
 import { tick, watchStatuses } from "./flow";
 import { mcpUrl } from "./launcher";
 import { linkProjects } from "./project-links";
+import * as repo from "./repo";
 import { syncDevice } from "./requests";
+import { usesCloud } from "./scope";
 import { MODE, NotSignedIn, authState } from "./supabase";
 
 const CHECK_EVERY = 30 * 60_000;
@@ -13,6 +15,7 @@ const CHECK_EVERY = 30 * 60_000;
 export function startBackground() {
   const g = globalThis as unknown as {
     __organizerTick?: NodeJS.Timeout; __organizerSync?: NodeJS.Timeout; __organizerCloud?: NodeJS.Timeout; __organizerLinks?: NodeJS.Timeout;
+    __organizerAgents?: NodeJS.Timeout;
   };
   if (MODE !== "desktop" || g.__organizerTick) return;
 
@@ -67,4 +70,9 @@ export function startBackground() {
   g.__organizerCloud = every(60_000, "Codex cloud check", checkCodexCloud);
   // Which repository each project is, for your other computers, and this computer's folders after merges elsewhere.
   g.__organizerLinks = every(60_000, "project links", linkProjects);
+  // Agents you allowed on PacedMind Cloud's MCP server: asking for them binds each approval to the sign-in that came of
+  // it, also for an agent that signed in (codex mcp login) without calling the server yet. Nothing without an account.
+  g.__organizerAgents = every(60_000, "agent sign-ins", async () => {
+    if (await usesCloud()) await repo.listConnectedAgents();
+  });
 }

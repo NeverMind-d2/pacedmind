@@ -58,7 +58,9 @@ async function authorizeAgent(token: string): Promise<McpCaller | Response> {
       const db = await supabase();
       const { data, error } = await db.rpc("claim_agent_login");
       if (error || data !== true) {
-        return signInFirst("invalid_token", "PacedMind didn't approve this sign-in. Connect the agent again and allow it on the page that opens.");
+        return signInFirst("invalid_token",
+          "PacedMind didn't approve this sign-in. Connect the agent again and allow it on the page that opens. " +
+          "(If another sign-in of this agent started at the same moment, neither counts.)");
       }
       if (claimed.size > 10_000) claimed.clear();
       claimed.set(state.sessionId, Date.now() + 10 * 60_000);

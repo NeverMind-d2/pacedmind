@@ -174,7 +174,7 @@ export function VerifyForm({ factors, backupCodes, next }: { factors: { id: stri
 
 /* ---------- setting up an authenticator ---------- */
 
-export function SetupForm({ first, email }: { first: boolean; email: string }) {
+export function SetupForm({ first, email, next }: { first: boolean; email: string; next?: string | null }) {
   const router = useRouter();
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [code, setCode] = useState("");
@@ -228,7 +228,7 @@ export function SetupForm({ first, email }: { first: boolean; email: string }) {
         </p>
         <div className="flex gap-2">
           <Button type="button" onClick={() => router.push("/login/setup?add=1")} className="h-9 flex-1 justify-center">Add a second one</Button>
-          <Button type="button" variant="primary" onClick={() => router.push("/today")} className="h-9 flex-1 justify-center">Continue</Button>
+          <Button type="button" variant="primary" onClick={() => router.push(next ?? "/today")} className="h-9 flex-1 justify-center">Continue</Button>
         </div>
       </div>
     );
