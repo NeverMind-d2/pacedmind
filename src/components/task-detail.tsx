@@ -11,6 +11,7 @@ import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote
 import { AskCard } from "./ask-card";
 import { RequestStatus, useComputer } from "./request-status";
 import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
+import { agentUseLine, hasUse } from "@/lib/usage";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
   type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
@@ -93,6 +94,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const area = ctx.areas.find((a) => a.id === task.areaId) ?? null;
   const project = ctx.projects.find((p) => p.id === task.projectId) ?? null;
   const session = ctx.sessions[task.id] ?? null;
+  const use = ctx.agentUse?.[task.id];
   const events = session ? ctx.sessionEvents[session.id] ?? [] : [];
   // Null when the task is yours: then it never starts an agent session.
   const agent = agentOf(task, project?.agent);
@@ -385,6 +387,13 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
           </Prop>
           {/* A row of its own under Start, so Session stays level with the button. */}
           {agent && (!session || session.status === "failed") && trustHint("col-start-2 px-2 pb-1")}
+          {/* What its sessions used, as their agents reported it. */}
+          {hasUse(use) && (
+            <Prop label="Usage">
+              <span title="As the agents reported it. The price is what these tokens cost through the API; on a plan, not what you pay."
+                className="flex h-7 items-center truncate px-2 text-fg2">{agentUseLine(use)}</span>
+            </Prop>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">

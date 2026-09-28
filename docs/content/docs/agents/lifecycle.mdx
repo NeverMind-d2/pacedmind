@@ -101,16 +101,36 @@ While a session runs, PacedMind hears when its agent stops to wait for you in it
 | Asks for your permission, such as to run a command | *Claude Code asks for your permission in its terminal: …* | *Asks your permission* | *asks your permission* | *DEV-22 asks for your permission* |
 | Asks you something in its terminal | *Claude Code asks you something in its terminal: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
 | Asked you a question with `ask_user` or `report_progress` | *Claude Code asks you: …* | *Has a question* | *has a question* | *DEV-22 has a question for you* |
+| Stopped at a usage limit, of your plan or your API credit | *Claude Code stopped at a usage limit: …*, with what Claude Code said, such as when the limit resets | *Paused: usage limit* | *paused: usage limit* | *DEV-22 stopped at a usage limit* |
+| Stopped on another error from the API, after trying again | *Claude Code stopped on an error and waits for you in its terminal: …* | *Waiting for you* | *waiting for you* | *DEV-22 is waiting for you* |
 
 In the task list, hover over the words to read the whole line; on a phone, only the dot shows. In **Sessions**, the session stays under **Running**, with a navy dot like a finished one. The desktop app notifies once each time the agent starts waiting, with the task's title and the line above, and a click opens the session; the tray icon's tooltip counts these sessions with the finished ones. See [Notifications](/desktop-app#notifications).
 
-The session is back at work as soon as the agent is: when you answer in its terminal (*You answered in its terminal, and Claude Code went on*), when you answer its question in PacedMind (*You answered in PacedMind, and Claude Code went on: …*), when you allow what it asked (*You allowed it in its terminal, and Claude Code went on*), or when it calls PacedMind again (*Claude Code went on*).
+The session is back at work as soon as the agent is: when you answer in its terminal (*You answered in its terminal, and Claude Code went on*), when you answer its question in PacedMind (*You answered in PacedMind, and Claude Code went on: …*), when you allow what it asked (*You allowed it in its terminal, and Claude Code went on*), or when it calls PacedMind again (*Claude Code went on*). After a usage limit: when Claude Code waited for the limit to reset and went on by itself (*The usage limit reset, and Claude Code went on*), when you write in its terminal (*You wrote in its terminal, and Claude Code went on*), or when it runs a tool again (*Claude Code went on*).
 
 How PacedMind hears it depends on the agent:
 
-* **Claude Code in a terminal**: the hooks PacedMind installs for the session report when its turn ends, when it shows a permission prompt or a question, or a reminder that it's still waiting, when you send it a message, and, while it waits for your permission, when it runs the tool.
+* **Claude Code in a terminal**: the hooks PacedMind installs for the session report when its turn ends, when an error from the API ends it (such as a usage limit), when it shows a permission prompt or a question, or a reminder that it's still waiting, when it goes on after a usage limit reset, when you send it a message, and, while it waits for your permission or after a usage limit, when it runs a tool.
 * **Codex in a terminal**: the hooks PacedMind gives the session report when its turn ends, when it asks for your permission, when you send it a message, and, while it waits for your permission, when it runs the tool. Codex runs them once you've trusted them: the first time, it asks *Hooks need review* in its terminal; choose **Trust all and continue**. They're the same in every session, so it asks once per computer. Until then, and with a Codex older than 0.150, only the end of a turn shows (its `notify` program), and PacedMind hears it went on when it next calls PacedMind. Codex has no hook for a question it asks in its terminal.
 * **Desktop apps** have no such hooks: only the questions the agent asks with `ask_user` or `report_progress` show there. Sessions in **the cloud** can't reach PacedMind.
+
+## What it used
+
+A session PacedMind starts in a terminal reports what its agent used: the tokens it read and wrote, and how long it worked. Claude Code also reports what those tokens cost at API prices. It shows
+
+* in **Sessions**, in the session's details: **Working**, **Tokens**, **API price** and **Model**. See [Session details](/views/sessions#session-details);
+* in the task's details, as **Usage**, for all the task's sessions: *262k tokens · $0.31 at API prices · 1 min working · 1 session*;
+* in a project's header, for all its tasks: *agents: 1.2M tokens, $3.40 at API prices*;
+* to agents, in `list_sessions` (*used …*) and `get_task` (*Agents used: …*).
+
+Tokens count everything the agent read and wrote, most of it read again from its cache, which costs far less. On a plan (Pro, Max, ChatGPT), the API price is what the same tokens would cost through the API, not what you pay.
+
+The agents send these numbers themselves, as usage metrics (OpenTelemetry), to PacedMind on your computer every 30 seconds and when they exit, with the session's own token. PacedMind keeps only the numbers and the model's name: what else the metrics carry, such as the account's email, is dropped as it arrives. No messages are sent, yours or the agent's.
+
+* **Claude Code** reports tokens, the API price, its working time and the model.
+* **Codex 0.150 and later** reports tokens, its working time and the model. Codex doesn't price them.
+* **Desktop apps and the cloud** report nothing, and neither does a session started outside PacedMind.
+* **When you send Claude Code's or Codex's telemetry somewhere yourself**, in its settings (Claude Code's `settings.json`, its managed settings, or Codex's `config.toml`) or in PacedMind's environment, PacedMind leaves it as it is, and those sessions report nothing.
 
 ## Answer while it works
 
@@ -152,6 +172,10 @@ Each session keeps a list of events, shown in **Sessions** under **What PacedMin
 | *Claude Code ran into a problem:* and a message | The agent reported a problem with `report_progress`. |
 | *Claude Code asks you:* and a question | The agent asked you something with `ask_user` or `report_progress`. |
 | *Claude Code is waiting for you in its terminal*, with its last message | The agent's turn ended in its terminal. |
+| *Claude Code stopped at a usage limit:* and what Claude Code said | A usage limit of your plan, or your API credit, ended Claude Code's turn. |
+| *Claude Code stopped on an error and waits for you in its terminal:* and the error | Another error from the API ended Claude Code's turn, after it tried again. |
+| *The usage limit reset, and Claude Code went on* | Claude Code waited for its usage limit to reset and went on by itself. |
+| *You wrote in its terminal, and Claude Code went on* | You sent Claude Code a message after it stopped at a usage limit. |
 | *Claude Code asks for your permission in its terminal:* and what it asks | Claude Code showed a permission prompt. |
 | *Claude Code asks you something in its terminal:* and what it asks | Claude Code asked you a question in its terminal. |
 | *You answered in its terminal, and Claude Code went on* | You sent Claude Code a message while it waited for you. |

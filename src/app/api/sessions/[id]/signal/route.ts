@@ -12,7 +12,7 @@ const MAX_BODY = 64 * 1024;
 
 /**
  * Called by the hooks the launcher installs in a session's terminal (signals.ts), with that session's token:
- * `?kind=stop|notify|prompt|tool` from Claude Code (and Codex's hooks, with `start` from its SessionStart), `turn` from
+ * `?kind=stop|failure|notify|prompt|tool` from Claude Code (and Codex's hooks, with `start` from its SessionStart), `turn` from
  * Codex's notify, and `cli`, the Claude Code
  * conversation. The answer never has a body, whatever happens: what a UserPromptSubmit hook prints goes into the
  * agent's conversation. A token that doesn't work (any more) gets the same empty answer as one that does: after a
@@ -27,7 +27,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const who = await authorizeHook(req);
   if (!who || who.kind !== "session") return new Response(null, { status: 204 });
   let payload: Record<string, unknown> = {};
-  if (kind === "stop" || kind === "notify" || kind === "turn" || kind === "start" || (kind === "tool" && holdsPermission(who.sessionId))) {
+  if (kind === "stop" || kind === "failure" || kind === "notify" || kind === "turn" || kind === "start" || (kind === "tool" && holdsPermission(who.sessionId))) {
     const text = await req.text().catch(() => "");
     if (text.length <= MAX_BODY) {
       try {

@@ -9,6 +9,7 @@ import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
 import { agentOf, isLiveSession, type Area, type Project, type Session, type Task, type TaskContext, type Usage } from "@/lib/types";
+import { NO_USE, addUse, sessionUse, type AgentUse } from "@/lib/usage";
 
 export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const ids = new Set(tasks.map((t) => t.id));
@@ -20,6 +21,9 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
   const shown = Object.values(sessions).map((s) => s.id);
   const [sessionEvents, reports, pending] = await Promise.all([repo.sessionEventsFor(shown), repo.reportsForTasks([...ids]), repo.pendingImages(shown)]);
   const live = new Set(all.filter(isLiveSession).map((s) => s.taskId));
+  // What every session of each task used, as its agent reported it.
+  const agentUse: Record<number, AgentUse> = {};
+  for (const s of all) if (ids.has(s.taskId)) agentUse[s.taskId] = addUse(agentUse[s.taskId] ?? NO_USE, sessionUse(s));
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const changesOk: Record<string, boolean> = {};
   // Changes for a session that ran elsewhere go to its computer as a request (requestChangesRemoteAction).
@@ -36,6 +40,7 @@ export async function taskContext(tasks: Task[]): Promise<TaskContext> {
     desktop: MODE === "desktop", deviceId: MODE === "desktop" && (await usesCloud()) ? thisDeviceId() : null,
     asksTrust: MODE === "desktop" ? asksTrust(tasks, sessions, projects) : undefined,
     tools: await accountTools(),
+    agentUse,
   };
 }
 

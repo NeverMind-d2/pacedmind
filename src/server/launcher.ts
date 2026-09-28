@@ -13,7 +13,7 @@ import * as repo from "./repo";
 import { MODE } from "./supabase";
 import { activeDevice } from "./scope";
 import { dataDir, deviceConfig, issueSessionToken, projectFolder, projectServers } from "./device";
-import { claudeServers, codexServersOff } from "./extras";
+import { TELEMETRY_VAR, claudeServers, claudeTelemetrySet, codexServersOff, codexTelemetrySet } from "./extras";
 import { HOST_SESSION_VARS, agentEnv, execLine, openUrl } from "./shell";
 import { nowStamp } from "@/lib/dates";
 import { terminalFor } from "@/lib/terminals";
@@ -149,10 +149,56 @@ function claudeHook(url: string, token: string, body: boolean, timeout = 10) {
   return { type: "command", command: `curl -s -m 5 -o ${DEV_NULL} -X POST -H "Authorization: Bearer ${token}"${data} "${url}"`, timeout: 10 };
 }
 
+/** Whether the environment PacedMind starts terminals with sends the agents' telemetry somewhere already. */
+function telemetryInEnv(): boolean {
+  const env = agentEnv();
+  return Object.keys(env).some((k) => TELEMETRY_VAR.test(k) && !!env[k]);
+}
+
+/**
+ * What sends a Codex session's usage metrics to its usage route (usage-metrics.ts): its [otel] metrics exporter, as
+ * JSON, and the session's token as the exporter's header from the terminal's environment (Codex doesn't read variables
+ * in a header's value). Its other telemetry stays as your config has it; nothing when your config or the environment
+ * sends its metrics somewhere, or for a Codex before 0.150.
+ */
+function codexUsage(sessionId: string, token: string): { flag: string; env: Record<string, string> } | null {
+  if (!codexHooksOn() || telemetryInEnv() || codexTelemetrySet()) return null;
+  const value = `otel.metrics_exporter={otlp-http={endpoint="${baseUrl()}/api/sessions/${sessionId}/usage",protocol="json"}}`;
+  return {
+    flag: process.platform === "win32" ? ` -c "${value.replace(/"/g, '\\"')}"` : ` -c '${value}'`,
+    env: {
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: `Authorization=Bearer ${token}`,
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "delta",
+      OTEL_METRIC_EXPORT_INTERVAL: "30000",
+    },
+  };
+}
+
+/**
+ * What sends a Claude Code conversation's usage metrics to its session's usage route (usage-metrics.ts): tokens, their
+ * cost at API prices and its active time, as OpenTelemetry metrics in JSON every half minute, with the session's token.
+ * Only metrics: no events, so nothing of what you or the agent write. Null when you send Claude Code's telemetry
+ * somewhere yourself (in the environment PacedMind starts terminals with, your settings or the managed ones), which
+ * PacedMind leaves as it is: those sessions show no usage.
+ */
+function usageEnv(route: string, cli: string, token: string): Record<string, string> | null {
+  if (telemetryInEnv() || claudeTelemetrySet()) return null;
+  return {
+    CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+    OTEL_METRICS_EXPORTER: "otlp",
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: "http/json",
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: `${route}/usage?cli=${cli}`,
+    OTEL_EXPORTER_OTLP_METRICS_HEADERS: `Authorization=Bearer ${token}`,
+    OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: "delta",
+    OTEL_METRIC_EXPORT_INTERVAL: "30000",
+    OTEL_METRICS_INCLUDE_ACCOUNT_UUID: "false",
+  };
+}
+
 /**
  * The MCP config and the hooks for one Claude Code conversation (`cli`). SessionEnd closes the session when its
- * terminal closes; the others tell PacedMind when the agent waits for you, asks for your permission, or goes back to
- * work (signals.ts). The hooks name their conversation, and each conversation has its own settings file, so a
+ * terminal closes; the others tell PacedMind when the agent waits for you, asks for your permission, stops at a usage
+ * limit, or goes back to work (signals.ts). Its `env` sends its usage metrics (usageEnv). The hooks name their conversation, and each conversation has its own settings file, so a
  * terminal still open on an older conversation of the session says nothing about it. `servers`: the other MCP
  * servers the session gets when its project picks them (Settings), which it then gets alone (--strict-mcp-config).
  * Like the token, their definitions stay in files only you can read, deleted when the session ends.
@@ -171,11 +217,15 @@ function writeClaudeConfig(dir: string, sessionId: string, cli: string, token: s
   const signal = (kind: string, body: boolean, matcher?: string) => [{
     ...(matcher ? { matcher } : {}), hooks: [claudeHook(`${route}/signal?kind=${kind}&cli=${cli}`, token, body)],
   }];
+  const env = usageEnv(route, cli, token);
   const settings = {
+    ...(env ? { env } : {}),
     hooks: {
       SessionEnd: [{ hooks: [claudeHook(`${route}/ended?cli=${cli}`, token, false)] }],
       Stop: signal("stop", true),
-      Notification: signal("notify", true, "permission_prompt|idle_prompt|elicitation_dialog|agent_needs_input"),
+      // An error from the API ended its turn: a usage limit, or one it gave up on.
+      StopFailure: signal("failure", true),
+      Notification: signal("notify", true, "permission_prompt|idle_prompt|elicitation_dialog|agent_needs_input|quota_auto_resume_fired"),
       UserPromptSubmit: signal("prompt", false),
       PostToolUse: signal("tool", false),
       // With "Answer from elsewhere" on, a permission also waits for you in PacedMind, while the terminal asks too
@@ -328,12 +378,13 @@ function agentCommand(dir: string, session: Session, task: Task, kind: "start" |
     ].join(" ");
     // The session's token as a header file, for its notify and hooks, which find it through the terminal's environment.
     const auth = writeHookAuth(dir, token);
-    const flags = `${mcp}${codexNotify(auth, session.id)}${codexHooks()}`;
+    const usage = codexUsage(session.id, token);
+    const flags = `${mcp}${codexNotify(auth, session.id)}${codexHooks()}${usage?.flag ?? ""}`;
     // A resume goes back into the conversation the session ran, once its SessionStart hook said which; else the last.
     const back = session.cliSessionId && UUID.test(session.cliSessionId) ? `resume ${session.cliSessionId}` : "resume --last";
     return {
       command: kind === "resume" ? `${exe} ${flags} ${back}` : `${exe} ${flags} "${prompt}"`, conversation: null,
-      env: { PACEDMIND_HOOK_URL: `${baseUrl()}/api/sessions/${session.id}`, PACEDMIND_HOOK_AUTH: auth }, after: codexAfter(),
+      env: { PACEDMIND_HOOK_URL: `${baseUrl()}/api/sessions/${session.id}`, PACEDMIND_HOOK_AUTH: auth, ...usage?.env }, after: codexAfter(),
     };
   }
   const last = session.cliSessionId && UUID.test(session.cliSessionId) ? session.cliSessionId : null;

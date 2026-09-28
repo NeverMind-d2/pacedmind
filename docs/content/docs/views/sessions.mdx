@@ -21,7 +21,7 @@ Each row shows the session's state dot, the task's key and title, the project an
 | State | Row text |
 | --- | --- |
 | Finished | *finished 12:22*; handed back partly done, *partly done 12:22*; blocked, *stuck 12:22* |
-| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*, or *answers since 14:05* after you answered its questions. When the agent hasn't checked in after 90 seconds, or Claude Code is asking whether you trust the folder: *waiting in its terminal*, or *waiting in the Claude app*. When the agent waits for you: *waiting for you*, *asks your permission* or *has a question*, with a navy dot |
+| Running | *since 09:40*, or *in the cloud since 09:40*. After **Request changes**: *changes since 14:05*, or *answers since 14:05* after you answered its questions. When the agent hasn't checked in after 90 seconds, or Claude Code is asking whether you trust the folder: *waiting in its terminal*, or *waiting in the Claude app*. When the agent waits for you: *waiting for you*, *asks your permission*, *has a question* or *paused: usage limit*, with a navy dot |
 | Done | *done yesterday 18:10* |
 | Closed | *closed before finishing* |
 | Failed | *couldn't start* |
@@ -86,12 +86,18 @@ Below them come the session's fields:
 | **Branch** | The branch name recorded for the session. |
 | **Started** | When, and how: *from PacedMind*, *outside PacedMind* for a session an agent reported on its own, or *in the same session* for a session that continues another one. |
 | **Duration** | How long the agent worked: until now while it runs, else until it finished or its terminal closed. |
+| **Working** | How long the agent was at work, as it reported it, without the time it waited for you. |
+| **Tokens** | The tokens the agent read and wrote, as it reported them, such as *262k tokens, 246k of them from cache, 1.5k output*. |
+| **API price** | For Claude Code, what those tokens cost at API prices, such as *$0.31, what these tokens cost through the API*. On a plan, not what you pay. |
+| **Model** | The models the agent ran, the latest first. |
 | **Client** | For a session PacedMind started in a terminal, what it connected to PacedMind from: the name and version its MCP client gave, such as *Claude Code 2.1.278*. |
 | **Agent says** | What the session runs with, as of when the agent called `start_task`: the model it said, and the MCP servers it has tools from, such as *runs as …, with the MCP servers github, playwright; the claude.ai connectors Gmail* or *runs as …, with no other MCP servers*. For Claude Code in a terminal, the servers come from Claude Code's own record of the session. |
 | **Not available** | For Claude Code in a terminal, MCP servers the session should have but has no tools from, and why, such as *stripe needs you to sign in (/mcp in its terminal)* or *github didn't start (ENOENT)*. See [What a session actually has](/agents/start-and-manage#what-a-session-actually-has). |
 | **Session** | The session's id, which agents use in `start_task` and `finish_task`. |
 | **Claude session** | For Claude Code in a terminal, its own conversation id, used to resume it. |
 | **Continues** | For a session that carries on another one: that session (*DEV-22's session*). Select it to open it. |
+
+**Working**, **Tokens**, **API price** and **Model** show for sessions in a terminal, once the agent has reported them. See [What it used](/agents/lifecycle#what-it-used).
 
 **What PacedMind heard** lists the session's events with their times, such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it finished*, *You marked it done*, *You asked for changes:* with the start of what you wrote, *You answered its questions:* with the start of your answers, *Plan: 2 of 5 steps done*, *Claude Code is waiting for you in its terminal*, *You answered in its terminal, and Claude Code went on*, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*. See [How a session runs](/agents/lifecycle#what-pacedmind-records) for all of them.
 

@@ -100,6 +100,7 @@ export async function sessionList(selected: string | null): Promise<{ groups: Se
       endAt: active(s) || s.status === "finished" ? null : endAt(s),
       note: s.note,
       cliSessionId: s.cliSessionId,
+      usage: s.usage ?? null,
       origin: s.continuesSessionId
         ? "continued"
         : events.some((e) => e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text)) ? "outside" : "organizer",

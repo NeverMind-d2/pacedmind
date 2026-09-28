@@ -6,6 +6,7 @@ import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
   AskKind, PushSubscriptionInput, AgentExtras, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
   OtherSessionState, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
+  SessionUsage, TokenCounts,
 } from "@/lib/types";
 
 /*
@@ -306,6 +307,26 @@ export function extrasOf(v: unknown, max = 12): AgentExtras | undefined {
     mcp: list(h.mcp, /^[\w.@:+-]{1,48}$/), plugins: list(h.plugins, /^[\w.@:+-]{1,48}$/), skills, hooks: list(h.hooks, /^[A-Za-z]{1,40}$/),
     ...(accountAt ? { account, accountAt } : {}),
   };
+}
+
+/** A session's usage as a store keeps it (JSON), checked: plain numbers, plain model names, at most 20 conversations. */
+export function usageOf(v: unknown): SessionUsage | null {
+  const o = typeof v === "string" ? (() => { try { return JSON.parse(v) as unknown; } catch { return null; } })() : v;
+  if (!o || typeof o !== "object") return null;
+  const u = o as Record<string, unknown>;
+  const count = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(Math.round(x), 1e13) : 0);
+  const conversations: Record<string, TokenCounts> = {};
+  if (u.conversations && typeof u.conversations === "object") {
+    for (const [id, t] of Object.entries(u.conversations as Record<string, unknown>).slice(0, 20)) {
+      if (!/^[\w-]{1,64}$/.test(id) || !t || typeof t !== "object") continue;
+      const c = t as Record<string, unknown>;
+      conversations[id] = { input: count(c.input), cacheRead: count(c.cacheRead), cacheWrite: count(c.cacheWrite), output: count(c.output) };
+    }
+  }
+  const models = strings(u.models).filter((m) => /^[\w.:@/-]{1,80}$/.test(m)).slice(0, 5);
+  const at = typeof u.at === "string" && /^\d{4}-\d\d-\d\dT[\d:.]{8,12}Z$/.test(u.at) ? u.at : null;
+  const amount = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? Math.min(x, 1e9) : 0);
+  return at ? { conversations, costUsd: amount(u.costUsd), activeSeconds: amount(u.activeSeconds), models, at } : null;
 }
 
 /* ---------- settings ---------- */

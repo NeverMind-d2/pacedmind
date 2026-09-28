@@ -156,6 +156,27 @@ export function serverChoices(folder: string | null): Record<AgentId, string[]> 
 }
 
 /** How Claude Code names a server in its tools' names (mcp__<name>__<tool>): anything but letters, digits, _ and - becomes _. */
+/** Claude Code's managed settings, which an administrator puts there and which win over everything else. */
+const managedSettings = () =>
+  process.platform === "win32" ? path.join(process.env.ProgramFiles || "C:\\Program Files", "ClaudeCode", "managed-settings.json")
+    : process.platform === "darwin" ? "/Library/Application Support/ClaudeCode/managed-settings.json"
+      : "/etc/claude-code/managed-settings.json";
+
+/** The settings and variables that send Claude Code's metrics somewhere. */
+export const TELEMETRY_VAR = /^(CLAUDE_CODE_ENABLE_TELEMETRY|OTEL_METRICS_EXPORTER|OTEL_EXPORTER_OTLP(_METRICS)?_(ENDPOINT|HEADERS|PROTOCOL))$/;
+
+/**
+ * Whether your Claude Code settings or the managed ones send its telemetry somewhere (their `env`, or a helper for its
+ * headers). Those come before a session's settings file, so PacedMind then leaves telemetry alone (launcher.ts).
+ */
+export function claudeTelemetrySet(): boolean {
+  return [readJson(path.join(claudeHome(), "settings.json")), readJson(managedSettings())].some((s) =>
+    !!s && (typeof s.otelHeadersHelper === "string" || (isObject(s.env) && Object.keys(s.env).some((k) => TELEMETRY_VAR.test(k)))));
+}
+
+/** Whether your Codex config sends its metrics somewhere (`metrics_exporter` in its [otel] table), which PacedMind then leaves alone. */
+export const codexTelemetrySet = () => /^\s*(otel\.)?metrics_exporter\s*=/m.test(readText(path.join(codexHome(), "config.toml")) ?? "");
+
 export const toolPrefix = (name: string) => name.replace(/[^A-Za-z0-9_-]/g, "_");
 
 /** The MCP servers a session has tools from, by where each comes from. */

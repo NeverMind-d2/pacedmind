@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, agent TEXT NOT NULL,
   folder TEXT, branch TEXT, status TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, ended_at TEXT,
   note TEXT, cli_session_id TEXT, continues_session_id TEXT,
-  surface TEXT NOT NULL DEFAULT 'terminal', device_id TEXT, url TEXT
+  surface TEXT NOT NULL DEFAULT 'terminal', device_id TEXT, url TEXT, usage TEXT
 );
 CREATE TABLE IF NOT EXISTS session_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
@@ -141,7 +141,7 @@ function migrate(conn: DatabaseSync) {
     areas: [["icon", "TEXT"], ["picture", "TEXT"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"]],
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"]],
-    sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"]],
+    sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"]],
   };
   for (const [table, columns] of Object.entries(added)) {

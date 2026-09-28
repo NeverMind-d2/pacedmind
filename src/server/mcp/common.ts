@@ -16,6 +16,7 @@ import {
   AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isAnswers,
   type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task,
 } from "@/lib/types";
+import { NO_USE, addUse, agentUseLine, hasUse, sessionUse } from "@/lib/usage";
 
 /* ---------- registering tools ---------- */
 
@@ -258,9 +259,11 @@ export function taskLine(t: Task, n: Names): string {
 }
 
 export async function describeTask(t: Task, given?: Names): Promise<string> {
-  const [n, edges, tasks, session, report] = await Promise.all([
-    given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id), repo.latestReport(t.id),
+  const [n, edges, tasks, session, report, sessions] = await Promise.all([
+    given ?? names(), repo.listEdges(), repo.listTasks(), repo.latestSession(t.id), repo.latestReport(t.id), repo.listSessions({ taskId: t.id }),
   ]);
+  // What its sessions used, as their agents reported it.
+  const use = sessions.map(sessionUse).reduce(addUse, NO_USE);
   const keys = new Map(tasks.map((x) => [x.id, x.key]));
   const keyOf = (id: number) => keys.get(id) ?? `#${id}`;
   const after = edges.filter((e) => e.toTaskId === t.id).map((e) => `${keyOf(e.fromTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
@@ -276,6 +279,7 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,
     t.runIn ? `Sessions run in: ${t.runIn === "desktop" ? "the agent's desktop app" : t.runIn === "cloud" ? "the agent's cloud" : "a terminal"}` : null,
     t.needs.length ? `Needs on its computer: ${t.needs.join(", ")}` : null,
+    hasUse(use) ? `Agents used: ${agentUseLine(use)} (the price is what the tokens cost through the API)` : null,
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",
     t.doneWhen.length ? `\nDone when:\n${t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n")}` : null,
     t.subtasks.length ? `\nSub-tasks:\n${t.subtasks.map((s, i) => `${i + 1}. [${s.done ? "x" : " "}] ${s.title}`).join("\n")}` : null,

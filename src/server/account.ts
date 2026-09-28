@@ -12,7 +12,7 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
-import { SETTING_KEYS, areaPictureOf, deriveKey } from "./store/shared";
+import { SETTING_KEYS, areaPictureOf, deriveKey, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
@@ -385,6 +385,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       started_at: match(x.started_at, STAMP) ?? now, finished_at: match(x.finished_at, STAMP), ended_at: match(x.ended_at, STAMP),
       note: s(x.note)?.slice(0, 2000) ?? null, cli_session_id: uuid(x.cli_session_id),
       continues_session_id: x.continues_session_id ? sessionId.get(String(x.continues_session_id)) ?? null : null,
+      usage: usageOf(x.usage),
     }));
     for (let i = 0; i < sessionRows.length; i += 200) check(await db.from("sessions").insert(sessionRows.slice(i, i + 200)));
     const sevs = sessionEvents.filter((e) => sessionId.has(String(e.session_id)) && match(e.at, STAMP) && match(e.kind, /^[a-z_]{1,40}$/)).map((e) => ({
@@ -573,12 +574,13 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     // Sessions keep their ids; one that continues a session that didn't come along continues nothing.
     const kept = new Set(sessions.filter((x) => task(x.task_id)).map((x) => String(x.id)));
     const insSession = conn.prepare(`INSERT INTO sessions (id, task_id, agent, folder, branch, status, started_at, finished_at, ended_at, note,
-      cli_session_id, continues_session_id, surface, url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      cli_session_id, continues_session_id, surface, url, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const x of sessions) {
       if (!kept.has(String(x.id))) continue;
       const continues = x.continues_session_id != null && kept.has(String(x.continues_session_id)) ? String(x.continues_session_id) : null;
       insSession.run(String(x.id), task(x.task_id), String(x.agent), s(x.folder), s(x.branch), String(x.status), String(x.started_at),
-        s(x.finished_at), s(x.ended_at), s(x.note), s(x.cli_session_id), continues, String(x.surface ?? "terminal"), s(x.url));
+        s(x.finished_at), s(x.ended_at), s(x.note), s(x.cli_session_id), continues, String(x.surface ?? "terminal"), s(x.url),
+        usageOf(x.usage) ? JSON.stringify(usageOf(x.usage)) : null);
     }
     const insEv = conn.prepare("INSERT INTO session_events (session_id, at, kind, text) VALUES (?, ?, ?, ?)");
     for (const e of sessionEvents) if (kept.has(String(e.session_id))) insEv.run(String(e.session_id), String(e.at), String(e.kind), String(e.text ?? ""));

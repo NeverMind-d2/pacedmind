@@ -9,7 +9,7 @@ import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
   linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
-  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
@@ -409,7 +409,7 @@ const toSession = (r: Row): Session => ({
   id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
   deviceId: null, folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
-  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id),
+  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id), usage: usageOf(r.usage),
 });
 
 /** Sessions, newest first. They all ran on this computer: asking for another's finds none. */
@@ -456,12 +456,13 @@ export async function createSession(input: {
 }
 
 export async function updateSession(
-  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url">>,
+  id: string, patch: Partial<Pick<Session, "status" | "folder" | "finishedAt" | "endedAt" | "note" | "branch" | "cliSessionId" | "url" | "usage">>,
 ) {
   const values = columns(patch, {
     status: "status", folder: "folder", finishedAt: "finished_at", endedAt: "ended_at", note: "note", branch: "branch", cliSessionId: "cli_session_id",
     url: "url",
   });
+  if (patch.usage !== undefined) values.usage = patch.usage ? JSON.stringify(patch.usage) : null;
   if (typeof values.url === "string" && !SESSION_URL.test(values.url)) delete values.url;
   update("sessions", id, values);
 }

@@ -1,3 +1,4 @@
+import type { AgentUse } from "./usage";
 import type { AreaIcon } from "./area-icons";
 
 export type Status = "backlog" | "todo" | "progress" | "review" | "done" | "canceled";
@@ -171,6 +172,32 @@ export interface Session {
   note: string | null;
   cliSessionId: string | null;
   continuesSessionId: string | null;
+  /** What its agent used, as the agent reported it (its usage metrics, the usage route); null until it did. */
+  usage?: SessionUsage | null;
+}
+
+/** Tokens an agent used, as its records count them: read fresh, read from its cache, written to its cache, and written. */
+export interface TokenCounts {
+  input: number;
+  cacheRead: number;
+  cacheWrite: number;
+  output: number;
+}
+
+/**
+ * What a session's agent used, as Claude Code's usage metrics report it (OpenTelemetry): tokens per conversation it ran,
+ * by its own id for it (a request for changes starts a new one), what they'd cost at API prices, how long it worked,
+ * and the models it ran, the latest first.
+ */
+export interface SessionUsage {
+  conversations: Record<string, TokenCounts>;
+  /** US dollars at API prices, as Claude Code counts them; on a plan, not what you pay. */
+  costUsd: number;
+  /** Seconds the agent was working (not waiting for you). */
+  activeSeconds: number;
+  models: string[];
+  /** When it last reported. */
+  at: string;
 }
 
 export interface SessionEvent {
@@ -565,6 +592,8 @@ export interface TaskContext {
    * each with the computers that have it: what a task's Needs suggests and says.
    */
   tools?: { name: string; on: string[] }[];
+  /** Per task id with sessions: what all its sessions used and how long they ran (src/lib/usage.ts). */
+  agentUse?: Record<number, AgentUse>;
 }
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */

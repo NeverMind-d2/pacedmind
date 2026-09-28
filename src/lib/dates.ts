@@ -114,13 +114,21 @@ export function waitingInTerminal(
 
 /**
  * Session events that mean the agent waits for you: its turn ended in its terminal (`waiting`), it asks for your
- * permission there (`permission`) or asks you something there (`input`), all from the hooks in its terminal
- * (signals.ts); or it asked you a question over MCP (`question`, report_progress).
+ * permission there (`permission`) or asks you something there (`input`), it stopped at a usage limit (`limit`), all
+ * from the hooks in its terminal (signals.ts); or it asked you a question over MCP (`question`, report_progress).
  */
-export const ATTENTION_KINDS = ["waiting", "permission", "input", "question"] as const;
+export const ATTENTION_KINDS = ["waiting", "permission", "input", "question", "limit"] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
 export const isAttention = (kind: string): kind is AttentionKind => (ATTENTION_KINDS as readonly string[]).includes(kind);
+
+/** What a session that waits for you shows: "Asks your permission", "Paused: usage limit"… */
+export function attentionWords(kind: AttentionKind): string {
+  if (kind === "permission") return "Asks your permission";
+  if (kind === "waiting") return "Waiting for you";
+  if (kind === "limit") return "Paused: usage limit";
+  return "Has a question";
+}
 
 /** Events that say what a session runs with, not what it does: they don't end a wait. */
 export const isNeutralEvent = (kind: string) => kind === "connected" || kind === "environment" || kind === "mcp_status";

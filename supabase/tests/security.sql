@@ -262,6 +262,26 @@ begin
     select count(*) into n from public.attachments; out := out || '17e other account sees images=' || n || ' (want 0)' || E'\n';
     reset role;
   exception when others then out := out || '17d ERROR ' || sqlerrm || E'\n'; end;
+  -- 17u-w. what a session's agent used: a small JSON object, nothing else
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set usage = '{"conversations": {"c1": {"input": 10, "cacheRead": 5, "cacheWrite": 0, "output": 2}}, "costUsd": 0.01, "activeSeconds": 3, "models": ["m"], "at": "2026-09-25T10:00:00.000Z"}'
+      where id = '0123456789abcdef';
+    get diagnostics n = row_count; out := out || '17u session usage saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '17u ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set usage = jsonb_build_object('x', repeat('a', 9000)) where id = '0123456789abcdef';
+    out := out || '17v FAIL an oversized usage accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17v oversized usage rejected: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.sessions set usage = '[1, 2]' where id = '0123456789abcdef';
+    out := out || '17w FAIL a usage that is not an object accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '17w usage that is not an object rejected: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', b, 'role', 'authenticated', 'aal', 'aal2', 'session_id', sb,
       'amr', json_build_array(json_build_object('method', 'totp', 'timestamp', now_s - 3600)))::text, true);

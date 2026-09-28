@@ -57,6 +57,7 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 | **Labels** | The labels, and **+ Add**: type a label and press <kbd>Enter</kbd>. Click a label to remove it. |
 | **Needs** | For a task an agent does: what its agent needs from the computer its session runs on, MCP servers or claude.ai connectors such as `Gmail` or `supabase`, up to 10. Type a name, or pick one your computers have, and press <kbd>Enter</kbd>. Hovering a need shows the computers that have it, such as *On Studio PC*; one none of them has is dimmed (*None of your computers said it has this*). Click a need to remove it. See [What a task needs](/agents/start-and-manage#what-a-task-needs). |
 | **Session** | The latest agent session, or a button to start one. See below. |
+| **Usage** | Once an agent reported it: what all the task's sessions used, such as *262k tokens · $0.31 at API prices · 1 min working · 1 session*. Hover over it for what the price means. See [What it used](/agents/lifecycle#what-it-used). |
 
 The date fields open the date picker (see [Dates](/concepts/dates)): type a date, take a suggestion or pick a day on the calendar. **Plan for a day** closes once a day is picked; **Due date** stays open for its time: pick one, or **Done** for none. **Clear** appears once a date is set.
 
@@ -80,7 +81,7 @@ Once a task has a session, a card under the **Done when** list shows its state:
 | --- | --- |
 | Running | *Running in Claude Code since 14:05*, or with the place: *Running in the Claude app since 14:05*, *Running in Claude Code on the web since 14:05* |
 | Running again after **Request changes** | *Claude Code is working on your changes since 14:05*, or after you answered its questions *Claude Code is working with your answers since 14:05* |
-| Running, the agent waits for you, with a navy dot | *Claude Code is waiting for you in its terminal: “…”*, *Claude Code asks for your permission in its terminal: …*, *Claude Code asks you something in its terminal: …* or *Claude Code asks you: …*. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you). |
+| Running, the agent waits for you, with a navy dot | *Claude Code is waiting for you in its terminal: “…”*, *Claude Code asks for your permission in its terminal: …*, *Claude Code asks you something in its terminal: …*, *Claude Code asks you: …* or *Claude Code stopped at a usage limit: …*. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you). |
 | Running in a terminal, in a folder Claude Code doesn't trust yet, until the agent checks in | *Claude Code is asking whether you trust this folder. Choose “Yes, I trust this folder” in its terminal.* |
 | Running, no word from the agent after 90 seconds | *Claude Code hasn't checked in yet. It may be waiting for you in its terminal.*, or in a desktop app *Opened in the Claude app. Send the first message there to start.* After **Request changes**, the 90 seconds count from the request. |
 | Finished | *Claude Code finished at 14:40 · waiting for you* |

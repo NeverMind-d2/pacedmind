@@ -140,6 +140,19 @@ PacedMind hears that an agent waits for you only from sessions it started in a t
 * **Claude Code older than 2.1.84, and Codex,** report through `curl`. Check that `curl --version` works in a new terminal. In PacedMind's Codex sessions, PacedMind's `notify` program takes the place of your own.
 * **The desktop app notifies once each time the agent starts waiting.** If none appear, check the system's notification settings: see [Notifications](/desktop-app#notifications).
 
+### A session shows no usage
+
+Only sessions PacedMind started in a terminal report what their agent used, and only once the agent has: every 30 seconds while it works, and when it exits. See [What it used](/agents/lifecycle#what-it-used).
+
+* **Sessions in a desktop app or the cloud**, and sessions started outside PacedMind, report nothing.
+* **Codex older than 0.150** reports nothing. Codex never reports a price.
+* **Your own telemetry**: when Claude Code's settings, its managed settings, Codex's `config.toml` or PacedMind's environment already send its telemetry somewhere (`CLAUDE_CODE_ENABLE_TELEMETRY`, `OTEL_METRICS_EXPORTER`, `OTEL_EXPORTER_OTLP_…`, or Codex's `metrics_exporter`), PacedMind leaves it alone. The same variables exported in your shell's startup files also take its place.
+* **A session started before this version** of PacedMind reports nothing; its next one does.
+
+### A session says "Paused: usage limit"
+
+Claude Code stopped because a usage limit of your plan, or your API credit, ran out; the session's line says what Claude Code said, such as when the limit resets. The session stays running. Claude Code may wait for the limit to reset and go on by itself; otherwise, write to it in its terminal once it has, or switch it to another model or account there.
+
 ### An image is missing from a report
 
 Agents save screenshots as files first, and PacedMind keeps a copy of each: PNG, JPEG, GIF or WebP files of up to 20 MB. It refuses any other file with the reason, which the agent sees and can act on, such as *after.bmp isn't a PNG, JPEG, GIF or WebP image.* When the agent hands over several images at once and one of them fails, none is kept. Cloud sessions can't send images.

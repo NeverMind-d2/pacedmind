@@ -22,6 +22,7 @@ import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, STATUS_LABEL, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
   type AgentId, type EdgeMode, type Report, type ReportCriterion, type Session, type Surface, type Task,
 } from "@/lib/types";
+import { sessionUse, usageText } from "@/lib/usage";
 import {
   agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, imageLine, names, plural, projectRef, reportCounts,
   taskRef, tool, when,
@@ -58,9 +59,10 @@ function sessionLine(s: Session, tasks: Map<number, Task>, reports: Map<string, 
   const working = (s.status === "starting" || s.status === "running") && report?.changesAt ? report.changesAt : null;
   const at = (working ?? s.finishedAt ?? s.endedAt ?? s.startedAt).replace("T", " ");
   const counts = report ? reportCounts(report) : "";
+  const used = usageText(sessionUse(s));
   return `Session ${s.id} · ${t ? `${t.key} ${t.title}` : `task #${s.taskId}`} · ${AGENT_LABEL[s.agent]} ${placeText(s.agent, s.surface, s.deviceId, devices)} · ` +
     `${SESSION_TEXT[s.status]} · ${at}${report && report.outcome !== "done" ? ` · handed back ${report.outcome}` : ""}` +
-    `${s.note ? ` · ${s.note}` : ""}${counts ? ` (${counts})` : ""}`;
+    `${s.note ? ` · ${s.note}` : ""}${counts ? ` (${counts})` : ""}${used ? ` · used ${used}` : ""}`;
 }
 
 /** Session lines with their reports and computers looked up once. */

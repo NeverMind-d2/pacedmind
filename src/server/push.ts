@@ -13,7 +13,7 @@ import { MODE } from "./supabase";
  */
 
 /** Session events that notify: the agent waits for you, asks for permission or asks you something, or handed back. */
-export const PUSH_KINDS = new Set(["waiting", "permission", "input", "question", "finished"]);
+export const PUSH_KINDS = new Set(["waiting", "permission", "input", "question", "limit", "finished"]);
 
 /** The push services' addresses: Google, Mozilla, Apple and Microsoft (the database checks the same). */
 export const PUSH_ENDPOINT =
@@ -46,6 +46,7 @@ async function messageFor(sessionId: string, kind: string, text: string) {
   if (kind === "permission") title = `${key} asks for your permission`;
   else if (kind === "question" || kind === "input") title = `${key} has a question for you`;
   else if (kind === "waiting") title = `${key} is waiting for you`;
+  else if (kind === "limit") title = `${key} stopped at a usage limit`;
   else {
     const outcome = (await repo.latestSessionReport(sessionId))?.outcome;
     title = outcome === "blocked" ? `${key} is blocked` : outcome === "partial" ? `${key} is partly done` : `${key} is finished`;

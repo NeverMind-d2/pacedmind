@@ -11,10 +11,11 @@ import { RequestChip, RequestStatus, dismissRequest, requestShown, statusAt, use
 import { AgentIcon, Icon, SurfaceIcon } from "@/components/icons";
 import { AnswerForm, Gallery, RequestChangesForm, SessionPlan, SessionReport } from "@/components/report";
 import { Button, Menu, cx, useAction } from "@/components/ui";
-import { attentionOf, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, mcpProblemsOf, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, attentionWords, checkedIn, eventLine, parseLocal, planOf, toDateStr, toDateTimeStr, mcpProblemsOf, waitingInTerminal } from "@/lib/dates";
+import { fmtSpan, fmtUsd, sessionTokens, tokenTotal, tokensLine } from "@/lib/usage";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, isAnswers, HARNESS_LABEL, TRUST_WAITING, harnessAgent,
-  type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type Surface,
+  type AgentId, type Attachment, type OtherSession, type OtherSessionState, type Report, type SessionEvent, type SessionStatus, type SessionUsage, type Surface,
 } from "@/lib/types";
 
 /* ---------- data from the server ---------- */
@@ -37,6 +38,8 @@ export interface SessionItem {
   endAt: string | null;
   note: string | null;
   cliSessionId: string | null;
+  /** What its agent used, as it reported it; null when it couldn't (the apps, the cloud) or hasn't yet. */
+  usage: SessionUsage | null;
   origin: "organizer" | "outside" | "continued";
   /** The session whose terminal this one carries on ("same session" connections). */
   continues: { id: string; key: string } | null;
@@ -160,7 +163,7 @@ function meta(s: SessionItem, now: number): string {
     case "starting":
     case "running": {
       const waits = waitsFor(s);
-      if (waits) return waits.kind === "permission" ? "asks your permission" : waits.kind === "waiting" ? "waiting for you" : "has a question";
+      if (waits) return attentionWords(waits.kind).toLowerCase();
       if (askingTrust(s) || unheard(s, now)) return s.surface === "desktop" ? `waiting in the ${APP_LABEL[s.agent]}` : "waiting in its terminal";
       const asked = s.reports[0]?.changes ? s.reports[0].changesAt : null;
       if (asked) return `${isAnswers(s.reports[0].changes ?? "") ? "answers" : "changes"} since ${clock(asked, now)}`;
@@ -482,6 +485,14 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
     ["Started", started, false],
   ];
   if (worked) props.push(["Duration", worked, false]);
+  // What its agent used, as its usage metrics said (usage-metrics.ts).
+  if (s.usage) {
+    const tokens = sessionTokens(s.usage);
+    if (s.usage.activeSeconds) props.push(["Working", fmtSpan(s.usage.activeSeconds * 1000), false]);
+    if (tokenTotal(tokens)) props.push(["Tokens", tokensLine(tokens), false]);
+    if (s.usage.costUsd) props.push(["API price", `${fmtUsd(s.usage.costUsd)}, what these tokens cost through the API`, false]);
+    if (s.usage.models[0]) props.push(["Model", s.usage.models.join(", "), true]);
+  }
   // What it runs in, as its MCP client said when it connected, and what the agent says it runs with (start_task).
   const client = s.events.findLast((e) => e.kind === "connected");
   if (client) props.push(["Client", client.text.replace(/^Connected from /, ""), false]);

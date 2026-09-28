@@ -499,12 +499,16 @@ function notifyApproval(a) {
   n.show();
 }
 
-/** A running session whose agent waits for you: its turn ended in its terminal, it asks for your permission, or it asked you something. */
+/**
+ * A running session whose agent waits for you: its turn ended in its terminal, it asks for your permission, it asked you
+ * something, or it stopped at a usage limit.
+ */
 function notifyAttention(s) {
   if (!Notification.isSupported()) return;
   const who = s.key ?? "A session";
   const title = s.kind === "permission" ? `${who} asks for your permission`
-    : s.kind === "question" || s.kind === "input" ? `${who} has a question for you` : `${who} is waiting for you`;
+    : s.kind === "question" || s.kind === "input" ? `${who} has a question for you`
+    : s.kind === "limit" ? `${who} stopped at a usage limit` : `${who} is waiting for you`;
   const n = new Notification({ title, body: [s.title, s.text].filter(Boolean).join("\n"), icon: ICON_PNG });
   notifications.add(n);
   n.on("click", () => showWindow(`${ORIGIN}/sessions?s=${encodeURIComponent(s.id)}`));

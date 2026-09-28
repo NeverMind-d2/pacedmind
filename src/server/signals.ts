@@ -10,15 +10,18 @@ import { deviceConfig, updateDevice } from "./device";
 /*
  * What the hooks the launcher installs in a session's terminal say (the signal route), and what its agent does over
  * MCP, turned into the session's events: its turn ended and it waits for you, it asks for your permission or for an
- * answer, or it went back to work. Claude Code runs a hook when its turn ends (Stop), when it shows a notification
- * (Notification), when you send it a message (UserPromptSubmit) and after every tool call (PostToolUse); Codex runs
- * its `notify` program when a turn ends. Pages show them and the desktop app notifies you (/api/state, attentionOf).
+ * answer, it stopped at a usage limit, or it went back to work. Claude Code runs a hook when its turn ends (Stop, or
+ * StopFailure when an error from the API ended it), when it shows a notification (Notification), when you send it a
+ * message (UserPromptSubmit) and after every tool call (PostToolUse); Codex runs its `notify` program when a turn ends. Pages show them and the desktop app notifies you (/api/state, attentionOf).
  *
  * The hooks after every message and tool call only matter while the session waits for you, so they're answered from
  * memory (attention.ts) without reading the store.
  */
 
-export const HOOK_KINDS = ["stop", "notify", "prompt", "tool", "turn", "start"] as const;
+export const HOOK_KINDS = ["stop", "notify", "prompt", "tool", "turn", "start", "failure"] as const;
+
+/** StopFailure's error types that mean a limit of the account: its usage limit, or its credit. */
+const LIMIT_ERRORS = new Set(["rate_limit", "billing_error"]);
 export type HookKind = (typeof HOOK_KINDS)[number];
 
 /** At most this many events from hooks per session while this process runs, so a runaway loop can't fill its history. */
@@ -72,11 +75,23 @@ function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind
       }
       // Idle a minute after its turn ended: the Stop hook usually said so already.
       if (type === "idle_prompt") return now ? null : { kind: "waiting", text: `${who} is waiting for you in its terminal` };
+      // Claude Code waited for the usage limit to reset and went on by itself.
+      if (type === "quota_auto_resume_fired") return now === "limit" ? { kind: "working", text: `The usage limit reset, and ${who} went on` } : null;
       return null;
     }
+    case "failure": {
+      // An error from the API ended its turn (StopFailure; Claude Code tried again first where that helps).
+      const why = plain(p.details ?? p.error_message);
+      if (typeof p.error_type === "string" && LIMIT_ERRORS.has(p.error_type)) {
+        return now === "limit" ? null : { kind: "limit", text: `${who} stopped at a usage limit${why}` };
+      }
+      return now && now !== "permission" ? null : { kind: "waiting", text: `${who} stopped on an error and waits for you in its terminal${why}` };
+    }
     case "prompt":
+      if (now === "limit") return { kind: "working", text: `You wrote in its terminal, and ${who} went on` };
       return now ? { kind: "working", text: `You answered in its terminal, and ${who} went on` } : null;
     case "tool":
+      if (now === "limit") return { kind: "working", text: `${who} went on` };
       return now === "permission" ? { kind: "working", text: `You allowed it in its terminal, and ${who} went on` } : null;
     case "start":
       return null;
@@ -96,7 +111,7 @@ export async function recordSignal(o: { sessionId: string; hookedId: string; kin
   }
   if (o.kind === "tool" || o.kind === "prompt") {
     const now = await attentionNow(o.sessionId);
-    if (!now || (o.kind === "tool" && now !== "permission")) return;
+    if (!now || (o.kind === "tool" && now !== "permission" && now !== "limit")) return;
   }
   const s = await hookSession(o.sessionId, o.hookedId, o.cli);
   if (!s) return;
