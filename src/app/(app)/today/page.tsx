@@ -28,6 +28,7 @@ export default async function TodayPage(props: PageProps<"/today">) {
       title="Today"
       subtitle={format(new Date(), "EEE, d MMM")}
       groups={groups}
+      groupedBy="Section"
       schedule={schedule}
       ctx={await taskContext([...overdue, ...dueToday, ...planned])}
       initialKey={typeof sp.task === "string" ? sp.task : null}

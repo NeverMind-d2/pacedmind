@@ -8,6 +8,7 @@ import { openActivity } from "./activity-editor";
 import { Icon, type IconName } from "./icons";
 import type { QuickAddDefaults } from "./quick-add";
 import { TaskDetail } from "./task-detail";
+import { DisplayMenu, arrange, useTaskDisplay } from "./task-display";
 import { TaskRow } from "./task-row";
 import { Button, Segmented, cx } from "./ui";
 
@@ -25,7 +26,7 @@ export function openAdd(detail: QuickAddDefaults = {}) {
 }
 
 export function TaskList({
-  icon, mark, title, subtitle, groups, schedule, ctx, initialKey, empty, headerRight, addDefaults, areaDetails,
+  icon, mark, title, subtitle, groups: pageGroups, groupedBy = "Status", schedule, ctx, initialKey, empty, headerRight, addDefaults, areaDetails,
 }: {
   icon: IconName;
   /** Shown instead of the icon, such as an area's own icon. */
@@ -33,6 +34,8 @@ export function TaskList({
   title: string;
   subtitle?: string;
   groups: TaskGroup[];
+  /** What the page's own groups are by, for the Display menu. */
+  groupedBy?: string;
   schedule?: EventOccurrence[];
   ctx: TaskContext;
   initialKey?: string | null;
@@ -45,7 +48,9 @@ export function TaskList({
   const [sel, setSel] = useState<string | null>(initialKey ?? null);
   const [filter, setFilter] = useState<"all" | "tasks" | "activities">("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true, canceled: true });
-  const all = groups.flatMap((g) => g.tasks);
+  const [display, setDisplay] = useTaskDisplay();
+  const groups = arrange(pageGroups, display);
+  const all = pageGroups.flatMap((g) => g.tasks);
   const selected = all.find((t) => t.key === sel) ?? null;
   const now = toDateTimeStr(new Date());
 
@@ -78,6 +83,7 @@ export function TaskList({
           {subtitle && <span className="min-w-0 shrink-[3] truncate text-mut2">{subtitle}</span>}
           <span className="flex-1" />
           {headerRight}
+          {all.length > 0 && <DisplayMenu display={display} onChange={setDisplay} groupedBy={groupedBy} />}
           {areaDetails && <Button aria-expanded={areaOpen && !selected} onClick={() => { setSel(null); setAreaOpen((v) => !v || !!selected); }}>Area details</Button>}
           <Button onClick={() => openAdd(addDefaults)} aria-label="New task"><Icon name="plus" size={13} /><span className="max-sm:hidden">New task</span></Button>
         </div>
