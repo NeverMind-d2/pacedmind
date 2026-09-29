@@ -1,6 +1,7 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import * as repo from "@/server/repo";
 import { importLegacy, moveToThisComputer, resetAccount } from "@/server/account";
@@ -34,7 +35,7 @@ import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
+  AGENT_LABEL, CONNECT_CARD_COOKIE, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
   type AgentId, type Device, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
   type TerminalId,
 } from "@/lib/types";
@@ -911,6 +912,13 @@ export async function cloudConnectOfferAction(connect: boolean): Promise<Result>
   if (!results.length) return done({ ok: false, error: "Neither Claude Code nor Codex is installed here." });
   if (failed.length) return done({ ok: false, error: failed.map((x) => x.r.error).join(" ") });
   return done({ ok: true, message: `Connected ${results.map((x) => AGENT_LABEL[x.agent]).join(" and ")} to PacedMind Cloud. Allow each in the browser page its terminal opens.` });
+}
+
+/** Not now, on the web app's card about connecting an agent: this browser doesn't show it for a year. */
+export async function dismissConnectCardAction(): Promise<Result> {
+  await guard();
+  (await cookies()).set(CONNECT_CARD_COOKIE, "1", { path: "/", maxAge: 365 * 24 * 60 * 60, httpOnly: true, sameSite: "lax", secure: MODE === "web" });
+  return { ok: true };
 }
 
 /** Disconnects an agent from PacedMind Cloud's MCP server: its sign-in ends at once. */

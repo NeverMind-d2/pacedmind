@@ -34,6 +34,8 @@ export const mcpReaches = (link: McpLink) => link === "connected" || link === "o
 export const MCP_NAME = "pacedmind";
 /** Its name before, which configs set up earlier still have (Connect replaces it). */
 export const OLD_MCP_NAME = "organizer";
+/** The web app's cookie for Not now on its card about connecting an agent (agent-connect-card.tsx). */
+export const CONNECT_CARD_COOKIE = "pm_connect_card";
 /** How an agent handed a task back: all of it ready, part of it, or stuck until the user decides something. */
 export type ReportOutcome = "done" | "partial" | "blocked";
 /** An agent's answer to one "Done when" item. */

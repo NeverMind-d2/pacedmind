@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
@@ -11,6 +12,7 @@ import { Approvals } from "@/components/approvals";
 import { RemoteStart } from "@/components/remote-start";
 import { ImportOffer } from "@/components/import-projects";
 import { CloudConnectOffer } from "@/components/cloud-connect-offer";
+import { AgentConnectCard } from "@/components/agent-connect-card";
 import { LinkOffer, type Linkable } from "@/components/link-offer";
 import { Toaster } from "@/components/ui";
 import { BillingBanner } from "@/components/billing";
@@ -20,12 +22,13 @@ import { localTools, mcpLinks, thisDevice } from "@/server/devices";
 import { folderHints } from "@/server/folder-hints";
 import { mcpUrl } from "@/server/launcher";
 import { MODE, authState } from "@/server/supabase";
+import { cloudMcpUrl } from "@/server/supabase-config";
 import { nextStep } from "@/server/auth-flow";
 import { approvalItems } from "@/server/requests";
 import { readPlan } from "@/server/billing";
 import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
-import type { FoundFolder } from "@/lib/types";
+import { CONNECT_CARD_COOKIE, type FoundFolder } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +43,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const step = state || MODE === "web" ? nextStep(state) : deviceConfig().withoutAccount ? null : "/login";
   if (step) redirect(step);
   const user = state?.user ?? null;
-  const [areas, projects, tasks, waiting, all, plan] = await Promise.all([
+  // The web app shows how to connect an agent until the account has one, or this browser said Not now.
+  const askConnect = MODE === "web" && !(await cookies()).get(CONNECT_CARD_COOKIE);
+  const [areas, projects, tasks, waiting, all, plan, agentsIn] = await Promise.all([
     repo.listAreas(), repo.listProjects(), repo.listTasks(), repo.listSessions({ status: ["finished"] }), repo.listDevices(), readPlan(),
+    askConnect ? repo.listConnectedAgents().catch(() => null) : null,
   ]);
   // Where "Start on a computer" can send a session: in the desktop app, the other computers.
   const me = MODE === "desktop" ? deviceConfig().deviceId : null;
@@ -101,6 +107,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {cloudOffer.length > 0 && <CloudConnectOffer agents={cloudOffer} />}
       {/* One card at a time: the agents' connection first. */}
       {!cloudOffer.length && linkable.length > 0 && <LinkOffer items={linkable} areas={areas} />}
+      {/* The web app, until an agent is connected: the steps for each one, as on pacedmind.com/connect. */}
+      {agentsIn?.length === 0 && <AgentConnectCard url={cloudMcpUrl()} />}
     </div>
     </ExecutionProvider>
   );
