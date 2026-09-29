@@ -109,7 +109,7 @@ export function DisplayMenu({ display, onChange, groupedBy }: {
         // Below the button, right edges lined up (the popover opens 6 px right of its anchor).
         onClick={(e) => { const a = anchorOf(e.currentTarget); setAnchor((o) => o ? null : { x: a.x + (a.w ?? 0) - 206, y: a.y + (a.h ?? 0) + 4 }); }}>
         <Icon name="timeline" size={13} />
-        <span className="max-sm:hidden">{changed ? [display.group === "label" && "By label", display.order !== "default" && ORDER_NAMES[display.order]].filter(Boolean).join(" · ") : "Display"}</span>
+        <span className="@max-xl:hidden">{changed ? [display.group === "label" && "By label", display.order !== "default" && ORDER_NAMES[display.order]].filter(Boolean).join(" · ") : "Display"}</span>
       </Button>
       {anchor && (
         <Popover anchor={anchor} onClose={() => setAnchor(null)} width={200}>

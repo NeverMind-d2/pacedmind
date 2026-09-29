@@ -13,7 +13,7 @@ import {
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon } from "./icons";
 import { ComputerPicker, Issues, NeedsPicker, useComputerChoice, useExecutionIssues, useTaskDevice } from "./execution-context";
 import { DateField } from "./date-field";
-import { Markdown } from "./markdown";
+import { MarkdownEditor } from "./markdown-editor";
 import { ModelChips, useModelProblem } from "./model-picker";
 import type { ModelSelection } from "@/lib/agent-models";
 import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
@@ -52,8 +52,6 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [mode, setMode] = useState<"task" | "activity">("task");
   const [text, setText] = useState("");
   const [desc, setDesc] = useState("");
-  // The description as it will show (Markdown), instead of its text.
-  const [preview, setPreview] = useState(false);
   // "Done when" items, one per line; null while the field is hidden.
   const [doneWhen, setDoneWhen] = useState<string | null>(null);
   const [more, setMore] = useState(false);
@@ -65,8 +63,6 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     modelSettings?: ModelSelection | null; modelProject?: string | null;
   }>({});
   const input = useRef<HTMLInputElement>(null);
-  const descInput = useRef<HTMLTextAreaElement>(null);
-  const editDesc = () => { setPreview(false); setTimeout(() => descInput.current?.focus(), 0); };
   const { pending, run } = useAction();
   const path = usePathname();
 
@@ -152,7 +148,6 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
     setOpen(false);
     setText("");
     setDesc("");
-    setPreview(false);
     setDoneWhen(null);
     setOv({});
   };
@@ -181,7 +176,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
         return r.ok ? undefined : r;
       });
     }
-    if (more) { setText(""); setDesc(""); setPreview(false); setDoneWhen(null); setOv({}); input.current?.focus(); } else close();
+    if (more) { setText(""); setDesc(""); setDoneWhen(null); setOv({}); input.current?.focus(); } else close();
   };
 
   if (!open) return null;
@@ -252,17 +247,8 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
               className="relative w-full bg-transparent text-[18px] font-medium leading-7 text-transparent caret-strong outline-none placeholder:text-dim"
             />
           </div>
-          {preview && desc.trim()
-            ? <div role="button" tabIndex={0} aria-label="Edit the description" title="Click to edit" onClick={editDesc}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) { e.preventDefault(); editDesc(); } }}
-                className="max-h-[40vh] min-h-[44px] cursor-text overflow-y-auto outline-none">
-                <Markdown text={desc} breaks className="text-[13.5px] text-fg3" />
-              </div>
-            : <textarea ref={descInput} aria-label="Description" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} placeholder="Add description… Markdown works"
-                className="field-sizing-content max-h-[40vh] min-h-[44px] w-full resize-none bg-transparent text-[13.5px] leading-relaxed text-fg3 outline-none placeholder:text-mut2" />}
-          {desc.trim() && <button type="button" onClick={() => (preview ? editDesc() : setPreview(true))} className="-mt-1 self-end text-[11.5px] text-mut2 hover:text-fg2">
-            {preview ? "Edit" : "Preview"}
-          </button>}
+          <MarkdownEditor label="Description" value={desc} onChange={setDesc} placeholder="Add description… Markdown works"
+            className="max-h-[40vh] min-h-[44px] overflow-y-auto text-[13.5px] text-fg3" />
           {mode === "task" && doneWhen !== null && (
             <div className="flex flex-col gap-1 border-t border-line pb-1 pt-2.5">
               <span className="text-[12px] font-medium text-fg3">Done when</span>

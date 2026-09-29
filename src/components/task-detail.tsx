@@ -22,7 +22,8 @@ import {
 } from "@/lib/types";
 import { DateField } from "./date-field";
 import { AgentIcon, AreaMark, Icon, PriorityIcon, StatusIcon, SurfaceIcon, VerdictIcon } from "./icons";
-import { InlineMarkdown, Markdown } from "./markdown";
+import { InlineMarkdown } from "./markdown";
+import { MarkdownEditor } from "./markdown-editor";
 import { AnswerForm, Gallery, ReportBody, RequestChangesForm, SessionPlan, SessionReport, sameText } from "./report";
 import { Button, IconButton, Menu, cx, useAction } from "./ui";
 
@@ -507,28 +508,18 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
 }
 
 /**
- * The task's description, in Markdown: shown formatted, and as the text itself while you edit it (click it, or Enter on
- * it). A long one shows its start, with Show more.
+ * The task's description, in Markdown, edited where it shows (markdown-editor.tsx): a click puts the cursor there.
+ * A long one shows its start, with Show more, until you edit it.
  */
 function Description({ text, onChange, onSave }: { text: string; onChange: (text: string) => void; onSave: () => void }) {
-  const [editing, setEditing] = useState(false);
   const [all, setAll] = useState(false);
-  if (editing || !text.trim()) {
-    return <div className="flex flex-col gap-1">
-      <textarea aria-label="Description" value={text} placeholder="Add description…" autoFocus={editing}
-        onFocus={() => setEditing(true)} onChange={(e) => onChange(e.target.value)} onBlur={() => { setEditing(false); onSave(); }}
-        className="field-sizing-content min-h-[44px] resize-none bg-transparent text-[13.5px] leading-relaxed text-fg3 outline-none placeholder:text-dim" />
-      {editing && <span className="self-end text-[11px] text-dim">Markdown</span>}
-    </div>;
-  }
   const long = text.length > 700 || text.split("\n").length > 14;
+  const cut = long && !all;
   return <div className="flex flex-col gap-1">
-    <div role="button" tabIndex={0} aria-label="Edit the description" title="Click to edit"
-      onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) setEditing(true); }}
-      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); setEditing(true); } }}
-      className={cx("relative -mx-1.5 cursor-text rounded-md px-1.5 py-0.5 outline-none hover:bg-hover/60 focus-visible:bg-hover/60", long && !all && "max-h-[230px] overflow-hidden")}>
-      <Markdown text={text} breaks className="text-[13.5px] text-fg3" />
-      {long && !all && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-panel to-transparent" />}
+    <div onFocus={() => setAll(true)} className={cx("relative", cut && "max-h-[230px] overflow-hidden")}>
+      <MarkdownEditor label="Description" value={text} onChange={onChange} onBlur={onSave} placeholder="Add description…"
+        className="min-h-[44px] text-[13.5px] text-fg3" />
+      {cut && <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-linear-to-t from-panel to-transparent" />}
     </div>
     {long && <button type="button" onClick={() => setAll((v) => !v)} className="self-start text-[12px] text-mut2 hover:text-fg2">{all ? "Show less" : "Show more"}</button>}
   </div>;

@@ -898,7 +898,7 @@ function FlowEditor(props: FlowViewProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !(e.target as HTMLElement).closest?.("input, textarea, [role=menu]")) {
+      if (e.key === "Escape" && !(e.target as HTMLElement).closest?.("input, textarea, [contenteditable=true], [role=menu]")) {
         setSel(null);
         setAdding(false);
       }

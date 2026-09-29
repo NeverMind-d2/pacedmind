@@ -60,7 +60,7 @@ export function useSelection(initialKey: string | null) {
   const [sel, setSel] = useState<string | null>(initialKey);
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key === "Escape" && !(e.target as HTMLElement).closest("input, textarea, [role=dialog]")) setSel(null);
+      if (e.key === "Escape" && !(e.target as HTMLElement).closest("input, textarea, [contenteditable=true], [role=dialog]")) setSel(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
