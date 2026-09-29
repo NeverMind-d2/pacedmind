@@ -1,7 +1,7 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
 import { formatPlanPrice, yearlyMarket } from "@/lib/markets";
-import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, FLOW, NAME, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
+import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
 
 /**
  * /llms.txt and /llms-full.txt (https://llmstxt.org): PacedMind in plain Markdown for answer engines
@@ -16,7 +16,7 @@ export function llmsTxt() {
 
 > ${DESCRIPTION}
 
-${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadlines and calendar events share one calendar and one timeline. ${NAME} also coordinates AI coding agents: it starts Claude Code and Codex sessions from your tasks, in a terminal, the agent's desktop app or the agent's cloud, runs them one after another in a flow if you like, and tells you when a session is waiting for you. The agents report back to ${NAME} over MCP (the Model Context Protocol), on your computer. ${NAME} doesn't run an AI model of its own and needs no API key.
+${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadlines and calendar events share one calendar and one timeline. ${NAME} also coordinates AI coding agents: it starts Claude Code and Codex sessions from your tasks, in a terminal, the agent's desktop app or the agent's cloud, and tells you when a session is waiting for you. Nothing starts on its own: you start each session, or ask an agent in a chat to request one, and each of your computers asks you first unless you let it start them itself. A task can wait for others in its project, drawn as arrows on the Timeline, which only puts the work in order. The agents report back to ${NAME} over MCP (the Model Context Protocol), on your computer. ${NAME} doesn't run an AI model of its own and needs no API key.
 
 - Plans: ${COST}
 - Your data: on one device, your plan stays on your computer, with no account.
@@ -30,10 +30,9 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 
 ## Website
 
-- [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today, Timeline and Flow views.
+- [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today and Timeline views.
 - [Your day](${absoluteUrl("/#day")}): Your plan and your agents' sessions on one day, with the checks PacedMind books.
 - [Agents](${absoluteUrl("/#agents")}): Where agent sessions run: a terminal, the agent's app or the cloud.
-- [Flows](${absoluteUrl("/#flow")}): How a flow starts sessions one after another.
 - [Open source](${absoluteUrl("/#open-source")}): The source code on GitHub under the GNU AGPL, and how to build ${NAME} from it.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
 - [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys, where your plan is stored, and the source code.
@@ -89,14 +88,6 @@ ${list(PLACES.items.map(({ name, body }) => `${name}: ${body}`))}
 ${PLACES.note}
 
 ${PLACES.harnesses}
-
-## ${FLOW.title}
-
-${FLOW.subtitle} ${FLOW.intro}
-
-${list(FLOW.modes.map(({ name, body }) => `${name}: ${body}`))}
-
-${FLOW.note}
 
 ## ${OPEN_SOURCE.title}
 

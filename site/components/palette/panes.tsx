@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { AREA, FLOW_LINE, Group, Icon, StatusIcon, type FlowMode, type IconName } from "../screens/parts";
+import { AREA, Group, Icon, StatusIcon, type IconName } from "../screens/parts";
 import s from "../command-palette.module.css";
 
 // What each command in the palette shows, drawn like the app with its sizes and color tokens, for the day the
 // page tells. A result plays in each time it's shown (the palette mounts it again); with reduced motion it's still.
 
-export type PaneId = "plan" | "waiting" | "terminal" | "app" | "cloud" | "flow" | "more";
+export type PaneId = "plan" | "waiting" | "terminal" | "app" | "cloud" | "more";
 
 /** The few icons the palette needs beyond the screens' own, from the app's icon set (src/components/icons.tsx). */
 const GLYPHS = {
@@ -382,89 +382,6 @@ function CloudPane() {
   );
 }
 
-/* ---------- Connect WEB-14 to WEB-16 ---------- */
-
-const MODES: { mode: FlowMode; title: string; body: string; label: string }[] = [
-  { mode: "auto", title: "Automatically", body: "A new Claude Code session starts as soon as WEB-14 is finished.", label: "Auto" },
-  { mode: "manual", title: "After you mark it done", body: "WEB-16 waits until you mark WEB-14 done, so you can check it first.", label: "Manual" },
-  { mode: "session", title: "In the same session", body: "The agent carries on with what it learned, between sessions on your computer. After a cloud session like WEB-14, the next one starts as a new session.", label: "Same session" },
-  { mode: "time", title: "At a set time", body: "WEB-16 starts at 18:00, once WEB-14 is finished.", label: "At 18:00" },
-];
-
-// Two sessions of the flow, as the Flow editor draws them (see session-flow.tsx), one above the other.
-function FlowNode({ y, x, taskKey, title, state, agent, place, where }: { x: number; y: number; taskKey: string; title: string; state: "waiting" | "todo"; agent: string; place: IconName; where: string }) {
-  const chip = agent === "Codex" ? 46 : 80;
-  return (
-    <g transform={`translate(${x} ${y})`}>
-      <rect x="0.5" y="0.5" width="231" height="73" rx="8" fill="var(--color-app-raised)" stroke="var(--color-app-ctl)" />
-      <g transform="translate(12 8)">
-        {state === "waiting"
-          ? <><circle cx="7" cy="7" r="6" fill="none" stroke="var(--color-app-accent)" strokeWidth="1.5" /><circle cx="7" cy="7" r="3" fill="var(--color-app-accent)" /></>
-          : <circle cx="7" cy="7" r="6" fill="none" stroke="var(--color-app-mut2)" strokeWidth="1.5" strokeDasharray="2 2" />}
-      </g>
-      <text x="33" y="19" fontFamily="var(--font-mono)" fontSize="11" fill="var(--color-app-mut2)">{taskKey}</text>
-      <text x="220" y="19" textAnchor="end" fontSize="11" fill={state === "waiting" ? "var(--color-app-fg2)" : "var(--color-app-mut2)"}>
-        {state === "waiting" ? "Waiting for you" : "Not started"}
-      </text>
-      <text x="12" y="40" fontSize="13" fill="var(--color-app-strong)">{title}</text>
-      <rect x="12.5" y="48.5" width={chip} height="18" rx="5" fill="none" stroke="var(--color-app-ctl)" />
-      <text x="19" y="61" fontSize="11" fill="var(--color-app-mut)">{agent}</text>
-      <g transform={`translate(${21 + chip} 51)`} color="var(--color-app-mut2)"><Icon name={place} size={13} strokeWidth={2} /></g>
-      <text x={39 + chip} y="61" fontSize="11" fill="var(--color-app-mut2)">{where}</text>
-      {[0, 74].map((cy) => <circle key={cy} cx="116" cy={cy} r="4" fill="var(--color-app-panel)" stroke="var(--color-app-line-strong)" strokeWidth="1.5" />)}
-    </g>
-  );
-}
-
-function FlowPane() {
-  const [mode, setMode] = useState<FlowMode>("time");
-  const line = FLOW_LINE[mode];
-  const label = MODES.find((m) => m.mode === mode)!.label;
-  const pw = label.length * 6.1 + 18;
-  return (
-    <>
-      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-app-line pl-5 pr-4">
-        <span className="h-2 w-2 rounded-full" style={{ background: AREA.dev }} />
-        <span className="text-[14px] font-semibold text-app-strong">PacedMind website</span>
-        <span className="flex-1" />
-        <span className="text-[12.5px] text-app-fg3">Flow on</span>
-        <span className="flex h-[18px] w-[30px] items-center justify-end rounded-full bg-accent-strong p-0.5"><span className="h-3.5 w-3.5 rounded-full bg-white" /></span>
-      </div>
-      <div className={s.flow}>
-        <div className={s.canvas} style={{ backgroundImage: "radial-gradient(circle, var(--color-app-ctl) 1px, transparent 1.3px)", backgroundSize: "22px 22px" }}>
-          <svg viewBox="0 0 320 250" className="block h-auto" style={{ width: "min(100%, 320px)" }} aria-hidden="true" fontFamily="var(--font-app)">
-            <g className={s.edge}>
-              <path d="M 124 94 C 124 122, 196 122, 196 150" fill="none" stroke="var(--color-app-fg3)" strokeWidth={line.width} strokeDasharray={line.dash} strokeLinecap="round" />
-              <path d="M 192 144 L 196 150 L 200 144" fill="none" stroke="var(--color-app-fg3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-            </g>
-            <FlowNode x={8} y={12} taskKey="WEB-14" title="Compress the hero images" state="waiting" agent="Codex" place="cloud" where="Codex cloud" />
-            <FlowNode x={80} y={159} taskKey="WEB-16" title="Draft the launch announcement" state="todo" agent="Claude Code" place="terminal" where="Terminal" />
-            <g transform="translate(160 122)">
-              <rect x={-pw / 2 + 0.5} y="-9.5" width={pw - 1} height="19" rx="9.5" fill="var(--color-app-panel)" stroke="var(--color-app-ctl)" />
-              <text y="4" textAnchor="middle" fontSize="11" fill="var(--color-app-mut)">{label}</text>
-            </g>
-          </svg>
-        </div>
-        <fieldset className="min-w-0 space-y-0.5 px-3 py-4">
-          <legend className="float-left mb-2 px-2 text-[12.5px] font-medium text-app-fg2">How WEB-16 starts</legend>
-          {MODES.map((m) => (
-            <label key={m.mode} className={`clear-left grid cursor-pointer grid-cols-[16px_28px_minmax(0,1fr)] items-start gap-2.5 rounded-lg p-2 hover:bg-app-hover ${mode === m.mode ? "bg-app-accent/[0.07]" : ""}`}>
-              <input type="radio" name="palette-mode" value={m.mode} checked={mode === m.mode} onChange={() => setMode(m.mode)} className={s.radio} />
-              <svg width="28" height="18" viewBox="0 0 28 18" aria-hidden="true">
-                <path d="M2 9H26" stroke="var(--color-app-fg3)" strokeWidth={FLOW_LINE[m.mode].width} strokeDasharray={FLOW_LINE[m.mode].dash} strokeLinecap="round" />
-              </svg>
-              <span>
-                <span className="block text-[13px] font-medium text-app-strong">{m.title}</span>
-                <span className="mt-0.5 block text-[12px] leading-[1.45] text-app-mut"><Keys text={m.body} /></span>
-              </span>
-            </label>
-          ))}
-        </fieldset>
-      </div>
-    </>
-  );
-}
-
 /* ---------- Start with another agent ---------- */
 
 function MorePane() {
@@ -499,7 +416,6 @@ export function Pane({ id, planned }: { id: PaneId; planned: boolean }) {
     case "terminal": return <TerminalPane />;
     case "app": return <AppPane />;
     case "cloud": return <CloudPane />;
-    case "flow": return <FlowPane />;
     case "more": return <MorePane />;
   }
 }

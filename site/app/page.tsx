@@ -2,7 +2,7 @@ import Link from "next/link";
 import prices from "@/prices.json";
 import { SITE, downloadEvent, signInEvent, sourceEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
-import { CLOUD, DAY, DOWNLOAD_NOTE, FAQ, FLOW, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, TRY, VIEWS as VIEW_COPY } from "@/lib/content";
+import { CLOUD, DAY, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, TRY, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication, softwareSourceCode } from "@/lib/seo";
 import { starsAtBuild } from "@/lib/github";
 import { JsonLd } from "@/components/json-ld";
@@ -13,9 +13,7 @@ import { Wordmark } from "@/components/wordmark";
 import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
 import { TodayScreen } from "@/components/screens/today";
 import { TimelineScreen } from "@/components/screens/timeline";
-import { FlowScreen } from "@/components/screens/flow";
-import { FLOW_LINE, Icon } from "@/components/screens/parts";
-import { SessionFlow } from "@/components/session-flow";
+import { Icon } from "@/components/screens/parts";
 import { DeparturesBoard } from "@/components/departures-board";
 import { DayStrip } from "@/components/day-strip";
 import { CommandPalette } from "@/components/command-palette";
@@ -29,7 +27,7 @@ const markets: Market[] = Object.entries(prices.markets)
   .sort((a, b) => a.name.localeCompare(b.name));
 
 // The screens render here, on the server; the deck only moves them.
-const SCREENS = { Today: <TodayScreen />, Timeline: <TimelineScreen />, Flow: <FlowScreen /> };
+const SCREENS = { Today: <TodayScreen />, Timeline: <TimelineScreen /> };
 const VIEWS: DeckItem[] = VIEW_COPY.map((view) => ({ ...view, screen: SCREENS[view.tab] }));
 
 // Beside the text, the screens take the column's width. In a short window they give up to 120 px of it, so the
@@ -101,8 +99,8 @@ export default async function Home() {
         </section>
 
         {/*
-          Between the hero and the pricing, one day three ways: your day beside the agents' (the day strip), where each
-          session runs (the board) and how the next one starts (the flow). Their widgets share the day's tasks and times.
+          Between the hero and the pricing, one day two ways: your day beside the agents' (the day strip) and where each
+          session runs (the board). Their widgets, and the command palette's results, share the day's tasks and times.
         */}
         <section id="day" className="mt-24 scroll-mt-8 sm:mt-[150px]">
           <Heading title={DAY.title} subtitle={DAY.subtitle} intro={DAY.intro} />
@@ -136,25 +134,6 @@ export default async function Home() {
             </div>
             <p className="text-[16px] text-text sm:text-[18px]">{PLACES.harnesses}</p>
           </div>
-        </section>
-
-        {/* A project's flow playing through the day, then the four ways the next session starts, drawn as the flow draws them. */}
-        <section id="flow" className="mt-24 scroll-mt-8 sm:mt-[150px]">
-          <Heading title={FLOW.title} subtitle={FLOW.subtitle} intro={FLOW.intro} />
-          <SessionFlow className="mt-12 sm:mt-16" />
-          <ul className="mt-16 grid gap-x-14 gap-y-10 border-t border-line pt-12 sm:mt-20 sm:grid-cols-2 md:pt-14 xl:grid-cols-4">
-            {FLOW.modes.map(({ mode, name, body }) => (
-              <li key={name}>
-                <svg width="34" height="22" viewBox="0 0 34 22" aria-hidden="true" className="text-mut">
-                  <path d="M 1.5 11 L 32.5 11" stroke="currentColor" strokeWidth={FLOW_LINE[mode].width * 1.3}
-                    strokeDasharray={FLOW_LINE[mode].dash} strokeLinecap="round" />
-                </svg>
-                <p className="mt-4 text-[17px] text-ink sm:text-[18px]">{name}</p>
-                <p className="mt-1.5 text-[16px] leading-[1.6] text-mut">{body}</p>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-10 max-w-[720px] text-[16px] leading-[1.6] text-text">{FLOW.note}</p>
         </section>
 
         <section id="try" className="mt-24 scroll-mt-8 sm:mt-[150px]">

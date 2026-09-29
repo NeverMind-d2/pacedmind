@@ -302,7 +302,7 @@
     grid-row: auto;
   }
 
-  /* The first session is long done; the phone shows the five that move. */
+  /* The first session is long done; the phone shows the four that move. */
   .labels,
   .lamp,
   .row[data-row="0"] {

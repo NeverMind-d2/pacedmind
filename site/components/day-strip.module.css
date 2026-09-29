@@ -419,12 +419,6 @@
   white-space: nowrap;
 }
 
-.label.end {
-  left: auto;
-  right: 0;
-  top: 8px;
-}
-
 .label .mono {
   color: var(--color-text);
   font-family: var(--font-mono);
@@ -442,7 +436,7 @@
   border-right: 3px solid var(--color-ink);
 }
 
-/* The marks: a fermata where a session waits for you, a cue at a set time, a tie across one session. */
+/* The mark: a fermata where a task that's ready holds until you start it. */
 .mark {
   position: absolute;
   color: var(--color-ink);
@@ -457,28 +451,6 @@
 
 .mark[data-state="holding"] {
   color: var(--color-app-accent);
-}
-
-.cue {
-  position: absolute;
-  top: 4px;
-  left: calc(var(--from) * 100%);
-  transform: translateX(-50%);
-  padding: 3px 4px 2px;
-  border: 1px solid var(--color-ink);
-  border-radius: 3px;
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font: 500 11px/1 var(--font-mono);
-}
-
-.cue::after {
-  content: "";
-  position: absolute;
-  top: 100%;
-  left: 50%;
-  height: 6px;
-  border-left: 1px solid var(--color-ink);
 }
 
 .playhead {

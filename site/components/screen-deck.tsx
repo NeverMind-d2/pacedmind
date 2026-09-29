@@ -7,9 +7,12 @@ export type DeckItem = { tab: string; title: string; body: string; screen: React
 
 const HOLD = 6000;
 const EASE = "cubic-bezier(0.65, 0, 0.35, 1)";
-// Where the front, middle and back screens sit on a 1056 × 780 stage; everything scales with the stage.
+// Where the front and back screens sit on a 1056 × 780 stage, with any others evenly between them; everything
+// scales with the stage.
 const STAGE = { w: 1056, h: 780 };
-const SLOTS = [[0, 236, 0], [138, 118, -130], [275, 0, -260]];
+const FRONT = [0, 236, 0];
+const BACK = [275, 0, -260];
+const slot = (role: number, count: number) => FRONT.map((f, i) => f + ((BACK[i] - f) * role) / Math.max(1, count - 1));
 const CARD_SCALE = 0.74;
 // The part of the stage the tilted screens cover, measured in the browser. The deck's box is cut to it, so the
 // tabs sit right under the screens and the screens' edges are the deck's edges.
@@ -77,11 +80,14 @@ export function ScreenDeck({ items, className = {} }: { items: DeckItem[]; class
     };
   }, [front, cycling, paused, items.length]);
 
-  // A screen that moves between the front and the back fades out while it passes the others.
+  // A screen that moves between the front and the back fades out while it passes the others. Two screens swap
+  // places, so only the one leaving the front fades.
   useEffect(() => {
-    const roles = items.map((_, i) => (i - front + items.length) % items.length);
+    const n = items.length;
+    const roles = items.map((_, i) => (i - front + n) % n);
     roles.forEach((role, i) => {
-      if (!reduced && Math.abs(role - lastRoles.current[i]) === 2) {
+      const last = lastRoles.current[i];
+      if (!reduced && n > 1 && Math.abs(role - last) === n - 1 && (n > 2 || last === 0)) {
         cards.current[i]?.animate([{ opacity: 1 }, { opacity: 0, offset: 0.3 }, { opacity: 0, offset: 0.62 }, { opacity: 1 }], { duration: 1000, easing: "ease-in-out" });
       }
     });
@@ -120,7 +126,7 @@ export function ScreenDeck({ items, className = {} }: { items: DeckItem[]; class
         }}>
           {items.map((it, i) => {
             const role = (i - front + items.length) % items.length;
-            const [x, y, z] = SLOTS[role];
+            const [x, y, z] = slot(role, items.length);
             return (
               <div key={it.tab} ref={(el) => { cards.current[i] = el; }} aria-hidden={role !== 0}
                 className="absolute left-0 top-0 will-change-transform"

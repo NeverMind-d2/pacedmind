@@ -19,7 +19,6 @@ const PATHS = {
   timeline: "M4 6h9M9 12h11M6 18h8",
   box: "M21 8l-9-5-9 5v8l9 5 9-5z M3 8l9 5 9-5 M12 13v8",
   roadmap: "M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z M9 3v15 M15 6v15",
-  flow: "M4 4h6v6H4z M14 14h6v6h-6z M10 7h2a3 3 0 0 1 3 3v4",
   terminal: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z M7 10l3 2-3 2 M12 15h5",
   appWindow: "M4 4h16a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z M3 9h18 M6.5 6.5h.01 M9.5 6.5h.01",
   cloud: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z",
@@ -43,15 +42,6 @@ export function Icon({ name, size = 16, strokeWidth = 1.8, className = "" }: { n
     </svg>
   );
 }
-
-/** The four ways the next session starts, as the Flow editor draws their connections. */
-export type FlowMode = "auto" | "manual" | "session" | "time";
-export const FLOW_LINE: Record<FlowMode, { width: number; dash?: string }> = {
-  auto: { width: 1.5 },
-  manual: { width: 1.5, dash: "5 4" },
-  session: { width: 3 },
-  time: { width: 1.8, dash: "1 4" },
-};
 
 export type Status = "backlog" | "todo" | "progress" | "review" | "done";
 
@@ -132,7 +122,7 @@ export function Segmented({ options, current }: { options: [IconName | null, str
 
 const NAV: [string, IconName, number?][] = [
   ["Inbox", "inbox"], ["Today", "sun", 5], ["Upcoming", "clock"], ["Calendar", "calendar"], ["Timeline", "timeline"],
-  ["Projects", "box"], ["Roadmap", "roadmap"], ["Flows", "flow"], ["Sessions", "terminal", 1],
+  ["Projects", "box"], ["Roadmap", "roadmap"], ["Sessions", "terminal", 1],
 ];
 
 /**

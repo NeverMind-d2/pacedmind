@@ -197,48 +197,9 @@ html[data-js] .deck-stage:not(.is-sized) {
   }
 }
 
-/* A pulse travelling into the running session in the Flow screen. */
-.flowing {
-  animation: flowing 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-
-@keyframes flowing {
-  from {
-    stroke-dashoffset: 14;
-  }
-  to {
-    stroke-dashoffset: -300;
-  }
-}
-
-/* The flow in the agents section (components/session-flow.tsx): states fade, and a start travels its connection. */
-.flow-fade {
-  transition: fill 400ms ease, stroke 400ms ease;
-}
-
-.flow-pulse {
-  stroke-dasharray: 10 100;
-  animation: flow-pulse cubic-bezier(0.65, 0, 0.35, 1) both;
-}
-
-@keyframes flow-pulse {
-  from {
-    stroke-dashoffset: 10;
-  }
-  to {
-    stroke-dashoffset: -100;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .unfold-tail,
-  .unfold-letter,
-  .flowing,
-  .flow-pulse {
+  .unfold-letter {
     animation: none;
-  }
-
-  .flow-fade {
-    transition: none;
   }
 }

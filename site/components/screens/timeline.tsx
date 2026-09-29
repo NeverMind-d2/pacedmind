@@ -48,6 +48,25 @@ for (const row of ROWS) {
 }
 const ROWS_H = bottom;
 
+// The day's dependencies: WEB-12 waits for WEB-10, and WEB-14 for WEB-12. Drawn as the app draws them, from under
+// the end of the earlier bar to the start of the later one, where an arrow points into it.
+const WAITS: [string, string][] = [["WEB-10", "WEB-12"], ["WEB-12", "WEB-14"]];
+const BAR = { top: 4, h: 18, mid: 13 };
+const taskAt = (key: string) => PLACED.find((p) => p.row.kind === "task" && p.row.key === key) as { row: Extract<Row, { kind: "task" }>; top: number };
+const DEPENDENCIES = WAITS.map(([from, to]) => {
+  const a = taskAt(from);
+  const b = taskAt(to);
+  const x1 = Math.max(X(a.row.from) + 3, X(a.row.to) - 5);
+  const y1 = a.top + BAR.top + BAR.h;
+  const x2 = X(b.row.from);
+  const y2 = b.top + BAR.mid;
+  return {
+    key: `${from}-${to}`,
+    d: `M${x1} ${y1} V${b.top} H${x2 - 6} V${y2} H${x2 - 1}`,
+    head: `M${x2 - 5} ${y2 - 3} L${x2 - 1} ${y2} L${x2 - 5} ${y2 + 3}`,
+  };
+});
+
 const LOOK: Record<Look, (c: string) => CSSProperties & { text: string }> = {
   done: (c) => ({ background: tint(c, 10), border: `1px solid ${tint(c, 22)}`, text: "text-app-mut2" }),
   waiting: (c) => ({ background: tint(c, 20), border: "1px solid color-mix(in srgb, var(--color-app-accent) 70%, transparent)", text: "text-app-fg2" }),
@@ -104,7 +123,7 @@ function Bars({ row, y }: { row: Row; y: number }) {
 export function TimelineScreen() {
   return (
     <AppWindow id="timeline" current="Timeline"
-      label="The Timeline view in PacedMind: three weeks of projects and tasks by area, with agent sessions as thin lines under their tasks and today marked.">
+      label="The Timeline view in PacedMind: three weeks of projects and tasks by area, with agent sessions as thin lines under their tasks, arrows into the tasks that wait for others, and today marked.">
       <Header icon="timeline" title="Timeline" sub="21 Sep to 11 Oct 2026">
         <Segmented options={[[null, "Week"], [null, "Month"], [null, "Quarter"]]} current="Month" />
       </Header>
@@ -178,11 +197,18 @@ export function TimelineScreen() {
           </div>
           <div className="relative" style={{ height: ROWS_H }}>
             {PLACED.map(({ row, top }, i) => (
-              <div key={i}>
-                <div className="absolute inset-x-0 h-px bg-app-hover" style={{ top: top + HEIGHT[row.kind] - 1 }} />
-                <Bars row={row} y={top} />
-              </div>
+              <div key={i} className="absolute inset-x-0 h-px bg-app-hover" style={{ top: top + HEIGHT[row.kind] - 1 }} />
             ))}
+            {/* Over the rows' lines and under the bars, as in the app. */}
+            <svg className="absolute left-0 top-0" width={GRID_W} height={ROWS_H} aria-hidden="true">
+              {DEPENDENCIES.map((dep) => (
+                <g key={dep.key}>
+                  <path d={dep.d} fill="none" stroke="var(--color-app-line-strong)" strokeWidth="1.2" strokeLinejoin="round" />
+                  <path d={dep.head} fill="none" stroke="var(--color-app-dim)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+              ))}
+            </svg>
+            {PLACED.map(({ row, top }, i) => <Bars key={i} row={row} y={top} />)}
           </div>
           <div className="absolute bottom-0 top-10 w-px bg-app-accent opacity-60" style={{ left: X(TODAY + 0.55) }} />
         </div>

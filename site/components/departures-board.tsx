@@ -5,31 +5,29 @@ import { Wordmark } from "./wordmark";
 import s from "./departures-board.module.css";
 
 // The day's agent sessions as a departures board: every few seconds one of them moves on, and its row flips to show
-// it, letter by letter, like a split-flap board. The same day as the day strip and the flow section.
+// it, letter by letter, like a split-flap board. The same day as the day strip and the command palette.
 
 type Row = { time: string; key: string; title: string; agent: string; where: string; status: string };
 
 // The board at 11:05: WEB-10 is done after your 11:00 check, APP-31 is still running, WEB-12 has waited since 10:42.
+// Nothing starts by itself: WEB-14 and WEB-16 get their times when you start them.
 const DAY: Row[] = [
   { time: "09:10", key: "WEB-10", title: "Draft the home page", agent: "Claude Code", where: "Claude app", status: "Done" },
   { time: "09:40", key: "APP-31", title: "Fix calendar sync after sleep", agent: "Codex", where: "Terminal", status: "Running" },
   { time: "09:52", key: "WEB-12", title: "Write the pricing page", agent: "Claude Code", where: "Terminal", status: "Waiting for you" },
-  { time: "", key: "WEB-14", title: "Compress the hero images", agent: "Codex", where: "Codex cloud", status: "After you mark it done" },
-  { time: "18:00", key: "WEB-16", title: "Draft the launch announcement", agent: "Claude Code", where: "Terminal", status: "At 18:00" },
-  { time: "", key: "WEB-17", title: "Proofread the announcement", agent: "Claude Code", where: "Terminal", status: "Same session" },
+  { time: "", key: "WEB-14", title: "Compress the hero images", agent: "Codex", where: "Codex cloud", status: "Waits for WEB-12" },
+  { time: "", key: "WEB-16", title: "Draft the launch announcement", agent: "Claude Code", where: "Terminal", status: "Not started" },
 ];
 // The rest of the day, one row at a time; then a new day, and the board starts over.
 const STEPS: ([number, Partial<Row>] | "new day")[] = [
   [1, { status: "Waiting for you" }], // 11:10, APP-31 hands back
   [2, { status: "Done" }], // 11:20, in WEB-12's check
-  [3, { time: "11:20", status: "Running" }], // so WEB-14 goes to Codex cloud
+  [3, { time: "11:20", status: "Running" }], // and you send WEB-14 to Codex cloud
   [1, { status: "Done" }], // after APP-31's 11:30 check
   [3, { status: "Waiting for you" }], // 13:20, PacedMind notices Codex cloud is done
   [3, { status: "Done" }], // after its 13:30 check
-  [4, { status: "Running" }], // 18:00
+  [4, { time: "18:00", status: "Running" }], // 18:00, you allow the start you asked for in a chat
   [4, { status: "Waiting for you" }], // 18:47
-  [5, { time: "18:47", status: "Running" }], // in the same session
-  [5, { status: "Waiting for you" }], // 19:30
   "new day",
 ];
 // How many characters each column holds, and what a changing flap riffles through on its way.

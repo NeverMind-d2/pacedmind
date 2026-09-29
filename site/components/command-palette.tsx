@@ -26,8 +26,6 @@ const COMMANDS: Command[] = [
     say: "WEB-10 opened in the Claude app with its first message written. Send it there to start." },
   { id: "cloud", group: "Agents", label: "Send WEB-14 to Codex cloud", icon: "cloud", pane: "cloud", keys: "codex cloud branch repository session",
     say: "WEB-14 went to Codex cloud, on the branch agent/web-14. PacedMind checked every minute and marked it finished at 13:20." },
-  { id: "flow", group: "Agents", label: "Connect WEB-14 to WEB-16", icon: "flow", pane: "flow", keys: "flow next session automatically mark done same session set time",
-    say: "Connect WEB-14 to WEB-16. Choose how WEB-16 starts." },
   { id: "more", group: "Agents", label: "Start with another agent", icon: "plus", pane: "more", hint: "Coming soon", disabled: true, keys: "harness harnesses agents",
     say: "Support for more agent harnesses is coming soon." },
   { id: "windows", group: "Get PacedMind", label: "Download for Windows", icon: "download", href: SITE.downloads.windows, keys: "install free" },
@@ -314,7 +312,7 @@ export function CommandPalette({ className = "" }: { className?: string }) {
                 </div>
               );
             })}
-            {shown.length === 0 && <p className="px-3.5 py-6 text-center text-[12.5px] text-app-mut2">No matches. Try “plan”, “codex” or “flow”.</p>}
+            {shown.length === 0 && <p className="px-3.5 py-6 text-center text-[12.5px] text-app-mut2">No matches. Try “plan”, “codex” or “terminal”.</p>}
           </div>
 
           <div className={s.result} role="region" aria-label="Result">

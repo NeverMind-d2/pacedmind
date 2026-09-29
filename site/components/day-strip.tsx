@@ -35,7 +35,7 @@ type Clip = {
   short?: boolean;
 };
 
-// The same day the flow section and the other widgets tell.
+// The same day the departures board and the command palette tell.
 const CLIPS: Clip[] = [
   { line: "you", kind: "event", from: "08:30", to: "08:45", area: "work", title: "Standup", short: true },
   { line: "you", kind: "block", from: "09:00", to: "11:00", area: "work", title: "Focus: pricing page" },
@@ -45,7 +45,6 @@ const CLIPS: Clip[] = [
   { line: "claude", kind: "session", from: "09:10", to: "09:52", area: "dev", key: "WEB-10", title: "Draft the home page", place: "Claude app", check: "11:00", done: "11:15" },
   { line: "claude", kind: "session", from: "09:52", to: "10:42", area: "dev", key: "WEB-12", title: "Write the pricing page", place: "Terminal", check: "11:15", done: "11:20" },
   { line: "claude", kind: "session", from: "18:00", to: "18:47", area: "dev", key: "WEB-16", title: "Draft the launch announcement", place: "Terminal" },
-  { line: "claude", kind: "session", from: "18:47", to: "19:30", area: "dev", key: "WEB-17", title: "Proofread the announcement", place: "Terminal, same session", short: true },
   { line: "codex", kind: "session", from: "09:40", to: "11:10", area: "dev", key: "APP-31", title: "Fix calendar sync after sleep", place: "Terminal", check: "11:30", done: "11:45" },
   { line: "codex", kind: "session", from: "11:20", to: "13:20", area: "dev", key: "WEB-14", title: "Compress the hero images", place: "Codex cloud", check: "13:30", done: "13:45" },
 ];
@@ -55,19 +54,18 @@ const TIMES = CLIPS.map((c) => ({ from: hours(c.from), to: hours(c.to), check: c
 const STATUS: [number, string][] = ([
   ["08:00", "Your calendar is on the top line. Your agents’ sessions go on the lines below it."],
   ["09:10", "You start WEB-10 in the Claude app."],
-  ["09:40", "Codex starts APP-31 in a terminal."],
-  ["09:52", "WEB-10 is finished, so WEB-12 starts on its own in a terminal."],
-  ["10:42", "Claude Code finished WEB-12. Its check is at 11:15, and WEB-14 waits until you mark it done."],
+  ["09:40", "You start APP-31 with Codex in a terminal."],
+  ["09:52", "WEB-10 is finished, so you start WEB-12, which waits for it, in a terminal."],
+  ["10:42", "Claude Code finished WEB-12. Its check is at 11:15, and WEB-14 waits until you start it."],
   ["11:00", "Your focus block is over, and your checks begin with WEB-10."],
   ["11:10", "Codex finished APP-31. Its check is at 11:30."],
-  ["11:20", "You marked WEB-12 done, so WEB-14 starts in Codex cloud."],
+  ["11:20", "You mark WEB-12 done and send WEB-14 to Codex cloud."],
   ["13:20", "Codex cloud finished WEB-14. Its check is at 13:30, after lunch."],
   ["14:00", "Your own task: PER-8, Book the dentist."],
   ["15:00", "The auto-planner placed a focus block for WRK-31, which is due at 17:00."],
   ["17:00", "WRK-31 is due."],
-  ["18:00", "At 18:00, WEB-16 starts on its own in a terminal."],
-  ["18:47", "WEB-16 is waiting for you. WEB-17 carries on in the same session."],
-  ["19:30", "WEB-17 is finished too. Both wait for you, with their reports."],
+  ["18:00", "You ask Claude in a chat to start WEB-16. It starts in a terminal once you allow it."],
+  ["18:47", "Claude Code finished WEB-16. It waits for you, with its report."],
 ] as const).map(([at, text]): [number, string] => [hours(at), text]);
 
 const PACES = [
@@ -75,7 +73,7 @@ const PACES = [
 ];
 // Where each line's clips sit: the line's top edge is measured, this is the middle of its staff.
 const MIDDLE: Record<LineName, number> = { you: 58, claude: 46, codex: 46 };
-// WEB-14 holds (the fermata) from WEB-12's finish until you mark WEB-12 done.
+// WEB-14 holds (the fermata) from WEB-12's finish, which it waits for, until you start it.
 const HOLD = [hours("10:42"), hours("11:20")];
 
 type ClipState = "todo" | "running" | "waiting" | "done";
@@ -382,15 +380,6 @@ export function DayStrip({ className = "" }: { className?: string }) {
                     ))}
                   </>
                 )}
-                {name === "claude" && (
-                  <>
-                    <span className={styles.cue} style={pos(18)}>18:00</span>
-                    <span className={`${styles.label} ${styles.end}`}><span className={styles.mono}>WEB-17</span></span>
-                    <div className={styles.mark} style={{ left: `calc(${along(hours("18:47")) * 100}% - 22px)`, top: MIDDLE.claude + 20 }}>
-                      <svg width="44" height="12" viewBox="0 0 44 12"><path d="M1 1C11 12.5 33 12.5 43 1C33 8 11 8 1 1Z" fill="currentColor" /></svg>
-                    </div>
-                  </>
-                )}
                 {name === "codex" && (
                   <div ref={fermata} data-state={STILL >= HOLD[0] && STILL < HOLD[1] ? "holding" : ""} className={styles.mark}
                     style={{ left: `calc(${along(hours("11:20")) * 100}% - 11px)`, top: MIDDLE.codex - 33 }}>
@@ -411,12 +400,12 @@ export function DayStrip({ className = "" }: { className?: string }) {
       <p className={styles.caption}>A day in PacedMind, written as a score. Drag along the hours to move through it.</p>
       <p className="sr-only">
         The day: a standup at 08:30 and a focus block for the pricing page from 09:00 to 11:00. You start WEB-10 in the
-        Claude app at 09:10; when it finishes at 09:52, WEB-12 starts on its own in a terminal and finishes at 10:42.
-        Codex works on APP-31 in a terminal from 09:40 to 11:10. PacedMind books their checks right after your focus
-        block, at 11:00, 11:15 and 11:30. When you mark WEB-12 done at 11:20, WEB-14 starts in Codex cloud; it finishes
-        at 13:20, and its check is at 13:30, after lunch with Ana. You book the dentist at 14:00 and prepare the Q4
-        slides before they’re due at 17:00. At 18:00 WEB-16 starts on its own in a terminal, and WEB-17 carries on in
-        the same session.
+        Claude app at 09:10; when it finishes at 09:52, you start WEB-12, which waits for it, in a terminal, and it
+        finishes at 10:42. At 09:40 you start APP-31 with Codex in a terminal; it works until 11:10. PacedMind books
+        their checks right after your focus block, at 11:00, 11:15 and 11:30. At 11:20 you mark WEB-12 done and send
+        WEB-14, which waits for it, to Codex cloud; it finishes at 13:20, and its check is at 13:30, after lunch with
+        Ana. You book the dentist at 14:00 and prepare the Q4 slides before they’re due at 17:00. At 18:00 you ask
+        Claude in a chat to start WEB-16; it starts in a terminal once you allow it in PacedMind, and finishes at 18:47.
       </p>
     </div>
   );

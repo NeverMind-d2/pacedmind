@@ -345,51 +345,6 @@
   background: var(--color-app-line2);
 }
 
-/* Connect WEB-14 to WEB-16: the connection draws itself; the ways to start sit beside it. */
-.flow {
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  min-height: 0;
-  overflow: auto;
-}
-
-.canvas {
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  border-right: 1px solid var(--color-app-line);
-  background-color: var(--color-app-bg);
-}
-
-.play .edge {
-  animation: wipe 700ms var(--ease) 100ms both;
-}
-
-@keyframes wipe {
-  from {
-    clip-path: inset(0 100% 0 0);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
-  }
-}
-
-.radio {
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  margin: 1px 0 0;
-  border: 1.5px solid var(--color-app-line-strong);
-  border-radius: 50%;
-  background: var(--color-app-panel);
-}
-
-.radio:checked {
-  border-color: var(--color-app-accent);
-  background: radial-gradient(circle, var(--color-app-accent) 0 3.6px, transparent 4.2px);
-}
-
 /* Narrow: the result first, the commands under it; while a command is typed, only the commands. */
 @container palette (width < 980px) {
   .body {
@@ -413,8 +368,7 @@
   }
 
   .scroll,
-  .aside,
-  .flow {
+  .aside {
     overflow: visible;
   }
 
@@ -447,19 +401,13 @@
 }
 
 @container result (width < 620px) {
-  .plan,
-  .flow {
+  .plan {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .aside {
     border-top: 1px solid var(--color-app-line);
     border-left: 0;
-  }
-
-  .canvas {
-    border-right: 0;
-    border-bottom: 1px solid var(--color-app-line);
   }
 
   .rules,
