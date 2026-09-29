@@ -100,7 +100,7 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
     if (mode === "signin") return run(() => signInAction(email, password, next));
     if (mode === "reset") return run(() => sendResetAction(email));
     if (password !== confirm) return setNote({ text: "The two passwords don't match.", error: true });
-    run(() => signUpAction(email, password));
+    run(() => signUpAction(email, password, next));
   };
   const switchTo = (m: Mode) => {
     setMode(m);

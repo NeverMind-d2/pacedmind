@@ -112,16 +112,21 @@ export async function signInAction(email: string, password: string, next?: strin
   return goNext(next);
 }
 
-export async function signUpAction(email: string, password: string): Promise<AuthResult> {
+/**
+ * `next`, as for signing in: an account made while an agent waits to be allowed goes on to that page once its email
+ * is confirmed and its two-factor sign-in set up (the email's link carries it, checked again by the callback).
+ */
+export async function signUpAction(email: string, password: string, next?: string | null): Promise<AuthResult> {
   await guard();
   if (!looksLikeEmail(clean(email))) return { ok: false, error: "Enter your email address." };
   const problem = passwordProblem(password);
   if (problem) return { ok: false, error: problem };
   const db = await supabase();
-  const { data, error } = await db.auth.signUp({ email: clean(email), password, options: { emailRedirectTo: callbackUrl("/today") } });
+  const after = MODE === "desktop" ? "/today" : safeNext(next);
+  const { data, error } = await db.auth.signUp({ email: clean(email), password, options: { emailRedirectTo: callbackUrl(after) } });
   if (error) return { ok: false, error: explain(error.message) };
   // Only when the project doesn't ask to confirm emails (it should).
-  if (data.session) return goNext();
+  if (data.session) return goNext(next);
   return { ok: true, message: `If ${clean(email)} can get an account, we sent it a link. Open it to confirm your email, then set up two-factor sign-in.` };
 }
 
