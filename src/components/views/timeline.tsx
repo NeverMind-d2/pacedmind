@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   useEffect, useLayoutEffect, useOptimistic, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent, type ReactNode,
 } from "react";
@@ -12,6 +12,7 @@ import {
   AGENT_LABEL, type Area, type FlowEdge, type Project, type Session, type SessionStatus, type Task, type TaskContext,
 } from "@/lib/types";
 import type { DayLoad, TaskState } from "@/server/timeline";
+import { TIMELINE_DAYS, TIMELINE_ZOOMS, type TimelineZoom } from "@/lib/timeline";
 import { AreaMark, Diamond, Icon, ProgressRing } from "@/components/icons";
 import { Popover, PopoverItem, PopoverLabel, type Anchor } from "@/components/popover";
 import type { QuickAddDefaults } from "@/components/quick-add";
@@ -60,9 +61,10 @@ function usePhone() {
 
 /* ---------- layout ---------- */
 
-export type TimelineZoom = "week" | "month" | "quarter";
 
+/** The zoom buttons fit this many days in view; the wheel (with Ctrl, or over the days) zooms anywhere between. */
 const ZOOM: Record<TimelineZoom, { label: string; days: number; minDay: number }> = {
+  day: { label: "Day", days: 1, minDay: 480 },
   week: { label: "Week", days: 7, minDay: 72 },
   month: { label: "Month", days: 28, minDay: 18 },
   quarter: { label: "Quarter", days: 91, minDay: 5 },
@@ -77,6 +79,14 @@ const LAYERS: { id: Layer; label: string }[] = [
   { id: "deadlines", label: "Deadlines" },
   { id: "deps", label: "Dependencies" },
 ];
+
+/** Pixels per day, from a whole quarter in view to a day whose hours are 200 px wide. */
+const MIN_DAY_W = 4;
+const MAX_DAY_W = 4800;
+/** From this width a day shows its hours. */
+const HOURS_FROM = 160;
+/** How far from either end of the range the next range is asked for, in days. */
+const EDGE = 14;
 
 const TREE = 260;
 /** On a phone the names get a narrow column, so the days keep most of the screen. */
@@ -401,9 +411,10 @@ function EdgeHint({ span, sc }: { span: Span; sc: Scale }) {
 
 /* ---------- lanes ---------- */
 
-function CapLane({ loads, dayMinutes, sc }: { loads: Record<string, DayLoad>; dayMinutes: number; sc: Scale }) {
+function CapLane({ loads, dayMinutes, sc, lo, hi }: { loads: Record<string, DayLoad>; dayMinutes: number; sc: Scale; lo: number; hi: number }) {
   const w = Math.max(3, Math.min(28, sc.dayW * 0.52));
-  return Array.from({ length: sc.days }, (_, i) => {
+  return Array.from({ length: hi - lo }, (_, k) => {
+    const i = lo + k;
     const day = addDaysStr(sc.from, i);
     const past = day < sc.today;
     const min = (past ? loads[day]?.done : loads[day]?.planned) ?? 0;
@@ -552,7 +563,11 @@ function TaskLane({ row, state, sc, layers, dragText, linkTarget, onGrab, onLink
 
 /* ---------- header with months and days ---------- */
 
-function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
+/** Hours between labels, so they stay about 44 px apart. */
+const hourStep = (dayW: number) => [1, 2, 3, 4, 6, 12].find((h) => (h * dayW) / 24 >= 44) ?? 24;
+
+/** Only the days in view (`lo` to `hi`) are drawn; `left` is where the view starts, so a day's name stays in sight. */
+function DayHeader({ sc, lo, hi, left }: { sc: Scale; lo: number; hi: number; left: number }) {
   const out: ReactNode[] = [];
   const pill = (day: string, d: Date, i: number) => {
     const isToday = day === sc.today;
@@ -564,18 +579,38 @@ function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
       </span>
     );
   };
-  for (let i = 0; i < sc.days; i++) {
+  for (let i = lo; i < hi; i++) {
     const day = addDaysStr(sc.from, i);
     const d = parseLocal(day);
     const x0 = sc.X(i);
     const cw = sc.X(i + 1) - x0;
-    if (zoom === "quarter") {
+    if (sc.dayW >= HOURS_FROM) {
+      // The day's name on top, held at the left of the view while its hours scroll by; the hours below.
+      const name = format(d, cw >= 260 ? "EEEE, d MMMM" : "EEE d MMM");
+      const nameX = Math.max(x0, Math.min(left, x0 + cw - textWidth(name) - 16));
+      out.push(
+        <span key={`n${i}`} className={cx("absolute top-[5px] flex items-center gap-1.5 whitespace-nowrap pl-1.5 text-[11px]", day === sc.today ? "text-fg2" : "text-mut")} style={{ left: nameX }}>
+          {day === sc.today && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}{name}
+        </span>,
+      );
+      out.push(<span key={`b${i}`} className="absolute bottom-0 top-0 w-px bg-line" style={{ left: x0 }} />);
+      const step = hourStep(sc.dayW);
+      for (let h = step; h < 24; h += step) {
+        out.push(
+          <span key={`h${i}-${h}`} className="absolute top-[22px] -translate-x-1/2 font-mono text-[10.5px] leading-[18px] text-mut2" style={{ left: x0 + (h * cw) / 24 }}>
+            {String(h).padStart(2, "0")}:00
+          </span>,
+        );
+      }
+      continue;
+    }
+    if (sc.dayW < 10) {
       // Months on top, Mondays below (today's week shows today's number instead). The range starts on a Monday.
-      if (d.getDate() === 1 || (i === 0 && d.getDate() < 22)) {
+      if (d.getDate() === 1 || (i === lo && d.getDate() < 22)) {
         // The first month is shortened when the next one starts too soon for its full name (days are narrow on a phone).
         const room = (getDaysInMonth(d) - d.getDate() + 1) * sc.dayW;
         const name = format(d, room < textWidth(format(d, "MMMM")) + 12 ? "MMM" : "MMMM");
-        out.push(<span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: x0 }}>{name}</span>);
+        out.push(<span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: i === lo ? Math.max(x0, left) : x0 }}>{name}</span>);
       }
       const thisWeek = dayDiff(day, sc.today) >= 0 && dayDiff(day, sc.today) < 7;
       if (i % 7 === 0 && !thisWeek) {
@@ -586,16 +621,16 @@ function DayHeader({ sc, zoom }: { sc: Scale; zoom: TimelineZoom }) {
       }
       continue;
     }
-    if (d.getDate() === 1) {
+    if (d.getDate() === 1 || (i === lo && d.getDate() < 25)) {
       out.push(
-        <span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: x0 }}>
+        <span key={`m${i}`} className="absolute top-[5px] whitespace-nowrap pl-1.5 text-[11px] text-mut" style={{ left: i === lo ? Math.max(x0, left) : x0 }}>
           {format(d, "MMMM")}
         </span>,
       );
     }
     out.push(
       <span key={`d${i}`} className="absolute top-[22px] flex h-[18px] items-center justify-center gap-1" style={{ left: x0, width: cw }}>
-        {zoom === "week" && <span className={cx("text-[11px]", i % 7 >= 5 ? "text-dim" : "text-mut2")}>{format(d, "EEE")}</span>}
+        {sc.dayW >= 40 && <span className={cx("text-[11px]", i % 7 >= 5 ? "text-dim" : "text-mut2")}>{format(d, "EEE")}</span>}
         {pill(day, d, i)}
       </span>,
     );
@@ -613,6 +648,7 @@ function addFor(r: Row, day: string): QuickAddDefaults | null {
 }
 
 function rangeLabel(from: string, days: number, short = false) {
+  if (days <= 1) return format(parseLocal(from), short ? "EEE d MMM" : "EEEE, d MMMM yyyy");
   if (short) return `${fmtShort(from)} to ${fmtShort(addDaysStr(from, days - 1))}`;
   const a = parseLocal(from);
   const b = parseLocal(addDaysStr(from, days - 1));
@@ -620,8 +656,12 @@ function rangeLabel(from: string, days: number, short = false) {
 }
 
 export function Timeline(props: {
-  /** Monday the range starts on, "YYYY-MM-DD". */
+  /** Monday the range starts on, "YYYY-MM-DD": TIMELINE_DAYS days, which scroll. */
   from: string;
+  /** The day it opens on, from the address; null opens on today. */
+  focus: string | null;
+  /** Pixels per day from the address (a zoom of the wheel's); null takes the zoom's. */
+  dayWidth: number | null;
   /** Server time, "YYYY-MM-DDTHH:mm:ss". */
   now: string;
   zoom: TimelineZoom;
@@ -643,7 +683,12 @@ export function Timeline(props: {
     state.map((t) => (t.id === p.id ? { ...t, ...p.patch } : t)));
   const [edges, editEdges] = useOptimistic(props.edges, (state, op: { add: FlowEdge } | { remove: number }) =>
     "add" in op ? [...state, op.add] : state.filter((e) => e.id !== op.remove));
-  const [zoom, setZoom] = useState(props.zoom);
+  const router = useRouter();
+  // A zoom button's, or null after the wheel set `custom` pixels per day.
+  const [zoom, setZoom] = useState<TimelineZoom | null>(props.dayWidth ? null : props.zoom);
+  const [custom, setCustom] = useState(props.dayWidth ?? 0);
+  // Where the view is scrolled to, across the days: which days to draw, and what the header says.
+  const [scrollX, setScrollX] = useState(0);
   const [layers, setLayers] = useState<Record<Layer, boolean>>({ tasks: true, sessions: true, blocks: true, deadlines: true, deps: true });
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -675,20 +720,165 @@ export function Timeline(props: {
   }, []);
 
   const now = tick && tick > props.now ? tick : props.now;
-  const { days, minDay } = ZOOM[zoom];
-  const dayW = Math.max(minDay, (width - tree) / days);
+  const days = TIMELINE_DAYS;
+  const viewW = Math.max(1, width - tree);
+  // Never so narrow that the days don't fill the view.
+  const floorW = Math.max(MIN_DAY_W, viewW / days);
+  const presetW = (z: TimelineZoom) => Math.max(ZOOM[z].minDay, viewW / ZOOM[z].days);
+  const dayW = Math.min(MAX_DAY_W, Math.max(floorW, zoom ? presetW(zoom) : custom));
   const X = (d: number) => Math.round(d * dayW);
   const sc: Scale = { from, days, dayW, gridW: X(days), X, now, nowPos: dayPos(from, now), today: dateOnly(now) };
   /** Which day of the range the pointer is over in a row's lane. */
   const dayAt = (e: { clientX: number; currentTarget: HTMLElement }) =>
     Math.max(0, Math.min(days - 1, Math.floor((e.clientX - e.currentTarget.getBoundingClientRect().left) / dayW)));
+  // The days in view, and one on each side, are drawn.
+  const lo = Math.max(0, Math.floor(scrollX / dayW) - 1);
+  const hi = Math.min(days, Math.ceil((scrollX + viewW) / dayW) + 1);
+  const firstShown = addDaysStr(from, Math.max(0, Math.floor(scrollX / dayW + 0.02)));
+  const shownDays = Math.max(1, Math.round(viewW / dayW));
+  // Where "Today" and the first view put today: a quarter of the way in, or in the Day zoom, now at a third.
+  const todayPos = () => (dayW >= HOURS_FROM ? dayPos(from, now) : dayDiff(from, dateOnly(now)));
+  const todayAt = () => (dayW >= HOURS_FROM ? viewW / 3 : Math.min(viewW / 4, dayW));
 
-  // On a phone the days scroll sideways: a range opens at its start, or at the day before today when today is out of view.
-  const todayAt = dayDiff(from, sc.today);
-  const openAt = todayAt > 0 && todayAt < days && X(todayAt + 1) > width - tree ? X(todayAt - 1) : 0;
+  /*
+   * Where the view goes when it's laid out next: a day position (in days from `from`) held at a point of the view
+   * (px from its left). Zooming holds the day under the pointer; a new range holds the days that were in view.
+   */
+  const hold = useRef<{ pos: number; at: number } | null>(null);
+  const lastFrom = useRef(from);
+  const opened = useRef(false);
+  const asked = useRef(false);
   useLayoutEffect(() => {
-    if (phone) scrollRef.current?.scrollTo({ left: openAt });
-  }, [phone, from, zoom, openAt, scrollRef]);
+    const el = scrollRef.current;
+    if (!el || width <= tree + 1) return;
+    if (lastFrom.current !== from) {
+      const shift = dayDiff(from, lastFrom.current);
+      lastFrom.current = from;
+      asked.current = false;
+      if (opened.current && !hold.current) hold.current = { pos: el.scrollLeft / dayW + shift, at: 0 };
+    }
+    // Only once the width is measured: until then the days have the fallback's width.
+    if (!opened.current && el.clientWidth === width) {
+      opened.current = true;
+      hold.current = props.focus ? { pos: dayDiff(from, props.focus), at: Math.min(viewW / 4, dayW) } : { pos: todayPos(), at: todayAt() };
+    }
+    if (hold.current) {
+      // The scroll event that follows updates what's drawn.
+      el.scrollLeft = Math.max(0, hold.current.pos * dayW - hold.current.at);
+      hold.current = null;
+    }
+  });
+
+  /** What's drawn follows the scroll; near either end of the range, the next one is asked for, around the days in view. */
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setScrollX(el.scrollLeft);
+    if (asked.current || !opened.current || hold.current) return;
+    const first = el.scrollLeft / dayW;
+    const last = (el.scrollLeft + viewW) / dayW;
+    if (first > EDGE && last < days - EDGE) return;
+    asked.current = true;
+    const q = new URLSearchParams(window.location.search);
+    q.set("at", addDaysStr(from, Math.floor((first + last) / 2)));
+    q.delete("from");
+    router.replace(`/timeline?${q}`, { scroll: false });
+  };
+
+  /** The zoom goes in the address, without asking the server again. */
+  const remember = (z: TimelineZoom | null, w: number) => {
+    const q = new URLSearchParams(window.location.search);
+    q.delete("zoom");
+    q.delete("dw");
+    if (z && z !== "month") q.set("zoom", z);
+    if (!z) q.set("dw", String(Math.round(w * 10) / 10));
+    const s = q.toString();
+    window.history.replaceState(window.history.state, "", s ? `?${s}` : window.location.pathname);
+  };
+  /** Zooms to `w` pixels per day, or to a zoom button's, holding the day at `at` px into the view (its middle by default). */
+  const zoomTo = (w: number | TimelineZoom, at = viewW / 2) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    hold.current = { pos: (el.scrollLeft + at) / dayW, at };
+    if (typeof w === "string") {
+      setZoom(w);
+      remember(w, 0);
+      return;
+    }
+    const next = Math.min(MAX_DAY_W, Math.max(floorW, w));
+    setZoom(null);
+    setCustom(next);
+    remember(null, next);
+  };
+
+  // The wheel zooms with Ctrl or ⌘ (a touchpad's pinch sends that too), or over the days at the top; otherwise it scrolls.
+  const wheel = useRef({ zoomTo, dayW });
+  useEffect(() => { wheel.current = { zoomTo, dayW }; });
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const overDays = !!(e.target as Element).closest?.("[data-days]");
+      const pinch = e.ctrlKey || e.metaKey;
+      if (!pinch && (!overDays || Math.abs(e.deltaX) > Math.abs(e.deltaY))) return;
+      e.preventDefault();
+      const delta = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1);
+      const at = Math.max(0, e.clientX - el.getBoundingClientRect().left - tree);
+      wheel.current.zoomTo(wheel.current.dayW * Math.exp(-delta * 0.0025), at);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [scrollRef, tree]);
+
+  /**
+   * A mouse dragged across the days (anywhere but a bar or its dots, which have their own drags, and the names)
+   * moves the view in any direction. A press without a drag stays a click.
+   */
+  const pan = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el || e.pointerType !== "mouse" || (e.button !== 0 && e.button !== 1)) return;
+    if ((e.target as Element).closest("[data-names], button, a, input")) return;
+    if (e.button === 1) e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, l0 = el.scrollLeft, t0 = el.scrollTop;
+    let moved = false;
+    const onMove = (ev: PointerEvent) => {
+      if (!moved) {
+        if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return;
+        moved = true;
+        holdCursor("grabbing");
+        setSpot(null);
+      }
+      el.scrollLeft = l0 - (ev.clientX - x0);
+      el.scrollTop = t0 - (ev.clientY - y0);
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      if (!moved) return;
+      releaseCursor();
+      swallowClick();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
+
+  /** The arrows move the view by most of its width; "Today" brings today back (from another range, it asks for today's). */
+  const scrollBy = (share: number) => scrollRef.current?.scrollBy({ left: share * viewW, behavior: "smooth" });
+  const toToday = () => {
+    const pos = todayPos();
+    if (pos < EDGE || pos > days - EDGE) {
+      opened.current = false;
+      const q = new URLSearchParams(window.location.search);
+      q.delete("at");
+      q.delete("from");
+      const s = q.toString();
+      router.replace(s ? `/timeline?${s}` : "/timeline", { scroll: false });
+      return;
+    }
+    scrollRef.current?.scrollTo({ left: Math.max(0, pos * dayW - todayAt()), behavior: "smooth" });
+  };
 
   const sessionsOf = new Map<number, Session[]>();
   for (const x of [...sessions].sort((a, b) => a.startedAt.localeCompare(b.startedAt))) {
@@ -845,23 +1035,11 @@ export function Timeline(props: {
     return { x1, y1, d: `M${x1} ${y1} C${x1 + k} ${y1} ${x2 - k} ${y2} ${x2} ${y2}`, ok: !link.problem };
   })();
 
-  const href = (start: string | null) => {
-    const q = new URLSearchParams();
-    if (start) q.set("from", start);
-    if (zoom !== "month") q.set("zoom", zoom);
-    const s = q.toString();
-    return s ? `/timeline?${s}` : "/timeline";
-  };
-  // The zoom only changes the layout, so it is kept in the URL without asking the server again.
-  const pickZoom = (z: TimelineZoom) => {
-    setZoom(z);
-    const q = new URLSearchParams(window.location.search);
-    if (z === "month") q.delete("zoom");
-    else q.set("zoom", z);
-    const s = q.toString();
-    window.history.replaceState(null, "", s ? `?${s}` : window.location.pathname);
-  };
-  const zoomOptions = (Object.keys(ZOOM) as TimelineZoom[]).map((z) => ({ value: z, label: ZOOM[z].label }));
+  // A zoom button, from the wheel's zoom too: it keeps the day in the middle of the view there.
+  const pickZoom = (z: TimelineZoom) => zoomTo(z);
+  const zoomOptions = TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM[z].label }));
+  // After the wheel zoomed, no button is pressed.
+  const zoomValue = (zoom ?? "") as TimelineZoom;
 
   return (
     <div className="flex min-w-0 flex-1">
@@ -870,29 +1048,29 @@ export function Timeline(props: {
         <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
           <Icon name="timeline" className="text-mut" />
           <h1 className="text-[14px] font-semibold text-strong">Timeline</h1>
-          <span className="text-mut2 max-md:hidden">{rangeLabel(from, days)}</span>
-          <span className="min-w-0 truncate text-mut2 md:hidden">{rangeLabel(from, days, true)}</span>
+          <span className="text-mut2 max-md:hidden">{rangeLabel(firstShown, shownDays)}</span>
+          <span className="min-w-0 truncate text-mut2 md:hidden">{rangeLabel(firstShown, shownDays, true)}</span>
           <div className="ml-1.5 flex items-center gap-0.5 max-md:ml-auto">
-            <Link href={href(addDaysStr(from, -days))} aria-label="Earlier" title="Earlier" className={NAV}>
+            <button type="button" onClick={() => scrollBy(-0.8)} aria-label="Earlier" title="Earlier" className={NAV}>
               <Icon name="chevronLeft" size={14} strokeWidth={2} />
-            </Link>
-            <Link href={href(addDaysStr(from, days))} aria-label="Later" title="Later" className={NAV}>
+            </button>
+            <button type="button" onClick={() => scrollBy(0.8)} aria-label="Later" title="Later" className={NAV}>
               <Icon name="chevronRight" size={14} strokeWidth={2} />
-            </Link>
-            <Link href={href(null)} className="ml-0.5 inline-flex h-[26px] items-center rounded-md border border-line2 px-2 text-[12.5px] text-fg3 hover:bg-hover">
+            </button>
+            <button type="button" onClick={toToday} className="ml-0.5 inline-flex h-[26px] items-center rounded-md border border-line2 px-2 text-[12.5px] text-fg3 hover:bg-hover">
               Today
-            </Link>
+            </button>
           </div>
           <span className="flex-1 max-md:hidden" />
           <div className="contents max-md:hidden">
-            <Segmented value={zoom} onChange={pickZoom} options={zoomOptions} />
+            <Segmented value={zoomValue} onChange={pickZoom} options={zoomOptions} />
           </div>
         </div>
 
         {/* On a phone the zoom comes first and the filters scroll sideways. */}
         <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-line px-5 text-[12px] max-md:overflow-x-auto">
           <div className="mr-1.5 shrink-0 md:hidden">
-            <Segmented value={zoom} onChange={pickZoom} options={zoomOptions} />
+            <Segmented value={zoomValue} onChange={pickZoom} options={zoomOptions} />
           </div>
           <span className="mr-1 text-mut2">Show</span>
           {LAYERS.map((l) => (
@@ -908,16 +1086,19 @@ export function Timeline(props: {
 
         {/* On a phone it scrolls both ways by touch, with the names and the days held in place. It stays hidden there
             until the page knows it's on a phone, rather than first showing the computer's layout. */}
-        <div ref={scrollRef} className={cx("min-h-0 flex-1 overflow-auto max-md:overscroll-x-contain", !phone && "max-md:invisible")}>
+        {/* Scrolls both ways; a mouse can also drag the days, and the wheel zooms over the days at the top or with Ctrl. */}
+        <div ref={scrollRef} onScroll={onScroll} onPointerDown={pan}
+          className={cx("min-h-0 flex-1 overflow-auto overscroll-x-contain", !phone && "max-md:invisible")}>
           <div style={{ width: tree + sc.gridW }}>
             <div className="sticky top-0 z-20 flex h-11 border-b border-line bg-panel">
-              <div className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel pl-5 pr-4 text-[11.5px] text-mut2 max-md:pl-3 max-md:pr-2 max-md:leading-4"
+              <div data-names className="sticky left-0 z-10 flex shrink-0 items-center border-r border-line bg-panel pl-5 pr-4 text-[11.5px] text-mut2 max-md:pl-3 max-md:pr-2 max-md:leading-4"
                 style={{ width: tree }}>
                 Areas, projects and tasks
               </div>
               {/* A click on a day adds a task planned for it. The day a row's lane points at is lit here too. */}
-              <div className="relative shrink-0 overflow-hidden" style={{ width: sc.gridW }}>
-                {Array.from({ length: days }, (_, i) => {
+              <div data-days title="Scroll here to zoom" className="relative shrink-0 overflow-hidden" style={{ width: sc.gridW }}>
+                {Array.from({ length: hi - lo }, (_, k) => {
+                  const i = lo + k;
                   const day = addDaysStr(from, i);
                   return (
                     <span key={day} title={`New task on ${fmtDay(day)}`} {...addOnClick(() => ({ plannedDate: day }))}
@@ -925,16 +1106,24 @@ export function Timeline(props: {
                   );
                 })}
                 <div className="pointer-events-none absolute inset-0">
-                  <DayHeader sc={sc} zoom={zoom} />
+                  <DayHeader sc={sc} lo={lo} hi={hi} left={scrollX} />
                 </div>
               </div>
             </div>
 
             <div ref={gridRef} className="relative" style={{ height }}>
-              {Array.from({ length: days }, (_, i) => i).filter((i) => i % 7 >= 5).map((i) => (
+              {Array.from({ length: hi - lo }, (_, k) => lo + k).filter((i) => i % 7 >= 5).map((i) => (
                 <span key={i} className="pointer-events-none absolute inset-y-0"
                   style={{ left: tree + X(i), width: X(i + 1) - X(i), background: "color-mix(in srgb, var(--color-ink) 1.8%, transparent)" }} />
               ))}
+              {/* With hours showing, a line at each labeled hour and a stronger one where each day starts. */}
+              {dayW >= HOURS_FROM && Array.from({ length: hi - lo }, (_, k) => lo + k).flatMap((i) => {
+                const step = hourStep(dayW);
+                return Array.from({ length: Math.ceil(24 / step) }, (_, j) => j * step).map((h) => (
+                  <span key={`${i}-${h}`} className="pointer-events-none absolute inset-y-0 w-px"
+                    style={{ left: tree + X(i + h / 24), background: h ? "color-mix(in srgb, var(--color-line) 70%, transparent)" : "var(--color-line)" }} />
+                ));
+              })}
 
               {rows.map((r) => {
                 const isSel = r.kind === "task" && r.task.key === sel;
@@ -944,7 +1133,7 @@ export function Timeline(props: {
                   <div key={r.id} className={cx("group flex", r.kind === "area" ? "bg-raised" : isSel ? "bg-sel" : "hover:bg-hover")}
                     style={{ height: r.h, borderBottom: `1px solid ${line}` }}>
                     {/* Its shadow covers the row's border as well, so the lines and bars scrolled under the names don't show through it. */}
-                    <div className={cx("sticky left-0 z-10 flex shrink-0 items-center gap-2 overflow-hidden border-r border-line pr-3", bg)}
+                    <div data-names className={cx("sticky left-0 z-10 flex shrink-0 items-center gap-2 overflow-hidden border-r border-line pr-3", bg)}
                       style={{
                         width: tree, boxShadow: `0 1px 0 ${line}`,
                         paddingLeft: r.kind === "task" ? (r.nested ? indent.nested : indent.task) : r.kind === "proj" ? indent.proj : indent.area,
@@ -992,7 +1181,7 @@ export function Timeline(props: {
                         },
                         onPointerLeave: () => setSpot(null),
                       })}>
-                      {r.kind === "cap" && layers.blocks && <CapLane loads={loads} dayMinutes={dayMinutes} sc={sc} />}
+                      {r.kind === "cap" && layers.blocks && <CapLane loads={loads} dayMinutes={dayMinutes} sc={sc} lo={lo} hi={hi} />}
                       {r.kind === "proj" && <ProjectLane row={r} sc={sc} />}
                       {r.kind === "task" && (
                         <TaskLane row={r} state={states[r.task.id]} sc={sc} layers={layers}

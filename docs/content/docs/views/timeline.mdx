@@ -1,6 +1,6 @@
 ---
 title: Timeline
-description: The timeline shows areas, projects and tasks as bars over weeks. Click a day to add a task, drag a bar's edges to change when it starts or is due, drag the bar to move it, and draw dependencies between tasks.
+description: The timeline shows areas, projects and tasks as bars over time, which you scroll and zoom freely, down to a day's hours. Click a day to add a task, drag a bar's edges to change when it starts or is due, drag the bar to move it, and draw dependencies between tasks.
 ---
 
 The **Timeline** lays out the work over time, grouped by area: each project and each task is a bar. It shows at a glance what runs when, what waits for what, and how much of your own time each day holds.
@@ -9,11 +9,17 @@ The **Timeline** lays out the work over time, grouped by area: each project and 
 
 ## The header
 
-* The range shown, such as *21 Sep to 18 Oct 2026*. It always starts on a Monday.
-* **Earlier** and **Later** move by one screen; **Today** returns to the current week.
-* **Week**, **Month** and **Quarter** set the zoom: 7, 28 or 91 days. **Month** is the default.
+* The days in view, such as *21 Sep to 18 Oct 2026*, or one day, such as *Tuesday, 29 September 2026*.
+* **Earlier** and **Later** move most of a screen; **Today** brings today back into view.
+* **Day**, **Week**, **Month** and **Quarter** zoom to fit 1, 7, 28 or 91 days in view. **Month** is the default.
 
-In **Week** and **Month**, the month's name appears above its first day.
+## Moving around and zooming
+
+The timeline scrolls freely in every direction, with no jumps between ranges: scroll sideways with a touchpad or <kbd>Shift</kbd> and the wheel, or drag the days with the mouse anywhere but on a bar, and the view follows in any direction. As you get near either end of what's loaded, the next weeks load around the days in view.
+
+Zoom with the wheel over the days at the top, or anywhere with <kbd>Ctrl</kbd> (on macOS <kbd>⌘</kbd>) held, or with a touchpad's pinch: the day under the pointer stays where it is. After zooming this way, no zoom button is pressed. The zoom is kept in the page's address.
+
+Zoomed in far enough, as in **Day**, each day shows its hours, with a line at each labeled hour, and the day's name stays at the left while its hours scroll by. **Day** puts now a third of the way in. With fewer days in view, the weekday names appear next to the dates; further out, the month's name appears above its first day, and in the widest zooms only Mondays are numbered.
 
 The bar under the header chooses what to **Show**:
 
@@ -57,7 +63,7 @@ While the pointer is over one of these rows, a dashed box with a **+** marks the
 * **starts** on its planned day; without one, on the day its first session started, or else on the day it was created. A task that hasn't started, has no planned day and waits for other tasks starts after them.
 * **ends** at its deadline, including the time of day. Without a deadline, the estimate sets the length, counting 8 hours per day, and at least one day.
 
-Bars outside the range show a small date at the edge, such as *‹ 12 Sep* or *30 Oct ›*. A navy line marks now; weekends are shaded.
+Bars outside the loaded weeks show a small date at the edge, such as *‹ 12 Sep* or *30 Oct ›*. A navy line marks now; weekends are shaded.
 
 ## How bars look
 
