@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useOptimistic, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useOptimistic, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   createAreaAction, createProjectAction, moveProjectsAction, reorderAreasAction, reorderProjectsAction, updateAreaAction, updateProjectAction,
 } from "@/app/actions";
@@ -12,6 +12,7 @@ import type { Area, Project, Usage } from "@/lib/types";
 import { AreaMenu, AreasMenu, InlineName, MoreButton, ProjectMenu, ProjectsMenu, type OpenMenu } from "./entity-menu";
 import { AreaIconSvg, AreaPicture, Icon, ProgressRing, type IconName } from "./icons";
 import { anchorOf, type Anchor } from "./popover";
+import { SIDEBAR_DEFAULT, SIDEBAR_MIN, clampWidth, setSidebarLayout, toggleSidebar, useSidebarLayout } from "./sidebar-layout";
 import { cx, useAction } from "./ui";
 import { ThemeToggle } from "./theme";
 
@@ -146,6 +147,12 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   // On a phone the sidebar is a panel over the page, opened from the header's menu button (app-header.tsx).
   const [drawer, setDrawer] = useState(false);
+  // On a wider screen: its width (dragged at its right edge) and whether Ctrl+B hid it. Hidden, it slides out over
+  // the page while the pointer is at the window's left edge (peek).
+  const layout = useSidebarLayout();
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const [peek, setPeek] = useState(false);
+  const width = dragWidth ?? layout.width;
   const nav = useRef<HTMLElement>(null);
   const active = (href: string) => path === href || path.startsWith(`${href}/`);
   const closeMenu = () => { setMenu(null); setBulk(null); };
@@ -153,8 +160,15 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   useEffect(() => {
     const toggle = () => setDrawer((open) => !open);
     const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "b" && !(e.target as HTMLElement).isContentEditable) {
+        e.preventDefault();
+        if (window.matchMedia("(max-width: 767.98px)").matches) setDrawer((open) => !open);
+        else { setPeek(false); toggleSidebar(); }
+        return;
+      }
       if (e.key !== "Escape") return;
       setDrawer(false);
+      setPeek(false);
       setSelection(null);
     };
     window.addEventListener("organizer:menu", toggle);
@@ -349,20 +363,50 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
   const menuArea = menu?.kind === "area" ? areas.find((a) => a.id === menu.id) : undefined;
   const menuProject = menu?.kind === "project" ? projects.find((p) => p.id === menu.id) : undefined;
 
+  // Dragging the right edge sets the width; let go far enough left of the narrowest and it hides instead.
+  const startResize = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const x0 = e.clientX, w0 = layout.width;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => setDragWidth(clampWidth(w0 + ev.clientX - x0));
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+      const w = w0 + ev.clientX - x0;
+      setSidebarLayout(w < SIDEBAR_MIN - 80 ? { hidden: true } : { width: clampWidth(w) });
+      setDragWidth(null);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+
   return (
     <>
       {drawer && <div aria-hidden className="fixed inset-0 z-40 bg-overlay md:hidden" onClick={() => setDrawer(false)} />}
+      {/* Takes the sidebar's room beside the page, or, hidden, a strip at the window's edge that brings it out. On a phone it isn't there. */}
+      <div className="relative shrink-0 max-md:contents" style={{ width: layout.hidden ? 8 : width }}
+        onMouseEnter={() => { if (layout.hidden) setPeek(true); }}
+        // Out of the strip and the sidebar over the page, a peek goes back, unless one of its menus is open.
+        onMouseLeave={() => { if (!menu && !bulk) setPeek(false); }}>
       <nav ref={nav} aria-label="Main"
         // A link opens its page and ends the selection; on a phone the panel gets out of the way. A click with
         // Ctrl, ⌘ or Shift selected a row instead.
         onClick={(e) => {
           if (e.ctrlKey || e.metaKey || e.shiftKey || !(e.target as HTMLElement).closest("a")) return;
           setDrawer(false);
+          setPeek(false);
           setSelection(null);
         }}
-        className={cx("flex w-60 shrink-0 flex-col gap-[18px] overflow-y-auto px-2.5 py-3",
+        style={{ "--sidebar-w": `${width}px` } as CSSProperties}
+        className={cx("flex h-full w-[var(--sidebar-w)] shrink-0 flex-col gap-[18px] overflow-y-auto px-2.5 py-3",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[280px] max-md:border-r max-md:border-line max-md:bg-bg max-md:transition-[transform,visibility] max-md:duration-200",
-          !drawer && "max-md:invisible max-md:-translate-x-full")}>
+          !drawer && "max-md:invisible max-md:-translate-x-full",
+          layout.hidden && "md:absolute md:inset-y-0 md:left-0 md:z-50 md:rounded-r-[10px] md:border md:border-l-0 md:border-line md:bg-bg md:shadow-[var(--shadow-popover)] md:transition-[transform,visibility] md:duration-150",
+          layout.hidden && !peek && "md:invisible md:-translate-x-full")}>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={() => { setDrawer(false); window.dispatchEvent(new CustomEvent("organizer:palette")); }} aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)"
             className="flex h-[30px] flex-1 items-center gap-2 rounded-md px-2 text-mut hover:bg-hover">
@@ -479,6 +523,19 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
             onRename={() => setRenaming(`project:${menuProject.id}`)} />
         )}
       </nav>
+      {!layout.hidden && (
+        <div role="separator" aria-orientation="vertical" aria-label="Sidebar width" aria-valuenow={width} tabIndex={0}
+          title="Drag to resize, double-click to reset. Ctrl+B hides the sidebar."
+          onPointerDown={startResize} onDoubleClick={() => setSidebarLayout({ width: SIDEBAR_DEFAULT })}
+          onKeyDown={(e) => {
+            const step = e.key === "ArrowLeft" ? -16 : e.key === "ArrowRight" ? 16 : 0;
+            if (step) { e.preventDefault(); setSidebarLayout({ width: clampWidth(width + step) }); }
+          }}
+          className="group absolute inset-y-0 -right-1 z-10 flex w-2 cursor-col-resize justify-center outline-none max-md:hidden">
+          <span className={cx("h-full w-0.5 rounded-full transition-colors group-hover:bg-line2 group-focus-visible:bg-line2", dragWidth !== null && "bg-line2")} />
+        </div>
+      )}
+      </div>
     </>
   );
 }
