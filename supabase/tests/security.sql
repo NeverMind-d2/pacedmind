@@ -762,6 +762,12 @@ begin
   exception when others then out := out || '30g a request''s own fresh_code refused: ' || left(sqlerrm, 60) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, agent_session) values (dev, tid, 'claude', gen_random_uuid());
+    out := out || '30ga FAIL a request named an agent''s sign-in itself' || E'\n';
+    reset role;
+  exception when others then out := out || '30ga a request''s own agent sign-in refused: ' || left(sqlerrm, 60) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
     update public.launch_requests set fresh_code = true where id = req_nc;
     out := out || '30h FAIL a request''s fresh_code changed afterwards' || E'\n';
     reset role;
@@ -1054,6 +1060,18 @@ begin
     out := out || '28m FAIL a read-only account asked a computer to start a session' || E'\n';
     reset role;
   exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28m starting a session refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at) values ('Time and schedule', 'Blocked', '2026-09-29T10:00:00');
+    out := out || '28ma FAIL a read-only account added a preference' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28ma adding a preference refused with ' || code || ' (want PT402)' || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.folder_requests (device_id, area_id, folder) values (dev, area_a, '/home/me/code');
+    out := out || '28mb FAIL a read-only account asked for a folder' || E'\n';
+    reset role;
+  exception when others then get stacked diagnostics code = returned_sqlstate; out := out || '28mb asking for a folder refused with ' || code || ' (want PT402)' || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
     update public.areas set name = name where user_id = b; get diagnostics n = row_count;

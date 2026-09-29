@@ -76,7 +76,7 @@ export interface LaunchRequestInput {
   deviceId: string;
   taskId: number;
   agent: AgentId;
-  /** Where it was asked from: "web" or "desktop". */
+  /** Where it was asked from: "web", "desktop", or "agent" for an agent's start_session (the database sets it for one signed in to PacedMind Cloud). */
   via: string;
   kind?: LaunchRequestKind;
   surface?: Surface | null;
