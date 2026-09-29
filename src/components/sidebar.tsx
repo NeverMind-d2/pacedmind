@@ -109,7 +109,9 @@ function MenuRow({ href, active, open, selected, dragged, drop, label, onMenu, o
         {trailing && <span className={cx("group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 pointer-coarse:mr-7 pointer-coarse:opacity-100", open && "opacity-0")}>{trailing}</span>}
       </Link>
       {group && <button type="button" aria-label={`New project in ${label}`} title={`New project in ${label}`} onClick={group.onAdd}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-mut2 hover:bg-hover hover:text-fg2">
+        // Like the "…", only while the row is hovered or its menu is open; a touch screen always shows it.
+        className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded text-mut2 opacity-0 hover:bg-hover hover:text-fg2 focus-visible:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100",
+          open && "opacity-100")}>
         <Icon name="plus" size={13} />
       </button>}
       <MoreButton label={`${label} options`} open={open} onOpen={onMenu} onClose={onClose}
