@@ -12,7 +12,8 @@ import {
 import { askForChangesOn, resumeSessionOrAsk, startSessionOrAsk } from "./remote-start";
 import { AskCard } from "./ask-card";
 import { RequestStatus, useComputer } from "./request-status";
-import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
+import { attentionOf, checkedIn, dueInfo, eventLine, fmtTime, hhmm, minutesOf, parseLocal, planOf, timeOf, waitingInTerminal } from "@/lib/dates";
+import { blockMinutes } from "@/lib/planner";
 import { desktopStartText } from "@/lib/session-health";
 import { agentUseLine, hasUse } from "@/lib/usage";
 import {
@@ -36,6 +37,15 @@ const DoerIcon = ({ doer, size }: { doer: Doer | null; size: number }) =>
   doer === "human" ? <Icon name="user" size={size} /> : doer ? <AgentIcon agent={doer} size={size - 1} /> : <Icon name="terminal" size={size} />;
 
 const ESTIMATES = [15, 30, 45, 60, 90, 120, 180, 240];
+
+/** "45 min", "1 h", "1 h 30 min". */
+const duration = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`);
+
+/** How long a block from `start` may run, in minutes, for its finish menu: common lengths within the day, and its own. */
+function finishOptions(start: number, current: number) {
+  const lengths = [15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 480];
+  return [...new Set([...lengths, current])].filter((m) => start + m <= 24 * 60).sort((a, b) => a - b);
+}
 
 function Prop({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -349,16 +359,32 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
                 {due ? <><span>{format(parseLocal(task.dueDate!), timeOf(task.dueDate) ? "EEE d MMM, HH:mm" : "EEE d MMM")}</span><span className="truncate text-mut2">{due.long.split("·")[1]}</span></> : <span className="text-mut2">Add a deadline</span>}
               </button>} />
           </Prop>
-          <Prop label="Planned">
-            <DateField value={task.plannedDate} withTime={false} onChange={(v) => save({ plannedDate: v ? v.slice(0, 10) : null })}
+          {/* When you mean to work on it: a day, or a block from a start time to a finish, as in the week calendar. */}
+          <Prop label="Start">
+            <DateField value={task.plannedDate && (task.plannedTime ? `${task.plannedDate}T${task.plannedTime}` : task.plannedDate)}
+              onChange={(v) => save(v ? { plannedDate: v.slice(0, 10), plannedTime: timeOf(v) } : { plannedDate: null, plannedTime: null })}
               trigger={<button type="button" className={pv}><Icon name="calendarCheck" size={14} />
-                {task.plannedDate ? format(parseLocal(task.plannedDate), "EEE d MMM") : <span className="text-mut2">Pick a day to work on it</span>}
+                {task.plannedDate
+                  ? format(parseLocal(task.plannedDate), "EEE d MMM") + (task.plannedTime ? `, ${task.plannedTime}` : "")
+                  : <span className="text-mut2">Pick when to work on it</span>}
               </button>} />
           </Prop>
-          <Prop label="Estimate">
-            <Menu trigger={<button type="button" className={pv}><Icon name="hourglass" size={14} />{task.estimateMin} min</button>}
-              items={ESTIMATES.map((m) => ({ value: m, label: `${m} min` }))} onSelect={(v) => save({ estimateMin: v })} />
-          </Prop>
+          {task.plannedDate && task.plannedTime ? (
+            <Prop label="Finish">
+              <Menu trigger={<button type="button" className={pv}><Icon name="clock" size={14} />
+                {hhmm(Math.min(24 * 60, minutesOf(task.plannedTime) + blockMinutes(task)))}
+                <span className="text-mut2">{duration(blockMinutes(task))}</span></button>}
+                items={finishOptions(minutesOf(task.plannedTime), blockMinutes(task)).map((m) => ({
+                  value: m, label: `${hhmm(minutesOf(task.plannedTime!) + m)}  ·  ${duration(m)}`,
+                }))}
+                onSelect={(v) => save({ estimateMin: v })} />
+            </Prop>
+          ) : (
+            <Prop label="Estimate">
+              <Menu trigger={<button type="button" className={pv}><Icon name="hourglass" size={14} />{task.estimateMin} min</button>}
+                items={ESTIMATES.map((m) => ({ value: m, label: `${m} min` }))} onSelect={(v) => save({ estimateMin: v })} />
+            </Prop>
+          )}
           <Prop label="Area">
             <Menu trigger={<button type="button" className={pv}>{area ? <AreaMark area={area} size={14} dot={8} /> : <Icon name="inbox" size={14} />}{area?.name ?? "Inbox"}</button>}
               items={[{ value: null as string | null, label: "Inbox, no area" }, ...ctx.areas.map((a) => ({ value: a.id as string | null, label: a.name, icon: <AreaMark area={a} size={14} dot={8} /> }))]}
