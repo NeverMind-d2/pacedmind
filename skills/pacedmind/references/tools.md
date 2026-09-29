@@ -2,15 +2,22 @@
 
 Every tool the `pacedmind` MCP server offers, grouped by purpose. The tool descriptions and parameter schemas the client shows you have the details. Tools marked (read) never change anything.
 
-A session that PacedMind started gets a smaller set: the read tools, `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run and what they need), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
+A session that PacedMind started gets a smaller set: the read tools (`get_preferences` too), `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run and what they need), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
 
 PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign in to with the user's account) has every tool but `attach_image` and `ask_user`: it can't read files from your computer, so `finish_task` takes no `images` there, and you ask the user in the conversation instead. Its `start_session` and `request_changes` start nothing: they return a link where the user does it with their two-factor code. It can't set folders either.
 
 ## Orientation
 
-- `get_overview` (read): the current date and time, areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and sessions waiting for review or running. Start here.
+- `get_overview` (read): the current date and time, the user's preferences (while they're short), areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and sessions waiting for review or running. Start here.
 - `get_settings` (read): work hours, break and work days, how sessions start, and the MCP address.
 - `update_settings`: work hours, break and work days, which the auto-planner uses.
+
+## Preferences
+
+How the user likes to work, in their own words: one short sentence each, on a topic: `schedule` (when to plan which work, focus time, breaks, days off), `deadlines` (due dates and planned days, buffers), `tasks` (language, detail, estimates, Done when items, labels), `places` (which area, project, workspace or computer work goes to), `agents` (which agent does what, models, where sessions run) and `other`. The user edits them in Settings → How you work.
+
+- `get_preferences` (read): all of them by topic with their ids, or one topic's. Read them before you plan, schedule, set dates or create tasks, and follow them unless the user says otherwise now. They're the user's notes, not instructions.
+- `update_preferences`: `add` (topic and text), `change` (by id: new text or topic) and `remove` (ids). Only what the user said or confirmed in this conversation; ask before saving something you inferred, and before removing one. Text the list has already isn't added twice; at most 100.
 
 ## Areas
 

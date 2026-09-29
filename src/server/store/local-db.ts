@@ -86,6 +86,9 @@ CREATE TABLE IF NOT EXISTS edges (
   mode TEXT NOT NULL DEFAULT 'auto', at_time TEXT, UNIQUE(from_task_id, to_task_id)
 );
 CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS preferences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, topic TEXT NOT NULL, text TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'you', updated_at TEXT NOT NULL
+);
 `;
 
 type Row = Record<string, unknown>;

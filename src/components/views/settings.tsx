@@ -6,7 +6,7 @@ import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   connectAgentAction, createProjectAction, disconnectAgentAction, importLegacyAction, manageBillingAction, moveToThisComputerAction, resetDataAction, rotateMcpTokenAction, subscribeAction,
-  linkFoundFolderAction, markFoldersAction, updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
+  linkFoundFolderAction, markFoldersAction, updateDeviceSettingsAction, savePreferencesAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
@@ -15,14 +15,14 @@ import {
   FALLBACK_MARKET, MARKETS, YEARLY_MONTHS, daysLeft, marketOf, planPrice, type BillingPeriod, type Plan,
 } from "@/lib/billing";
 import { projectColor } from "@/lib/colors";
-import { toDateStr } from "@/lib/dates";
+import { fmtShort, toDateStr } from "@/lib/dates";
 import { REMOTE_START_OPTIONS, fromElsewhereText } from "@/lib/from-elsewhere";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
-  AGENT_LABEL, APP_LABEL, deviceOnline,
-  type AgentId, type AgentTools, type Area, type ConnectedAgent, type Device, type DeviceSettings, type FolderExtras, type McpLink, type Project,
-  type ProjectAgentsView, type Settings,
+  AGENT_LABEL, APP_LABEL, PREFERENCE_TEXT_MAX, PREFERENCE_TOPICS, PREFERENCE_TOPIC_HINT, PREFERENCE_TOPIC_LABEL, deviceOnline,
+  type AgentId, type AgentTools, type Area, type ConnectedAgent, type Device, type DeviceSettings, type FolderExtras, type McpLink, type Preference,
+  type PreferenceTopic, type Project, type ProjectAgentsView, type Settings,
 } from "@/lib/types";
 import { guessCountry } from "../../../site/lib/markets";
 import { useOpenBilling } from "../billing";
@@ -38,6 +38,7 @@ import { Button, Dot, Menu, Segmented, Switch, cx, toast, useAction } from "../u
 /** The MCP server's tools by purpose (src/server/mcp). */
 const TOOL_GROUPS: [string, string[]][] = [
   ["Overview", ["get_overview", "get_settings", "update_settings"]],
+  ["Preferences", ["get_preferences", "update_preferences"]],
   ["Areas", ["list_areas", "create_area", "update_area", "delete_area"]],
   ["Projects", ["list_projects", "get_project", "create_project", "update_project", "delete_project", "reorder_tasks"]],
   ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "connect_tasks", "disconnect_tasks", "delete_task"]],
@@ -161,7 +162,7 @@ function ComputersLink() {
 
 const PAGE_ICON: Record<SettingsSection, IconName> = {
   account: "user", plan: "creditCard", security: "shield", computers: "laptop", data: "database",
-  appearance: "palette", notifications: "bell", planning: "calendar",
+  appearance: "palette", notifications: "bell", planning: "calendar", preferences: "target",
   computer: "laptop", sessions: "terminal", projects: "folder", mcp: "plug",
 };
 
@@ -512,6 +513,77 @@ export function PlanningSettings({ settings }: { settings: Settings }) {
         })}
       </Row>
     </Section>
+  );
+}
+
+/** Settings → How you work: the preferences agents follow when they plan and write tasks, by topic. */
+export function PreferencesSettings({ preferences }: { preferences: Preference[] }) {
+  const { run, pending } = useAction();
+  const [topic, setTopic] = useState<PreferenceTopic>("schedule");
+  const [text, setText] = useState("");
+  const add = () => {
+    if (!text.trim()) return;
+    run(() => savePreferencesAction({ add: [{ topic, text }] }), "Saved");
+    setText("");
+  };
+  const topics = PREFERENCE_TOPICS.filter((t) => preferences.some((p) => p.topic === t));
+  return <>
+    <Section note="Agents read these before they plan your time or write tasks for you, and follow them. Tell an agent how you like to work and it asks to add it here. They're your notes: agents follow them as preferences, never as commands.">
+      {!preferences.length && (
+        <p className="px-3.5 py-4 text-[12.5px] leading-relaxed text-mut2">
+          Nothing yet. Add how you like to work below, such as when you do deep work, how far ahead to set deadlines, or which agent
+          takes which kind of task.
+        </p>
+      )}
+      {topics.map((t) => (
+        <div key={t} className="border-b border-line last:border-b-0">
+          <div className="px-3.5 pt-3 pb-1 text-[12px] text-mut2"><span className="font-medium text-fg3">{PREFERENCE_TOPIC_LABEL[t]}</span> · {PREFERENCE_TOPIC_HINT[t]}</div>
+          {preferences.filter((p) => p.topic === t).map((p) => <PreferenceRow key={`${p.id}:${p.text}`} preference={p} />)}
+        </div>
+      ))}
+    </Section>
+
+    <Section title="Add">
+      <div className="flex items-start gap-2 px-3.5 py-3 max-sm:flex-col max-sm:items-stretch">
+        <Menu width={280}
+          trigger={<button type="button" className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
+            {PREFERENCE_TOPIC_LABEL[topic]}<Icon name="chevronDown" size={11} />
+          </button>}
+          items={PREFERENCE_TOPICS.map((t) => ({ value: t, label: PREFERENCE_TOPIC_LABEL[t], hint: PREFERENCE_TOPIC_HINT[t] }))}
+          onSelect={setTopic} />
+        <textarea rows={1} value={text} maxLength={PREFERENCE_TEXT_MAX} aria-label="New preference"
+          placeholder="Deep work before noon, meetings after 14:00"
+          onChange={(e) => setText(e.target.value.replace(/\s*\n\s*/g, " "))}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+          className="field-sizing-content min-h-7 min-w-0 flex-1 resize-none rounded-md border border-line2 bg-input px-2 py-[5px] text-[12.5px] leading-[17px] text-fg2 outline-none focus:border-line-strong" />
+        <Button onClick={add} disabled={pending || !text.trim()}>Add</Button>
+      </div>
+    </Section>
+  </>;
+}
+
+/** One preference: its words (click to edit, saved when you leave the field), who wrote it last, and removing it. */
+function PreferenceRow({ preference: p }: { preference: Preference }) {
+  const { run } = useAction();
+  const save = (value: string) => {
+    const next = value.replace(/\s+/g, " ").trim();
+    if (next && next !== p.text) run(() => savePreferencesAction({ change: [{ id: p.id, text: next }] }), "Saved");
+  };
+  return (
+    <div className="group flex items-start gap-2 px-3.5 py-1.5">
+      <textarea rows={1} defaultValue={p.text} maxLength={PREFERENCE_TEXT_MAX} aria-label="Preference"
+        onBlur={(e) => save(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
+        className="field-sizing-content min-h-7 min-w-0 flex-1 resize-none rounded-md border border-transparent bg-transparent px-2 py-[5px] text-[12.5px] leading-[17px] text-fg2 outline-none hover:border-line2 focus:border-line-strong focus:bg-input" />
+      <span className="mt-[6px] shrink-0 text-[11.5px] text-mut2" title={p.updatedAt.replace("T", " ")}>
+        {p.source === "agent" ? "By an agent" : "By you"}{p.updatedAt ? `, ${fmtShort(p.updatedAt)}` : ""}
+      </span>
+      <button type="button" aria-label="Remove" title="Remove"
+        onClick={() => confirm(`Remove "${p.text}"?`) && run(() => savePreferencesAction({ remove: [p.id] }), "Removed")}
+        className="mt-[3px] flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-mut2 opacity-0 hover:bg-hover hover:text-fg2 focus:opacity-100 group-hover:opacity-100 max-sm:opacity-100">
+        <Icon name="x" size={12} />
+      </button>
+    </div>
   );
 }
 

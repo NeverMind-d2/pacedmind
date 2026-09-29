@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ComputersSettings } from "@/components/computers-settings";
 import {
   AccountSettings, AppearanceSettings, ComputerSettings, DataSettings, McpSettings, NotificationSettings, PlanSettings,
-  PlanningSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
+  PlanningSettings, PreferencesSettings, ProjectSettings, SecuritySettings, SessionSettings, SettingsContent, type AccountView,
 } from "@/components/views/settings";
 import * as repo from "@/server/repo";
 import { legacySummary } from "@/server/account";
@@ -83,6 +83,8 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     }
     case "planning":
       return <PlanningSettings settings={await repo.getSettings()} />;
+    case "preferences":
+      return <PreferencesSettings preferences={await repo.listPreferences()} />;
     case "computer":
       return <ComputerSettings device={deviceSettings()} account={!!state} found={await thisDevice()} />;
     case "sessions":

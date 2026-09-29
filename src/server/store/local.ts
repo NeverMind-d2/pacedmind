@@ -9,16 +9,17 @@ import {
 import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
-  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf, expandOccurrences, withDoneDay,
-  linksOf, pictureHash, renamedKey, repoOf, strings,
-  type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
+  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, byTopic, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf,
+  expandOccurrences, withDoneDay, linksOf, pictureHash, preferenceOf, renamedKey, repoOf, strings,
+  type AskInput, type PreferenceInput, type PreferencePatch, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput,
+  type TaskPatch, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   repeatOf, taskHref,
   type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
-  type LaunchRequest, type Priority, type Project, type Report, type ReportOutcome, type Session,
+  type LaunchRequest, type Preference, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
   type Task,
 } from "@/lib/types";
@@ -702,6 +703,34 @@ export async function setSettings(patch: Partial<Settings>) {
       run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, JSON.stringify(patch[key]));
     }
   });
+}
+
+/* ---------- preferences ---------- */
+
+const preferenceRow = (id: number) => {
+  const r = get("SELECT id, topic, text, source, updated_at FROM preferences WHERE id = ?", id);
+  return r ? preferenceOf(r) : null;
+};
+
+export async function listPreferences(): Promise<Preference[]> {
+  return all("SELECT id, topic, text, source, updated_at FROM preferences ORDER BY id").flatMap((r) => preferenceOf(r) ?? []).sort(byTopic);
+}
+
+export async function addPreference(input: PreferenceInput): Promise<Preference> {
+  const r = run("INSERT INTO preferences (topic, text, source, updated_at) VALUES (?, ?, ?, ?)", input.topic, cleanPreference(input.text), input.source, nowStamp());
+  return preferenceRow(Number(r.lastInsertRowid))!;
+}
+
+export async function updatePreference(id: number, patch: PreferencePatch): Promise<Preference | null> {
+  const values: Record<string, Value> = { source: patch.source, updated_at: nowStamp() };
+  if (patch.topic) values.topic = patch.topic;
+  if (patch.text !== undefined) values.text = cleanPreference(patch.text);
+  update("preferences", id, values);
+  return preferenceRow(id);
+}
+
+export async function deletePreference(id: number): Promise<boolean> {
+  return Number(run("DELETE FROM preferences WHERE id = ?", id).changes) > 0;
 }
 
 /* ---------- computers and requests: PacedMind Cloud's ---------- */

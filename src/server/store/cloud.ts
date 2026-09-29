@@ -10,10 +10,10 @@ import {
   areaFolder, deviceConfig, forgetArea, forgetProject, forgetTask, projectFolder, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import {
-  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
+  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, byTopic, cleanDeviceName, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf,
   deriveKey, doneDaysOf, expandOccurrences, withDoneDay, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, strings,
-  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
-  type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
+  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PreferenceInput, type PreferencePatch, type PushSubscriptionRow,
+  type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, preferenceOf, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
@@ -21,7 +21,7 @@ import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, repeatOf, taskHref,
   type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
-  type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
+  type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Preference, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
@@ -820,7 +820,6 @@ export async function deleteEdge(id: number) {
 
 /* ---------- settings ---------- */
 
-
 export async function getSettings(): Promise<Settings> {
   const db = await accountDb();
   const stored = Object.fromEntries(many(await db.from("settings").select("key, value"))
@@ -833,6 +832,37 @@ export async function setSettings(patch: Partial<Settings>) {
   if (!rows.length) return;
   const db = await accountDb();
   check(await db.from("settings").upsert(rows, { onConflict: "user_id,key" }));
+}
+
+/* ---------- preferences ---------- */
+
+const PREFERENCE_COLS = "id, topic, text, source, updated_at";
+
+export async function listPreferences(): Promise<Preference[]> {
+  const db = await accountDb();
+  return many(await db.from("preferences").select(PREFERENCE_COLS).order("id")).flatMap((r) => preferenceOf(r) ?? []).sort(byTopic);
+}
+
+export async function addPreference(input: PreferenceInput): Promise<Preference> {
+  const db = await accountDb();
+  const r = one(await db.from("preferences")
+    .insert({ topic: input.topic, text: cleanPreference(input.text), source: input.source, updated_at: nowStamp() })
+    .select(PREFERENCE_COLS).single());
+  return preferenceOf(r!)!;
+}
+
+export async function updatePreference(id: number, patch: PreferencePatch): Promise<Preference | null> {
+  const values: Row = { source: patch.source, updated_at: nowStamp() };
+  if (patch.topic) values.topic = patch.topic;
+  if (patch.text !== undefined) values.text = cleanPreference(patch.text);
+  const db = await accountDb();
+  const r = one(await db.from("preferences").update(values).eq("id", id).select(PREFERENCE_COLS).maybeSingle());
+  return r ? preferenceOf(r) : null;
+}
+
+export async function deletePreference(id: number): Promise<boolean> {
+  const db = await accountDb();
+  return many(await db.from("preferences").delete().eq("id", id).select("id")).length > 0;
 }
 
 /* ---------- computers and requests to start sessions ---------- */

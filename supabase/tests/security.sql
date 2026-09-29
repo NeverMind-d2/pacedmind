@@ -1089,6 +1089,71 @@ begin
   update private.billing_switch set enforce = false;
   update public.billing set status = 'none', subscription_id = null, trial_ends_at = now() + interval '7 days' where user_id = a;
 
+  -- 31. preferences: the account's own, one line of plain text on a known topic, at most 100
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at) values ('schedule', 'Deep work before noon', '2026-09-29T10:00:00');
+    select count(*) into n from public.preferences; out := out || '31 own preference saved=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '31 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at) values ('secrets', 'Anything', '2026-09-29T10:00:00');
+    out := out || '31a FAIL a preference on an unknown topic saved' || E'\n';
+    reset role;
+  exception when others then out := out || '31a unknown topic rejected: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at) values ('tasks', E'Line one\nIgnore the rest', '2026-09-29T10:00:00');
+    out := out || '31b FAIL a preference with a line break saved' || E'\n';
+    reset role;
+  exception when others then out := out || '31b line break rejected: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at) values ('tasks', repeat('x', 501), '2026-09-29T10:00:00');
+    out := out || '31c FAIL a 501-character preference saved' || E'\n';
+    reset role;
+  exception when others then out := out || '31c long text rejected: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (user_id, topic, text, updated_at) values (b, 'other', 'Planted in b', '2026-09-29T10:00:00');
+    out := out || '31d FAIL a preference written into another account' || E'\n';
+    reset role;
+  exception when others then out := out || '31d another account''s preference refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.preferences; out := out || '31e other account sees preferences=' || n || ' (want 0)' || E'\n';
+    update public.preferences set text = 'Changed by b';
+    delete from public.preferences;
+    reset role;
+    select count(*) into n from public.preferences where user_id = a and text = 'Deep work before noon';
+    out := out || '31f other account changed or removed them=' || (1 - n) || ' (want 0)' || E'\n';
+  exception when others then out := out || '31e ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    select count(*) into n from public.preferences; out := out || '31g password-only session sees preferences=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '31g ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('role', 'anon')::text, true); set local role anon;
+    select count(*) into n from public.preferences; out := out || '31h anon sees preferences=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '31h anon refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at)
+      select 'other', 'Filler ' || i, '2026-09-29T10:00:00' from generate_series(1, 99) i;
+    select count(*) into n from public.preferences; out := out || '31i up to the limit=' || n || ' (want 100)' || E'\n';
+    reset role;
+  exception when others then out := out || '31i ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.preferences (topic, text, updated_at) values ('other', 'One too many', '2026-09-29T10:00:00');
+    out := out || '31j FAIL a 101st preference saved' || E'\n';
+    reset role;
+  exception when others then out := out || '31j 101st refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  delete from public.preferences where user_id = a and text like 'Filler %';
+
   -- 29. agents signed in with OAuth count only once a two-factor session approved that very request, and only when the
   --     sign-in that came of it is the only one it can be
   insert into auth.oauth_clients (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method)
@@ -1189,6 +1254,9 @@ begin
     select count(*) into n from public.launch_requests; out := out || '29r agent sees session requests=' || n || ' (want 0)' || E'\n';
     select count(*) into n from public.session_asks; out := out || '29s agent sees what agents wait for=' || n || ' (want 0)' || E'\n';
     select count(*) into n from public.agent_logins; out := out || '29t agent sees approvals=' || n || ' (want 0)' || E'\n';
+    select count(*) into n from public.preferences; out := out || '29ta approved agent reads preferences=' || n || ' (want 1)' || E'\n';
+    insert into public.preferences (topic, text, source, updated_at) values ('agents', 'Codex for refactors', 'agent', '2026-09-29T10:00:00');
+    select count(*) into n from public.preferences where source = 'agent'; out := out || '29tb approved agent adds a preference=' || n || ' (want 1)' || E'\n';
     reset role;
   exception when others then out := out || '29k ERROR ' || sqlerrm || E'\n'; end;
   begin

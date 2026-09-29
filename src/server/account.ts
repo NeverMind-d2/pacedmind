@@ -13,13 +13,13 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
-import { SETTING_KEYS, areaPictureOf, deriveKey, diffOf, doneDaysOf, usageOf } from "./store/shared";
+import { SETTING_KEYS, areaPictureOf, cleanPreference, deriveKey, diffOf, doneDaysOf, isPreferenceTopic, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
 import { nowStamp, toDateStr, toStamp } from "@/lib/dates";
 import { cleanNeeds } from "@/lib/needs";
-import { repeatOf } from "@/lib/types";
+import { MAX_PREFERENCES, repeatOf } from "@/lib/types";
 
 /*
  * An account's data as a whole: starting over, sample data, moving over this computer's own data (what
@@ -234,6 +234,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const reports = has("reports") ? all("SELECT * FROM reports ORDER BY id") : [];
     const attachments = has("attachments") ? all("SELECT * FROM attachments ORDER BY created_at") : [];
     const settings = all("SELECT key, value FROM settings");
+    const preferences = has("preferences") ? all("SELECT topic, text, source, updated_at FROM preferences ORDER BY id") : [];
 
     await clearAccount(db);
     // The local database never checked what it kept: every value is held to what the cloud accepts, so one odd
@@ -463,6 +464,17 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       ...(Array.isArray(old.workDays) && old.workDays.length <= 7 ? [{ user_id: userId, key: "workDays", value: old.workDays }] : []),
     ];
     if (values.length) check(await db.from("settings").upsert(values, { onConflict: "user_id,key" }));
+
+    // Preferences join the account's (which a reset keeps), except what it says already, up to the most it takes.
+    const known = new Set((check(await db.from("preferences").select("text")) as Row[]).map((r) => String(r.text).toLowerCase()));
+    const room = Math.max(0, MAX_PREFERENCES - known.size);
+    const joining = preferences.flatMap((p) => {
+      const text = cleanPreference(String(p.text ?? ""));
+      if (!isPreferenceTopic(p.topic) || !text || known.has(text.toLowerCase())) return [];
+      known.add(text.toLowerCase());
+      return [{ topic: p.topic, text, source: p.source === "agent" ? "agent" : "you", updated_at: match(p.updated_at, STAMP) ?? nowStamp() }];
+    }).slice(0, room);
+    if (joining.length) check(await db.from("preferences").insert(joining));
     updateDevice({
       ...(old.terminal === "wt" || old.terminal === "cmd" || old.terminal === "terminal" || old.terminal === "iterm" ? { terminal: old.terminal } : {}),
       ...(typeof old.claudeCommand === "string" && !commandProblem(old.claudeCommand) ? { claudeCommand: old.claudeCommand } : {}),
@@ -500,10 +512,10 @@ async function everyRow(db: SupabaseClient, table: string, order: string): Promi
 export async function moveToThisComputer(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
   await requireAal2();
-  const [areas, projects, tasks, subtasks, events, sessions, sessionEvents, edges, reports, attachments, settings] = await Promise.all([
+  const [areas, projects, tasks, subtasks, events, sessions, sessionEvents, edges, reports, attachments, settings, preferences] = await Promise.all([
     everyRow(db, "areas", "sort"), everyRow(db, "projects", "sort"), everyRow(db, "tasks", "id"), everyRow(db, "subtasks", "id"),
     everyRow(db, "events", "id"), everyRow(db, "sessions", "started_at"), everyRow(db, "session_events", "id"), everyRow(db, "edges", "id"),
-    everyRow(db, "reports", "id"), everyRow(db, "attachments", "created_at"), everyRow(db, "settings", "key"),
+    everyRow(db, "reports", "id"), everyRow(db, "attachments", "created_at"), everyRow(db, "settings", "key"), everyRow(db, "preferences", "id"),
   ]);
 
   const conn = localDb();
@@ -633,6 +645,13 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
 
     const insSetting = conn.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
     for (const x of settings) if ((SETTING_KEYS as string[]).includes(String(x.key))) insSetting.run(String(x.key), JSON.stringify(x.value));
+
+    conn.exec("DELETE FROM preferences");
+    const insPreference = conn.prepare("INSERT INTO preferences (topic, text, source, updated_at) VALUES (?, ?, ?, ?)");
+    for (const p of preferences.slice(0, MAX_PREFERENCES)) {
+      const text = cleanPreference(String(p.text ?? ""));
+      if (isPreferenceTopic(p.topic) && text) insPreference.run(p.topic, text, p.source === "agent" ? "agent" : "you", String(p.updated_at ?? nowStamp()));
+    }
     conn.exec("COMMIT");
   } catch (e) {
     conn.exec("ROLLBACK");

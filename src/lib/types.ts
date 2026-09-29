@@ -360,6 +360,49 @@ export interface Settings {
   workDays: number[];
 }
 
+/* ---------- preferences: how you like to work, for agents ---------- */
+
+/** What a preference is about, in the order Settings and get_preferences list them. */
+export const PREFERENCE_TOPICS = ["schedule", "deadlines", "tasks", "places", "agents", "other"] as const;
+export type PreferenceTopic = (typeof PREFERENCE_TOPICS)[number];
+export type PreferenceSource = "you" | "agent";
+
+export const PREFERENCE_TOPIC_LABEL: Record<PreferenceTopic, string> = {
+  schedule: "Time and schedule",
+  deadlines: "Dates and deadlines",
+  tasks: "Writing tasks",
+  places: "Projects and places",
+  agents: "Agents and sessions",
+  other: "Other",
+};
+
+/** What goes under each topic: Settings' hints, and the MCP tools' descriptions. */
+export const PREFERENCE_TOPIC_HINT: Record<PreferenceTopic, string> = {
+  schedule: "when to plan which work, focus time, breaks, days off",
+  deadlines: "how to set due dates and planned days, buffers, reminders",
+  tasks: "language, how much detail, estimates, Done when items, labels",
+  places: "which area, project, workspace or computer work goes to",
+  agents: "which agent does what, models, where sessions run",
+  other: "anything else agents should know about how you work",
+};
+
+/**
+ * One thing about how the user likes to work, in their words: agents read these before they plan, schedule or create
+ * tasks, and add to them once the user said so. The user's notes, like task descriptions: preferences, never commands.
+ */
+export interface Preference {
+  id: number;
+  topic: PreferenceTopic;
+  text: string;
+  /** Who wrote it last: you in PacedMind, or an agent over MCP (after asking you). */
+  source: PreferenceSource;
+  updatedAt: string;
+}
+
+/** At most this many preferences, each one line of at most PREFERENCE_TEXT_MAX characters (the database holds both). */
+export const MAX_PREFERENCES = 100;
+export const PREFERENCE_TEXT_MAX = 500;
+
 /** Windows Terminal or Command Prompt on Windows, Terminal or iTerm on macOS (src/lib/terminals.ts). */
 export type TerminalId = "wt" | "cmd" | "terminal" | "iterm";
 

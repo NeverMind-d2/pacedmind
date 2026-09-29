@@ -20,6 +20,7 @@ import { markAll, markArea, markProject } from "@/server/marker";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findWork, importAreas, importProjects, keyOf, type FoundArea, type FoundProject, type ImportArea, type ImportItem } from "@/server/import";
 import { linkFolder, mergeProjects } from "@/server/project-links";
+import { changePreferences, type PreferenceChanges } from "@/server/preferences";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
@@ -763,6 +764,17 @@ export async function setProjectServersAction(projectId: string, names: string[]
 export async function updateSettingsAction(patch: Partial<Settings>) {
   await guard();
   await repo.setSettings(patch);
+  return done();
+}
+
+/** Adds, changes or removes preferences in Settings → How you work: yours, as you wrote them. */
+export async function savePreferencesAction(changes: PreferenceChanges): Promise<Result> {
+  await guard();
+  try {
+    await changePreferences(changes, "you");
+  } catch (e) {
+    return { ok: false, error: errorOf(e) };
+  }
   return done();
 }
 

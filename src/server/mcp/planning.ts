@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { folderProblem } from "../folders";
+import { preferencesText } from "../preferences";
 import { nextReadyTask } from "../dependencies";
 import { afterTaskDone, repeatTask, startsAfterWouldLoop } from "../ops";
 import * as repo from "../repo";
@@ -11,7 +12,7 @@ import { callerSession } from "./principal";
 import { nextColor } from "@/lib/colors";
 import { MAX_NEEDS } from "@/lib/needs";
 import { addDaysStr, dateOnly, timeOf, toDateStr } from "@/lib/dates";
-import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Repeat, type Status, type Task } from "@/lib/types";
+import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Preference, type Repeat, type Status, type Task } from "@/lib/types";
 import {
   AREA_ICON_EXAMPLES, PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail, iconFrom,
   findArea, findAreaOrInbox, findProject, findTask, fmtWhen, isOpen, names, prioritySchema, priorityOf, projectLine,
@@ -172,18 +173,27 @@ function shiftValue(value: string | null, days: number): string | null {
 export function registerPlanningTools(server: McpServer) {
   /* ---------- overview ---------- */
 
+  /** The user's preferences in the overview while they're short; otherwise where to find them. */
+  const preferencesPart = (list: Preference[]) => {
+    if (!list.length) return "The user's preferences: none saved yet. When they tell you how they like to work, offer to save it (update_preferences).";
+    const text = preferencesText(list, false);
+    return text.length <= 3000
+      ? `The user's preferences, for planning and creating tasks (with ids in get_preferences):\n${text}`
+      : `The user's preferences: ${plural(list.length, "preference")}. Read them with get_preferences before you plan, set dates or create tasks.`;
+  };
+
   tool(server, "get_overview", {
     title: "Get overview",
     description:
-      "Start here. Today's date and time, the user's areas and projects with their ids, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running.",
+      "Start here. Today's date and time, the user's preferences for how they work, their areas and projects with their ids, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running.",
     input: z.object({}),
     kind: "read",
   }, async () => {
     const now = new Date();
     const today = toDateStr(now);
-    const [n, tasks, events, eventList, waiting, running] = await Promise.all([
+    const [n, tasks, events, eventList, waiting, running, preferences] = await Promise.all([
       names(), repo.listTasks(), repo.occurrences(today, today), repo.listEvents(),
-      repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }),
+      repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listPreferences(),
     ]);
     const areas = [...n.areas.values()];
     const projects = [...n.projects.values()];
@@ -199,6 +209,7 @@ export function registerPlanningTools(server: McpServer) {
     const section = (title: string, lines: string[], empty = "none") => `${title}:\n${lines.length ? lines.map((l) => `- ${l}`).join("\n") : `- ${empty}`}`;
     return [
       todayLine(now),
+      preferencesPart(preferences),
       section("Areas", areas.map((a) => `${a.name} (id ${a.id}, key ${a.key}, ${colorName(a.color)}) · ${plural(u.areas[a.id]?.open ?? 0, "open task")} · ${plural(u.areas[a.id]?.projects ?? 0, "project")}`)),
       section("Projects", projects.map((p) => projectLine(p, n, u.projects[p.id]))),
       `Inbox: ${plural(inbox.length, "open task")} without an area`,

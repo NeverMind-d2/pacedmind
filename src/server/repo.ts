@@ -102,9 +102,13 @@ export const listEdges = via("listEdges");
 export const createEdge = via("createEdge");
 export const deleteEdge = via("deleteEdge");
 
-/* ---------- settings ---------- */
+/* ---------- settings, and preferences for agents ---------- */
 export const getSettings = via("getSettings");
 export const setSettings = via("setSettings");
+export const listPreferences = via("listPreferences");
+export const addPreference = via("addPreference");
+export const updatePreference = via("updatePreference");
+export const deletePreference = via("deletePreference");
 
 /* ---------- computers and requests to start sessions (PacedMind Cloud's) ---------- */
 export const saveDeviceTools = via("saveDeviceTools");
