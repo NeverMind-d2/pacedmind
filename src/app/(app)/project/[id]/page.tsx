@@ -45,7 +45,6 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
           <ProjectFolderChip project={project} areaFolder={area?.folder ?? null} />
           <RepoLink repo={project.repo ?? area?.repo} />
           <Link href={`/roadmap?p=${id}`} aria-label="Roadmap" className={link}><Icon name="roadmap" size={13} /><span className="@max-xl:hidden">Roadmap</span></Link>
-          <Link href={`/flows?p=${id}`} aria-label="Flow" className={link}><Icon name="flow" size={13} /><span className="@max-xl:hidden">Flow</span></Link>
         </>
       }
       empty={`No tasks in ${project.name} yet`}

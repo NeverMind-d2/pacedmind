@@ -6,7 +6,7 @@ import {
 } from "./launcher";
 import { deviceConfig, deviceFor, revokeAllSessionTokens, thisPlatform, updateDevice } from "./device";
 import { approvals, clearApprovals, handledRequests, type Approval } from "./approval-store";
-import { APP_VERSION, deviceIdFor, flowsOnHere, runsHere, toolsHere } from "./devices";
+import { APP_VERSION, deviceIdFor, runsHere, toolsHere } from "./devices";
 import { missingFrom } from "@/lib/needs";
 import { changesProblem, requestChanges } from "./ops";
 import { attachedConversations } from "./attach";
@@ -22,14 +22,14 @@ import {
  * Sessions asked for from outside this computer's PacedMind window: from the web app or another computer
  * (a launch request in the cloud, which the database only accepts from a live two-factor session, with a code from
  * the last five minutes from an authenticator older than the asking session unless this computer takes requests
- * without one), from an agent over MCP, or from a flow along a connection you haven't confirmed here. A request from
+ * without one), or from an agent over MCP. A request from
  * elsewhere starts a session, resumes one that ran here, or sends one that ran here back to its agent with changes.
  * What happens to it is this computer's setting (device.ts):
  * - off: refused;
  * - ask (the default): the request waits here until you allow or refuse it in the app;
  * - auto: acted on right away, except anything that runs in the agent's cloud, which always waits for you.
  * A request that came without a fresh code is refused while this computer's own setting asks for one (remoteCode).
- * Agents over MCP and unconfirmed flow connections always wait for you. Each approval keeps the task, agent,
+ * Agents over MCP on this computer always wait for you. Each approval keeps the task, agent,
  * folder and way it runs that you were shown, and acting refuses if any of them changed in between.
  */
 
@@ -67,7 +67,6 @@ export interface ApprovalItem {
 const FROM_TEXT: Record<Approval["from"], string> = {
   elsewhere: "the web app or another computer",
   agent: "an agent over MCP",
-  flow: "its flow, along a connection you haven't confirmed on this computer",
 };
 
 export function approvalItems(tasks: Task[]): ApprovalItem[] {
@@ -76,9 +75,7 @@ export function approvalItems(tasks: Task[]): ApprovalItem[] {
     id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
     surface: a.surface, folder: a.folder, modelSettings: a.modelSettings,
     from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”`
-      : a.resume ? `${FROM_TEXT[a.from]}, resuming its session`
-        // A flow that asks because the task needs something the agent lacks here says so itself (missing).
-        : a.from === "flow" && a.missing?.length ? "its flow" : FROM_TEXT[a.from],
+      : a.resume ? `${FROM_TEXT[a.from]}, resuming its session` : FROM_TEXT[a.from],
     changes: a.changes?.text ?? null, missing: a.missing ?? [],
     requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
@@ -115,12 +112,6 @@ async function ask(
 
 /** An agent asked over MCP to start a session (where it runs, if it said): it waits for you in the app. */
 export const askFromAgent = (task: Task, agent: AgentId | null, surface?: Surface) => ask(task, agent, "agent", null, undefined, surface);
-
-/**
- * A flow wants to start a task along a connection you haven't confirmed on this computer, or one that needs something
- * its agent doesn't have here.
- */
-export const askFromFlow = (task: Task) => ask(task, null, "flow", null);
 
 /**
  * Asks you to send a session back to work with changes: an agent's request_changes over MCP, or (with `origin`) a
@@ -196,8 +187,6 @@ const g = globalThis as unknown as {
   __pacedmindSeen?: number;
   /** This computer's name in the account's list as last seen, to tell a name given elsewhere from one given here. */
   __pacedmindRowName?: string;
-  /** The flows the account's list shows as on here, as last written or seen. */
-  __pacedmindFlowsSent?: string;
   /** This computer's other sessions as last written to the account's list. */
   __pacedmindOthersSent?: string;
 };
@@ -219,12 +208,9 @@ async function othersToReport(): Promise<OtherSession[] | null> {
   }
 }
 
-/** The account's projects whose flow is on here, as the account's list keeps them. */
-const cloudFlows = () => flowsOnHere(true).slice(0, 200);
-
 /**
  * The desktop app's side of the account, every few seconds: registers this computer, notices when it was
- * signed out from elsewhere, keeps its entry current (still here, its name, version and flows), and handles the
+ * signed out from elsewhere, keeps its entry current (still here, its name and version), and handles the
  * launch requests sent to it, each exactly once.
  */
 export async function syncDevice(): Promise<void> {
@@ -275,15 +261,7 @@ export async function syncDevice(): Promise<void> {
     });
     if (othersKey) g.__pacedmindOthersSent = othersKey;
     g.__pacedmindRowName = pushName ? cleanDeviceName(d.name) : me.name;
-    g.__pacedmindFlowsSent = me.flowsOn.join(",");
     g.__pacedmindSeen = now;
-  }
-
-  // Which projects' flows are on here, for the account's list (display only), soon after a switch changes.
-  const flows = cloudFlows();
-  if (g.__pacedmindFlowsSent !== flows.join(",")) {
-    await repo.updateDeviceRow(d.deviceId!, { flowsOn: flows });
-    g.__pacedmindFlowsSent = flows.join(",");
   }
 
   const pending = await repo.listLaunchRequests({ deviceId: d.deviceId!, status: ["pending"] });
@@ -375,6 +353,5 @@ async function signOutHere() {
   updateDevice({ deviceId: null, claimedSession: null });
   g.__pacedmindSeen = undefined;
   g.__pacedmindRowName = undefined;
-  g.__pacedmindFlowsSent = undefined;
   await (await supabase()).auth.signOut({ scope: "local" });
 }

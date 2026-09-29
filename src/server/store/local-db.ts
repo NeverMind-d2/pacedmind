@@ -6,12 +6,12 @@ import { DatabaseSync } from "node:sqlite";
 import { addDays, addMinutes } from "date-fns";
 import { removeImageFiles } from "../attachments";
 import {
-  commandProblem, dataDir, deviceConfig, forgetAll, setFlowArmed, setProjectFolder, setTaskFolder, updateDevice,
+  commandProblem, dataDir, deviceConfig, forgetAll, setProjectFolder, setTaskFolder, updateDevice,
 } from "../device";
-import { SETTING_KEYS, snapshotOf } from "./shared";
+import { SETTING_KEYS } from "./shared";
 import { EARLIER_PALETTE } from "@/lib/colors";
 import { toDateStr, toStamp } from "@/lib/dates";
-import type { EdgeMode, TerminalId } from "@/lib/types";
+import type { TerminalId } from "@/lib/types";
 
 /*
  * This computer's own data, for the free One device plan: without an account, PacedMind keeps everything in
@@ -176,8 +176,8 @@ function parse(v: unknown): unknown {
 /**
  * Once per file: what earlier versions kept in the database but this computer's settings keep now (device.ts,
  * encrypted in the desktop app), so they can't be changed through the data. That's how sessions start and
- * the MCP token, project and task folders, and which flows are on (with their connections as they are, which
- * is how they ran). Sessions also get ids of the length the launcher and the session hooks expect.
+ * the MCP token, and project and task folders. Sessions also get ids of the length the launcher and the session
+ * hooks expect.
  */
 function adopt(conn: DatabaseSync) {
   if (conn.prepare("SELECT 1 FROM meta WHERE key = 'adopted'").get()) return;
@@ -201,19 +201,10 @@ function adopt(conn: DatabaseSync) {
     });
   }
 
-  const tasks = conn.prepare("SELECT id, project_id, folder FROM tasks").all() as Row[];
-  const edges = (conn.prepare("SELECT * FROM edges").all() as Row[]).map((e) => ({
-    id: Number(e.id), fromTaskId: Number(e.from_task_id), toTaskId: Number(e.to_task_id), mode: String(e.mode) as EdgeMode,
-    atTime: e.at_time == null ? null : String(e.at_time),
-  }));
-  for (const p of conn.prepare("SELECT id, folder, flow_on, after_project_id FROM projects").all() as Row[]) {
-    const id = String(p.id);
+  const tasks = conn.prepare("SELECT id, folder FROM tasks").all() as Row[];
+  for (const p of conn.prepare("SELECT id, folder FROM projects").all() as Row[]) {
     const folder = typeof p.folder === "string" ? p.folder.trim() : "";
-    const placed = folder ? !setProjectFolder(id, folder) : true;
-    if (placed && Number(p.flow_on) === 1) {
-      const own = tasks.filter((t) => String(t.project_id) === id).map((t) => Number(t.id));
-      setFlowArmed(id, true, snapshotOf(own, edges, p.after_project_id == null ? null : String(p.after_project_id)));
-    }
+    if (folder) setProjectFolder(String(p.id), folder);
   }
   for (const t of tasks) if (typeof t.folder === "string" && t.folder.trim()) setTaskFolder("local", Number(t.id), t.folder.trim());
 
@@ -300,15 +291,15 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
 
   const insTask = conn.prepare(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date,
-       estimate_min, labels, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, done_when)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       estimate_min, labels, agent, sort_order, created_at, updated_at, completed_at, done_when)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const insSub = conn.prepare("INSERT INTO subtasks (task_id, title, done, sort) VALUES (?, ?, ?, ?)");
   const ids: Record<string, number> = {};
   type Seed = {
     key: string; area: string; project?: string; title: string; desc?: string; status?: string; pr?: number;
     due?: string; planned?: string; est?: number; labels?: string[]; agent?: string; sort?: number;
-    fx?: number; fy?: number; subs?: [string, boolean][]; doneWhen?: string[];
+    subs?: [string, boolean][]; doneWhen?: string[];
   };
   const tasks: Seed[] = [
     { key: "WRK-27", area: "work", project: "q4", title: "Review Q3 budget draft", status: "progress", pr: 3, due: D(-1), planned: D(-2), est: 90, labels: ["finance"],
@@ -336,17 +327,17 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
     { key: "LRN-12", area: "learning", project: "spanish", title: "Finish Spanish unit 6 exercises", pr: 4, due: D(0), est: 60,
       desc: "Exercises 4 to 9, then go through the vocabulary list once." },
     { key: "LRN-14", area: "learning", project: "spanish", title: "Grammar book, chapter 3", pr: 4, est: 120 },
-    { key: "DEV-18", area: "dev", project: "organizer", title: "Project scaffold: Next.js and SQLite", status: "done", pr: 2, agent: "claude", sort: 1, fx: 0, fy: 0 },
-    { key: "DEV-19", area: "dev", project: "organizer", title: "Task list and detail views", status: "done", pr: 2, agent: "claude", sort: 2, fx: 0, fy: 120 },
-    { key: "DEV-21", area: "dev", project: "organizer", title: "MCP server skeleton", status: "review", pr: 2, due: D(0), agent: "claude", sort: 3, fx: 0, fy: 240, labels: ["mcp"],
+    { key: "DEV-18", area: "dev", project: "organizer", title: "Project scaffold: Next.js and SQLite", status: "done", pr: 2, agent: "claude", sort: 1 },
+    { key: "DEV-19", area: "dev", project: "organizer", title: "Task list and detail views", status: "done", pr: 2, agent: "claude", sort: 2 },
+    { key: "DEV-21", area: "dev", project: "organizer", title: "MCP server skeleton", status: "review", pr: 2, due: D(0), agent: "claude", sort: 3, labels: ["mcp"],
       desc: "Expose tasks, projects and time blocks over MCP so Claude Code and Codex can read and update them.",
       doneWhen: ["/api/mcp answers tools/list with the task tools", "Requests without the token get 401", "Claude Code can create a task through it"] },
-    { key: "DEV-22", area: "dev", project: "organizer", title: "Start sessions from the app", pr: 2, agent: "claude", sort: 4, fx: 0, fy: 380,
+    { key: "DEV-22", area: "dev", project: "organizer", title: "Start sessions from the app", pr: 2, agent: "claude", sort: 4,
       desc: "A Start button on a task opens a terminal with Claude Code or Codex working on it, in the project's folder.",
       doneWhen: ["Start in Claude Code opens a terminal in the project folder", "The session shows as running on the task", "A screenshot of the task panel with the running session"] },
-    { key: "DEV-23", area: "dev", project: "organizer", title: "Session tracking over MCP", pr: 3, agent: "claude", sort: 5, fx: 0, fy: 500 },
-    { key: "DEV-24", area: "dev", project: "organizer", title: "Auto-planner for time blocks", pr: 3, agent: "codex", sort: 6, fx: 360, fy: 380 },
-    { key: "DEV-25", area: "dev", project: "organizer", title: "Desktop build with Electron", pr: 3, agent: "claude", sort: 7, fx: 0, fy: 640 },
+    { key: "DEV-23", area: "dev", project: "organizer", title: "Session tracking over MCP", pr: 3, agent: "claude", sort: 5 },
+    { key: "DEV-24", area: "dev", project: "organizer", title: "Auto-planner for time blocks", pr: 3, agent: "codex", sort: 6 },
+    { key: "DEV-25", area: "dev", project: "organizer", title: "Desktop build with Electron", pr: 3, agent: "claude", sort: 7 },
     { key: "DEV-26", area: "dev", project: "organizer", title: "Settings screen", status: "backlog", pr: 4, agent: "claude", sort: 8 },
     { key: "DEV-40", area: "dev", project: "portfolio", title: "Portfolio navigation redesign", status: "done", pr: 3, agent: "codex", sort: 1 },
     { key: "DEV-41", area: "dev", project: "portfolio", title: "Case study page layout", pr: 3, agent: "codex", sort: 2 },
@@ -356,19 +347,19 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
     const done = t.status === "done";
     const r = insTask.run(
       t.key, t.area, t.project ?? null, t.title, t.desc ?? "", t.status ?? "todo", t.pr ?? 0, t.due ?? null, t.planned ?? null,
-      t.est ?? 60, JSON.stringify(t.labels ?? []), t.agent ?? null, t.sort ?? 0, t.fx ?? null, t.fy ?? null,
+      t.est ?? 60, JSON.stringify(t.labels ?? []), t.agent ?? null, t.sort ?? 0,
       ago(60 * 24 * 3), stamp, done ? ago(90) : null, JSON.stringify(t.doneWhen ?? []),
     );
     ids[t.key] = Number(r.lastInsertRowid);
     (t.subs ?? []).forEach(([title, d], i) => insSub.run(ids[t.key], title, d ? 1 : 0, i));
   }
 
-  const insEdge = conn.prepare("INSERT INTO edges (from_task_id, to_task_id, mode) VALUES (?, ?, ?)");
-  const edges: [string, string, string][] = [
-    ["DEV-18", "DEV-19", "auto"], ["DEV-19", "DEV-21", "auto"], ["DEV-21", "DEV-22", "manual"], ["DEV-21", "DEV-24", "auto"],
-    ["DEV-22", "DEV-23", "session"], ["DEV-23", "DEV-25", "auto"], ["DEV-24", "DEV-25", "auto"],
+  // Dependencies: the task on the right waits for the one on the left.
+  const insEdge = conn.prepare("INSERT INTO edges (from_task_id, to_task_id) VALUES (?, ?)");
+  const edges: [string, string][] = [
+    ["DEV-18", "DEV-19"], ["DEV-19", "DEV-21"], ["DEV-21", "DEV-22"], ["DEV-21", "DEV-24"], ["DEV-22", "DEV-23"], ["DEV-23", "DEV-25"], ["DEV-24", "DEV-25"],
   ];
-  edges.forEach(([a, b, m]) => insEdge.run(ids[a], ids[b], m));
+  edges.forEach(([a, b]) => insEdge.run(ids[a], ids[b]));
 
   const insEvent = conn.prepare("INSERT INTO events (title, area_id, start_at, end_at, recurrence) VALUES (?, ?, ?, ?, ?)");
   const monday = addDays(today, -((today.getDay() + 6) % 7));

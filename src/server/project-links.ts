@@ -63,12 +63,11 @@ export async function linkFolder(project: Project, folder: string) {
 
 /**
  * Makes `folder` this computer's workspace of an area you have on another computer, as picking it in Settings does:
- * the area's projects without a folder here inherit it (their flows pause), and the area gets its repository and its
- * pacedmind.md. Returns why it couldn't, or null.
+ * the area's projects without a folder here inherit it, and the area gets its repository and its pacedmind.md.
+ * Returns why it couldn't, or null.
  */
 export async function linkWorkspace(area: Area, folder: string): Promise<string | null> {
-  const inheriting = (await repo.listProjects()).filter((p) => p.areaId === area.id && !p.folder).map((p) => p.id);
-  const error = setAreaFolder(area.id, folder, inheriting);
+  const error = setAreaFolder(area.id, folder);
   if (error) return error;
   const holds = repoIdentity(folder);
   if (holds && holds !== area.repo) await repo.setAreaRepo(area.id, holds);
@@ -78,8 +77,8 @@ export async function linkWorkspace(area: Area, folder: string): Promise<string 
 
 /**
  * Merges projects into `intoId` (repo.mergeProject), with what this computer keeps for them: the folder of a merged
- * project goes to `intoId` when it has none here, and their flow switches go. Merging projects pinned to different
- * computers leaves the result on none: its sessions start where you start them.
+ * project goes to `intoId` when it has none here. Merging projects pinned to different computers leaves the result on
+ * none: its sessions start where you start them.
  */
 export async function mergeProjects(fromIds: string[], intoId: string): Promise<{ into: Project; merged: Project[] } | { error: string }> {
   const projects = await repo.listProjects();

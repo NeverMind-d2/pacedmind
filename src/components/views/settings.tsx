@@ -40,9 +40,8 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Overview", ["get_overview", "get_settings", "update_settings"]],
   ["Areas", ["list_areas", "create_area", "update_area", "delete_area"]],
   ["Projects", ["list_projects", "get_project", "create_project", "update_project", "delete_project", "reorder_tasks"]],
-  ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "delete_task"]],
+  ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "connect_tasks", "disconnect_tasks", "delete_task"]],
   ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
-  ["Flows", ["get_flow", "connect_tasks", "disconnect_tasks", "add_to_flow", "remove_from_flow"]],
   ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "ask_user", "finish_task"]],
 ];
 
@@ -270,9 +269,9 @@ export function AccountSettings({ account, devices, thisDeviceId }: {
       </Row>
     </Section>
 
-    {/* A summary: the Computers page shows each computer's agents, flows and sessions, and manages them. */}
+    {/* A summary: the Computers page shows each computer's agents and sessions, and manages them. */}
     <Section title="Computers" action={<ComputersLink />}
-      note="The Computers page shows what each computer has of Claude Code and Codex, its flows and its sessions. There you rename computers, choose the default and sign one out.">
+      note="The Computers page shows what each computer has of Claude Code and Codex, and its sessions. There you rename computers, choose the default and sign one out.">
       <Row label="Signed in">
         <span className="flex-1 text-[12.5px] text-fg3" suppressHydrationWarning>
           {devices.length
@@ -445,14 +444,14 @@ export function DataSettings({ account, desktop, legacy, sessionsCount }: {
           <span className="flex-1 truncate text-[12.5px] text-fg3" title={legacy.file}>
             {legacy.tasks} tasks and {legacy.projects} projects kept here without an account
           </span>
-          <Button onClick={() => confirm("Move them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer. A copy stays on this computer, without its flows.")
+          <Button onClick={() => confirm("Move them into your account? This works on an account without projects or tasks, and replaces its areas with the ones from this computer. A copy stays on this computer.")
             && run(() => importLegacyAction())}>Move to account</Button>
         </Row>
       )}
       {account && desktop && (
         <Row label="Your account">
           <span className="flex-1 text-[12.5px] text-fg3">Keep it on this computer, without an account</span>
-          <Button onClick={() => confirm("Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there, and flows are off until you switch them on. Your account keeps its data until you delete it.")
+          <Button onClick={() => confirm("Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there. Your account keeps its data until you delete it.")
             && run(() => moveToThisComputerAction())}>Move to this computer</Button>
         </Row>
       )}
@@ -528,8 +527,8 @@ export function ComputerSettings({ device, account, found }: {
   return <>
     <Section
       note={device.encrypted
-        ? "What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain."
-        : "What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer. This development server keeps them unencrypted in data/."}>
+        ? "What runs here is decided here. Agent commands, project and task folders and access tokens stay on this computer, encrypted with a key from the operating system's keychain."
+        : "What runs here is decided here. Agent commands, project and task folders and access tokens stay on this computer. This development server keeps them unencrypted in data/."}>
       <Row label="Name">
         <input className={input} defaultValue={device.name} maxLength={80} aria-label="This computer's name"
           onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== device.name && saveDevice({ name: e.target.value })} />
@@ -547,7 +546,7 @@ export function ComputerSettings({ device, account, found }: {
     </Section>
 
     <Section title="Agents found here" action={<ComputersLink />}
-      note="What PacedMind found here; it looks when it starts and every half hour. The Computers page has more: cloud and sign-in for each agent, and this computer's flows and sessions.">
+      note="What PacedMind found here; it looks when it starts and every half hour. The Computers page has more: cloud and sign-in for each agent, and this computer's sessions.">
       {(["claude", "codex"] as AgentId[]).map((a) => (
         <Row key={a} label={AGENT_LABEL[a]}>
           <span className="flex-1 truncate text-[12.5px] text-fg3">{found.checkedAt ? foundHere(a, found.agents[a]) : "Looking…"}</span>
@@ -615,7 +614,7 @@ export function SessionSettings({ device, account, platform }: {
   </>;
 }
 
-/** Settings → Projects: each project's agent, and in the desktop app its folder, flow and MCP servers here. */
+/** Settings → Projects: each project's agent, and in the desktop app its folder and MCP servers here. */
 export function ProjectSettings({ projects, areas, desktop, agents, copies = {}, unmarked = 0 }: {
   projects: Project[]; areas: Area[];
   desktop: boolean;
@@ -650,8 +649,8 @@ export function ProjectSettings({ projects, areas, desktop, agents, copies = {},
     <Section
       action={desktop && <Button size="sm" variant="ghost" onClick={() => setImporting(true)}><Icon name="download" size={12} />Import from Claude and Codex</Button>}
       note={desktop
-        ? "A session uses its task's folder, then its project's, then its area's workspace. Without any of these, PacedMind makes an empty folder for the task. Changing an inherited workspace pauses the affected flows."
-        : "Folders and flows are set in the desktop app, on the computer where the sessions run."}>
+        ? "A session uses its task's folder, then its project's, then its area's workspace. Without any of these, PacedMind makes an empty folder for the task."
+        : "Folders are set in the desktop app, on the computer where the sessions run."}>
       {projects.map((p) => (
         <div key={p.id} className="flex flex-col gap-2 border-b border-line px-3.5 py-3 last:border-b-0">
           <div className="flex items-center gap-2.5">
@@ -661,10 +660,6 @@ export function ProjectSettings({ projects, areas, desktop, agents, copies = {},
               trigger={<button type="button" className="flex h-6 items-center gap-1.5 rounded-md px-2 text-[12px] text-mut hover:bg-hover">{p.agent ? AGENT_LABEL[p.agent] : "No agent"}<Icon name="chevronDown" size={11} /></button>}
               items={[{ value: null as AgentId | null, label: "No agent" }, { value: "claude" as AgentId | null, label: "Claude Code" }, { value: "codex" as AgentId | null, label: "Codex" }]}
               onSelect={(v) => run(() => updateProjectAction(p.id, { agent: v }), "Saved")} />
-            {desktop && <>
-              <span className="text-[12px] text-mut2">Flow</span>
-              <Switch on={p.flowOn} label={`Flow for ${p.name}`} onChange={(v) => run(() => updateProjectAction(p.id, { flowOn: v }), v ? "Flow on" : "Flow paused")} />
-            </>}
           </div>
           {desktop && (() => {
             const areaFolder = areas.find((a) => a.id === p.areaId)?.folder ?? null;

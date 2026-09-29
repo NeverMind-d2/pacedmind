@@ -127,7 +127,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
     useModelProblem(agent ?? "claude", runsOn, task.needs, task.runIn, task.modelSettings),
   ];
   const doers: { value: Doer | null; label: string; hint?: string }[] = [
-    { value: "human", label: DOER_LABEL.human, hint: "Stays out of flows" },
+    { value: "human", label: DOER_LABEL.human, hint: "No agent session" },
     { value: "claude", label: DOER_LABEL.claude },
     { value: "codex", label: DOER_LABEL.codex },
     { value: null, label: project?.agent ? `Project default, ${AGENT_LABEL[project.agent]}` : "Not decided" },

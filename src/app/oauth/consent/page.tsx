@@ -81,7 +81,7 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
       <ConsentForm id={id} held={held} name={name} local={to.local}>
         <h1 className="text-[15px] font-semibold text-strong">{name ? `Allow ${name} to use PacedMind?` : "Allow this agent to use PacedMind again?"}</h1>
         <p className="text-[13px] leading-relaxed text-fg3">
-          It will act as you in PacedMind Cloud: read and change your areas, projects, tasks, calendar and flows, and report on
+          It will act as you in PacedMind Cloud: read and change your areas, projects, tasks and calendar, and report on
           agent sessions. It can&apos;t start sessions on your computers, answer for you, change your computers or delete your account.
         </p>
         <div className="flex flex-col gap-1.5 rounded-md border border-line2 px-3 py-2.5 text-[12.5px] text-fg3">

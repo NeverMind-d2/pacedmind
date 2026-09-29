@@ -7,9 +7,9 @@ import { nowStamp } from "@/lib/dates";
 
 /*
  * Cloud sessions can't reach PacedMind on this computer. Codex cloud can be asked, though: `codex cloud list --json`
- * says which tasks are ready. A ready task finishes its session here, as if the agent had reported it, so the flow
- * goes on. Claude Code on the web has no such list, so you mark those finished yourself. Only the computer that sent
- * a task to the cloud asks about it, so two computers never settle the same session.
+ * says which tasks are ready. A ready task finishes its session here, as if the agent had reported it. Claude Code on
+ * the web has no such list, so you mark those finished yourself. Only the computer that sent a task to the cloud asks
+ * about it, so two computers never settle the same session.
  */
 
 type CloudTask = { id?: string; url?: string; title?: string; status?: string; summary?: { files_changed?: number; lines_added?: number; lines_removed?: number } };

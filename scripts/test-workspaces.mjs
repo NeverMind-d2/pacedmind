@@ -37,16 +37,10 @@ try {
   assert.equal(device.setProjectFolder("app", null), null);
   assert.equal(plannedFolder(task), area, "clearing the project restores area inheritance");
 
-  device.setFlowArmed("app", true, { edges: ["1>2:auto"], after: null, areaId: "dev" });
-  device.setFlowArmed("unrelated", true);
-  assert.equal(device.setAreaFolder("dev", area, ["app"]), null);
-  assert.equal(device.flowArmed("app"), true, "saving an unchanged workspace keeps the flow");
-  assert.ok(device.setAreaFolder("dev", path.join(temp, "missing"), ["app"]));
-  assert.equal(device.flowArmed("app"), true, "invalid folder does not change state");
-  assert.equal(device.setAreaFolder("dev", nextArea, ["app"]), null);
-  assert.equal(device.flowArmed("app"), false, "a workspace change pauses the affected flow");
-  assert.equal(device.confirmedFlow("app"), null);
-  assert.equal(device.flowArmed("unrelated"), true);
+  assert.equal(device.setAreaFolder("dev", area), null, "saving an unchanged workspace is fine");
+  assert.ok(device.setAreaFolder("dev", path.join(temp, "missing")));
+  assert.equal(plannedFolder(task), area, "an invalid folder does not change the workspace");
+  assert.equal(device.setAreaFolder("dev", nextArea), null);
   assert.equal(plannedFolder(task), nextArea);
 
   globalThis.__pacedmindDevice = undefined;
@@ -71,7 +65,7 @@ try {
   device.deviceFor("account-one");
   device.deviceFor("account-two");
   assert.equal(device.areaFolder("dev"), null, "workspace mappings do not leak across accounts");
-  console.log("Workspace checks passed: inheritance, shared folders, validation, flows, persistence, reset and account isolation.");
+  console.log("Workspace checks passed: inheritance, shared folders, validation, persistence, reset and account isolation.");
 } finally {
   const resolved = path.resolve(temp);
   const base = path.resolve(os.tmpdir());

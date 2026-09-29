@@ -99,9 +99,9 @@ const STATUS_OF: Record<(typeof STATUS_NAMES)[number], Status> = {
 export const statusOf = (s: (typeof STATUS_NAMES)[number]): Status => STATUS_OF[s];
 
 export const agentSchema = z.enum(["claude", "codex"]).describe("claude (Claude Code) or codex (Codex)");
-/** Who does a task. "human" marks a task only the user can do: it stays out of flows and never starts an agent session. */
+/** Who does a task. "human" marks a task only the user can do: it never starts an agent session. */
 export const doerSchema = z.enum(["claude", "codex", "human"])
-  .describe("Who does the task: claude (Claude Code), codex (Codex), or human (only the user can do it; it stays out of flows)");
+  .describe("Who does the task: claude (Claude Code), codex (Codex), or human (only the user can do it; it never gets an agent session)");
 
 /* ---------- finding things ---------- */
 
@@ -281,8 +281,8 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
   const use = sessions.map(sessionUse).reduce(addUse, NO_USE);
   const keys = new Map(tasks.map((x) => [x.id, x.key]));
   const keyOf = (id: number) => keys.get(id) ?? `#${id}`;
-  const after = edges.filter((e) => e.toTaskId === t.id).map((e) => `${keyOf(e.fromTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
-  const next = edges.filter((e) => e.fromTaskId === t.id).map((e) => `${keyOf(e.toTaskId)} (${e.mode === "session" ? "same session" : e.mode})`);
+  const after = edges.filter((e) => e.toTaskId === t.id).map((e) => keyOf(e.fromTaskId));
+  const next = edges.filter((e) => e.fromTaskId === t.id).map((e) => keyOf(e.toTaskId));
   const project = t.projectId ? n.projects.get(t.projectId) : undefined;
   return [
     `${t.key} · ${t.title}`,
@@ -291,7 +291,7 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.relatedProjectId ? `About: project ${n.project(t.relatedProjectId)} (${t.relatedProjectId}), without being part of it` : null,
     t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? plannedWhen(t) : "none"}` : null,
     t.repeat ? `Repeats: ${REPEAT_LABEL[t.repeat].toLowerCase()}; done, it comes back as a new task at its next date` : null,
-    `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent === "human" ? " · Done by: the user (human), not in flows" : t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
+    `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent === "human" ? " · Done by: the user (human), never an agent session" : t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,
     t.runIn ? `Sessions run in: ${t.runIn === "desktop" ? "the agent's desktop app" : t.runIn === "cloud" ? "the agent's cloud" : "a terminal"}` : null,
@@ -300,8 +300,8 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     t.description ? `\nDescription:\n${t.description}` : "\nDescription: none",
     t.doneWhen.length ? `\nDone when:\n${t.doneWhen.map((c, i) => `${i + 1}. ${c}`).join("\n")}` : null,
     t.subtasks.length ? `\nSub-tasks:\n${t.subtasks.map((s, i) => `${i + 1}. [${s.done ? "x" : " "}] ${s.title}`).join("\n")}` : null,
-    after.length ? `\nStarts after: ${after.join(", ")}` : null,
-    next.length ? `${after.length ? "" : "\n"}Leads to: ${next.join(", ")}` : null,
+    after.length ? `\nWaits for: ${after.join(", ")}` : null,
+    next.length ? `${after.length ? "" : "\n"}Before: ${next.join(", ")}` : null,
     session && session.id !== report?.sessionId ? `\nLatest session: ${session.id} · ${session.status}${session.note ? ` · ${session.note}` : ""}` : null,
     report ? `\n${reportText(report, session?.id === report.sessionId ? "Latest report" : "Last report, from an earlier session")}` : null,
     `\nCreated ${t.createdAt.replace("T", " ")} · updated ${t.updatedAt.replace("T", " ")}${t.completedAt ? ` · done ${t.completedAt.replace("T", " ")}` : ""}`,
@@ -370,7 +370,6 @@ export function projectLine(p: Project, n: Names, u: { tasks: number; open: numb
   if (p.color) parts.push(`color ${colorName(p.color)}`);
   if (p.agent) parts.push(`agent ${AGENT_LABEL[p.agent]}`);
   if (p.folder) parts.push(`folder ${p.folder}`);
-  if (p.flowOn) parts.push("flow on");
   if (p.afterProjectId) parts.push(`starts after ${n.project(p.afterProjectId) ?? p.afterProjectId}`);
   return parts.join(" · ");
 }

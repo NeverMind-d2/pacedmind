@@ -9,9 +9,9 @@ import { usesCloud } from "@/server/scope";
 import { resetLocal } from "@/server/store/local-db";
 import { checkThisDevice, deviceIdFor, offeredDevice, runsHere, thisDeviceId, toolsHere } from "@/server/devices";
 import { deviceWithNeeds, missingFrom, needList } from "@/lib/needs";
-import { mcpUrl, plannedFolder, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
+import { mcpUrl, plannedFolder, resumeSession, startSession } from "@/server/launcher";
 import {
-  afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, repeatTask, requestChanges, saveProject,
+  afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, repeatTask, requestChanges, saveProject,
 } from "@/server/ops";
 import { approve, cutOffAgents, deny } from "@/server/requests";
 import { commandProblem, deviceConfig, rotateOwnerToken, setAreaFolder, setProjectServers, updateDevice } from "@/server/device";
@@ -33,7 +33,7 @@ import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
   AGENT_LABEL, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
-  type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
+  type AgentId, type Device, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
   type TerminalId,
 } from "@/lib/types";
 
@@ -42,12 +42,6 @@ type Result = { ok: boolean; error?: string; message?: string };
 function done<T extends Result = Result>(r: T = { ok: true } as T): T {
   refresh();
   return r;
-}
-
-async function launched(rs: LaunchResult[]): Promise<string | undefined> {
-  const keys: string[] = [];
-  for (const r of rs) if (r.ok && r.session) keys.push((await repo.getTask(r.session.taskId))?.key ?? "a task");
-  return keys.length ? `Started ${keys.join(", ")}` : undefined;
 }
 
 const errorOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -63,10 +57,7 @@ export async function createTaskAction(input: repo.TaskInput & { subtasks?: stri
   return { ok: true, key: t.key };
 }
 
-/**
- * A task's own folder is this computer's setting, so it's checked here; a new one switches its project's flow off
- * until you switch it on again (repo.updateTask).
- */
+/** A task's own folder is this computer's setting, so it's checked here (repo.updateTask). */
 export async function updateTaskAction(id: number, patch: repo.TaskPatch): Promise<Result> {
   await guard();
   const before = await repo.getTask(id);
@@ -74,22 +65,16 @@ export async function updateTaskAction(id: number, patch: repo.TaskPatch): Promi
   if (patch.folder !== undefined && MODE !== "desktop") return { ok: false, error: "Folders are set in the PacedMind desktop app." };
   const bad = patch.folder ? folderProblem(patch.folder) : null;
   if (bad) return { ok: false, error: `Can't use ${patch.folder}: ${bad}` };
-  const project = before.projectId ? await repo.getProject(before.projectId) : null;
   try {
     await repo.updateTask(id, patch);
   } catch (e) {
     return { ok: false, error: errorOf(e) };
   }
-  if (patch.agent === "human" && (await keepYoursOutOfFlow(id))) return done({ ok: true, message: `${before.key} is yours now, so it left the flow` });
   if (patch.status === "done" && before.status !== "done") {
     // A repeating task comes back first, so the message can say when.
     const again = await repeatTask(id);
-    const started = await launched(await afterTaskDone(id));
-    const back = again && `${before.key} comes back as ${again.key} on ${fmtDay(again.plannedDate ?? again.dueDate!)}`;
-    return done({ ok: true, message: [back, started].filter(Boolean).join(". ") || undefined });
-  }
-  if (patch.folder !== undefined && project?.flowOn && !(await repo.getProject(project.id))?.flowOn) {
-    return done({ ok: true, message: `${project.name}'s flow is off now. Switch it on again to let it start sessions in the new folder.` });
+    await afterTaskDone(id);
+    return done({ ok: true, message: again ? `${before.key} comes back as ${again.key} on ${fmtDay(again.plannedDate ?? again.dueDate!)}` : undefined });
   }
   return done();
 }
@@ -384,8 +369,8 @@ export async function finishSessionAction(sessionId: string): Promise<Result> {
   const s = await repo.getSession(sessionId);
   if (!s) return { ok: false, error: "Session not found" };
   if (s.status !== "starting" && s.status !== "running") return { ok: false, error: "The session isn't running" };
-  const { started } = await finishTask(s.taskId, s.id, "", "you", undefined, s);
-  return done({ ok: true, message: (await launched(started)) ?? `${(await repo.getTask(s.taskId))?.key ?? "The task"} waits for your check` });
+  await finishTask(s.taskId, s.id, "", "you", undefined, s);
+  return done({ ok: true, message: `${(await repo.getTask(s.taskId))?.key ?? "The task"} waits for your check` });
 }
 
 /**
@@ -559,38 +544,9 @@ export async function denyLaunchAction(id: string): Promise<Result> {
   return done();
 }
 
-/* ---------- flow ---------- */
+/* ---------- dependencies ---------- */
 
-/** A flow edit in this window confirms what it touched, for a flow that's on (see repo.confirmFlowChange). */
-async function confirmTasks(...taskIds: number[]) {
-  const tasks = (await Promise.all(taskIds.map((id) => repo.getTask(id)))).filter((t) => t !== null);
-  for (const projectId of new Set(tasks.map((t) => t.projectId))) await repo.confirmFlowChange(projectId, { tasks: taskIds });
-}
-
-export async function placeInFlowAction(taskId: number, x: number, y: number, agent?: AgentId) {
-  await guard();
-  await repo.updateTask(taskId, { flowX: x, flowY: y, ...(agent ? { agent } : {}) });
-  return done();
-}
-
-export async function removeFromFlowAction(taskId: number) {
-  await guard();
-  await removeFromFlow(taskId);
-  await confirmTasks(taskId);
-  return done();
-}
-
-export async function connectAction(fromTaskId: number, toTaskId: number, mode: EdgeMode = "auto") {
-  await guard();
-  await repo.createEdge(fromTaskId, toTaskId, mode);
-  await confirmTasks(fromTaskId, toTaskId);
-  return done();
-}
-
-/**
- * A dependency drawn on the timeline: `toTaskId` waits for `fromTaskId`. It is the same connection a flow
- * uses, so it follows the same rules and takes the mode of the task's other incoming connections.
- */
+/** A dependency drawn on the timeline: `toTaskId` waits for `fromTaskId`. It only orders the work; nothing starts by itself. */
 export async function linkTasksAction(fromTaskId: number, toTaskId: number): Promise<Result> {
   await guard();
   const [from, to] = await Promise.all([repo.getTask(fromTaskId), repo.getTask(toTaskId)]);
@@ -598,36 +554,14 @@ export async function linkTasksAction(fromTaskId: number, toTaskId: number): Pro
   if (from.id === to.id) return { ok: false, error: "A task can't wait for itself" };
   if (from.projectId !== to.projectId) return { ok: false, error: `${from.key} and ${to.key} are in different projects. Dependencies stay within one project.` };
   if (await edgeWouldLoop(from.id, to.id)) return { ok: false, error: `${from.key} already waits for ${to.key}, so this would make a loop` };
-  const other = (await repo.listEdges()).find((e) => e.toTaskId === to.id && e.fromTaskId !== from.id);
-  await repo.createEdge(from.id, to.id, other?.mode ?? "auto");
-  if (other) await repo.setIncomingMode(to.id, other.mode, other.atTime);
-  await confirmTasks(from.id, to.id);
+  await repo.createEdge(from.id, to.id);
   return done({ ok: true, message: `${to.key} now waits for ${from.key}` });
-}
-
-export async function setIncomingModeAction(taskId: number, mode: EdgeMode, atTime: string | null = null) {
-  await guard();
-  await repo.setIncomingMode(taskId, mode, atTime);
-  await confirmTasks(taskId);
-  return done();
 }
 
 export async function deleteEdgeAction(edgeId: number) {
   await guard();
-  const edge = (await repo.listEdges()).find((e) => e.id === edgeId);
   await repo.deleteEdge(edgeId);
-  if (edge) await confirmTasks(edge.fromTaskId, edge.toTaskId);
   return done();
-}
-
-/**
- * Lets a project's flow start sessions on this computer by itself, or stops it. A switch of this computer only.
- * Switching it on starts the sessions it would have started while it was off.
- */
-export async function setFlowOnAction(projectId: string, on: boolean): Promise<Result> {
-  await guard();
-  if (MODE !== "desktop") return { ok: false, error: "Flows are switched on in the PacedMind desktop app, on the computer they run on." };
-  return done({ ok: true, message: await launched(await saveProject(projectId, { flowOn: on })) });
 }
 
 /* ---------- projects and settings ---------- */
@@ -677,22 +611,17 @@ export async function setAreaFolderAction(id: string, folder: string | null): Pr
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Workspaces are set in the PacedMind desktop app on this computer." };
   if (folder !== null && typeof folder !== "string") return { ok: false, error: "Enter a folder path." };
-  const [areas, projects] = await Promise.all([repo.listAreas(), repo.listProjects()]);
-  const area = areas.find((a) => a.id === id);
+  const area = (await repo.listAreas()).find((a) => a.id === id);
   if (!area) return { ok: false, error: "Area not found" };
   const next = folder?.trim() || null;
-  const inheriting = projects.filter((p) => p.areaId === id && !p.folder);
-  const changed = area.folder !== next;
-  const error = setAreaFolder(id, next, inheriting.map((p) => p.id));
+  const error = setAreaFolder(id, next);
   if (error) return { ok: false, error };
   // The repository it holds, so your other computers can offer their copy of it.
   const holds = next ? repoIdentity(next) : null;
   if (holds && holds !== area.repo) await repo.setAreaRepo(id, holds);
   // And by its pacedmind.md, whether it holds a repository or not.
   if (next) await markArea({ ...area, folder: next });
-  return done({ ok: true, message: changed && inheriting.some((p) => p.flowOn)
-    ? "Workspace saved. Flows that inherit it are paused; switch them on again to use the new folder."
-    : "Workspace saved" });
+  return done({ ok: true, message: "Workspace saved" });
 }
 
 /**
@@ -795,17 +724,15 @@ export async function moveProjectsAction(moving: string[], areaId: string, order
   return done({ ok: true, message: `Moved ${moving.length === 1 ? projects.find((p) => p.id === moving[0])!.name : `${moving.length} projects`} to ${area.name}` });
 }
 
-/** Saves a project. Switching its flow on (desktop app only) starts the sessions it would have started while it was off. */
+/** Saves a project. */
 export async function updateProjectAction(id: string, patch: Partial<Omit<Project, "id">>): Promise<Result> {
   await guard();
-  let started: LaunchResult[];
   try {
-    started = await saveProject(id, patch);
-    if (patch.afterProjectId !== undefined) await repo.confirmFlowChange(id, { after: true });
+    await saveProject(id, patch);
   } catch (e) {
     return { ok: false, error: errorOf(e) };
   }
-  return done({ ok: true, message: await launched(started) });
+  return done();
 }
 
 /** The Codex cloud environment a project's tasks run in when they go to Codex cloud (its label or id). */

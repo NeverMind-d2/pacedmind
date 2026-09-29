@@ -1,6 +1,6 @@
 ---
 name: pacedmind-projects
-description: Set up and structure projects in PacedMind - create the project, break the work into well-described tasks with sub-tasks and estimates, order the roadmap, set target dates and dependencies between projects, and wire agent flows so Claude Code or Codex sessions work through tasks in sequence. Use this skill whenever the user starts something new ("I want to build...", "new project", "help me plan X"), asks for a breakdown, roadmap or milestones, or wants agents to work through a project, even if they don't mention PacedMind.
+description: Set up and structure projects in PacedMind - create the project, break the work into well-described tasks with sub-tasks and estimates, order the roadmap, set target dates and dependencies between tasks and between projects, and mark which tasks agents do. Use this skill whenever the user starts something new ("I want to build...", "new project", "help me plan X"), asks for a breakdown, roadmap or milestones, or wants agents to work through a project, even if they don't mention PacedMind.
 ---
 
 # Projects in PacedMind
@@ -41,20 +41,11 @@ A task an agent can act on:
       - "An empty report gives a file with only the header"
       - "A screenshot of /reports with the button"
 
-## Automate it with agent flows
+## Who does what, and in which order
 
-A flow runs a project's tasks as agent sessions, one after another. Use it for work an agent can do on its own, such as code, writing or research. Don't use it for the user's own tasks.
-
-1. Mark who does what: set `agent` to claude or codex for agent work, and to `human` for tasks only the user can do (calls, purchases, decisions, reviews). Human tasks stay in the project and on its roadmap but never in the flow. Use `update_task` or `create_tasks`.
-2. Connect the tasks in order with `connect_tasks` from → to. Choose the mode by how much the user wants to check in between:
-   - **auto**: the next task starts as soon as the previous agent reports finished. Fastest, with the least oversight.
-   - **manual**: the next task starts only after the user reviews the previous one and marks it done. The safe choice for anything risky.
-   - **same_session**: the same agent continues in the same terminal and keeps its context. Good for closely related steps.
-   - **at_time**: waits until a set time, for example to run overnight.
-3. Check the result with `get_flow`.
-4. Nothing starts on its own until the project's flow is on. Only the user can switch it on, in PacedMind's Flows page on the computer where the sessions run, because it starts agents there unattended; switching it on also starts the tasks that are already ready. Tell them the flow is ready when it is.
-
-The user starts the first task of a flow with the Start button in PacedMind. If the user asks you to, `start_session` sends the request; they allow it in PacedMind.
+1. Mark who does what: set `agent` to claude or codex for work an agent can do on its own (code, writing, research), and to `human` for tasks only the user can do (calls, purchases, decisions, reviews). Human tasks stay in the project and on its roadmap, but never get an agent session. Use `update_task` or `create_tasks`.
+2. Where a task can't begin before another is finished, make it wait with `connect_tasks` from → to (same project, never a loop). Dependencies show as arrows on the Timeline, and `get_next_task` and `get_project` follow them. Leave independent tasks unconnected: the roadmap order is enough.
+3. Nothing starts by itself. The user starts a session with the Start button in PacedMind; if they ask you to, `start_session` sends the request and they allow it in PacedMind.
 
 ## Keep projects healthy
 

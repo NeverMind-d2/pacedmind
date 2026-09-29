@@ -3,7 +3,7 @@ import { format } from "date-fns";
 import * as repo from "./repo";
 import { planTimeBlocks } from "@/lib/planner";
 import { addDaysStr, dateOnly, dayDiff, fmtShort, fmtTime, minutesOf, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
-import { AGENT_LABEL, type FlowEdge, type Project, type ReportOutcome, type Session, type Settings, type Task } from "@/lib/types";
+import { AGENT_LABEL, type Dependency, type Project, type ReportOutcome, type Session, type Settings, type Task } from "@/lib/types";
 
 /* Read-only helpers for the Timeline and Roadmap views. */
 
@@ -85,15 +85,12 @@ export async function dayLoads(tasks: Task[], sessions: Session[], from: string,
 /** Tasks handed back partial or blocked, with that outcome (repo.heldOutcomes). */
 type Held = Map<number, Exclude<ReportOutcome, "done">>;
 
-/** Same rule as the flow engine: done, or handed back for review unless the hand-back was partial or blocked (`held`). */
-const ready = (source: Task, held: Held) => source.status === "done" || (source.status === "review" && !held.has(source.id));
-
-/** Same rule as the flow engine: whether a connection lets its target start. */
-function satisfied(edge: FlowEdge, source: Task | undefined, now: string, held: Held): boolean {
-  if (!source) return true;
-  if (edge.mode === "manual") return source.status === "done";
-  if (edge.mode === "time") return ready(source, held) && !!edge.atTime && edge.atTime <= now;
-  return ready(source, held);
+/**
+ * Whether a dependency lets its task go on (dependencies.ts has the same rule): the task it waits for is done, or
+ * handed back for review unless the hand-back was partial or blocked (`held`).
+ */
+function satisfied(source: Task | undefined, held: Held): boolean {
+  return !source || source.status === "done" || (source.status === "review" && !held.has(source.id));
 }
 
 const joinAnd = (xs: string[]) => (xs.length < 2 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
@@ -118,7 +115,7 @@ function doneLabel(t: Task, today: string): string {
 }
 
 function stateOf(
-  t: Task, s: Session | undefined, incoming: FlowEdge[], byId: Map<number, Task>, today: string, now: string, held: Held,
+  t: Task, s: Session | undefined, incoming: Dependency[], byId: Map<number, Task>, today: string, now: string, held: Held,
 ): TaskState {
   if (t.status === "done") return { text: doneLabel(t, today), short: "Done", tone: "done" };
   if (t.status === "canceled") return { text: "Canceled", short: "Canceled", tone: "done" };
@@ -137,20 +134,11 @@ function stateOf(
   if (t.status === "progress") return { text: "In progress", short: dueToday ?? "In progress", tone: "active" };
 
   const key = (id: number) => byId.get(id)?.key ?? "a removed task";
-  const same = incoming.find((e) => e.mode === "session");
-  if (same) return { text: `Same session as ${key(same.fromTaskId)}`, short: "Same session", tone: "queued" };
-  const blocking = incoming.filter((e) => !satisfied(e, byId.get(e.fromTaskId), now, held));
+  const blocking = incoming.filter((e) => !satisfied(byId.get(e.fromTaskId), held));
   // Held back by a partly done or blocked hand-back: it goes on when the user marks that task done.
   const heldBy = blocking.filter((e) => byId.get(e.fromTaskId)?.status === "review" && held.has(e.fromTaskId));
   if (blocking.length && heldBy.length === blocking.length) {
     return { text: `When you mark ${joinAnd(heldBy.map((e) => key(e.fromTaskId)))} done`, short: "Waits for you", tone: "next" };
-  }
-  if (blocking.length === 1 && blocking[0].mode === "manual") {
-    return { text: `When you mark ${key(blocking[0].fromTaskId)} done`, short: "Manual start", tone: "next" };
-  }
-  if (blocking.length && blocking.every((e) => e.mode === "time" && e.atTime && byId.has(e.fromTaskId) && ready(byId.get(e.fromTaskId)!, held))) {
-    const at = when(blocking.map((e) => e.atTime!).sort().at(-1)!, today);
-    return { text: `Starts ${at}`, short: `At ${at}`, tone: "queued" };
   }
   if (blocking.length) {
     const keys = blocking.map((e) => key(e.fromTaskId));
@@ -170,7 +158,7 @@ function stateOf(
  * What each task is doing or waiting for, from its status, its newest session and the
  * connections that lead into it: "Running in Codex", "When you mark DEV-21 done", …
  */
-export async function taskStates(tasks: Task[], sessions: Record<number, Session>, edges: FlowEdge[], now = new Date()): Promise<Record<number, TaskState>> {
+export async function taskStates(tasks: Task[], sessions: Record<number, Session>, edges: Dependency[], now = new Date()): Promise<Record<number, TaskState>> {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const today = toDateStr(now);
   const stamp = toDateTimeStr(now);

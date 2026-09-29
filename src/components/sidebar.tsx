@@ -24,7 +24,6 @@ const NAV: { href: string; label: string; icon: IconName; count?: "inbox" | "tod
   { href: "/timeline", label: "Timeline", icon: "timeline" },
   { href: "/projects", label: "Projects", icon: "box" },
   { href: "/roadmap", label: "Roadmap", icon: "roadmap" },
-  { href: "/flows", label: "Flows", icon: "flow" },
   { href: "/sessions", label: "Sessions", icon: "terminal", count: "sessions" },
 ];
 

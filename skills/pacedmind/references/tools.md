@@ -21,9 +21,9 @@ PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign
 
 ## Projects
 
-- `list_projects` (read): each project with progress, target date, agent, folder, flow and "starts after". Optional area filter.
+- `list_projects` (read): each project with progress, target date, agent, folder and "starts after". Optional area filter.
 - `get_project` (read): the project's tasks in roadmap order, grouped by status, plus the next ready task.
-- `create_project`: name and area, plus optional color, start_date, target_date, folder (on this computer), agent and starts_after. Whether its flow starts sessions on its own is switched by the user in PacedMind.
+- `create_project`: name and area, plus optional color, start_date, target_date, folder (on this computer), agent and starts_after.
 - `update_project`: any of the above, including moving the project to another area (its tasks move with it). `color: "area"` makes it follow the area's color. Pass null to clear a field.
 - `delete_project`: its tasks stay in the area. Ask first.
 - `reorder_tasks`: the roadmap order of a project's tasks.
@@ -31,22 +31,23 @@ PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign
 ## Tasks
 
 - `list_tasks` (read): filters for project, area (`"inbox"` for no area), status list, priority list, label, search words, due_from/due_to, planned_from/planned_to, overdue, unscheduled, include_done and limit.
-- `get_task` (read): everything about one task, including its numbered Done when items and sub-tasks, flow connections, the latest session and the latest report an agent handed back.
+- `get_task` (read): everything about one task, including its numbered Done when items and sub-tasks, the tasks it waits for and that wait for it, the latest session and the latest report an agent handed back.
 - `create_task`: title, project or area, description, done_when, needs, status, priority, due, planned, estimate_minutes, labels, subtasks and agent. `planned` with a time ("friday 10:00") puts the task at that time, for its estimate: a block in the week calendar that the auto-planner leaves alone. Without a time it's a day only. `related_project` makes a task outside a project (in an area's To-dos) about that project, listed under Related on its page; `repeat` (`day`, `weekday`, `week`, `month`) makes a done task come back at its next date, which suits chores like logging hours. `update_task` takes both too.
   - `done_when` lists what must be true when the task is finished, one checkable outcome per item. Agents answer each item when they hand the task back.
-  - `needs` lists what its agent needs from the computer its session runs on: MCP servers or claude.ai connectors by name, such as `["supabase", "Gmail"]`. PacedMind offers a computer that has them, and a flow asks before it starts the task without them. Only what differs between the user's computers: a project's own folder brings its servers everywhere.
-  - `agent` is who does the task: `claude`, `codex`, or `human` when only the user can do it. Tasks that are the user's (`human`) stay out of flows, can't start agent sessions, and the auto-planner puts them in the user's time. Left out, the task gets the project's default agent.
+  - `needs` lists what its agent needs from the computer its session runs on: MCP servers or claude.ai connectors by name, such as `["supabase", "Gmail"]`. PacedMind offers a computer that has them. Only what differs between the user's computers: a project's own folder brings its servers everywhere.
+  - `agent` is who does the task: `claude`, `codex`, or `human` when only the user can do it. Tasks that are the user's (`human`) can't start agent sessions, and the auto-planner puts them in the user's time. Left out, the task gets the project's default agent.
 - `create_tasks`: up to 50 tasks at once in one project or area.
 - `update_task`:
   - title, description (replace or `append_to_description`), done_when (replaces the list), status, priority, due, planned and estimate;
   - labels (replace, add or remove);
   - move to a project or area;
-  - agent (`human` also takes the task out of its flow);
+  - agent (`human` makes it the user's own: no agent sessions);
   - where its agent sessions run (`runs_in`: `terminal`, `desktop` for the agent's desktop app, or `cloud`) and its own `folder`, when it shouldn't work in the project's folder (null goes back to the project's);
   - `needs`, what its agent needs from the computer (replaces the list, `[]` clears it);
   - sub-tasks: add, complete, reopen or remove, by number or title.
-  - Setting status done may start sessions that wait for the task in a flow.
 - `bulk_update_tasks`: the same status, priority, due, planned, `shift_days`, project, area or label change for up to 100 tasks.
+- `connect_tasks`: from → to, both in the same project: `to` waits for `from` (a dependency, an arrow on the Timeline). It's ready once `from` is done, or handed back for review unless that hand-back was partial or blocked. It only orders the work: nothing starts by itself. `get_next_task` and `get_project` follow it. Never a loop.
+- `disconnect_tasks`: `to` stops waiting for `from`.
 - `delete_task`: prefer status canceled when a record is useful. Ask first.
 
 ## Calendar and planning
@@ -58,14 +59,6 @@ PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign
 - `get_agenda` (read): day by day, up to 14 days. Shows events, tasks due and planned, auto-planned focus blocks, free focus time, overdue tasks and what didn't fit.
 - `reschedule_day`: moves one day's planned tasks and one-off events to another day. Add `move_deadlines` to move deadlines too. Weekly events stay where they are.
 
-## Agent flows
-
-- `get_flow` (read): a project's flow sessions, which agent runs each and where (a terminal or the desktop app on which computer, or the cloud), what starts after what and how, whether the flow is on, and the next ready task.
-- `connect_tasks`: from → to, with mode auto, manual, same_session or at_time (plus `at`). It adds the tasks to the flow if needed. Call it again to change the mode.
-- `disconnect_tasks`: removes a connection.
-- `add_to_flow`: puts a task on the flow canvas, under the rest of the flow.
-- `remove_from_flow`: takes a task and its connections off the canvas. The task itself stays.
-
 ## Agent sessions
 
 - A task's report (`get_task`) ends its checks with what PacedMind saw change in git since the session started: files with lines added and removed, and commits. Compare it with the agent's summary.
@@ -76,7 +69,7 @@ PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign
 
 ## Protocol for agents working on a task
 
-- `get_next_task` (read): the next ready task in a project.
+- `get_next_task` (read): the next ready task in a project: the first open one in roadmap order whose dependencies are finished.
 - `start_task`: "I'm working on this task." Returns the changes the user asked for (if they sent the last hand-back back), the task with its Done when list, the last report if there is one, and hand-back instructions.
 - `attach_image`: adds a screenshot or other image (a PNG, JPEG, GIF or WebP file path, up to 20 MB) to the task while the agent works. It becomes part of the next report; after a hand-back, it joins the last one.
 - `report_progress`: keeps the user posted while the agent works, only when it matters: its `plan` (every step as a short outcome, with `done` for finished ones; sent again as steps get done), a `message` of `kind` `issue` (something that changes the scope or the risk) or `question` (a decision it needs: the user is notified, and the agent asks in its conversation too and waits), or `progress`. Not for routine steps.
@@ -85,6 +78,4 @@ PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign
   - `summary` (required): what changed and what to look at first;
   - `criteria`: a verdict (`met`, `partly`, `not_met`) and note for each Done when item. Required when the task has Done when items, unless the outcome is blocked;
   - `images`, `verify` (how to check it), `questions`, `details` (Markdown), `links` and `follow_ups`;
-  - `outcome`: `done`, `partial` or `blocked`. After partial or blocked, flows wait for the user.
-
-  It may hand you the next task in the same session.
+  - `outcome`: `done`, `partial` or `blocked`. After partial or blocked, what waits for the task waits for the user.

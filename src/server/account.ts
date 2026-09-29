@@ -8,10 +8,10 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { requireAal2, supabase } from "./supabase";
 import { attachmentPath, removeImageFiles } from "./attachments";
 import {
-  areaFolder, commandProblem, deviceConfig, flowArmed, forgetAll, projectFolder, projectServers, setAreaFolder, setFlowArmed, setProjectFolder, setProjectServers, setTaskFolder,
+  areaFolder, commandProblem, deviceConfig, forgetAll, projectFolder, projectServers, setAreaFolder, setProjectFolder, setProjectServers, setTaskFolder,
   taskFolder, updateDevice,
 } from "./device";
-import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
+import { CODEX_ENV, cleanDoneWhen, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
 import { SETTING_KEYS, areaPictureOf, deriveKey, diffOf, doneDaysOf, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
@@ -45,7 +45,7 @@ export const DEFAULT_AREAS = [
 /** Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay. */
 async function clearAccount(db: SupabaseClient) {
   const { id } = (await requireAal2()).user;
-  // The images this computer keeps for the account's tasks go with them, and so do its folders and flow switches.
+  // The images this computer keeps for the account's tasks go with them, and so do its folders.
   const device = deviceConfig().deviceId;
   const files = device ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
   const projects = (check(await db.from("projects").select("id")) as Row[]).map((r) => String(r.id));
@@ -94,7 +94,7 @@ async function seedSample(db: SupabaseClient, areaId: Map<string, string>) {
   type Seed = {
     key: string; area: string; project?: string; title: string; desc?: string; status?: string; pr?: number;
     due?: string; planned?: string; est?: number; labels?: string[]; agent?: string; sort?: number;
-    fx?: number; fy?: number; subs?: [string, boolean][];
+    subs?: [string, boolean][];
   };
   const tasks: Seed[] = [
     { key: "WRK-27", area: "WRK", project: "Q4 planning", title: "Review Q3 budget draft", status: "progress", pr: 3, due: D(-1), planned: D(-2), est: 90, labels: ["finance"],
@@ -122,14 +122,14 @@ async function seedSample(db: SupabaseClient, areaId: Map<string, string>) {
     { key: "LRN-12", area: "LRN", project: "Spanish B1", title: "Finish Spanish unit 6 exercises", pr: 4, due: D(0), est: 60,
       desc: "Exercises 4 to 9, then go through the vocabulary list once." },
     { key: "LRN-14", area: "LRN", project: "Spanish B1", title: "Grammar book, chapter 3", pr: 4, est: 120 },
-    { key: "DEV-18", area: "DEV", project: "Organizer app", title: "Project scaffold: Next.js and SQLite", status: "done", pr: 2, agent: "claude", sort: 1, fx: 0, fy: 0 },
-    { key: "DEV-19", area: "DEV", project: "Organizer app", title: "Task list and detail views", status: "done", pr: 2, agent: "claude", sort: 2, fx: 0, fy: 120 },
-    { key: "DEV-21", area: "DEV", project: "Organizer app", title: "MCP server skeleton", status: "review", pr: 2, due: D(0), agent: "claude", sort: 3, fx: 0, fy: 240, labels: ["mcp"],
+    { key: "DEV-18", area: "DEV", project: "Organizer app", title: "Project scaffold: Next.js and SQLite", status: "done", pr: 2, agent: "claude", sort: 1 },
+    { key: "DEV-19", area: "DEV", project: "Organizer app", title: "Task list and detail views", status: "done", pr: 2, agent: "claude", sort: 2 },
+    { key: "DEV-21", area: "DEV", project: "Organizer app", title: "MCP server skeleton", status: "review", pr: 2, due: D(0), agent: "claude", sort: 3, labels: ["mcp"],
       desc: "Expose tasks, projects and time blocks over MCP so Claude Code and Codex can read and update them." },
-    { key: "DEV-22", area: "DEV", project: "Organizer app", title: "Start sessions from the app", pr: 2, agent: "claude", sort: 4, fx: 0, fy: 380 },
-    { key: "DEV-23", area: "DEV", project: "Organizer app", title: "Session tracking over MCP", pr: 3, agent: "claude", sort: 5, fx: 0, fy: 500 },
-    { key: "DEV-24", area: "DEV", project: "Organizer app", title: "Auto-planner for time blocks", pr: 3, agent: "codex", sort: 6, fx: 360, fy: 380 },
-    { key: "DEV-25", area: "DEV", project: "Organizer app", title: "Desktop build with Electron", pr: 3, agent: "claude", sort: 7, fx: 0, fy: 640 },
+    { key: "DEV-22", area: "DEV", project: "Organizer app", title: "Start sessions from the app", pr: 2, agent: "claude", sort: 4 },
+    { key: "DEV-23", area: "DEV", project: "Organizer app", title: "Session tracking over MCP", pr: 3, agent: "claude", sort: 5 },
+    { key: "DEV-24", area: "DEV", project: "Organizer app", title: "Auto-planner for time blocks", pr: 3, agent: "codex", sort: 6 },
+    { key: "DEV-25", area: "DEV", project: "Organizer app", title: "Desktop build with Electron", pr: 3, agent: "claude", sort: 7 },
     { key: "DEV-26", area: "DEV", project: "Organizer app", title: "Settings screen", status: "backlog", pr: 4, agent: "claude", sort: 8 },
     { key: "DEV-40", area: "DEV", project: "Portfolio site", title: "Portfolio navigation redesign", status: "done", pr: 3, agent: "codex", sort: 1 },
     { key: "DEV-41", area: "DEV", project: "Portfolio site", title: "Case study page layout", pr: 3, agent: "codex", sort: 2 },
@@ -138,7 +138,7 @@ async function seedSample(db: SupabaseClient, areaId: Map<string, string>) {
   const inserted = check(await db.from("tasks").insert(tasks.map((t) => ({
     key: t.key, area_id: areaId.get(t.area), project_id: t.project ? project.get(t.project) : null, title: t.title, description: t.desc ?? "",
     status: t.status ?? "todo", priority: t.pr ?? 0, due_date: t.due ?? null, planned_date: t.planned ?? null, estimate_min: t.est ?? 60,
-    labels: t.labels ?? [], agent: t.agent ?? null, sort_order: t.sort ?? 0, flow_x: t.fx ?? null, flow_y: t.fy ?? null,
+    labels: t.labels ?? [], agent: t.agent ?? null, sort_order: t.sort ?? 0,
     created_at: ago(60 * 24 * 3), updated_at: stamp, completed_at: t.status === "done" ? ago(90) : null,
   }))).select("id, key")) as Row[];
   const id = new Map(inserted.map((t) => [String(t.key), Number(t.id)]));
@@ -146,11 +146,11 @@ async function seedSample(db: SupabaseClient, areaId: Map<string, string>) {
   const subtasks = tasks.flatMap((t) => (t.subs ?? []).map(([title, done], i) => ({ task_id: id.get(t.key), title, done, sort: i })));
   check(await db.from("subtasks").insert(subtasks));
 
-  const edges: [string, string, string][] = [
-    ["DEV-18", "DEV-19", "auto"], ["DEV-19", "DEV-21", "auto"], ["DEV-21", "DEV-22", "manual"], ["DEV-21", "DEV-24", "auto"],
-    ["DEV-22", "DEV-23", "session"], ["DEV-23", "DEV-25", "auto"], ["DEV-24", "DEV-25", "auto"],
+  // Dependencies: the task on the right waits for the one on the left.
+  const edges: [string, string][] = [
+    ["DEV-18", "DEV-19"], ["DEV-19", "DEV-21"], ["DEV-21", "DEV-22"], ["DEV-21", "DEV-24"], ["DEV-22", "DEV-23"], ["DEV-23", "DEV-25"], ["DEV-24", "DEV-25"],
   ];
-  check(await db.from("edges").insert(edges.map(([a, b, mode]) => ({ from_task_id: id.get(a), to_task_id: id.get(b), mode }))));
+  check(await db.from("edges").insert(edges.map(([a, b]) => ({ from_task_id: id.get(a), to_task_id: id.get(b) }))));
 
   const monday = addDays(today, -((today.getDay() + 6) % 7));
   const W = (weekday: number, time: string) => toDateStr(addDays(monday, weekday)) + `T${time}`;
@@ -205,9 +205,8 @@ export async function legacySummary(): Promise<{ file: string; areas: number; pr
 /**
  * Copies this computer's own data into the signed-in account. Only into an account without projects or
  * tasks: its default areas are replaced by the local ones. Task keys, dates, sessions and their reports come
- * along, and the images agents attached stay in this computer's data folder. Project and task folders and
- * flow switches stay this computer's settings (device.ts) and move to the copies; the originals' flows are
- * switched off, so they can't start sessions after the move. The data itself stays here too.
+ * along, and the images agents attached stay in this computer's data folder. Project and task folders stay this
+ * computer's settings (device.ts) and move to the copies. The data itself stays here too.
  */
 export async function importLegacy(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
@@ -295,7 +294,6 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     }
 
     const projectId = new Map<string, string>();
-    const flowsOn: string[] = [];
     for (const p of projects) {
       const area = areaId(p.area_id);
       if (!area) continue;
@@ -306,13 +304,12 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         codex_env: CODEX_ENV.test(env) ? env : null, device_id: p.device_id ? here : null, ...(repoOf(p.repo) ? { repo: repoOf(p.repo) } : {}),
       }).select("id").single()) as Row;
       projectId.set(String(p.id), String(r.id));
-      // The folder and the flow switch belonged to this computer all along; they stay here, not in the cloud. An
-      // earlier version kept them in its database, this one in this computer's settings.
+      // The folder belonged to this computer all along; it stays here, not in the cloud. An earlier version kept it
+      // in its database, this one in this computer's settings.
       const folder = (typeof p.folder === "string" && p.folder.trim()) || projectFolder(String(p.id));
-      const placed = folder ? !setProjectFolder(String(r.id), folder) : true;
+      if (folder) setProjectFolder(String(r.id), folder);
       const servers = projectServers(String(p.id));
       if (servers) setProjectServers(String(r.id), servers);
-      if (placed && (Number(p.flow_on) === 1 || flowArmed(String(p.id)))) flowsOn.push(String(r.id));
     }
     for (const p of projects.filter((x) => x.after_project_id != null)) {
       const after = projectId.get(String(p.after_project_id));
@@ -343,7 +340,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         repeat: repeatOf(t.repeat),
         estimate_min: int(t.estimate_min, 0, 10080, 60), labels: labelsOf(t.labels),
         reminder: match(t.reminder, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/), agent: oneOf(t.agent, ["claude", "codex", "human"]),
-        sort_order: int(t.sort_order, -1e9, 1e9, 0), flow_x: num(t.flow_x), flow_y: num(t.flow_y),
+        sort_order: int(t.sort_order, -1e9, 1e9, 0),
         created_at: match(t.created_at, STAMP) ?? now, updated_at: match(t.updated_at, STAMP) ?? now, completed_at: match(t.completed_at, STAMP),
         done_when: cleanDoneWhen(texts(t.done_when, 400)), needs: cleanNeeds(texts(t.needs, 48)), run_in: oneOf(t.run_in, SURFACES),
         device_id: t.device_id || modelSettings ? here : null,
@@ -400,7 +397,6 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       status: oneOf(x.status, ["starting", "running", "finished", "done", "closed", "failed"]) ?? "closed",
       started_at: match(x.started_at, STAMP) ?? now, finished_at: match(x.finished_at, STAMP), ended_at: match(x.ended_at, STAMP),
       note: s(x.note)?.slice(0, 2000) ?? null, cli_session_id: uuid(x.cli_session_id),
-      continues_session_id: x.continues_session_id ? sessionId.get(String(x.continues_session_id)) ?? null : null,
       usage: usageOf(x.usage),
     }));
     for (let i = 0; i < sessionRows.length; i += 200) check(await db.from("sessions").insert(sessionRows.slice(i, i + 200)));
@@ -444,14 +440,11 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
       }));
     for (let i = 0; i < images.length; i += 200) check(await db.from("attachments").insert(images.slice(i, i + 200)));
 
-    const connections = edges.filter((e) => task(e.from_task_id) && task(e.to_task_id) && task(e.from_task_id) !== task(e.to_task_id)).map((e) => ({
-      from_task_id: task(e.from_task_id), to_task_id: task(e.to_task_id), mode: oneOf(e.mode, ["auto", "manual", "session", "time"]) ?? "auto",
-      at_time: e.mode === "time" ? match(e.at_time, MINUTE) : null,
+    // Dependencies come along (an earlier version's flow connections are dependencies now).
+    const dependencies = edges.filter((e) => task(e.from_task_id) && task(e.to_task_id) && task(e.from_task_id) !== task(e.to_task_id)).map((e) => ({
+      from_task_id: task(e.from_task_id), to_task_id: task(e.to_task_id),
     }));
-    for (let i = 0; i < connections.length; i += 500) check(await db.from("edges").insert(connections.slice(i, i + 500)));
-    // A flow that was on stays on, with the connections it already ran with on this computer; one added
-    // later from elsewhere asks first. This computer's own copies no longer start anything.
-    for (const id of flowsOn) setFlowArmed(id, true, await flowSnapshot(id));
+    for (let i = 0; i < dependencies.length; i += 500) check(await db.from("edges").insert(dependencies.slice(i, i + 500)));
     forgetAll("local", projects.map((p) => String(p.id)), areas.map((a) => String(a.id)));
 
     // Planning settings go to the account; how sessions start stays on this computer (an earlier version kept
@@ -501,8 +494,8 @@ async function everyRow(db: SupabaseClient, table: string, order: string): Promi
  * read-only, and the account keeps its data until it's deleted. This computer's own data is replaced; a copy of the
  * file as it was stays next to it (organizer-before-move-<time>.db). Task keys, sessions and their reports come along,
  * and the images agents attached on this computer; images saved on another computer stay there. Project and task
- * folders, this computer's settings, go to the copies too, with their flows off (the account keeps its own, for
- * signing in again). The caller signs out afterwards.
+ * folders, this computer's settings, go to the copies too (the account keeps its own, for signing in again). The
+ * caller signs out afterwards.
  */
 export async function moveToThisComputer(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
@@ -571,13 +564,13 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const project = (v: unknown) => (v == null ? null : projectId.get(String(v)) ?? null);
 
     const insTask = conn.prepare(`INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date,
-      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when, needs, model_settings,
-      planned_time, related_project_id, repeat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      estimate_min, labels, reminder, agent, sort_order, created_at, updated_at, completed_at, run_in, done_when, needs, model_settings,
+      planned_time, related_project_id, repeat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const t of tasks) {
       const r = insTask.run(
         String(t.key), area(t.area_id), project(t.project_id), String(t.title), String(t.description ?? ""), String(t.status), Number(t.priority ?? 0),
         s(t.due_date), s(t.planned_date), Number(t.estimate_min ?? 60), json(t.labels), s(t.reminder), s(t.agent), Number(t.sort_order ?? 0),
-        t.flow_x == null ? null : Number(t.flow_x), t.flow_y == null ? null : Number(t.flow_y), String(t.created_at), String(t.updated_at),
+        String(t.created_at), String(t.updated_at),
         s(t.completed_at), s(t.run_in), json(t.done_when), json(cleanNeeds(Array.isArray(t.needs) ? t.needs.filter((x): x is string => typeof x === "string") : [])),
         JSON.stringify(modelSelectionOf(t.model_settings)),
         s(t.planned_date) && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t.planned_time)) ? String(t.planned_time) : null,
@@ -592,15 +585,14 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const insEvent = conn.prepare("INSERT INTO events (title, area_id, start_at, end_at, recurrence, done_on) VALUES (?, ?, ?, ?, ?, ?)");
     for (const e of events) insEvent.run(String(e.title), area(e.area_id), String(e.start_at), String(e.end_at), s(e.recurrence), JSON.stringify(doneDaysOf(e.done_on)));
 
-    // Sessions keep their ids; one that continues a session that didn't come along continues nothing.
+    // Sessions keep their ids.
     const kept = new Set(sessions.filter((x) => task(x.task_id)).map((x) => String(x.id)));
     const insSession = conn.prepare(`INSERT INTO sessions (id, task_id, agent, folder, branch, status, started_at, finished_at, ended_at, note,
-      cli_session_id, continues_session_id, surface, url, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      cli_session_id, surface, url, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const x of sessions) {
       if (!kept.has(String(x.id))) continue;
-      const continues = x.continues_session_id != null && kept.has(String(x.continues_session_id)) ? String(x.continues_session_id) : null;
       insSession.run(String(x.id), task(x.task_id), String(x.agent), s(x.folder), s(x.branch), String(x.status), String(x.started_at),
-        s(x.finished_at), s(x.ended_at), s(x.note), s(x.cli_session_id), continues, String(x.surface ?? "terminal"), s(x.url),
+        s(x.finished_at), s(x.ended_at), s(x.note), s(x.cli_session_id), String(x.surface ?? "terminal"), s(x.url),
         usageOf(x.usage) ? JSON.stringify(usageOf(x.usage)) : null);
     }
     const insEv = conn.prepare("INSERT INTO session_events (session_id, at, kind, text) VALUES (?, ?, ?, ?)");
@@ -632,11 +624,11 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
         a.width == null ? null : Number(a.width), a.height == null ? null : Number(a.height), String(a.caption ?? ""), String(a.created_at));
     }
 
-    const insEdge = conn.prepare("INSERT OR IGNORE INTO edges (from_task_id, to_task_id, mode, at_time) VALUES (?, ?, ?, ?)");
+    const insEdge = conn.prepare("INSERT OR IGNORE INTO edges (from_task_id, to_task_id) VALUES (?, ?)");
     for (const e of edges) {
       const from = task(e.from_task_id);
       const to = task(e.to_task_id);
-      if (from && to && from !== to) insEdge.run(from, to, String(e.mode), s(e.at_time));
+      if (from && to && from !== to) insEdge.run(from, to);
     }
 
     const insSetting = conn.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
@@ -647,7 +639,7 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     throw e;
   }
 
-  // This computer's folders follow the projects and tasks to their copies; the flows stay off until you switch them on.
+  // This computer's folders follow the projects and tasks to their copies.
   // The replaced data's settings go first. The account's stay, for signing in again.
   forgetAll("local", localProjects, localAreas);
   for (const [cloud, local] of areaId) {
@@ -659,7 +651,6 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     if (folder) setProjectFolder(local, folder);
     const servers = projectServers(cloud);
     if (servers) setProjectServers(local, servers);
-    setFlowArmed(local, false);
   }
   for (const [cloud, local] of taskId) {
     const folder = taskFolder("cloud", cloud);

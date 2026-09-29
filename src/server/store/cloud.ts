@@ -7,11 +7,11 @@ import { removeImageFiles, type StoredImage } from "../attachments";
 import { removeDiffFiles } from "../diff";
 import { repoIdentity } from "../git-remote";
 import {
-  areaFolder, deviceConfig, flowArmed, forgetArea, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
+  areaFolder, deviceConfig, forgetArea, forgetProject, forgetTask, projectFolder, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, doneDaysOf, expandOccurrences, withDoneDay, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
+  deriveKey, doneDaysOf, expandOccurrences, withDoneDay, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, strings,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
   type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
@@ -20,8 +20,8 @@ import { CloudReadOnly } from "@/lib/billing";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, repeatOf, taskHref,
-  type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence,
-  type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
+  type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
+  type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
 } from "@/lib/types";
@@ -32,7 +32,7 @@ import { cleanNeeds } from "@/lib/needs";
  * local.ts. Every query runs as the signed-in account, and row level security limits it to that account's
  * rows, so nothing here filters by user. New rows get their user_id from the database.
  *
- * A project's folder and flow switch, and a task's own folder, are this computer's (device.ts), merged in
+ * A project's folder, and a task's own folder, are this computer's (device.ts), merged in
  * here so the rest of the app sees one Project and one Task. The hosted web app has neither.
  */
 
@@ -182,7 +182,7 @@ export async function deleteProject(id: string) {
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
   folder: MODE === "desktop" ? projectFolder(String(r.id)) : null, deviceId: s(r.device_id), codexEnv: s(r.codex_env), repo: repoOf(r.repo),
-  agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id), flowOn: MODE === "desktop" && flowArmed(String(r.id)),
+  agent: s(r.agent) as AgentId | null, afterProjectId: s(r.after_project_id),
   sort: Number(r.sort),
 });
 
@@ -224,20 +224,15 @@ const PROJECT_COLS: Record<string, string> = {
 };
 
 /**
- * Moving a project to another area moves its tasks too (a trigger in the database does it). `folder` and
- * `flowOn` are this computer's settings: only the desktop app's own window may change them (the actions and
- * MCP tools refuse them otherwise), and a new folder switches the flow off until you switch it on again.
+ * Moving a project to another area moves its tasks too (a trigger in the database does it). `folder` is this
+ * computer's setting: only the desktop app may change it (the actions and MCP tools refuse it otherwise).
  */
 export async function updateProject(id: string, patch: Partial<Omit<Project, "id">>) {
   if (!isUuid(id)) return;
-  if (patch.folder !== undefined || patch.flowOn !== undefined) {
-    if (MODE !== "desktop") throw new Error("Folders and flows are set in the PacedMind desktop app.");
-    if (patch.folder !== undefined) {
-      const problem = setProjectFolder(id, patch.folder);
-      if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
-    }
-    // Switching a flow on confirms its connections as they are now (see device.ts, `confirmed`).
-    if (patch.flowOn !== undefined) setFlowArmed(id, patch.flowOn, patch.flowOn ? await flowSnapshot(id) : undefined);
+  if (patch.folder !== undefined) {
+    if (MODE !== "desktop") throw new Error("Folders are set in the PacedMind desktop app.");
+    const problem = setProjectFolder(id, patch.folder);
+    if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
   }
   if (patch.codexEnv !== undefined) {
     const env = patch.codexEnv?.trim() || null;
@@ -312,7 +307,7 @@ const toTask = (r: Row): Task => ({
   doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
   modelSettings: modelSelectionOf(r.model_settings),
-  sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
+  sortOrder: Number(r.sort_order),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at),
   subtasks: ((r.subtasks as Row[] | undefined) ?? []).map(toSubtask).sort((a, b) => a.sort - b.sort || a.id - b.id),
 });
@@ -341,12 +336,6 @@ export async function getTask(idOrKey: number | string): Promise<Task | null> {
   return r ? toTask(r) : null;
 }
 
-/** Every task's status, by id: what the desktop app compares to notice tasks finished elsewhere. */
-export async function taskStatuses(): Promise<Map<number, Status>> {
-  const db = await accountDb();
-  const rows = await all((from, to) => db.from("tasks").select("id, status").order("id").range(from, to));
-  return new Map(rows.map((r) => [Number(r.id), String(r.status) as Status]));
-}
 
 
 
@@ -380,23 +369,16 @@ const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
   dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
   relatedProjectId: "related_project_id", repeat: "repeat",
-  reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
+  reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order",
 };
 
 
-/**
- * `folder` is this computer's setting (device.ts), like a project's folder: the desktop app sets it (the web app
- * can't), and a new one switches the task's project's flow off until you switch it on again, since a flow runs
- * unattended in its folders.
- */
+/** `folder` is this computer's setting (device.ts), like a project's folder: the desktop app sets it (the web app can't). */
 export async function updateTask(id: number, patch: TaskPatch) {
   if (patch.folder !== undefined) {
     if (MODE !== "desktop") throw new Error("Folders are set in the PacedMind desktop app.");
-    const before = taskFolder("cloud", id);
     const problem = setTaskFolder("cloud", id, patch.folder);
     if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
-    const projectId = (await getTask(id))?.projectId;
-    if ((patch.folder || null) !== before && projectId && flowArmed(projectId)) setFlowArmed(projectId, false);
   }
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   if (patch.relatedProjectId != null && !isUuid(patch.relatedProjectId)) throw new Error("Unknown project");
@@ -501,7 +483,7 @@ const toSession = (r: Row): Session => ({
   id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
   deviceId: s(r.device_id), folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
-  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id), usage: usageOf(r.usage),
+  note: s(r.note), cliSessionId: s(r.cli_session_id), usage: usageOf(r.usage),
 });
 
 
@@ -513,7 +495,6 @@ export async function listSessions(filter: SessionFilter = {}): Promise<Session[
     let q = db.from("sessions").select("*");
     if (filter.taskId !== undefined) q = q.eq("task_id", filter.taskId);
     if (filter.status) q = q.in("status", filter.status);
-    if (filter.continuesSessionId) q = q.eq("continues_session_id", filter.continuesSessionId);
     if (filter.surface) q = q.eq("surface", filter.surface);
     if (filter.agent) q = q.eq("agent", filter.agent);
     if (filter.deviceId) q = q.eq("device_id", filter.deviceId);
@@ -537,14 +518,14 @@ export async function latestSession(taskId: number): Promise<Session | null> {
 
 export async function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; deviceId?: string | null; branch?: string | null; status?: SessionStatus;
-  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
+  surface?: Surface; cliSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
 }): Promise<Session> {
   const db = await accountDb();
   const r = one(await db.from("sessions").insert({
     id: crypto.randomBytes(8).toString("hex"), task_id: input.taskId, agent: input.agent, surface: input.surface ?? "terminal",
     device_id: input.deviceId ?? null, folder: input.folder, branch: input.branch ?? null, status: input.status ?? "starting",
     started_at: input.startedAt ?? nowStamp(), finished_at: input.finishedAt ?? null,
-    cli_session_id: input.cliSessionId ?? null, continues_session_id: input.continuesSessionId ?? null,
+    cli_session_id: input.cliSessionId ?? null,
   }).select().single());
   return toSession(r!);
 }
@@ -787,7 +768,7 @@ export async function latestSessionReport(sessionId: string): Promise<Report | n
 }
 
 /**
- * Tasks whose latest hand-back was partial or blocked, with that outcome. Flows don't go on after them until the user
+ * Tasks whose latest hand-back was partial or blocked, with that outcome. What waits for them waits until the user
  * marks them done. The report has to come from the task's latest session: a later session that was marked finished,
  * or finished in the cloud, brings no report of its own, and moves the task on.
  */
@@ -813,59 +794,28 @@ export async function heldOutcomes(): Promise<Map<number, Exclude<ReportOutcome,
   return held;
 }
 
-export async function heldTaskIds(): Promise<Set<number>> {
-  return new Set((await heldOutcomes()).keys());
-}
+/* ---------- dependencies ---------- */
 
-/* ---------- flow edges ---------- */
+// The edges table was made for flows too: its mode and at_time columns stay at their defaults now.
+const toEdge = (r: Row): Dependency => ({ id: Number(r.id), fromTaskId: Number(r.from_task_id), toTaskId: Number(r.to_task_id) });
 
-
-/** A project's flow as it is now: its connections, and the project it starts after. */
-export async function flowSnapshot(projectId: string): Promise<{ edges: string[]; after: string | null; areaId: string | null }> {
-  const [tasks, edges, project] = await Promise.all([listTasks({ projectId }), listEdges(), getProject(projectId)]);
-  return { ...snapshotOf(tasks.map((t) => t.id), edges, project?.afterProjectId ?? null), areaId: project?.areaId ?? null };
-}
-
-
-const toEdge = (r: Row): FlowEdge => ({
-  id: Number(r.id), fromTaskId: Number(r.from_task_id), toTaskId: Number(r.to_task_id), mode: String(r.mode) as EdgeMode, atTime: s(r.at_time),
-});
-
-export async function listEdges(): Promise<FlowEdge[]> {
+export async function listEdges(): Promise<Dependency[]> {
   const db = await accountDb();
-  return (await all((from, to) => db.from("edges").select("*").order("id").range(from, to))).map(toEdge);
+  return (await all((from, to) => db.from("edges").select("id, from_task_id, to_task_id").order("id").range(from, to))).map(toEdge);
 }
 
-export async function createEdge(fromTaskId: number, toTaskId: number, mode: EdgeMode = "auto"): Promise<FlowEdge | null> {
+/** Makes `toTaskId` wait for `fromTaskId`; the same dependency twice is one. */
+export async function createEdge(fromTaskId: number, toTaskId: number): Promise<Dependency | null> {
   if (fromTaskId === toTaskId) return null;
   const db = await accountDb();
-  check(await db.from("edges").upsert({ from_task_id: fromTaskId, to_task_id: toTaskId, mode }, { onConflict: "from_task_id,to_task_id", ignoreDuplicates: true }));
-  const r = one(await db.from("edges").select("*").eq("from_task_id", fromTaskId).eq("to_task_id", toTaskId).maybeSingle());
+  check(await db.from("edges").upsert({ from_task_id: fromTaskId, to_task_id: toTaskId }, { onConflict: "from_task_id,to_task_id", ignoreDuplicates: true }));
+  const r = one(await db.from("edges").select("id, from_task_id, to_task_id").eq("from_task_id", fromTaskId).eq("to_task_id", toTaskId).maybeSingle());
   return r ? toEdge(r) : null;
-}
-
-export async function updateEdge(id: number, patch: { mode?: EdgeMode; atTime?: string | null }) {
-  const values = columns(patch, { mode: "mode", atTime: "at_time" });
-  if (!Object.keys(values).length) return;
-  const db = await accountDb();
-  check(await db.from("edges").update(values).eq("id", id));
 }
 
 export async function deleteEdge(id: number) {
   const db = await accountDb();
   check(await db.from("edges").delete().eq("id", id));
-}
-
-/** Deletes every connection into or out of a task. */
-export async function deleteEdgesOf(taskId: number) {
-  const db = await accountDb();
-  check(await db.from("edges").delete().or(`from_task_id.eq.${taskId},to_task_id.eq.${taskId}`));
-}
-
-/** Sets the start mode of every connection that leads into a task. */
-export async function setIncomingMode(toTaskId: number, mode: EdgeMode, atTime: string | null = null) {
-  const db = await accountDb();
-  check(await db.from("edges").update({ mode, at_time: mode === "time" ? atTime : null }).eq("to_task_id", toTaskId));
 }
 
 /* ---------- settings ---------- */
@@ -887,7 +837,7 @@ export async function setSettings(patch: Partial<Settings>) {
 
 /* ---------- computers and requests to start sessions ---------- */
 
-const DEVICE_COLS = "id, name, platform, remote_start, remote_code, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, flows_on, other_sessions";
+const DEVICE_COLS = "id, name, platform, remote_start, remote_code, agents, created_at, last_seen_at, checked_at, revoked_at, is_default, app_version, other_sessions";
 
 /**
  * What a computer found of one agent, as the cloud has it: for display only. The launcher uses what this
@@ -903,8 +853,6 @@ function toolsOf(v: unknown): AgentTools {
   return { cli, app, mcp, login: loginOf(t.login), models: modelCatalogOf(t.models), ...(extras ? { extras } : {}) };
 }
 
-const isUuidValue = (v: unknown): v is string => typeof v === "string" && isUuid(v);
-
 const toDevice = (r: Row): Device => {
   const agents = (r.agents && typeof r.agents === "object" ? r.agents : {}) as Row;
   return {
@@ -913,7 +861,6 @@ const toDevice = (r: Row): Device => {
     agents: { claude: toolsOf(agents.claude), codex: toolsOf(agents.codex) },
     createdAt: String(r.created_at), lastSeenAt: s(r.last_seen_at), checkedAt: s(r.checked_at), revokedAt: s(r.revoked_at),
     isDefault: r.is_default === true, appVersion: s(r.app_version),
-    flowsOn: Array.isArray(r.flows_on) ? r.flows_on.filter(isUuidValue) : [],
     otherSessions: otherSessionsOf(r.other_sessions),
   };
 };
@@ -996,11 +943,11 @@ export async function revokeDevice(id: string) {
 /**
  * What this computer reports about its own entry (the database takes these only from the computer's own sign-in):
  * its name as set in its window, its settings for requests from elsewhere (whether asking needs a code, which the
- * database checks requests against), that it's still there, PacedMind's version, and the projects whose flow is on here.
+ * database checks requests against), that it's still there, and PacedMind's version.
  * Values in the wrong shape are left out rather than failing the rest.
  */
 export async function updateDeviceRow(id: string, patch: {
-  name?: string; remoteStart?: RemoteStart; remoteCode?: boolean; lastSeen?: boolean; appVersion?: string; flowsOn?: string[];
+  name?: string; remoteStart?: RemoteStart; remoteCode?: boolean; lastSeen?: boolean; appVersion?: string;
   otherSessions?: OtherSession[];
 }) {
   const values: Row = {};
@@ -1011,7 +958,6 @@ export async function updateDeviceRow(id: string, patch: {
   if (typeof patch.remoteCode === "boolean") values.remote_code = patch.remoteCode;
   if (patch.lastSeen) values.last_seen_at = new Date().toISOString();
   if (patch.appVersion !== undefined && appVersionOk(patch.appVersion)) values.app_version = patch.appVersion;
-  if (patch.flowsOn) values.flows_on = [...new Set(patch.flowsOn.filter(isUuid))].sort().slice(0, 200);
   if (!Object.keys(values).length || !isUuid(id)) return;
   const db = await accountDb();
   check(await db.from("devices").update(values).eq("id", id));

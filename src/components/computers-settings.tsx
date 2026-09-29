@@ -3,21 +3,20 @@ import { thisDevice } from "@/server/devices";
 import { mcpUrl } from "@/server/launcher";
 import * as repo from "@/server/repo";
 import { MODE, authState } from "@/server/supabase";
-import { projectColor } from "@/lib/colors";
 import { LIVE_STATUSES } from "@/lib/types";
 
 /** The server's clock for the page's first render ("last seen", online); the view keeps it ticking. */
 const clock = () => Date.now();
 
 /**
- * The account's computers, or without an account this one: what each found of Claude Code and Codex, its flows and
- * its sessions; renaming, the default computer and signing one out. Each computer reported these itself; what runs
+ * The account's computers, or without an account this one: what each found of Claude Code and Codex, and its
+ * sessions; renaming, the default computer and signing one out. Each computer reported these itself; what runs
  * on it is still decided there (device.ts).
  */
 export async function ComputersSettings() {
-  const [state, all, me, projects, areas, tasks, sessions] = await Promise.all([
+  const [state, all, me, tasks, sessions] = await Promise.all([
     authState(), repo.listDevices(), MODE === "desktop" ? thisDevice() : null,
-    repo.listProjects(), repo.listAreas(), repo.listTasks(), repo.listSessions({ status: [...LIVE_STATUSES, "finished"] }),
+    repo.listTasks(), repo.listSessions({ status: [...LIVE_STATUSES, "finished"] }),
   ]);
   const account = MODE === "web" || !!state;
   // This computer first (only the desktop app has one; signed in, once it joined the account's list, which takes
@@ -33,7 +32,6 @@ export async function ComputersSettings() {
     key: taskOf.get(s.taskId)?.key ?? null, title: taskOf.get(s.taskId)?.title ?? null,
     startedAt: s.startedAt, finishedAt: s.finishedAt, outcome: briefs.get(s.id)?.outcome ?? null,
   }));
-  const flowing = new Set(devices.flatMap((d) => d.flowsOn));
 
   return (
     <ComputersView
@@ -41,7 +39,6 @@ export async function ComputersSettings() {
       hereId={here ? here.id : null}
       account={account}
       registering={!!me && !me.id && account}
-      projects={projects.filter((p) => flowing.has(p.id)).map((p) => ({ id: p.id, name: p.name, color: projectColor(p, areas) }))}
       sessions={items}
       mcpUrl={MODE === "desktop" ? mcpUrl() : null}
       now={clock()}

@@ -16,7 +16,7 @@ import { ConfirmDialog } from "../dialog";
 import { InlineName } from "../entity-menu";
 import { AgentIcon, Icon, SurfaceIcon, type IconName } from "../icons";
 import { ToolIcon } from "../tool-icon";
-import { Button, Dot, Segmented, Switch, cx, useAction } from "../ui";
+import { Button, Segmented, Switch, cx, useAction } from "../ui";
 
 /* ---------- data from the server ---------- */
 
@@ -34,13 +34,6 @@ export interface ComputerSession {
   finishedAt: string | null;
   /** How the agent handed the task back, for a session waiting for you. */
   outcome: ReportOutcome | null;
-}
-
-/** A project whose flow is switched on at some computer. */
-export interface FlowProject {
-  id: string;
-  name: string;
-  color: string;
 }
 
 /* ---------- words ---------- */
@@ -98,7 +91,7 @@ const SESSIONS_SHOWN = 6;
 
 /* ---------- the view ---------- */
 
-export function ComputersView({ devices, hereId, account, registering, projects, sessions, mcpUrl, now: serverNow }: {
+export function ComputersView({ devices, hereId, account, registering, sessions, mcpUrl, now: serverNow }: {
   /** The account's signed-in computers, this one first; without an account, just this one. */
   devices: Device[];
   /** This computer's id among them (the desktop app; "" without an account); null in the web app. */
@@ -107,7 +100,6 @@ export function ComputersView({ devices, hereId, account, registering, projects,
   account: boolean;
   /** Signed in in the desktop app, but this computer hasn't joined the account's list yet (it does within seconds). */
   registering: boolean;
-  projects: FlowProject[];
   sessions: ComputerSession[];
   /** This computer's MCP address, for connecting its agents; null in the web app. */
   mcpUrl: string | null;
@@ -139,7 +131,6 @@ export function ComputersView({ devices, hereId, account, registering, projects,
   const onlineCount = devices.filter(online).length;
   const subtitle = !account ? "This computer"
     : devices.length ? `${devices.length} signed in · ${onlineCount} online` : registering ? "Adding this computer" : "None signed in yet";
-  const byId = new Map(projects.map((p) => [p.id, p]));
 
   const connect = (agent: AgentId) => {
     const what = agent === "claude" ? "Claude Code, for all projects" : "Codex's config.toml";
@@ -161,7 +152,6 @@ export function ComputersView({ devices, hereId, account, registering, projects,
 
       {devices.map((d) => (
         <Computer key={d.id} d={d} here={d.id === hereId} desktop={hereId !== null} account={account} online={online(d)} now={now}
-          flows={d.flowsOn.flatMap((id) => byId.get(id) ?? [])}
           sessions={sessions.filter((s) => (account ? s.deviceId === d.id : d.id === hereId))}
           renaming={renaming === d.id} pending={pending}
           onRename={() => setRenaming(d.id)} onRenamed={() => setRenaming(null)}
@@ -222,12 +212,12 @@ export function ComputersView({ devices, hereId, account, registering, projects,
 
 /* ---------- one computer ---------- */
 
-function Computer({ d, here, desktop, account, online, now, flows, sessions, renaming, pending, onRename, onRenamed, onSave, onDefault, onCheck, onConnect, onRemote, onSignOut }: {
+function Computer({ d, here, desktop, account, online, now, sessions, renaming, pending, onRename, onRenamed, onSave, onDefault, onCheck, onConnect, onRemote, onSignOut }: {
   d: Device; here: boolean;
   /** Seen in the desktop app (which has a computer of its own), not the web app. */
   desktop: boolean;
   account: boolean; online: boolean; now: number;
-  flows: FlowProject[]; sessions: ComputerSession[];
+  sessions: ComputerSession[];
   renaming: boolean; pending: boolean;
   onRename: () => void; onRenamed: () => void; onSave: (name: string) => void;
   onDefault: () => void; onCheck: () => void; onConnect: (agent: AgentId) => void;
@@ -311,21 +301,6 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
             <FromElsewhere d={d} editable={here && desktop} onChange={onRemote} />
           </Line>
         )}
-        <Line label="Flows on" title="Projects whose flow may start sessions by itself on this computer. Each computer switches its own, in Flows.">
-          {flows.length ? (
-            <div className="flex min-h-8 flex-wrap items-center gap-1.5">
-              {flows.map((p) => (
-                <Link key={p.id} href={`/flows?p=${p.id}`}
-                  className="inline-flex h-7 max-w-full items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
-                  <Dot color={p.color} size={7} />
-                  <span className="truncate">{p.name}</span>
-                </Link>
-              ))}
-            </div>
-          ) : (
-            <p className="flex min-h-8 items-center text-[12.5px] text-mut2 @max-xl:min-h-0">None</p>
-          )}
-        </Line>
         <Line label="Sessions">
           {list.length ? (
             <div className="flex min-w-0 flex-col">

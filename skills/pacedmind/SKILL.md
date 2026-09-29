@@ -5,7 +5,7 @@ description: Manage the user's PacedMind planner (also called Organizer) through
 
 # PacedMind
 
-PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `pacedmind`; in Claude Code its tools appear as `mcp__pacedmind__<tool>`. A setup from before names it `organizer` (`mcp__organizer__<tool>`): the same tools, until the user connects again in PacedMind. If neither is available in this session, tell the user and offer to connect it. With a PacedMind Cloud account, the server is `https://app.pacedmind.com/api/mcp` and you can set it up yourself, with the user allowing it in the browser: follow "Instructions for agents" in https://pacedmind.com/docs/mcp/connect-cloud.mdx (Claude Code: `claude mcp add --transport http --scope user pacedmind https://app.pacedmind.com/api/mcp`, then `claude mcp login pacedmind`; Codex: `codex mcp add pacedmind --url https://app.pacedmind.com/api/mcp`, then `codex mcp login pacedmind`). Without an account, point them to PacedMind → Settings → Connect your agents. Never ask the user for a password, a code or a token. Don't edit PacedMind's database or files directly: its flows, notifications and live views only react to changes made through the tools.
+PacedMind is the user's personal planner, and its MCP server gives you the whole app. The server is registered as `pacedmind`; in Claude Code its tools appear as `mcp__pacedmind__<tool>`. A setup from before names it `organizer` (`mcp__organizer__<tool>`): the same tools, until the user connects again in PacedMind. If neither is available in this session, tell the user and offer to connect it. With a PacedMind Cloud account, the server is `https://app.pacedmind.com/api/mcp` and you can set it up yourself, with the user allowing it in the browser: follow "Instructions for agents" in https://pacedmind.com/docs/mcp/connect-cloud.mdx (Claude Code: `claude mcp add --transport http --scope user pacedmind https://app.pacedmind.com/api/mcp`, then `claude mcp login pacedmind`; Codex: `codex mcp add pacedmind --url https://app.pacedmind.com/api/mcp`, then `codex mcp login pacedmind`). Without an account, point them to PacedMind → Settings → Connect your agents. Never ask the user for a password, a code or a token. Don't edit PacedMind's database or files directly: its notifications and live views only react to changes made through the tools.
 
 ## How the planner is organized
 
@@ -14,7 +14,7 @@ PacedMind is the user's personal planner, and its MCP server gives you the whole
 - **Tasks** live in a project, directly in an area, or in the Inbox (no area). They have a status (backlog, todo, in_progress, in_review, done, canceled), a priority (urgent, high, medium, low, none), a **due** date (the deadline, optionally with a time), a **planned** day (when the user means to do it), an estimate in minutes, labels, a description, a **Done when** list (what must be true when it's finished) and sub-tasks.
 - **Calendar events** are fixed activities such as meetings, workouts and appointments, either one-off or weekly.
 - **Focus blocks** aren't stored anywhere. The auto-planner computes them from work hours, events and open tasks, so you change them through the tasks' planned days, due dates, priorities and estimates.
-- **Agent sessions** are Claude Code or Codex runs on a task. When an agent finishes, it hands the task back with a **report** (a summary, an answer to each Done when item, screenshots, how to check it, questions), and the task moves to in_review and waits for the user. **Flows** chain a project's tasks so their sessions start one after another.
+- **Agent sessions** are Claude Code or Codex runs on a task. When an agent finishes, it hands the task back with a **report** (a summary, an answer to each Done when item, screenshots, how to check it, questions), and the task moves to in_review and waits for the user. **Dependencies** make a task wait for another in its project; they order the work, and nothing starts by itself.
 
 ## Working with the tools
 
@@ -70,6 +70,6 @@ Example:
 ## Related skills
 
 - **pacedmind-planning**: planning a day or week, moving things around, handling overload.
-- **pacedmind-projects**: setting up a project, breaking it down, automating it with agent flows.
+- **pacedmind-projects**: setting up a project, breaking it down, ordering its tasks.
 - **pacedmind-review**: Inbox triage and the weekly review.
 - **pacedmind-agent-session**: working as an agent on a task PacedMind started.

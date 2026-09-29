@@ -236,17 +236,3 @@ html[data-dragging] * {
   cursor: var(--drag-cursor) !important;
   user-select: none;
 }
-
-/* React Flow follows the same theme as the rest of the workspace. */
-.react-flow {
-  --xy-background-color: transparent;
-  --xy-edge-stroke: var(--color-line-strong);
-  --xy-handle-background-color: var(--color-panel);
-  --xy-handle-border-color: var(--color-line-strong);
-  --xy-controls-button-background-color: var(--color-raised);
-  --xy-controls-button-background-color-hover: var(--color-sel);
-  --xy-controls-button-color: var(--color-mut);
-  --xy-controls-button-border-color: var(--color-line2);
-  --xy-selection-background-color: color-mix(in srgb, var(--color-accent) 8%, transparent);
-  --xy-selection-border: 1px dashed color-mix(in srgb, var(--color-accent) 60%, transparent);
-}

@@ -9,7 +9,7 @@ import { deleteEdgeAction, linkTasksAction, updateTaskAction } from "@/app/actio
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, minutesOf, parseLocal, timeOf, toStamp } from "@/lib/dates";
 import {
-  AGENT_LABEL, type Area, type FlowEdge, type Project, type Session, type SessionStatus, type Task, type TaskContext,
+  AGENT_LABEL, type Area, type Dependency, type Project, type Session, type SessionStatus, type Task, type TaskContext,
 } from "@/lib/types";
 import type { DayLoad, TaskState } from "@/server/timeline";
 import { TIMELINE_DAYS, TIMELINE_ZOOMS, type TimelineZoom } from "@/lib/timeline";
@@ -140,7 +140,7 @@ const isOpenTask = (t: Task) => t.status !== "done" && t.status !== "canceled";
  * Start: the planned day, else the day its first session started, else the day it was created; a task that
  * hasn't started and has neither waits for the tasks it depends on. End: the deadline, or the estimate in 8-hour days.
  */
-function taskSpans(tasks: Task[], sessionsOf: Map<number, Session[]>, edges: FlowEdge[], from: string): Map<number, TaskSpan> {
+function taskSpans(tasks: Task[], sessionsOf: Map<number, Session[]>, edges: Dependency[], from: string): Map<number, TaskSpan> {
   const byId = new Map(tasks.map((t) => [t.id, t]));
   const sources = new Map<number, number[]>();
   for (const e of edges) sources.set(e.toTaskId, [...(sources.get(e.toTaskId) ?? []), e.fromTaskId]);
@@ -299,8 +299,8 @@ function dragMessage(t: Task, patch: DatePatch, part: BarPart): string {
   return `Moved ${t.key} to ${fmtDay(patch.plannedDate!)}`;
 }
 
-/** Why `to` can't wait for `from`, or null when it can. The same rules as connections in a flow. */
-function linkProblem(from: Task, to: Task, edges: FlowEdge[]): string | null {
+/** Why `to` can't wait for `from`, or null when it can: within one project, never a loop. */
+function linkProblem(from: Task, to: Task, edges: Dependency[]): string | null {
   if (edges.some((e) => e.fromTaskId === from.id && e.toTaskId === to.id)) return `${to.key} already waits for ${from.key}`;
   if (!isOpenTask(to)) return `${to.key} is ${to.status === "done" ? "done" : "canceled"} already`;
   if (from.projectId !== to.projectId) return `${from.key} and ${to.key} are in different projects. Dependencies stay within one project.`;
@@ -669,7 +669,7 @@ export function Timeline(props: {
   projects: Project[];
   tasks: Task[];
   sessions: Session[];
-  edges: FlowEdge[];
+  edges: Dependency[];
   states: Record<number, TaskState>;
   loads: Record<string, DayLoad>;
   /** Focus minutes in a full working day, the height of a full "Your time" bar. */
@@ -681,7 +681,7 @@ export function Timeline(props: {
   const { run } = useAction();
   const [tasks, patchTask] = useOptimistic(props.tasks, (state, p: { id: number; patch: DatePatch }) =>
     state.map((t) => (t.id === p.id ? { ...t, ...p.patch } : t)));
-  const [edges, editEdges] = useOptimistic(props.edges, (state, op: { add: FlowEdge } | { remove: number }) =>
+  const [edges, editEdges] = useOptimistic(props.edges, (state, op: { add: Dependency } | { remove: number }) =>
     "add" in op ? [...state, op.add] : state.filter((e) => e.id !== op.remove));
   const router = useRouter();
   // A zoom button's, or null after the wheel set `custom` pixels per day.
@@ -696,7 +696,7 @@ export function Timeline(props: {
   const [tick, setTick] = useState<string | null>(null);
   const [drag, setDrag] = useState<BarDrag | null>(null);
   const [link, setLink] = useState<LinkDrag | null>(null);
-  const [depMenu, setDepMenu] = useState<{ edge: FlowEdge; from: string; to: string; anchor: Anchor } | null>(null);
+  const [depMenu, setDepMenu] = useState<{ edge: Dependency; from: string; to: string; anchor: Anchor } | null>(null);
   // The day under the mouse in a row that a click adds a task to.
   const [spot, setSpot] = useState<{ row: string; i: number } | null>(null);
   const addOnClick = useAddOnClick();
@@ -1000,7 +1000,7 @@ export function Timeline(props: {
       }
       const [fromId, toId] = side === "end" ? [source.id, l.target] : [l.target, source.id];
       run(() => {
-        editEdges({ add: { id: -Date.now(), fromTaskId: fromId, toTaskId: toId, mode: "auto", atTime: null } });
+        editEdges({ add: { id: -Date.now(), fromTaskId: fromId, toTaskId: toId } });
         return linkTasksAction(fromId, toId);
       });
     };
@@ -1011,7 +1011,7 @@ export function Timeline(props: {
     window.addEventListener("pointercancel", onCancel);
   };
 
-  const unlink = (edge: FlowEdge, fromKey: string, toKey: string) => {
+  const unlink = (edge: Dependency, fromKey: string, toKey: string) => {
     setDepMenu(null);
     run(() => {
       editEdges({ remove: edge.id });

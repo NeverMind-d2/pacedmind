@@ -2,8 +2,8 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { folderProblem } from "../folders";
-import { nextReadyTask } from "../flow";
-import { afterTaskDone, keepYoursOutOfFlow, repeatTask, startsAfterWouldLoop } from "../ops";
+import { nextReadyTask } from "../dependencies";
+import { afterTaskDone, repeatTask, startsAfterWouldLoop } from "../ops";
 import * as repo from "../repo";
 import { MODE } from "../supabase";
 import { usage } from "../views";
@@ -27,17 +27,11 @@ function checkFolder(folder: string | null | undefined) {
   if (problem) fail(`Can't use the folder ${folder}: ${problem}`);
 }
 
-async function launched(rs: { ok: boolean; session?: { taskId: number } }[]): Promise<string[]> {
-  const out: string[] = [];
-  for (const r of rs) if (r.ok && r.session) out.push(`Started a session for ${(await repo.getTask(r.session.taskId))?.key}.`);
-  return out;
-}
-
 /*
  * A session PacedMind started works on one task. It may note follow-up work as new open tasks and edit its own
  * task's details, but never change a status (finish_task does that), who does a task, where it lives, or where
  * and in which folder its sessions run, and never touch other tasks: a session led astray must not be able to
- * start flows, send work elsewhere or plant instructions in tasks other sessions will read.
+ * send work elsewhere or plant instructions in tasks other sessions will read.
  */
 function sessionMayCreate(status: string | undefined) {
   if (callerSession() && status && status !== "todo" && status !== "backlog") {
@@ -86,7 +80,7 @@ const newTaskFields = {
   labels: z.array(z.string()).optional(),
   subtasks: z.array(z.string()).optional().describe("Checklist items"),
   agent: doerSchema.optional()
-    .describe("claude or codex when an AI agent should do the task; human when only the user can (it then stays out of flows). Leave it out for the project's default"),
+    .describe("claude or codex when an AI agent should do the task; human when only the user can (it then never gets an agent session). Leave it out for the project's default"),
   related_project: projectRef.optional()
     .describe("A project the task is about without being part of it, for small things like replying to an email about it: the task stays in its area (give area, not project), and the project's page lists it under Related"),
   repeat: repeatSchema.optional(),
@@ -283,7 +277,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "list_projects", {
     title: "List projects",
-    description: "Projects with their area, progress, target date, agent, folder and flow settings.",
+    description: "Projects with their area, progress, target date, agent and folder.",
     input: z.object({ area: areaRef.optional().describe("Only projects in this area") }),
     kind: "read",
   }, async ({ area }) => {
@@ -353,7 +347,7 @@ export function registerPlanningTools(server: McpServer) {
   tool(server, "update_project", {
     title: "Update project",
     description:
-      'Change a project: rename, move to another area (its tasks move along), color ("area" to use the area\'s color), dates, folder, agent, or which project it starts after. Pass null to clear a field. Whether its flow starts sessions on its own is switched by the user in PacedMind, and a new folder switches it off.',
+      'Change a project: rename, move to another area (its tasks move along), color ("area" to use the area\'s color), dates, folder, agent, or which project it starts after. Pass null to clear a field.',
     input: z.object({
       project: projectRef,
       name: z.string().optional(),
@@ -461,7 +455,7 @@ export function registerPlanningTools(server: McpServer) {
 
   tool(server, "get_task", {
     title: "Get task",
-    description: "A task's full details: description, numbered Done when items and sub-tasks, dates, estimate, labels, flow connections, latest session and the latest report an agent handed back.",
+    description: "A task's full details: description, numbered Done when items and sub-tasks, dates, estimate, labels, the tasks it waits for and that wait for it, latest session and the latest report an agent handed back.",
     input: z.object({ task: taskRef }),
     kind: "read",
   }, async ({ task }) => describeTask(await findTask(task)));
@@ -480,9 +474,9 @@ export function registerPlanningTools(server: McpServer) {
   }, async (args) => {
     sessionMayCreate(args.status);
     const t = await createOne(args, await placeFor(args.project, args.area));
-    const started = t.status === "done" ? await launched(await afterTaskDone(t.id)) : [];
+    if (t.status === "done") await afterTaskDone(t.id);
     const extra = [t.doneWhen.length ? plural(t.doneWhen.length, "Done when item") : null, t.subtasks.length ? plural(t.subtasks.length, "sub-task") : null];
-    return [`Created ${taskLine(t, await names())}${extra.filter(Boolean).map((x) => ` · ${x}`).join("")}.`, ...started].join("\n");
+    return `Created ${taskLine(t, await names())}${extra.filter(Boolean).map((x) => ` · ${x}`).join("")}.`;
   });
 
   tool(server, "create_tasks", {
@@ -505,16 +499,15 @@ export function registerPlanningTools(server: McpServer) {
     }
     const created: Task[] = [];
     for (const t of args.tasks) created.push(await createOne(t, place));
-    const started: string[] = [];
-    for (const t of created) if (t.status === "done") started.push(...(await launched(await afterTaskDone(t.id))));
+    for (const t of created) if (t.status === "done") await afterTaskDone(t.id);
     const n = await names();
-    return [`Created ${created.length} tasks:`, ...created.map((t) => taskLine(t, n)), ...started].join("\n");
+    return [`Created ${created.length} tasks:`, ...created.map((t) => taskLine(t, n))].join("\n");
   });
 
   tool(server, "update_task", {
     title: "Update task",
     description:
-      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run, their folder and what they need from the computer, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder. Setting status to done may start sessions that wait for it in a flow.",
+      "Change anything about a task: title, description (replace or append), Done when, status, priority, dates, estimate, labels, project or area, agent, where its agent sessions run, their folder and what they need from the computer, and sub-tasks (by number from get_task, or title). Pass null to clear a date, project, area, agent, runs_in or folder.",
     input: z.object({
       task: taskRef,
       title: z.string().optional(),
@@ -534,7 +527,7 @@ export function registerPlanningTools(server: McpServer) {
       remove_labels: z.array(z.string()).optional(),
       project: projectRef.nullable().optional().describe("Move to this project (and its area), or null to take it out of its project"),
       area: areaRef.nullable().optional().describe('Move to this area without a project, or null / "inbox" for the Inbox'),
-      agent: doerSchema.nullable().optional().describe("human takes the task out of its flow for good"),
+      agent: doerSchema.nullable().optional().describe("human makes it the user's own: it never gets an agent session"),
       runs_in: z.enum(["terminal", "desktop", "cloud"]).nullable().optional()
         .describe("Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. null: a terminal when the agent's CLI is installed, else its desktop app"),
       folder: z.string().nullable().optional().describe("Absolute folder its sessions work in, when it isn't the project's; null for the project's folder"),
@@ -592,15 +585,14 @@ export function registerPlanningTools(server: McpServer) {
     for (const s of reopen) await repo.setSubtaskDone(s.id, false);
     for (const s of remove) await repo.deleteSubtask(s.id);
     for (const s of args.add_subtasks ?? []) if (s.trim()) await repo.addSubtask(t.id, s);
-    const leftFlow = args.agent === "human" && (await keepYoursOutOfFlow(t.id)) ? [`${t.key} is the user's now, so it left the flow.`] : [];
     // A repeating task comes back first, so the answer can name the new one.
     const again = status === "done" && t.status !== "done" ? await repeatTask(t.id) : null;
-    const started = status === "done" && t.status !== "done" ? await launched(await afterTaskDone(t.id)) : [];
-    if (again) started.unshift(`It repeats: ${again.key} is the next one, planned ${fmtWhen(again.plannedDate ?? again.dueDate!)}.`);
+    if (status === "done" && t.status !== "done") await afterTaskDone(t.id);
+    const started = again ? [`It repeats: ${again.key} is the next one, planned ${fmtWhen(again.plannedDate ?? again.dueDate!)}.`] : [];
     const after = (await repo.getTask(t.id))!;
     const subs = (args.done_when ? ` · ${plural(after.doneWhen.length, "Done when item")}` : "") +
       (after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "");
-    return [`Updated ${taskLine(after, await names())}${subs}.`, ...leftFlow, ...started].join("\n");
+    return [`Updated ${taskLine(after, await names())}${subs}.`, ...started].join("\n");
   });
 
   tool(server, "bulk_update_tasks", {
@@ -645,16 +637,15 @@ export function registerPlanningTools(server: McpServer) {
         labels,
       });
     }
-    const started: string[] = [];
-    if (status === "done") for (const t of tasks) if (t.status !== "done") started.push(...(await launched(await afterTaskDone(t.id))));
+    if (status === "done") for (const t of tasks) if (t.status !== "done") await afterTaskDone(t.id);
     const n = await names();
     const after = await Promise.all(tasks.map((t) => repo.getTask(t.id)));
-    return [`Updated ${tasks.length} tasks:`, ...after.flatMap((t) => (t ? [taskLine(t, n)] : [])), ...started].join("\n");
+    return [`Updated ${tasks.length} tasks:`, ...after.flatMap((t) => (t ? [taskLine(t, n)] : []))].join("\n");
   });
 
   tool(server, "delete_task", {
     title: "Delete task",
-    description: "Delete a task with its sub-tasks, sessions and flow connections. Prefer status canceled when the user may want a record. Ask first.",
+    description: "Delete a task with its sub-tasks, sessions and dependencies. Prefer status canceled when the user may want a record. Ask first.",
     input: z.object({ task: taskRef }),
     kind: "delete",
   }, async ({ task }) => {

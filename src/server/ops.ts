@@ -2,26 +2,24 @@ import "server-only";
 import * as repo from "./repo";
 import type { StoredImage } from "./attachments";
 import { revokeSessionTokens } from "./device";
-import { afterDone, afterFinished, afterFlowOn, startFromFlow } from "./flow";
 import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
-import { noteContinued, takeDiff } from "./diff";
+import { takeDiff } from "./diff";
 import { markProject } from "./marker";
 import { addDaysStr, dateOnly, dayDiff, nowStamp, timeOf, toDateStr } from "@/lib/dates";
 import { nextRepeat } from "@/lib/repeat";
-import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
 import {
-  AGENT_LABEL, ANSWERS_HEADING, LIVE_STATUSES, isAnswers, isLiveSession,
-  type AgentId, type Project, type Report, type ReportCriterion, type ReportOutcome, type Session, type Task,
+  ANSWERS_HEADING, LIVE_STATUSES, isAnswers, isLiveSession,
+  type Project, type Report, type ReportCriterion, type ReportOutcome, type Session, type Task,
 } from "@/lib/types";
 
 /* Operations shared by the Server Actions (the UI) and the MCP tools, so both behave the same. */
 
 /**
- * Call after a task's status became done: its finished sessions count as reviewed, and flows may start the sessions
- * that waited for it. A cloud session never reports back, so marking its task done ends it too.
+ * Call after a task's status became done: a repeating task comes back, and its finished sessions count as reviewed.
+ * A cloud session never reports back, so marking its task done ends it too.
  */
-export async function afterTaskDone(taskId: number): Promise<LaunchResult[]> {
+export async function afterTaskDone(taskId: number): Promise<void> {
   await repeatTask(taskId);
   const finished = await repo.listSessions({ taskId, status: ["finished"] });
   for (const s of finished) {
@@ -37,7 +35,6 @@ export async function afterTaskDone(taskId: number): Promise<LaunchResult[]> {
     revokeSessionTokens(finished.map((s) => s.id));
     forgetSessionFiles(finished.map((s) => s.id));
   }
-  return afterDone(taskId);
 }
 
 /**
@@ -88,15 +85,12 @@ export interface HandBack {
 }
 
 /**
- * The work on a task is finished and waits for your check: its session and the task say so, and the flow starts
- * what waited for it. A "same session" connection continues in the same session when the agent reported it (`by`
- * "agent"); when you or the cloud's status said so, that task starts in a new session instead. An agent's hand-back
- * comes with a report; when that says the work is partial or blocked, the flow waits for you. `session` is the
- * session to finish when the caller already knows it (a session token's own).
+ * The work on a task is finished and waits for your check: its session and the task say so. An agent's hand-back
+ * comes with a report. `session` is the session to finish when the caller already knows it (a session token's own).
  */
 export async function finishTask(
   taskId: number, sessionId: string | null, note: string, by: "agent" | "you" | "cloud", report?: HandBack, session?: Session | null,
-): Promise<{ session: Session | null; continueWith: Task | null; continued: Session | null; started: LaunchResult[] }> {
+): Promise<{ session: Session | null }> {
   const s = session === undefined ? await activeSession(taskId, sessionId) : session;
   if (s) {
     await repo.updateSession(s.id, { status: "finished", finishedAt: nowStamp(), note: note.slice(0, 2000) || null });
@@ -110,45 +104,16 @@ export async function finishTask(
     }
   }
   await repo.updateTask(taskId, { status: "review" });
-  if (report && report.outcome !== "done") return { session: s, continueWith: null, continued: null, started: [] };
-  const { continueWith, started } = await afterFinished(taskId);
-  let continued: Session | null = null;
-  if (continueWith && by === "agent" && s && s.surface !== "cloud") {
-    continued = await repo.createSession({
-      taskId: continueWith.id, agent: s.agent, surface: s.surface, deviceId: s.deviceId, folder: s.folder, status: "running",
-      cliSessionId: s.cliSessionId, continuesSessionId: s.id,
-    });
-    await repo.addSessionEvent(continued.id, "started", `Continues session ${s.id} in the same ${s.surface === "desktop" ? "app session" : "terminal"}`);
-    if (MODE === "desktop") await noteContinued(s.id, continued.id);
-    await repo.updateTask(continueWith.id, { status: "progress" });
-  } else if (continueWith) {
-    const r = await startFromFlow(continueWith, s?.agent);
-    if (r) started.push(r);
-  }
-  return { session: s, continueWith: continued ? continueWith : null, continued, started };
+  return { session: s };
 }
 
-/** "Started WRK-3 in Claude Code" lines for sessions a flow started. */
-export async function startedLines(started: LaunchResult[]): Promise<string[]> {
-  const lines: string[] = [];
-  for (const r of started) {
-    if (r.ok && r.session) lines.push(`PacedMind started ${(await repo.getTask(r.session.taskId))?.key} in a new ${AGENT_LABEL[r.session.agent]} session.`);
-  }
-  return lines;
-}
-
-/**
- * Saves a project. Switching its flow on (only the desktop app's own window can) starts the sessions it would have
- * started while it was off.
- */
-export async function saveProject(id: string, patch: Partial<Omit<Project, "id">>): Promise<LaunchResult[]> {
-  const wasOn = (await repo.getProject(id))?.flowOn;
+/** Saves a project; a new folder gets its pacedmind.md. */
+export async function saveProject(id: string, patch: Partial<Omit<Project, "id">>): Promise<void> {
   await repo.updateProject(id, patch);
   if (patch.folder) {
     const p = await repo.getProject(id);
     if (p) await markProject(p);
   }
-  return patch.flowOn && !wasOn ? afterFlowOn(id) : [];
 }
 
 /** Closes a session by hand, e.g. when its terminal was closed or it got stuck before the agent checked in. */
@@ -249,61 +214,9 @@ export async function requestChanges(sessionId: string, changes: string): Promis
   return { ok: true, session: (await repo.getSession(s.id))!, message: r.message };
 }
 
-/* ---------- flow canvas ---------- */
+/* ---------- dependencies ---------- */
 
-// Positions are free on a grid; the geometry and layout are shared with the canvas (src/lib/flow-layout.ts).
-
-const placed = (t: { flowX: number | null; flowY: number | null }) => t.flowX !== null && t.flowY !== null;
-
-/**
- * Puts a task on its project's flow canvas, run by `agent`: below `belowTaskId` when given (the task it
- * runs after), else under the rest of the flow, moved aside if another session is in the way.
- */
-export async function placeInFlow(taskId: number, agent: AgentId, belowTaskId?: number) {
-  const task = await repo.getTask(taskId);
-  if (!task) return;
-  const others = (await repo.listTasks({ projectId: task.projectId })).filter((t) => placed(t) && t.id !== taskId);
-  const at = (t: { flowX: number | null; flowY: number | null }) => ({ x: t.flowX ?? 0, y: t.flowY ?? 0 });
-  const source = belowTaskId !== undefined ? others.find((t) => t.id === belowTaskId) : undefined;
-  const spot = freeSpot(others.map(at), source ? at(source) : undefined);
-  await repo.updateTask(taskId, { flowX: spot.x, flowY: spot.y, agent });
-}
-
-/** Lays a project's flow out in the order its tasks run, like the canvas's "Tidy up". */
-export async function tidyFlow(projectId: string) {
-  const onCanvas = (await repo.listTasks({ projectId })).filter(placed);
-  const ids = new Set(onCanvas.map((t) => t.id));
-  const edges = (await repo.listEdges()).filter((e) => ids.has(e.fromTaskId) && ids.has(e.toTaskId));
-  const at = layoutFlow(onCanvas.map((t) => ({
-    id: t.id, x: t.flowX ?? 0, y: t.flowY ?? 0, sortOrder: t.sortOrder,
-  })), edges);
-  await Promise.all(onCanvas.map((t) => {
-    const p = at.get(t.id);
-    return p && (p.x !== t.flowX || p.y !== t.flowY) ? repo.updateTask(t.id, { flowX: p.x, flowY: p.y }) : null;
-  }));
-}
-
-/** Whether the task a connection leads to isn't below the one it comes from, so the flow needs tidying. */
-export async function flowNeedsTidy(fromId: number, toId: number): Promise<boolean> {
-  const [a, b] = await Promise.all([repo.getTask(fromId), repo.getTask(toId)]);
-  return !!a && !!b && (b.flowY ?? 0) < (a.flowY ?? 0) + NODE_H + GRID;
-}
-
-/** Takes a task off the flow canvas together with its connections. */
-export async function removeFromFlow(taskId: number) {
-  await repo.deleteEdgesOf(taskId);
-  await repo.updateTask(taskId, { flowX: null, flowY: null });
-}
-
-/** A task that is yours ("human") has no place in a flow: takes it off the canvas when it's on it. Call after its agent changed. */
-export async function keepYoursOutOfFlow(taskId: number): Promise<boolean> {
-  const t = await repo.getTask(taskId);
-  if (t?.agent !== "human" || (t.flowX === null && t.flowY === null)) return false;
-  await removeFromFlow(taskId);
-  return true;
-}
-
-/** Whether connecting fromId → toId would close a loop (toId already leads to fromId). */
+/** Whether making toId wait for fromId would close a loop (fromId already waits, directly or not, for toId). */
 export async function edgeWouldLoop(fromId: number, toId: number): Promise<boolean> {
   const edges = await repo.listEdges();
   const seen = new Set<number>();

@@ -5,7 +5,7 @@ export type Status = "backlog" | "todo" | "progress" | "review" | "done" | "canc
 /** Linear-style priority: 0 none, 1 urgent, 2 high, 3 medium, 4 low. */
 export type Priority = 0 | 1 | 2 | 3 | 4;
 export type AgentId = "claude" | "codex";
-/** Who does a task: an agent, or you ("human"). Tasks that are yours stay out of flows and agent sessions. */
+/** Who does a task: an agent, or you ("human"). Tasks that are yours never get an agent session. */
 export type Doer = AgentId | "human";
 
 /** How a task comes back once it's done: every day, every weekday (Monday to Friday), every week or every month. */
@@ -13,8 +13,6 @@ export type Repeat = "day" | "weekday" | "week" | "month";
 export const REPEATS: Repeat[] = ["day", "weekday", "week", "month"];
 export const REPEAT_LABEL: Record<Repeat, string> = { day: "Every day", weekday: "Every weekday", week: "Every week", month: "Every month" };
 export const repeatOf = (v: unknown): Repeat | null => (REPEATS.includes(v as Repeat) ? (v as Repeat) : null);
-/** How the target task's session starts once the source task is ready. */
-export type EdgeMode = "auto" | "manual" | "session" | "time";
 export type SessionStatus = "starting" | "running" | "finished" | "done" | "closed" | "failed";
 /**
  * Where an agent session runs: in a terminal or the agent's desktop app on a device where PacedMind is
@@ -129,8 +127,6 @@ export interface Project {
   repo: string | null;
   agent: AgentId | null;
   afterProjectId: string | null;
-  /** Whether its flow may start sessions on this computer by itself (a switch in the desktop app). */
-  flowOn: boolean;
   sort: number;
 }
 
@@ -162,7 +158,7 @@ export interface Task {
   estimateMin: number;
   /**
    * A project it's about without being part of it (it lives in its area): its page lists it under Related, and it
-   * counts nowhere in the project's progress, dates or flow.
+   * counts nowhere in the project's progress or dates.
    */
   relatedProjectId: string | null;
   /** Done, it comes back as a new task at its next date (ops.ts, repeatTask). */
@@ -184,8 +180,6 @@ export interface Task {
   /** Its own working folder on this computer; null inherits the project's, then the area's workspace. Never stored in the cloud. */
   folder: string | null;
   sortOrder: number;
-  flowX: number | null;
-  flowY: number | null;
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
@@ -234,7 +228,6 @@ export interface Session {
   endedAt: string | null;
   note: string | null;
   cliSessionId: string | null;
-  continuesSessionId: string | null;
   /** What its agent used, as the agent reported it (its usage metrics, the usage route); null until it did. */
   usage?: SessionUsage | null;
 }
@@ -351,13 +344,11 @@ export interface ReportDiff {
   skipped: "asks" | "git" | null;
 }
 
-export interface FlowEdge {
+/** A dependency: `toTaskId` waits for `fromTaskId` (the Timeline's arrows). It orders the work; nothing starts by itself. */
+export interface Dependency {
   id: number;
   fromTaskId: number;
   toTaskId: number;
-  mode: EdgeMode;
-  /** For mode "time": "YYYY-MM-DDTHH:mm". */
-  atTime: string | null;
 }
 
 /** Planning settings, stored with the account. How sessions start is per computer (DeviceSettings). */
@@ -497,8 +488,6 @@ export interface Device {
   isDefault: boolean;
   /** PacedMind's version on it, as it last said; null until it did. */
   appVersion: string | null;
-  /** Projects whose flow is switched on at that computer, as it last said. For display: each computer decides for itself. */
-  flowsOn: string[];
   /** The Claude Code and Codex sessions it found that PacedMind didn't start, as it last said (other-sessions.ts). */
   otherSessions: OtherSession[];
 }
@@ -807,9 +796,4 @@ export const VERDICT_LABEL: Record<Verdict, string> = {
   not_met: "Not met",
 };
 
-export const EDGE_LABEL: Record<EdgeMode, string> = {
-  auto: "Auto",
-  manual: "Manual",
-  session: "Same session",
-  time: "At a set time",
-};
+

@@ -27,12 +27,10 @@ export async function setNextProjectAction(projectId: string, nextId: string | n
   for (const p of projects) {
     if (p.afterProjectId === projectId && p.id !== nextId) {
       await repo.updateProject(p.id, { afterProjectId: null });
-      await repo.confirmFlowChange(p.id, { after: true });
     }
   }
   if (nextId) {
     await repo.updateProject(nextId, { afterProjectId: projectId });
-    await repo.confirmFlowChange(nextId, { after: true });
   }
   refresh();
   return { ok: true };

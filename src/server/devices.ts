@@ -48,17 +48,10 @@ export const localTools = (): Device["agents"] => g.__pacedmindTools ?? { claude
 /** When this computer last looked for the agents; null until the first check finished. */
 export const toolsCheckedAt = (): string | null => g.__pacedmindToolsAt ?? null;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Projects whose flow is switched on here (display only; device.ts decides), sorted: with `cloud`, only the account's
- * (their ids are UUIDs; this computer's own data names projects by slug).
- */
-export const flowsOnHere = (cloud = false): string[] => [...new Set(deviceConfig().armed)].filter((id) => !cloud || UUID.test(id)).sort();
 
 /**
  * This computer as the app shows it: its entry in the account's list, with what it found of the agents itself, its
- * own setting for requests from elsewhere, its version and its flows. Without an account it's the only computer (id
+ * own setting for requests from elsewhere and its version. Without an account it's the only computer (id
  * "", or the id it had in an account before signing out), so the default. Desktop app only: the web app has no
  * computer of its own.
  */
@@ -70,7 +63,7 @@ export async function thisDevice(): Promise<Device> {
     id: d.deviceId ?? "", name: row?.name ?? d.name, platform: row?.platform ?? thisPlatform(), remoteStart: d.remoteStart,
     remoteCode: d.remoteCode !== false, agents: localTools(), createdAt: row?.createdAt ?? "", lastSeenAt: row?.lastSeenAt ?? null,
     checkedAt: g.__pacedmindToolsAt ?? row?.checkedAt ?? null, revokedAt: row?.revokedAt ?? null,
-    isDefault: row ? row.isDefault : !cloud, appVersion: APP_VERSION, flowsOn: flowsOnHere(cloud),
+    isDefault: row ? row.isDefault : !cloud, appVersion: APP_VERSION,
     // The Sessions page looks for this computer's own itself (other-sessions.ts), more often than it reports them.
     otherSessions: [],
   };

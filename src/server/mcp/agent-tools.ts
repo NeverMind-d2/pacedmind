@@ -2,7 +2,7 @@
  * The MCP tools a session started by PacedMind may use, and without asking: reading, the session protocol
  * (start_task, attach_image, report_progress, ask_user, finish_task) and adding or updating tasks. They are also all it may use: the
  * server refuses anything else from a session's token (common.ts), so an agent led astray by what it reads
- * can't delete, move the calendar, change projects, wire flows or start other sessions. You do those in
+ * can't delete, move the calendar, change projects or start other sessions. You do those in
  * PacedMind or from your own Claude Code or Codex (the owner token).
  */
 export const AGENT_ALLOWED_TOOLS = [
@@ -14,7 +14,6 @@ export const AGENT_ALLOWED_TOOLS = [
   "get_task",
   "list_events",
   "get_agenda",
-  "get_flow",
   "list_sessions",
   "get_settings",
   "get_next_task",

@@ -6,7 +6,7 @@ import { noteClient } from "@/server/signals";
 import { runAsAgent } from "@/server/supabase";
 
 // The tools live in src/server/mcp: planning.ts (areas, projects, tasks), calendar.ts (events, agenda,
-// work hours) and agents.ts (flows, sessions and the start_task / finish_task protocol). A new server is
+// work hours) and agents.ts (dependencies, sessions and the start_task / finish_task protocol). A new server is
 // made for every request, inside runAs, so a session's token only ever sees that session's tools.
 const handler = createMcpHandler(registerTools, {
   serverInfo: { name: "pacedmind", version: "0.4.0" },

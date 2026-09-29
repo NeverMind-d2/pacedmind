@@ -19,8 +19,9 @@ export default async function RoadmapPage(props: PageProps<"/roadmap">) {
   ]);
   const sessions = latestSessions(all);
 
-  const inFlow = projects.find((p) => tasks.some((t) => t.projectId === p.id && t.flowX !== null));
-  const project = projects.find((p) => p.id === sp.p) ?? inFlow ?? projects[0] ?? null;
+  // Without one in the address, the first project with open tasks.
+  const busy = projects.find((p) => tasks.some((t) => t.projectId === p.id && t.status !== "done" && t.status !== "canceled"));
+  const project = projects.find((p) => p.id === sp.p) ?? busy ?? projects[0] ?? null;
   const own = project ? tasks.filter((t) => t.projectId === project.id && t.status !== "canceled") : [];
   const states = await taskStates(tasks, sessions, edges, now);
   const byId = new Map(tasks.map((t) => [t.id, t]));
@@ -31,7 +32,7 @@ export default async function RoadmapPage(props: PageProps<"/roadmap">) {
       .filter((x): x is Task => !!x)
       .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
     return {
-      task: t, after: before.map((x) => x.key), startOfFlow: t.flowX !== null && !before.length, state: states[t.id],
+      task: t, after: before.map((x) => x.key), state: states[t.id],
       session: sessions[t.id] ?? null,
     };
   });

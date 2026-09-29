@@ -4,20 +4,20 @@ import crypto from "node:crypto";
 import { removeImageFiles, type StoredImage } from "../attachments";
 import { removeDiffFiles } from "../diff";
 import {
-  areaFolder, flowArmed, forgetArea, forgetProject, forgetTask, projectFolder, setFlowArmed, setProjectFolder, setTaskFolder, taskFolder,
+  areaFolder, forgetArea, forgetProject, forgetTask, projectFolder, setProjectFolder, setTaskFolder, taskFolder,
 } from "../device";
 import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf, expandOccurrences, withDoneDay,
-  linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
+  linksOf, pictureHash, renamedKey, repoOf, strings,
   type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   repeatOf, taskHref,
-  type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
+  type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
   type LaunchRequest, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
   type Task,
@@ -28,7 +28,7 @@ import { cleanNeeds } from "@/lib/needs";
  * This computer's own data (the free One device plan), in the SQLite file local-db.ts opens. repo.ts uses it
  * while nobody is signed in to PacedMind Cloud, and it answers like cloud.ts, so the rest of the app doesn't
  * know which it has. There is only this computer: nothing runs on another one, and every image is here.
- * Folders and flow switches are this computer's settings (device.ts), as with the account's data.
+ * Folders are this computer's settings (device.ts), as with the account's data.
  */
 
 type Row = Record<string, unknown>;
@@ -146,7 +146,7 @@ export async function deleteProject(id: string) {
 const toProject = (r: Row): Project => ({
   id: String(r.id), areaId: String(r.area_id), name: String(r.name), color: s(r.color), startDate: s(r.start_date), targetDate: s(r.target_date),
   folder: projectFolder(String(r.id)), deviceId: null, codexEnv: s(r.codex_env), repo: repoOf(r.repo), agent: s(r.agent) as AgentId | null,
-  afterProjectId: s(r.after_project_id), flowOn: flowArmed(String(r.id)), sort: Number(r.sort),
+  afterProjectId: s(r.after_project_id), sort: Number(r.sort),
 });
 
 export async function listProjects(): Promise<Project[]> {
@@ -184,17 +184,14 @@ const PROJECT_COLS: Record<string, string> = {
 };
 
 /**
- * Moving a project to another area moves its tasks too. `folder` and `flowOn` are this computer's settings,
- * which only its window changes (the actions and MCP tools refuse them otherwise), and a new folder switches
- * the flow off until you switch it on again. There is one computer, so a project has no other to run on.
+ * Moving a project to another area moves its tasks too. `folder` is this computer's setting. There is one computer,
+ * so a project has no other to run on.
  */
 export async function updateProject(id: string, patch: Partial<Omit<Project, "id">>) {
   if (patch.folder !== undefined) {
     const problem = setProjectFolder(id, patch.folder);
     if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
   }
-  // Switching a flow on confirms its connections as they are now (see device.ts, `confirmed`).
-  if (patch.flowOn !== undefined) setFlowArmed(id, patch.flowOn, patch.flowOn ? await flowSnapshot(id) : undefined);
   if (patch.codexEnv !== undefined) {
     const env = patch.codexEnv?.trim() || null;
     const problem = env && codexEnvProblem(env);
@@ -264,7 +261,7 @@ const toTask = (r: Row, subs: Subtask[]): Task => ({
   doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
   modelSettings: modelSelectionOf(json(r.model_settings, null)),
-  sortOrder: Number(r.sort_order), flowX: n(r.flow_x), flowY: n(r.flow_y),
+  sortOrder: Number(r.sort_order),
   createdAt: String(r.created_at), updatedAt: String(r.updated_at), completedAt: s(r.completed_at), subtasks: subs,
 });
 
@@ -300,11 +297,6 @@ export async function getTask(idOrKey: number | string): Promise<Task | null> {
   return taskNow(idOrKey);
 }
 
-/** Every task's status, by id. */
-export async function taskStatuses(): Promise<Map<number, Status>> {
-  return new Map(all("SELECT id, status FROM tasks").map((r) => [Number(r.id), String(r.status) as Status]));
-}
-
 /** The next key in an area ("DEV-43"); tasks without an area are INB-. */
 function nextKey(areaId: string | null): string {
   const prefix = areaId ? String(get("SELECT key FROM areas WHERE id = ?", areaId)?.key ?? "TSK") : "INB";
@@ -335,20 +327,14 @@ const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
   dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min",
   relatedProjectId: "related_project_id", repeat: "repeat", reminder: "reminder", agent: "agent", runIn: "run_in",
-  sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
+  sortOrder: "sort_order",
 };
 
-/**
- * `folder` is this computer's setting (device.ts): a new one switches the task's project's flow off until you
- * switch it on again, since a flow runs unattended in its folders. There is no other computer to run on.
- */
+/** `folder` is this computer's setting (device.ts). There is no other computer to run on. */
 export async function updateTask(id: number, patch: TaskPatch) {
   if (patch.folder !== undefined) {
-    const before = taskFolder("local", id);
     const problem = setTaskFolder("local", id, patch.folder);
     if (problem) throw new Error(`Can't use the folder ${patch.folder}: ${problem}`);
-    const projectId = taskNow(id)?.projectId;
-    if ((patch.folder || null) !== before && projectId && flowArmed(projectId)) setFlowArmed(projectId, false);
   }
   const values = columns(patch, TASK_COLS);
   if (patch.modelSettings !== undefined) values.model_settings = JSON.stringify(checkedModelSelection(patch.modelSettings));
@@ -437,7 +423,7 @@ const toSession = (r: Row): Session => ({
   id: String(r.id), taskId: Number(r.task_id), agent: String(r.agent) as AgentId, surface: (s(r.surface) ?? "terminal") as Surface,
   deviceId: null, folder: s(r.folder), branch: s(r.branch), url: s(r.url),
   status: String(r.status) as SessionStatus, startedAt: String(r.started_at), finishedAt: s(r.finished_at), endedAt: s(r.ended_at),
-  note: s(r.note), cliSessionId: s(r.cli_session_id), continuesSessionId: s(r.continues_session_id), usage: usageOf(r.usage),
+  note: s(r.note), cliSessionId: s(r.cli_session_id), usage: usageOf(r.usage),
 });
 
 /** Sessions, newest first. They all ran on this computer: asking for another's finds none. */
@@ -452,7 +438,6 @@ export async function listSessions(filter: SessionFilter = {}): Promise<Session[
   };
   if (filter.taskId !== undefined) add("task_id = ?", filter.taskId);
   if (filter.status) add(`status IN (${marks(filter.status)})`, ...filter.status);
-  if (filter.continuesSessionId) add("continues_session_id = ?", filter.continuesSessionId);
   if (filter.surface) add("surface = ?", filter.surface);
   if (filter.agent) add("agent = ?", filter.agent);
   return all(`SELECT * FROM sessions WHERE ${where.join(" AND ")} ORDER BY started_at DESC, id`, ...params).map(toSession);
@@ -471,14 +456,14 @@ export async function latestSession(taskId: number): Promise<Session | null> {
 
 export async function createSession(input: {
   taskId: number; agent: AgentId; folder: string | null; deviceId?: string | null; branch?: string | null; status?: SessionStatus;
-  surface?: Surface; cliSessionId?: string | null; continuesSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
+  surface?: Surface; cliSessionId?: string | null; startedAt?: string; finishedAt?: string | null;
 }): Promise<Session> {
   const id = crypto.randomBytes(8).toString("hex");
   run(
-    `INSERT INTO sessions (id, task_id, agent, surface, folder, branch, status, started_at, finished_at, cli_session_id, continues_session_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sessions (id, task_id, agent, surface, folder, branch, status, started_at, finished_at, cli_session_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     id, input.taskId, input.agent, input.surface ?? "terminal", input.folder, input.branch ?? null, input.status ?? "starting",
-    input.startedAt ?? nowStamp(), input.finishedAt ?? null, input.cliSessionId ?? null, input.continuesSessionId ?? null,
+    input.startedAt ?? nowStamp(), input.finishedAt ?? null, input.cliSessionId ?? null,
   );
   return (await getSession(id))!;
 }
@@ -668,7 +653,7 @@ export async function latestSessionReport(sessionId: string): Promise<Report | n
 }
 
 /**
- * Tasks whose latest hand-back was partial or blocked, with that outcome. Flows don't go on after them until the user
+ * Tasks whose latest hand-back was partial or blocked, with that outcome. What waits for them waits until the user
  * marks them done. The report has to come from the task's latest session: a later session that was marked finished,
  * or finished in the cloud, brings no report of its own, and moves the task on.
  */
@@ -681,51 +666,25 @@ export async function heldOutcomes(): Promise<Map<number, Exclude<ReportOutcome,
   return new Map(rows.map((r) => [Number(r.task_id), String(r.outcome) as Exclude<ReportOutcome, "done">]));
 }
 
-export async function heldTaskIds(): Promise<Set<number>> {
-  return new Set((await heldOutcomes()).keys());
+/* ---------- dependencies ---------- */
+
+// The edges table was made for flows too: its mode and at_time columns stay at their defaults now.
+const toEdge = (r: Row): Dependency => ({ id: Number(r.id), fromTaskId: Number(r.from_task_id), toTaskId: Number(r.to_task_id) });
+
+export async function listEdges(): Promise<Dependency[]> {
+  return all("SELECT id, from_task_id, to_task_id FROM edges ORDER BY id").map(toEdge);
 }
 
-/* ---------- flow edges ---------- */
-
-/** A project's flow as it is now: its connections, and the project it starts after. */
-export async function flowSnapshot(projectId: string): Promise<{ edges: string[]; after: string | null; areaId: string | null }> {
-  const ids = all("SELECT id FROM tasks WHERE project_id = ?", projectId).map((r) => Number(r.id));
-  const project = projectNow(projectId);
-  return { ...snapshotOf(ids, edgesNow(), project?.afterProjectId ?? null), areaId: project?.areaId ?? null };
-}
-
-const toEdge = (r: Row): FlowEdge => ({
-  id: Number(r.id), fromTaskId: Number(r.from_task_id), toTaskId: Number(r.to_task_id), mode: String(r.mode) as EdgeMode, atTime: s(r.at_time),
-});
-const edgesNow = () => all("SELECT * FROM edges ORDER BY id").map(toEdge);
-
-export async function listEdges(): Promise<FlowEdge[]> {
-  return edgesNow();
-}
-
-export async function createEdge(fromTaskId: number, toTaskId: number, mode: EdgeMode = "auto"): Promise<FlowEdge | null> {
+/** Makes `toTaskId` wait for `fromTaskId`; the same dependency twice is one. */
+export async function createEdge(fromTaskId: number, toTaskId: number): Promise<Dependency | null> {
   if (fromTaskId === toTaskId) return null;
-  run("INSERT OR IGNORE INTO edges (from_task_id, to_task_id, mode) VALUES (?, ?, ?)", fromTaskId, toTaskId, mode);
-  const r = get("SELECT * FROM edges WHERE from_task_id = ? AND to_task_id = ?", fromTaskId, toTaskId);
+  run("INSERT OR IGNORE INTO edges (from_task_id, to_task_id) VALUES (?, ?)", fromTaskId, toTaskId);
+  const r = get("SELECT id, from_task_id, to_task_id FROM edges WHERE from_task_id = ? AND to_task_id = ?", fromTaskId, toTaskId);
   return r ? toEdge(r) : null;
-}
-
-export async function updateEdge(id: number, patch: { mode?: EdgeMode; atTime?: string | null }) {
-  update("edges", id, columns(patch, { mode: "mode", atTime: "at_time" }));
 }
 
 export async function deleteEdge(id: number) {
   run("DELETE FROM edges WHERE id = ?", id);
-}
-
-/** Deletes every connection into or out of a task. */
-export async function deleteEdgesOf(taskId: number) {
-  run("DELETE FROM edges WHERE from_task_id = ? OR to_task_id = ?", taskId, taskId);
-}
-
-/** Sets the start mode of every connection that leads into a task. */
-export async function setIncomingMode(toTaskId: number, mode: EdgeMode, atTime: string | null = null) {
-  run("UPDATE edges SET mode = ?, at_time = ? WHERE to_task_id = ?", mode, mode === "time" ? atTime : null, toTaskId);
 }
 
 /* ---------- settings ---------- */
@@ -753,7 +712,7 @@ const CLOUD_ONLY = "Sign in to PacedMind Cloud to use PacedMind on more than one
 export async function saveDeviceTools() {}
 
 /**
- * Other computers: none, without an account. This one is thisDevice() in devices.ts (Settings and the Flows page show
+ * Other computers: none, without an account. This one is thisDevice() in devices.ts (Settings and the Computers page show
  * it from there): the default by being the only one, named in this computer's settings.
  */
 export async function listDevices(): Promise<Device[]> {

@@ -4,7 +4,7 @@ import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import type {
-  AskKind, PushSubscriptionInput, AgentExtras, AgentLogin, CalEvent, Doer, EdgeMode, EventOccurrence, FlowEdge, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
+  AskKind, PushSubscriptionInput, AgentExtras, AgentLogin, CalEvent, Doer, EventOccurrence, Harness, LaunchRequestKind, LaunchRequestStatus, OtherSession,
   OtherSessionState, Priority, ReportCriterion, ReportOutcome, SessionStatus, Settings, Status, Surface, AgentId,
   ReportDiff, SessionUsage, TokenCounts,
 } from "@/lib/types";
@@ -45,14 +45,14 @@ export interface TaskInput {
 }
 
 export type TaskPatch = Partial<TaskInput & {
-  reminder: string | null; sortOrder: number; flowX: number | null; flowY: number | null;
+  reminder: string | null; sortOrder: number;
   deviceId: string | null; folder: string | null;
 }>;
 
 export interface SessionFilter {
   taskId?: number;
   status?: SessionStatus[];
-  continuesSessionId?: string;
+
   surface?: Surface;
   agent?: AgentId;
   deviceId?: string;
@@ -260,18 +260,6 @@ export function linksOf(v: unknown): { label: string; url: string }[] {
   return v.filter((l): l is Record<string, unknown> => !!l && typeof l === "object" && typeof (l as Record<string, unknown>).url === "string"
     && /^https?:\/\//i.test(String((l as Record<string, unknown>).url)))
     .map((l) => ({ label: typeof l.label === "string" && l.label.trim() ? l.label : String(l.url), url: String(l.url) }));
-}
-
-/* ---------- flows ---------- */
-
-/** A connection as a flow confirms it: which task, after which, and how (the time too, for "at a set time"). */
-export const edgeSignature = (e: { fromTaskId: number; toTaskId: number; mode: EdgeMode; atTime: string | null }) =>
-  `${e.fromTaskId}>${e.toTaskId}:${e.mode}${e.mode === "time" ? `@${e.atTime ?? ""}` : ""}`;
-
-/** A project's flow as it is: the connections into and out of its tasks, and the project it starts after. */
-export function snapshotOf(taskIds: number[], edges: FlowEdge[], after: string | null): { edges: string[]; after: string | null } {
-  const ids = new Set(taskIds);
-  return { edges: edges.filter((e) => ids.has(e.fromTaskId) || ids.has(e.toTaskId)).map(edgeSignature), after };
 }
 
 /* ---------- computers ---------- */

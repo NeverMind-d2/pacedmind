@@ -29,23 +29,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (fs.existsSync(own)) return done();
   }
 
-  // A terminal can carry a chain of "same session" tasks; close every one still open.
-  const chain = [first];
-  for (let i = 0; i < chain.length; i++) {
-    chain.push(...(await repo.listSessions({ continuesSessionId: chain[i].id })));
-  }
-  if (who.kind === "session" && !chain.some((s) => s.id === who.sessionId)) return done(401);
+  if (who.kind === "session" && who.sessionId !== first.id) return done(401);
 
-  for (const s of chain) {
-    if (s.status === "starting" || s.status === "running") {
-      await repo.updateSession(s.id, { status: "closed", endedAt: nowStamp() });
-      await repo.addSessionEvent(s.id, "closed", "Terminal closed before the agent finished");
-    } else if (!s.endedAt) {
-      await repo.updateSession(s.id, { endedAt: nowStamp() });
-      await repo.addSessionEvent(s.id, "closed", "Terminal closed");
-    }
+  if (first.status === "starting" || first.status === "running") {
+    await repo.updateSession(first.id, { status: "closed", endedAt: nowStamp() });
+    await repo.addSessionEvent(first.id, "closed", "Terminal closed before the agent finished");
+  } else if (!first.endedAt) {
+    await repo.updateSession(first.id, { endedAt: nowStamp() });
+    await repo.addSessionEvent(first.id, "closed", "Terminal closed");
   }
-  revokeSessionTokens(chain.map((s) => s.id));
-  forgetSessionFiles(chain.map((s) => s.id));
+  revokeSessionTokens([first.id]);
+  forgetSessionFiles([first.id]);
   return done();
 }

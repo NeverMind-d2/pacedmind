@@ -44,16 +44,6 @@ async function attentionNow(sessionId: string): Promise<AttentionKind | null> {
   return now;
 }
 
-/** Whether `hookedId` (the session the hook was written for) is `s` or one it continues in the same terminal. */
-async function sameTerminal(s: Session, hookedId: string): Promise<boolean> {
-  let at: Session | null = s;
-  for (let i = 0; at && i < 50; i++) {
-    if (at.id === hookedId) return true;
-    at = at.continuesSessionId ? await repo.getSession(at.continuesSessionId) : null;
-  }
-  return false;
-}
-
 /** The event a hook adds, given what the session waits for now; null for none. `who` names the agent. */
 function eventFor(kind: HookKind, p: Record<string, unknown>, now: AttentionKind | null, agent: Session["agent"]): { kind: string; text: string } | null {
   const who = AGENT_LABEL[agent];
@@ -161,14 +151,14 @@ export async function notePermissionAsked(s: Session, what: string) {
 
 /**
  * The session a hook speaks for: the one its token works for now (`sessionId`), while it runs, when the hook was
- * written for it or one it continues in the same terminal (`hookedId`) and runs in its current conversation (`cli`).
+ * written for it (`hookedId`) and runs in its current conversation (`cli`).
  * Null for a terminal still open on an older conversation, or a session that ended.
  */
 export async function hookSession(sessionId: string, hookedId: string, cli: string | null): Promise<Session | null> {
   const s = await repo.getSession(sessionId);
   if (!s || !isLiveSession(s)) return null;
   if (cli && s.cliSessionId && cli !== s.cliSessionId) return null;
-  return (await sameTerminal(s, hookedId)) ? s : null;
+  return s.id === hookedId ? s : null;
 }
 
 /** How MCP clients name themselves, as people know them. */

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useLayoutEffect, useOptimistic, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { linkFoundFolderAction, setFlowOnAction, updateProjectAction } from "@/app/actions";
+import { linkFoundFolderAction, setCodexEnvAction, updateProjectAction } from "@/app/actions";
 import { reorderTasksAction, setNextProjectAction } from "@/app/(app)/roadmap/actions";
 import { projectColor } from "@/lib/colors";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, fmtShort, parseLocal } from "@/lib/dates";
@@ -16,14 +16,13 @@ import { useExecution } from "@/components/execution-context";
 import { FolderField } from "@/components/folder-field";
 import { useQuickAddProject } from "@/components/quick-add";
 import { openAdd } from "@/components/task-list";
-import { Button, Dot, Menu, Switch, cx, useAction } from "@/components/ui";
+import { Button, Dot, Menu, cx, useAction } from "@/components/ui";
 import { dayPos, tint, useWidth } from "./timeline";
 
 export interface RoadmapItem {
   task: Task;
-  /** Keys of the tasks this one comes after in the flow. */
+  /** Keys of the tasks this one waits for. */
   after: string[];
-  startOfFlow: boolean;
   state: TaskState;
   session: Session | null;
 }
@@ -313,11 +312,6 @@ function PhoneTasks({ project, items, next, stats, onSelect }: {
       <div className="flex h-11 items-center gap-2 pl-4 pr-3">
         <h2 className="text-[12.5px] font-medium text-fg2">Task order</h2>
         <span className="text-[12px] text-mut2">{items.length} {items.length === 1 ? "task" : "tasks"}</span>
-        <span className="flex-1" />
-        <Link href={`/flows?p=${encodeURIComponent(project.id)}`}
-          className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line2 px-2.5 text-[12px] text-fg3 hover:bg-hover">
-          <Icon name="flow" size={12} strokeWidth={2} />Open as flow
-        </Link>
       </div>
       {items.map((it, i) => {
         const t = it.task;
@@ -353,9 +347,8 @@ function PhoneTasks({ project, items, next, stats, onSelect }: {
 
 /* ---------- task order ---------- */
 
-// Your own tasks are part of the plan but never of the flow.
 const afterOf = (it: RoadmapItem) =>
-  it.task.agent === "human" ? "Done by you" : it.after.length ? `After ${it.after.join(", ")}` : it.startOfFlow ? "Start of flow" : "";
+  it.after.length ? `After ${it.after.join(", ")}` : it.task.agent === "human" ? "Done by you" : "";
 const canOpen = (it: RoadmapItem) => it.state.tone === "waiting" && !!it.session;
 
 function NoTasks({ project }: { project: Project }) {
@@ -416,11 +409,6 @@ function TaskOrder({ project, items, next, stats, sel, onSelect }: {
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-5">
         <h2 className="mr-1 text-[12.5px] font-medium text-fg2">Task order</h2>
         <span className="truncate text-[12px] text-mut2">{project.name} · {list.length} {list.length === 1 ? "task" : "tasks"}</span>
-        <span className="flex-1" />
-        <Link href={`/flows?p=${encodeURIComponent(project.id)}`}
-          className="inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border border-line2 px-2.5 text-[12px] text-fg3 hover:bg-hover">
-          <Icon name="flow" size={12} strokeWidth={2} />Open as flow
-        </Link>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto pb-4">
         {list.map((it, i) => {
@@ -504,8 +492,6 @@ function PhoneSessionSettings(props: SettingsProps) {
       <summary className="flex h-11 cursor-pointer list-none items-center gap-2 px-4 text-[12.5px] hover:bg-hover [&::-webkit-details-marker]:hidden">
         <Icon name="chevronRight" size={13} strokeWidth={2} className="shrink-0 text-mut2 group-open/settings:rotate-90" />
         <span className="font-medium text-fg2">Session settings</span>
-        <span className="flex-1" />
-        <span className="shrink-0 text-mut2">{props.project.flowOn ? "Flow on" : "Paused"}</span>
       </summary>
       <SessionSettings key={`${props.project.id}:${props.project.folder ?? ""}`} {...props} />
     </details>
@@ -535,10 +521,6 @@ function SessionSettings({ project, projects, markOf, terminal, areaFolder }: Se
   return (
     <>
       <div className="flex flex-col gap-0.5 px-3 py-2.5 max-md:px-2 max-md:pt-0">
-        <Setting label="Flow on">
-          <span className="px-2"><Switch on={project.flowOn} label="Flow on" onChange={(v) => run(() => setFlowOnAction(project.id, v))} /></span>
-          <span className="truncate text-mut">{project.flowOn ? "Next sessions start on their own" : "Paused"}</span>
-        </Setting>
         <Setting label="Default agent">
           <Menu className="min-w-0" width={200}
             trigger={<button type="button" className={pv}>
@@ -560,6 +542,14 @@ function SessionSettings({ project, projects, markOf, terminal, areaFolder }: Se
               clear={areaFolder ? "Use the area's workspace again" : "Remove its folder"} found={found}
               onUse={(folder) => run(() => linkFoundFolderAction(project.id, folder))} onChange={(folder) => save({ folder })} />
           </div>
+        </Setting>
+        {/* Where its tasks run when they go to Codex cloud: the environment's label or id. */}
+        <Setting label="Codex cloud">
+          <input key={project.codexEnv ?? ""} defaultValue={project.codexEnv ?? ""} placeholder="Environment label or id" aria-label="Codex cloud environment"
+            title="Its label or id at chatgpt.com/codex/settings/environments, for tasks that run in Codex cloud"
+            onBlur={(e) => { if ((e.target.value.trim() || null) !== project.codexEnv) run(() => setCodexEnvAction(project.id, e.target.value)); }}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+            className="h-7 min-w-0 flex-1 rounded-md bg-transparent px-2 font-mono text-[12px] text-fg2 outline-none placeholder:font-sans placeholder:text-mut2 hover:bg-hover focus:bg-input" />
         </Setting>
         <Setting label="Starts after">
           <Menu className="min-w-0" width={240}
@@ -651,10 +641,6 @@ export function Roadmap(props: {
           <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-sel px-2.5 text-[12px] text-strong">
             <Icon name="roadmap" size={12} strokeWidth={2} />Roadmap
           </span>
-          <Link href={project ? `/flows?p=${encodeURIComponent(project.id)}` : "/flows"}
-            className="flex h-[22px] items-center gap-1.5 rounded-[5px] px-2.5 text-[12px] text-mut hover:text-fg2">
-            <Icon name="flow" size={12} strokeWidth={2} />Flow
-          </Link>
         </div>
         <span className="flex-1" />
         {props.waiting > 0 && (

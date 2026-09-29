@@ -38,7 +38,7 @@ import {
  * tools and stops working when the session ends. The desktop apps use your own connection (Settings → Connect),
  * and cloud sessions can't reach PacedMind at all.
  *
- * Only the desktop app's own window, the flows it switched on and requests you allowed call startSession
+ * Only the desktop app's own window and requests you allowed call startSession
  * (see the callers): the hosted web app and agents over MCP can only ask (requests.ts).
  */
 
@@ -602,7 +602,7 @@ export function plannedSurface(task: Task, agent: AgentId): Surface {
   return surfaceOf(task.runIn, toolsCheckedAt() ? localTools()[agent] : undefined);
 }
 
-/* One launch at a time, so two paths (a flow and a click, say) can't both start the same task. */
+/* One launch at a time, so two paths (a request and a click, say) can't both start the same task. */
 const g = globalThis as unknown as { __pacedmindLaunchLock?: Promise<unknown> };
 function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   const run = (g.__pacedmindLaunchLock ?? Promise.resolve()).then(fn, fn);
@@ -611,11 +611,10 @@ function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /** Why the session was started, for its history. */
-export type LaunchReason = "you" | "flow" | "approved" | "remote" | "remoteNoCode";
+export type LaunchReason = "you" | "approved" | "remote" | "remoteNoCode";
 
 const REASON_TEXT: Record<LaunchReason, string> = {
   you: "you started it here",
-  flow: "its flow started it",
   approved: "you allowed a request",
   remote: "a request with a fresh 2FA code",
   remoteNoCode: "a request without a 2FA code, as this computer allows",
@@ -623,8 +622,8 @@ const REASON_TEXT: Record<LaunchReason, string> = {
 
 /**
  * Starts a session for a task where the task says: in a terminal or the agent's desktop app on this computer, or in
- * the agent's cloud. Only for the desktop app: call it from the app's own window, a flow switched on here, or a
- * request that this computer's settings allow. A task that runs on another computer starts there. With `expect`
+ * the agent's cloud. Only for the desktop app: call it from the app's own window, or a request that this computer's
+ * settings allow. A task that runs on another computer starts there. With `expect`
  * (what you allowed), it refuses when the task, agent, folder or way it runs changed since.
  */
 export function startSession(

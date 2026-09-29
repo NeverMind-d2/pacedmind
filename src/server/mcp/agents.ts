@@ -2,16 +2,14 @@ import "server-only";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { ImageError, removeImageFiles, storeImage, type StoredImage } from "../attachments";
-import { deviceConfig, moveSessionToken, projectServers, revokeSessionTokens } from "../device";
+import { deviceConfig, projectServers, revokeSessionTokens } from "../device";
 import { noteAccountServers } from "../devices";
 import { agentExtras, folderExtras, sortReported, type ReportedServers } from "../extras";
 import { noteSessionMcp, sessionMcp } from "../session-mcp";
-import { nextReadyTask } from "../flow";
-import { forgetSessionFiles, plannedFolder, plannedSurface } from "../launcher";
+import { nextReadyTask } from "../dependencies";
+import { forgetSessionFiles, plannedFolder } from "../launcher";
 import { askForChanges, askFromAgent } from "../requests";
-import {
-  activeSession, changesProblem, closeSession, edgeWouldLoop, finishTask, flowNeedsTidy, placeInFlow, removeFromFlow, startedLines, tidyFlow,
-} from "../ops";
+import { activeSession, changesProblem, closeSession, edgeWouldLoop, finishTask } from "../ops";
 import * as repo from "../repo";
 import { MODE } from "../supabase";
 import { cloudOrigin } from "../supabase-config";
@@ -19,23 +17,13 @@ import { callerSession } from "./principal";
 import { QUESTION_CALL_MS, QUESTION_OPEN_MS, answeredText, openAsk, waitForAnswer } from "../asks";
 import { planText } from "@/lib/dates";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, STATUS_LABEL, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
-  type AgentId, type EdgeMode, type Report, type ReportCriterion, type Session, type Surface, type Task,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
+  type AgentId, type Report, type ReportCriterion, type Session, type Surface, type Task,
 } from "@/lib/types";
 import { sessionUse, usageText } from "@/lib/usage";
 import {
-  agentSchema, dateTimeInput, describeTask, fail, findProject, findSession, findTask, imageLine, names, plural, projectRef, reportCounts,
-  taskRef, tool, when,
+  agentSchema, describeTask, fail, findProject, findSession, findTask, imageLine, plural, projectRef, reportCounts, taskRef, tool,
 } from "./common";
-
-const MODE_OF = { auto: "auto", manual: "manual", same_session: "session", at_time: "time" } as const satisfies Record<string, EdgeMode>;
-const MODE_TEXT: Record<EdgeMode, string> = {
-  auto: "starts automatically when the previous task is finished",
-  manual: "starts after the user marks the previous task done",
-  session: "continues in the same terminal session as the previous task",
-  time: "starts at a set time once the previous task is finished",
-};
-const modeName = (m: EdgeMode) => (m === "session" ? "same session" : m === "time" ? "at a set time" : m);
 
 const SESSION_TEXT: Record<Session["status"], string> = {
   starting: "starting", running: "running", finished: "finished, waiting for the user's review", done: "reviewed and done",
@@ -74,19 +62,12 @@ async function sessionLines(sessions: Session[], tasks: Map<number, Task>): Prom
 /** The agent that runs a task: its own, else the project's, else Claude Code. None for a task that is the user's own. */
 const agentFor = async (t: Task): Promise<AgentId | null> => agentOf(t, t.projectId ? (await repo.getProject(t.projectId))?.agent : null);
 const notYours = (t: Task) => {
-  if (t.agent === "human") fail(`${t.key} is marked as the user's own task (human), so it stays out of flows and agent sessions. Ask the user before changing that with update_task.`);
+  if (t.agent === "human") fail(`${t.key} is marked as the user's own task (human), so it never gets an agent session. Ask the user before changing that with update_task.`);
 };
-
-/** Where a task's sessions run, in words. */
-async function runsText(t: Task, devices: Map<string, string>): Promise<string> {
-  const agent = (await agentFor(t)) ?? "claude";
-  const project = t.projectId ? await repo.getProject(t.projectId) : null;
-  return placeText(agent, plannedSurface(t, agent), t.deviceId ?? project?.deviceId ?? null, devices);
-}
 
 /**
  * The session a session token works in, checked against the task it names: a session PacedMind started can
- * only report on its own task (or the next one in the same terminal, which finish_task hands it).
+ * only report on its own task.
  */
 async function ownSession(t: Task, session?: string): Promise<Session | null> {
   const me = callerSession();
@@ -231,123 +212,39 @@ async function recordEnvironment(s: Session, projectId: string | null, env: { mo
 }
 
 export function registerAgentTools(server: McpServer) {
-  /* ---------- flows ---------- */
-
-  tool(server, "get_flow", {
-    title: "Get project flow",
-    description:
-      "A project's flow: which tasks agent sessions work on, which agent runs each and where, and which task starts after which (and how). Also whether the flow may start sessions on its own.",
-    input: z.object({ project: projectRef }),
-    kind: "read",
-  }, async ({ project }) => {
-    const [n, devices] = await Promise.all([names(), deviceNames()]);
-    const p = await findProject(project);
-    const [tasks, edges] = await Promise.all([repo.listTasks({ projectId: p.id }), repo.listEdges()]);
-    const inFlow = tasks.filter((t) => t.flowX !== null && t.flowY !== null).sort((a, b) => (a.flowY ?? 0) - (b.flowY ?? 0));
-    const keyOf = new Map(tasks.map((t) => [t.id, t.key]));
-    const next = [...n.projects.values()].filter((x) => x.afterProjectId === p.id);
-    const lines = [
-      `Flow for ${p.name} (id ${p.id}) · ${p.flowOn ? "on: sessions start on their own on this computer when their turn comes" : "off: nothing starts on its own (the user switches it on in PacedMind)"}`,
-      p.afterProjectId ? `Starts after project ${n.project(p.afterProjectId)}.` : null,
-      next.length ? `Then: ${next.map((x) => x.name).join(", ")}.` : null,
-    ];
-    for (const agent of ["claude", "codex"] as AgentId[]) {
-      const runs = inFlow.filter((t) => agentOf(t, p.agent) === agent);
-      if (!runs.length) continue;
-      lines.push(`\nRun by ${AGENT_LABEL[agent]}:`);
-      for (const t of runs) {
-        const inc = edges.filter((e) => e.toTaskId === t.id);
-        const how = inc.length
-          ? `after ${inc.map((e) => `${keyOf.get(e.fromTaskId) ?? `#${e.fromTaskId}`} (${modeName(e.mode)}${e.mode === "time" && e.atTime ? ` ${e.atTime.replace("T", " ")}` : ""})`).join(", ")}`
-          : "first, started by the user";
-        lines.push(`- ${t.key} · ${STATUS_LABEL[t.status]} · ${t.title} · ${how} · runs ${await runsText(t, devices)}`);
-      }
-    }
-    if (!inFlow.length) lines.push("\nNo tasks in the flow yet. connect_tasks or add_to_flow adds them.");
-    const outside = tasks.filter((t) => t.flowX === null && t.status !== "done" && t.status !== "canceled");
-    if (outside.length) lines.push(`\nOpen tasks not in the flow: ${outside.map((t) => t.key).join(", ")}`);
-    const ready = await nextReadyTask(p.id);
-    if (ready) lines.push(`Next ready task: ${ready.key} · ${ready.title}`);
-    return lines.filter((l) => l !== null).join("\n");
-  });
+  /* ---------- dependencies ---------- */
 
   tool(server, "connect_tasks", {
-    title: "Connect tasks in a flow",
+    title: "Make a task wait for another",
     description:
-      "Make one task's agent session start after another's, within one project. Modes: auto (when the previous task is finished), manual (after the user marks it done), same_session (the same agent continues in the same terminal), at_time (at a set time once the previous one is finished). The mode is how the second task starts, so it applies to all its incoming connections. Tasks not yet in the flow are added to it. Call again to change the mode.",
+      "Make one task wait for another in the same project (a dependency, drawn as an arrow on the Timeline): it's ready to work on once the other is done, or handed back for review unless that hand-back was partial or blocked. It only orders the work: nothing starts by itself. get_next_task and get_project follow it.",
     input: z.object({
       from: taskRef.describe("The task that comes first"),
-      to: taskRef.describe("The task that starts after it"),
-      mode: z.enum(["auto", "manual", "same_session", "at_time"]).optional().describe("Default auto"),
-      at: dateTimeInput.optional().describe("For at_time: when the task may start"),
+      to: taskRef.describe("The task that waits for it"),
     }),
     kind: "write",
   }, async (args) => {
     const from = await findTask(args.from);
     const to = await findTask(args.to);
-    if (from.id === to.id) fail("A task can't come after itself.");
-    if (!from.projectId || from.projectId !== to.projectId) fail("Both tasks have to be in the same project; flows are per project.");
-    if (await edgeWouldLoop(from.id, to.id)) fail(`${to.key} already leads to ${from.key}, so this would make a loop.`);
-    notYours(from);
-    notYours(to);
-    const mode: EdgeMode = MODE_OF[args.mode ?? "auto"];
-    const at = mode === "time" ? (args.at ? when(args.at, "required") : fail("at_time needs at, e.g. \"2026-09-26T09:00\".")) : null;
-    const fromAgent = (await agentFor(from)) ?? "claude";
-    if (from.flowX === null || from.flowY === null) await placeInFlow(from.id, fromAgent);
-    // "Same session" continues in the previous task's terminal, so it runs with that task's agent.
-    const toAgent = mode === "session" ? fromAgent : (await agentFor(to)) ?? "claude";
-    if (to.flowX === null || to.flowY === null) await placeInFlow(to.id, toAgent, from.id);
-    else if (toAgent !== (await agentFor(to))) await repo.updateTask(to.id, { agent: toAgent });
-    // One session also runs in one place.
-    if (mode === "session") await repo.updateTask(to.id, { runIn: from.runIn, deviceId: from.deviceId });
-    await repo.createEdge(from.id, to.id, mode);
-    await repo.setIncomingMode(to.id, mode, at);
-    const project = (await repo.getProject(from.projectId))!;
-    // Keep the canvas reading top to bottom when the new connection points up.
-    if (await flowNeedsTidy(from.id, to.id)) await tidyFlow(project.id);
-    return [
-      `${from.key} → ${to.key}: ${to.key} ${MODE_TEXT[mode]}${at ? ` (${at.replace("T", " ")})` : ""}.`,
-      project.flowOn ? null : `${project.name}'s flow is off, so nothing starts on its own. Only the user can switch it on, in PacedMind's Flows page, because it starts agents on their computer.`,
-    ].filter(Boolean).join("\n");
+    if (from.id === to.id) fail("A task can't wait for itself.");
+    if (!from.projectId || from.projectId !== to.projectId) fail("Both tasks have to be in the same project.");
+    if (await edgeWouldLoop(from.id, to.id)) fail(`${from.key} already waits for ${to.key}, so this would make a loop.`);
+    await repo.createEdge(from.id, to.id);
+    return `${to.key} waits for ${from.key}.`;
   });
 
   tool(server, "disconnect_tasks", {
-    title: "Disconnect tasks",
-    description: "Remove the connection that makes one task start after another.",
+    title: "Remove a dependency",
+    description: "Stop one task waiting for another.",
     input: z.object({ from: taskRef, to: taskRef }),
     kind: "delete",
   }, async ({ from, to }) => {
     const a = await findTask(from);
     const b = await findTask(to);
     const edge = (await repo.listEdges()).find((e) => e.fromTaskId === a.id && e.toTaskId === b.id);
-    if (!edge) fail(`${b.key} doesn't start after ${a.key}.`);
+    if (!edge) fail(`${b.key} doesn't wait for ${a.key}.`);
     await repo.deleteEdge(edge.id);
-    return `${b.key} no longer starts after ${a.key}.`;
-  });
-
-  tool(server, "add_to_flow", {
-    title: "Add task to flow",
-    description: "Put a project task on the flow canvas, under the rest of the flow, so an agent session can work on it.",
-    input: z.object({ task: taskRef, agent: agentSchema.optional().describe("Defaults to the task's or project's agent") }),
-    kind: "write",
-  }, async ({ task, agent }) => {
-    const t = await findTask(task);
-    if (!t.projectId) fail(`${t.key} isn't in a project. Flows belong to projects; move it into one first.`);
-    notYours(t);
-    const a = agent ?? (await agentFor(t)) ?? "claude";
-    await placeInFlow(t.id, a);
-    return `${t.key} is in ${(await names()).project(t.projectId)}'s flow, run by ${AGENT_LABEL[a]}.`;
-  });
-
-  tool(server, "remove_from_flow", {
-    title: "Remove task from flow",
-    description: "Take a task off the flow canvas together with its connections. The task itself stays.",
-    input: z.object({ task: taskRef }),
-    kind: "delete",
-  }, async ({ task }) => {
-    const t = await findTask(task);
-    await removeFromFlow(t.id);
-    return `${t.key} is no longer in the flow.`;
+    return `${b.key} no longer waits for ${a.key}.`;
   });
 
   /* ---------- sessions ---------- */
@@ -630,7 +527,7 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "finish_task", {
     title: "Finish task",
     description:
-      "For agents: hand a task back for the user's review, with a report of what you did. PacedMind shows the report on the task: your summary, your answer to each Done when item, screenshots, how to check the result and your questions. If not everything is ready, use outcome partial or blocked; the flow then waits for the user.",
+      "For agents: hand a task back for the user's review, with a report of what you did. PacedMind shows the report on the task: your summary, your answer to each Done when item, screenshots, how to check the result and your questions. If not everything is ready, use outcome partial or blocked.",
     input: z.object({
       task: taskRef,
       session: z.string().optional(),
@@ -683,29 +580,16 @@ export function registerAgentTools(server: McpServer) {
       removeImageFiles(stored.map((x) => x.img.file));
       throw e;
     }
-    const { session, continueWith, continued, started } = result;
+    const { session } = result;
     const report = session ? await repo.latestSessionReport(session.id) : null;
     const lines = [`Recorded your report for ${t.key} (${(report && reportCounts(report)) || "summary only"}). It waits for the user's check.`];
     const unanswered = criteria.filter((c) => c.verdict === null);
     if (unanswered.length && outcome !== "blocked") lines.push(`Not answered: ${unanswered.map((c) => `"${c.text}"`).join(", ")}.`);
     if (unknown.length) lines.push(`Left out follow-ups that aren't PacedMind tasks: ${unknown.join(", ")}.`);
     if ((args.links ?? []).length > links.length) lines.push("Left out links that aren't http or https.");
-    if (outcome !== "done") {
-      lines.push(`You handed it back as ${outcome}, so the flow waits until the user marks ${t.key} done. You can stop here.`);
-      releaseCaller();
-      return lines.join("\n");
-    }
-    lines.push(...(await startedLines(started)));
-    if (continueWith && continued) {
-      lines.push(`\nNext in this same session: ${continueWith.key} · ${continueWith.title}.`);
-      lines.push(`Call start_task with task ${continueWith.key} and session ${continued.id}, then keep working.`);
-      // The terminal's token now works for the next task.
-      const me = callerSession();
-      if (me) moveSessionToken(me.sessionId, continued.id, continueWith.id);
-    } else {
-      lines.push("You can stop here.");
-      releaseCaller();
-    }
+    if (outcome !== "done") lines.push(`You handed it back as ${outcome}: tasks that wait for ${t.key} wait until the user marks it done.`);
+    lines.push("You can stop here.");
+    releaseCaller();
     return lines.join("\n");
   });
 }

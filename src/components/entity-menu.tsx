@@ -314,7 +314,7 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
       <ConfirmDialog title={`Delete ${project.name}?`} confirmLabel="Delete project" danger
         onCancel={onClose} onConfirm={() => { run(() => deleteProjectAction(project.id)); onClose(); }}>
         {u.tasks ? `${plural(u.tasks, "task stays", "tasks stay")} in ${area?.name ?? "the area"} without a project. ` : "It has no tasks. "}
-        Its folder, agent and flow settings are removed.
+        Its folder and agent settings are removed.
       </ConfirmDialog>
     );
   }
@@ -326,7 +326,6 @@ export function ProjectMenu({ project, projects, areas, anchor, usage, onClose, 
       <PopoverItem icon={<Icon name="pen" size={14} />} onClick={() => { onClose(); onRename(); }}>Rename</PopoverItem>
       <PopoverLink icon={<Icon name="layers" size={14} />} href={`/project/${project.id}`} onClick={onClose}>Open tasks</PopoverLink>
       <PopoverLink icon={<Icon name="roadmap" size={14} />} href={`/roadmap?p=${project.id}`} onClick={onClose}>Open roadmap</PopoverLink>
-      <PopoverLink icon={<Icon name="flow" size={14} />} href={`/flows?p=${project.id}`} onClick={onClose}>Open flow</PopoverLink>
       <PopoverSeparator />
       <PopoverLabel>Color</PopoverLabel>
       <ColorSwatches value={project.color} onPick={(c) => run(() => updateProjectAction(project.id, { color: c }))} />
@@ -436,7 +435,7 @@ export function ProjectsMenu({ projects, areas, anchor, usage, onClose, onDelete
           onClose();
         }}>
         {names(projects)}. {tasks ? `${plural(tasks, "task stays", "tasks stay")} in ${tasks === 1 ? "its area" : "their areas"} without a project. ` : "They have no tasks. "}
-        Their folders, agents and flow settings are removed.
+        Their folders and agent settings are removed.
       </ConfirmDialog>
     );
   }

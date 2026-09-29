@@ -44,7 +44,6 @@ export async function sessionList(selected: string | null): Promise<{
   ]);
   const tasks = new Map(taskList.map((t) => [t.id, t]));
   const projects = new Map(projectList.map((p) => [p.id, p]));
-  const byId = new Map(all.map((s) => [s.id, s]));
   const devices = new Map(deviceList.map((d) => [d.id, d.name]));
   const busy = new Set(all.filter(active).map((s) => s.taskId));
   const today = todayStr();
@@ -82,7 +81,7 @@ export async function sessionList(selected: string | null): Promise<{
     const task = tasks.get(s.taskId);
     const project = task?.projectId ? projects.get(task.projectId) : undefined;
     const events = eventsOf[s.id] ?? [];
-    const prev = s.continuesSessionId ? byId.get(s.continuesSessionId) : undefined;
+    // The task that waits for this one (a dependency), to start next by hand.
     const next = task
       ? edges
         .filter((e) => e.fromTaskId === task.id)
@@ -106,10 +105,7 @@ export async function sessionList(selected: string | null): Promise<{
       note: s.note,
       cliSessionId: s.cliSessionId,
       usage: s.usage ?? null,
-      origin: s.continuesSessionId
-        ? "continued"
-        : events.some((e) => e.kind === "attached" || (e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text))) ? "outside" : "organizer",
-      continues: prev ? { id: prev.id, key: tasks.get(prev.taskId)?.key ?? "an earlier task" } : null,
+      origin: events.some((e) => e.kind === "attached" || (e.kind === "started" && /^Started outside (Organizer|PacedMind)$/.test(e.text))) ? "outside" : "organizer",
       task: task ? { id: task.id, key: task.key, title: task.title } : null,
       project: project ? { id: project.id, name: project.name } : null,
       href: task ? taskHref(task) : null,

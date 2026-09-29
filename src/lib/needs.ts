@@ -5,7 +5,7 @@ import { deviceOnline, type AgentId, type Device } from "./types";
  * such as "supabase" or "Gmail". Computers differ there: each has its own MCP servers and plugins, and its Claude Code
  * can be signed in to another account, with other connectors. A project's own folder brings its servers to every
  * computer that has it, so they don't need listing. PacedMind matches the needs against what each computer said its
- * agent has (AgentExtras): to offer a computer that has them, and to ask before a flow starts a task without them.
+ * agent has (AgentExtras), to offer a computer that has them.
  */
 
 /** At most this many needs per task. */

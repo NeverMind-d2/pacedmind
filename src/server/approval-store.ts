@@ -11,9 +11,9 @@ import type { AgentId, LaunchRequestKind, Surface } from "@/lib/types";
 export interface Approval {
   modelSettings: import("@/lib/agent-models").ModelSelection | null;
   id: string;
-  /** The launch request it answers, or null when it's this computer's own (an agent over MCP, a flow). */
+  /** The launch request it answers, or null when it's this computer's own (an agent over MCP). */
   requestId: string | null;
-  from: "elsewhere" | "agent" | "flow";
+  from: "elsewhere" | "agent";
   /** Start a new session, resume one, or send one back to its agent with changes. */
   kind: LaunchRequestKind;
   taskId: number;

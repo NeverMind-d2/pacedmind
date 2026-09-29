@@ -43,9 +43,7 @@ export interface SessionItem {
   cliSessionId: string | null;
   /** What its agent used, as it reported it; null when it couldn't (the apps, the cloud) or hasn't yet. */
   usage: SessionUsage | null;
-  origin: "organizer" | "outside" | "continued";
-  /** The session whose terminal this one carries on ("same session" connections). */
-  continues: { id: string; key: string } | null;
+  origin: "organizer" | "outside";
   task: { id: number; key: string; title: string } | null;
   project: { id: string; name: string } | null;
   /** Where the task opens in the app. */
@@ -66,7 +64,7 @@ export interface SessionItem {
   deviceId?: string | null;
   /** Running in a terminal here in a folder Claude Code doesn't trust yet: until the agent checks in, it's asking you. */
   asksTrust?: boolean;
-  /** The next task in the flow after this one. */
+  /** A task that waits for this one (a dependency), to start next. */
   next: { id: number; key: string; title: string; href: string; canStart: boolean } | null;
 }
 
@@ -335,14 +333,14 @@ export function SessionsView({ groups, others, initialId, startable, attachable,
               <div className="text-[14px] text-fg2">No sessions yet</div>
               <div className="max-w-sm text-[12.5px] leading-relaxed text-mut2">
                 Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex,
-                or switch on a project&apos;s flow to have them start one after another.
+                or ask an agent in a chat to start one.
               </div>
             </div>
           )}
         </div>
       </section>
       {selected && (
-        <Detail key={selected.id} s={selected} now={now} onSelect={select} chosen={chosen} onClose={backToList}
+        <Detail key={selected.id} s={selected} now={now} chosen={chosen} onClose={backToList}
           agentFor={(id) => startable.find((t) => t.id === id)?.agent} />
       )}
     </div>
@@ -535,8 +533,8 @@ function Row({ s, now, selected, onSelect }: { s: SessionItem; now: number; sele
   );
 }
 
-function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
-  s: SessionItem; now: number; onSelect: (id: string) => void; chosen: boolean; onClose: () => void;
+function Detail({ s, now, chosen, onClose, agentFor }: {
+  s: SessionItem; now: number; chosen: boolean; onClose: () => void;
   /** Who runs a task, when the page knows (for starting the next one on a computer). */
   agentFor: (taskId: number) => AgentId | undefined;
 }) {
@@ -562,7 +560,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
   const plan = active ? planOf(s.events) : null;
   const allToday = s.events.every((e) => sameDay(parseLocal(e.at), new Date(now)));
   const started = `${clockLong(s.startedAt, now)} ${
-    s.origin === "outside" ? "outside PacedMind" : s.origin === "continued" ? "in the same session" : "from PacedMind"
+    s.origin === "outside" ? "outside PacedMind" : "from PacedMind"
   }`;
   const props: [string, ReactNode, boolean][] = [
     ["Agent", <span key="a" className="flex items-center gap-1.5"><AgentIcon agent={s.agent} size={12} className="text-fg3" />{AGENT_LABEL[s.agent]}</span>, false],
@@ -651,16 +649,6 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
                 className={cx("truncate text-fg2", mono && "font-mono text-[11.5px] leading-[19px]")}>{value}</dd>
             </Fragment>
           ))}
-          {s.continues && (
-            <>
-              <dt className="text-mut2">Continues</dt>
-              <dd className="truncate">
-                <button type="button" onClick={() => onSelect(s.continues!.id)} className="text-fg2 hover:text-strong">
-                  <span className="font-mono text-[11.5px]">{s.continues.key}</span>&apos;s session
-                </button>
-              </dd>
-            </>
-          )}
         </dl>
 
         <div className="flex flex-col gap-2 border-t border-line pt-4">
@@ -738,7 +726,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
             </Button>
           )}
           {active && s.surface !== "terminal" && (
-            <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check, and what comes next may start."
+            <Button disabled={pending} title="The session can't always tell PacedMind itself. The task waits for your check."
               onClick={() => run(() => finishSessionAction(s.id))}>
               <Icon name="check" size={13} strokeWidth={2.2} />Mark finished
             </Button>
@@ -769,7 +757,7 @@ function Detail({ s, now, onSelect, chosen, onClose, agentFor }: {
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-[12px] text-mut2">
               <span className="min-w-0 flex-1 truncate">
-                Next in {s.project?.name ?? "the flow"}:{" "}
+                Waits for it:{" "}
                 <Link href={s.next.href} className="text-fg3 hover:text-strong">
                   <span className="font-mono text-[11px]">{s.next.key}</span> {s.next.title}
                 </Link>

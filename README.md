@@ -59,14 +59,14 @@ The MCP server runs at `http://127.0.0.1:4319/api/mcp` in the desktop app (`4320
 - For Codex, copy the `config.toml` snippet from Settings.
 - When an agent asks over MCP to start a session, PacedMind shows the request and a notification; nothing opens until you allow it.
 
-Set each project's folder in **Settings → Projects on this computer**. Folders, the agent commands and the **Flow** switches belong to each computer, not to your account. Flows only start sessions on their own when the project's **Flow** switch is on, on that computer.
+Set each project's folder in **Settings → Projects on this computer**. Folders and the agent commands belong to each computer, not to your account. Nothing starts a session on its own: you start it, or allow an agent's request.
 
 The MCP tools cover the whole app:
 - areas and projects;
 - tasks, with descriptions, "Done when" lists, sub-tasks, priorities, due and planned dates, and labels;
 - calendar events, and moving plans between days;
 - the agenda with its auto-planned focus blocks, and work hours;
-- agent flows and sessions, and the reports agents hand back.
+- dependencies between tasks, agent sessions, and the reports agents hand back.
 
 Dates can be written as `YYYY-MM-DD` or as phrases like "friday 10:00". In sessions started from PacedMind, agents can read, add tasks, update their own task and report on it, and nothing else. From your own Claude Code or Codex, deleting things, moving calendar events and starting sessions ask in the agent's terminal first, and starting a session also waits for you in PacedMind.
 
@@ -76,7 +76,7 @@ Dates can be written as `YYYY-MM-DD` or as phrases like "friday 10:00". In sessi
 
 - `pacedmind`: the basics.
 - `pacedmind-planning`: plan a day or week, move things.
-- `pacedmind-projects`: break a project down, set up agent flows.
+- `pacedmind-projects`: break a project down, order its tasks.
 - `pacedmind-review`: Inbox triage, the weekly review.
 - `pacedmind-agent-session`: the start_task / finish_task protocol for agents working on a task, including the report and screenshots.
 
@@ -90,7 +90,7 @@ This installs them in `~/.claude/skills` and, when Codex is installed, in `~/.co
 
 A task's **Done when** list says what must be true when it's finished, one checkable outcome per line. Add it in the task panel, or with the Done when chip when you create a task.
 
-When an agent hands a task back, `finish_task` carries a report: a summary, a verdict (met, partly or not met) for each Done when item, screenshots, how to check the result, questions for you, and details in Markdown. Open the task, or the session in Sessions, to see it, and click a screenshot to see it full size. An agent that hands back only part of the work (partial) or gets stuck (blocked) holds its flow: nothing after it starts until you mark the task done.
+When an agent hands a task back, `finish_task` carries a report: a summary, a verdict (met, partly or not met) for each Done when item, screenshots, how to check the result, questions for you, and details in Markdown. Open the task, or the session in Sessions, to see it, and click a screenshot to see it full size. An agent that hands back only part of the work (partial) or gets stuck (blocked) holds what waits for the task: it isn't ready until you mark the task done.
 
 If it isn't right yet, press **Request changes** under the report and write what should change. (Sessions in the Claude or Codex app, or in the cloud, take changes where they run.) The session reopens in a new terminal tab: Claude Code continues its conversation (as a new branch of it, so the old tab doesn't get in the way), and Codex starts a new one that reads its report and your changes. Either way the agent hands the task back with a new report, and the arrows on the report page through earlier ones.
 
@@ -98,7 +98,7 @@ Agents attach screenshots by saving an image file and passing its path (`attach_
 
 ## Views
 
-Today, Inbox, Upcoming, Calendar (month and week with auto-planned time blocks), Timeline, Projects, Roadmap and Flow (two views of one plan), Sessions, Settings (including Computers). Pages refresh on their own when an agent changes something.
+Today, Inbox, Upcoming, Calendar (month and week with auto-planned time blocks), Timeline, Projects, Roadmap, Sessions, Settings (including Computers). Pages refresh on their own when an agent changes something.
 
 Switch between dark and light mode beside Settings in the sidebar, or in **Settings → Appearance**. The choice is remembered on this device and also updates the Windows title-bar controls.
 

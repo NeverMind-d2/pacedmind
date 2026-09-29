@@ -29,7 +29,7 @@ export type QuickAddDefaults = {
   relatedProjectId?: string | null;
 };
 
-// The project a page shows when its address doesn't say which (Flows and Roadmap pick one), while that page is open.
+// The project a page shows when its address doesn't say which (Roadmap picks one), while that page is open.
 let shownProject: string | null = null;
 
 /** Tells quick add opened without a place (C, the pen button, the command menu) which project this page shows. */
@@ -70,7 +70,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
 
   useEffect(() => {
     // Opened without a place (C, the pen button, the command menu) on a project's or an area's page, or on a page that
-    // shows one project (Flows, Roadmap), a task goes there.
+    // shows one project (Roadmap), a task goes there.
     const [, page, id] = path.split("/");
     const here = (): QuickAddDefaults =>
       page === "project" && projects.some((p) => p.id === id) ? { projectId: id }
@@ -316,7 +316,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
                 {agent ? <AgentIcon agent={agent} size={12} /> : <Icon name="user" size={13} />}{doerLabel}
               </button>}
               items={[
-                { value: "human" as Doer | null, label: DOER_LABEL.human, icon: <Icon name="user" size={13} />, hint: "Stays out of flows" },
+                { value: "human" as Doer | null, label: DOER_LABEL.human, icon: <Icon name="user" size={13} />, hint: "No agent session" },
                 ...(["claude", "codex"] as const).map((a) => ({ value: a as Doer | null, label: DOER_LABEL[a], icon: <AgentIcon agent={a} size={12} /> })),
                 { value: null, label: project?.agent ? `Project default, ${DOER_LABEL[project.agent]}` : "Default, Claude Code", icon: <Icon name="layers" size={13} /> },
               ]}

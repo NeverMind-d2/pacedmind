@@ -1,9 +1,7 @@
 import "server-only";
 import { noteSessionEvent } from "./attention";
 import { isAttention } from "@/lib/dates";
-import { confirmedFlow, flowArmed, reconfirmFlow } from "./device";
 import { usesCloud } from "./scope";
-import { MODE } from "./supabase";
 import * as cloud from "./store/cloud";
 import * as local from "./store/local";
 
@@ -14,7 +12,7 @@ import * as local from "./store/local";
  */
 
 export {
-  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, edgeSignature, repoOf,
+  CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, repoOf,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
 } from "./store/shared";
 
@@ -50,7 +48,6 @@ export const mergeProject = via("mergeProject");
 /* ---------- tasks ---------- */
 export const listTasks = via("listTasks");
 export const getTask = via("getTask");
-export const taskStatuses = via("taskStatuses");
 export const createTask = via("createTask");
 export const updateTask = via("updateTask");
 export const deleteTask = via("deleteTask");
@@ -99,33 +96,11 @@ export const reportsForSessions = via("reportsForSessions");
 export const latestReport = via("latestReport");
 export const latestSessionReport = via("latestSessionReport");
 export const heldOutcomes = via("heldOutcomes");
-export const heldTaskIds = via("heldTaskIds");
 
-/* ---------- flows ---------- */
-export const flowSnapshot = via("flowSnapshot");
+/* ---------- dependencies (the Timeline's arrows) ---------- */
 export const listEdges = via("listEdges");
 export const createEdge = via("createEdge");
-export const updateEdge = via("updateEdge");
 export const deleteEdge = via("deleteEdge");
-export const deleteEdgesOf = via("deleteEdgesOf");
-export const setIncomingMode = via("setIncomingMode");
-
-/**
- * After you changed a flow in this computer's window (only for a flow that's on): the connections into and
- * out of `tasks` count as confirmed as they are now, connections that are gone are forgotten, and with
- * `after` so does the project it starts after. Other connections keep their state: one an agent added
- * meanwhile stays unconfirmed. MCP tools and the web app never call this.
- */
-export async function confirmFlowChange(projectId: string | null | undefined, change: { tasks?: number[]; after?: boolean }) {
-  if (MODE !== "desktop" || !projectId || !flowArmed(projectId)) return;
-  const was = confirmedFlow(projectId) ?? { edges: [], after: null };
-  const now = await flowSnapshot(projectId);
-  const touched = new Set(change.tasks ?? []);
-  const ends = (sig: string) => sig.split(":")[0].split(">").map(Number);
-  const edges = new Set(was.edges.filter((sig) => now.edges.includes(sig)));
-  for (const sig of now.edges) if (ends(sig).some((id) => touched.has(id))) edges.add(sig);
-  reconfirmFlow(projectId, { edges: [...edges], after: change.after ? now.after : was.after });
-}
 
 /* ---------- settings ---------- */
 export const getSettings = via("getSettings");
