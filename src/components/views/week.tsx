@@ -68,6 +68,9 @@ function tint(agent: AgentId, past: boolean): CSSProperties {
   };
 }
 
+/** A finished task, and the sessions of one: dimmed, so what's left stands out. Hovered, it comes back to read. */
+const DIMMED = "opacity-40 hover:opacity-90";
+
 /** The agent a task names outright; a task without one is shown as yours, as the auto-planner treats it. */
 const namedAgent = (t: Task): AgentId | null => (t.agent === "claude" || t.agent === "codex" ? t.agent : null);
 
@@ -379,6 +382,7 @@ export function WeekView({
       <Legend swatch="border-accent/55 bg-line">Check a finished session</Legend>
       <Legend style={tint("claude", false)}>{AGENT_LABEL.claude}</Legend>
       <Legend style={tint("codex", false)}>{AGENT_LABEL.codex}</Legend>
+      <Legend swatch="border-line-strong bg-line opacity-40">Done</Legend>
     </>
   );
 
@@ -499,8 +503,8 @@ export function WeekView({
                           className={cx("flex h-[22px] shrink-0 cursor-grab items-center gap-[5px] rounded-[4px] border px-1.5 text-[11px]",
                             t.key === sel ? "ring-1 ring-accent/70" : "",
                             drag?.task.id === t.id && "opacity-40",
-                            t.status === "done" ? "border-line text-dim line-through" : "border-line-strong bg-line text-strong hover:bg-sel")}
-                          style={namedAgent(t) ? tint(namedAgent(t)!, t.status === "done") : undefined}>
+                            "border-line-strong bg-line text-strong hover:bg-sel", t.status === "done" && DIMMED)}
+                          style={namedAgent(t) ? tint(namedAgent(t)!, false) : undefined}>
                           {namedAgent(t) ? <AgentIcon agent={namedAgent(t)!} size={9} className="shrink-0" style={{ color: `var(--color-${namedAgent(t)})` }} />
                             : <Dot color={taskColor(t, ctx.projects, ctx.areas)} size={6} />}
                           <span className="truncate">{t.key} {t.title}</span>
@@ -623,31 +627,32 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
 }) {
   const top = y(b.s) + 1;
   const height = Math.max(18, y(b.e) - top - 1);
-  const done = b.task?.status === "done" && b.kind === "pinned";
+  // A finished task's block, and its sessions, are dimmed.
+  const done = b.task?.status === "done" && (b.kind === "pinned" || b.kind === "session");
   const style: CSSProperties = {
     top,
     height,
     left: `calc(2px + (100% - 4px) * ${b.col / b.cols})`,
     width: `calc((100% - 4px) / ${b.cols} - ${b.cols > 1 ? 2 : 0}px)`,
-    ...(b.agent ? tint(b.agent, past || done) : {}),
+    ...(b.agent ? tint(b.agent, past) : {}),
   };
-  const tone = b.agent ? cx("hover:brightness-110", past || done ? "text-mut2" : "text-strong")
+  const tone = b.agent ? cx("hover:brightness-110", past ? "text-mut2" : "text-strong")
     : b.kind === "fixed" ? cx("border-ctl hover:bg-hover", past ? "text-mut2" : "text-fg3")
-    : past || done ? "border-sel bg-hover text-mut2 hover:bg-hover"
+    : past ? "border-sel bg-hover text-mut2 hover:bg-hover"
     : b.kind === "check" ? "border-accent/55 bg-line text-strong hover:bg-sel"
     : b.kind === "auto" ? "border-dashed border-ctl bg-hover text-fg2 hover:bg-sel"
     : "border-line-strong bg-line text-strong hover:bg-sel";
   const cls = cx("group absolute block overflow-hidden rounded-[5px] border px-1.5 text-left text-[11px] leading-[1.35]",
-    height >= 24 ? "py-[3px]" : "py-0", tone, selected && "ring-1 ring-accent/70", dragging && "opacity-40",
+    height >= 24 ? "py-[3px]" : "py-0", tone, selected && "ring-1 ring-accent/70", dragging ? "opacity-40" : done && DIMMED,
     onGrab ? "cursor-grab" : "cursor-pointer", b.kind === "session" ? "z-[5]" : "");
   const time = `${fmtTime(b.start)}–${b.running ? "now" : fmtTime(b.end)}`;
   const label = b.kind === "session"
     ? `${AGENT_LABEL[b.agent!]}: ${b.title}, ${fmtTime(b.start)}–${b.running ? "now, running" : fmtTime(b.end)}`
-    : `${b.title}, ${time}${b.kind === "auto" ? " (auto-planned)" : ""}${onGrab ? ". Drag to move it." : ""}`;
+    : `${b.title}, ${time}${b.kind === "auto" ? " (auto-planned)" : ""}${done ? ", done" : ""}${onGrab ? ". Drag to move it." : ""}`;
   return (
     <div data-block data-item title={label} aria-label={label} {...pressable(onOpen)} className={cls} style={style}
       onPointerDown={onGrab ? (e) => onGrab(e, "move") : undefined}>
-      <span className={cx("flex items-center gap-[5px] overflow-hidden whitespace-nowrap font-medium", done && "line-through")}>
+      <span className="flex items-center gap-[5px] overflow-hidden whitespace-nowrap font-medium">
         {b.kind === "check" ? <Icon name="terminal" size={10} strokeWidth={2.4} className={cx("shrink-0", past ? "text-dim" : "text-accent")} />
           : b.agent ? <AgentIcon agent={b.agent} size={10} className="shrink-0" style={{ color: `var(--color-${b.agent})` }} />
           : b.kind === "pinned" && b.task ? <StatusIcon status={b.task.status} size={10} />
