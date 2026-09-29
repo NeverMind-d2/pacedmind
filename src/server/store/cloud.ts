@@ -11,7 +11,7 @@ import {
 } from "../device";
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, cleanDeviceName, cleanDoneWhen, codexEnvProblem, criteriaOf,
-  deriveKey, expandOccurrences, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
+  deriveKey, doneDaysOf, expandOccurrences, withDoneDay, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
   type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
@@ -438,7 +438,7 @@ export async function deleteSubtask(id: number) {
 
 const toEvent = (r: Row): CalEvent => ({
   id: Number(r.id), title: String(r.title), areaId: s(r.area_id), start: String(r.start_at), end: String(r.end_at),
-  recurrence: s(r.recurrence) as CalEvent["recurrence"],
+  recurrence: s(r.recurrence) as CalEvent["recurrence"], doneOn: doneDaysOf(r.done_on),
 });
 
 export async function listEvents(): Promise<CalEvent[]> {
@@ -471,6 +471,14 @@ export async function updateEvent(id: number, patch: Partial<Omit<CalEvent, "id"
 export async function deleteEvent(id: number) {
   const db = await accountDb();
   check(await db.from("events").delete().eq("id", id));
+}
+
+/** Marks one day's occurrence of an activity done, or not done. */
+export async function setEventDone(id: number, day: string, done: boolean) {
+  const db = await accountDb();
+  const r = one(await db.from("events").select("done_on").eq("id", id).maybeSingle());
+  if (!r) return;
+  check(await db.from("events").update({ done_on: withDoneDay(doneDaysOf(r.done_on), day, done) }).eq("id", id));
 }
 
 /** Expands events (including weekly ones) into occurrences between from and to (inclusive dates). */

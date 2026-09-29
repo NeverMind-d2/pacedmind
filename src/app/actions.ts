@@ -147,6 +147,15 @@ export async function updateEventAction(id: number, occurrence: string, input: {
   return done();
 }
 
+/** Marks an activity done, or not done, on one day: `day` is its occurrence's date ("YYYY-MM-DD"). */
+export async function setEventDoneAction(id: number, day: string, isDone: boolean) {
+  await guard();
+  if (typeof day !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !isStamp(`${day}T00:00`)) return { ok: false, error: "That isn't a day" };
+  if (!(await repo.getEvent(id))) return { ok: false, error: "That activity is no longer in the calendar" };
+  await repo.setEventDone(id, day, isDone === true);
+  return done();
+}
+
 export async function deleteEventAction(id: number) {
   await guard();
   await repo.deleteEvent(id);

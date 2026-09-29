@@ -64,6 +64,7 @@ export const createEvent = via("createEvent");
 export const getEvent = via("getEvent");
 export const updateEvent = via("updateEvent");
 export const deleteEvent = via("deleteEvent");
+export const setEventDone = via("setEventDone");
 export const occurrences = via("occurrences");
 
 /* ---------- sessions ---------- */

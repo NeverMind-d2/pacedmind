@@ -13,7 +13,7 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, flowSnapshot, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
-import { SETTING_KEYS, areaPictureOf, deriveKey, diffOf, usageOf } from "./store/shared";
+import { SETTING_KEYS, areaPictureOf, deriveKey, diffOf, doneDaysOf, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
@@ -379,7 +379,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
 
     const evs = events.filter((e) => match(e.start_at, MINUTE) && match(e.end_at, MINUTE)).map((e) => ({
       title: clip(e.title, 200) || "Event", area_id: areaId(e.area_id), start_at: String(e.start_at), end_at: String(e.end_at),
-      recurrence: oneOf(e.recurrence, ["weekly"]),
+      recurrence: oneOf(e.recurrence, ["weekly"]), done_on: doneDaysOf(e.done_on),
     }));
     for (let i = 0; i < evs.length; i += 500) check(await db.from("events").insert(evs.slice(i, i + 500)));
 
@@ -582,8 +582,8 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
 
     const insSub = conn.prepare("INSERT INTO subtasks (task_id, title, done, sort) VALUES (?, ?, ?, ?)");
     for (const x of subtasks) if (task(x.task_id)) insSub.run(task(x.task_id), String(x.title), x.done ? 1 : 0, Number(x.sort ?? 0));
-    const insEvent = conn.prepare("INSERT INTO events (title, area_id, start_at, end_at, recurrence) VALUES (?, ?, ?, ?, ?)");
-    for (const e of events) insEvent.run(String(e.title), area(e.area_id), String(e.start_at), String(e.end_at), s(e.recurrence));
+    const insEvent = conn.prepare("INSERT INTO events (title, area_id, start_at, end_at, recurrence, done_on) VALUES (?, ?, ?, ?, ?, ?)");
+    for (const e of events) insEvent.run(String(e.title), area(e.area_id), String(e.start_at), String(e.end_at), s(e.recurrence), JSON.stringify(doneDaysOf(e.done_on)));
 
     // Sessions keep their ids; one that continues a session that didn't come along continues nothing.
     const kept = new Set(sessions.filter((x) => task(x.task_id)).map((x) => String(x.id)));

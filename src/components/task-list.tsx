@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { fmtTime, toDateTimeStr } from "@/lib/dates";
+import { dateOnly, fmtTime, parseLocal, toDateTimeStr } from "@/lib/dates";
+import { fmtSpan } from "@/lib/usage";
+import { setEventDoneAction } from "@/app/actions";
 import { AreaDetail } from "./area-detail";
 import type { Area, EventOccurrence, Task, TaskContext } from "@/lib/types";
 import { openActivity } from "./activity-editor";
-import { Icon, type IconName } from "./icons";
+import { Icon, StatusIcon, type IconName } from "./icons";
 import type { QuickAddDefaults } from "./quick-add";
 import { TaskDetail } from "./task-detail";
 import { DisplayMenu, arrange, useTaskDisplay } from "./task-display";
 import { TaskRow } from "./task-row";
-import { Button, Segmented, cx } from "./ui";
+import { Button, Segmented, cx, useAction } from "./ui";
 
 export interface TaskGroup {
   id: string;
@@ -102,21 +104,9 @@ export function TaskList({
           {showSchedule && schedule!.length > 0 && (
             <>
               <GroupHeader name="Schedule" count={schedule!.length} onAdd={() => openAdd({ mode: "activity" })} />
-              {schedule!.map((e) => {
-                const past = e.end <= now;
-                const current = e.start <= now && now < e.end;
-                const area = ctx.areas.find((a) => a.id === e.areaId);
-                return (
-                  <button key={`${e.eventId}-${e.start}`} type="button" onClick={() => openActivity(e)}
-                    className={cx("flex h-[38px] w-full items-center gap-3 border-b border-hover pl-5 pr-4 text-left hover:bg-hover", past ? "text-mut2" : "text-fg")}>
-                    <span className={cx("w-[96px] shrink-0 font-mono text-[11.5px]", past ? "text-dim" : "text-mut")}>{fmtTime(e.start)}–{fmtTime(e.end)}</span>
-                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: area?.color ?? "var(--color-mut2)" }} />
-                    <span className="min-w-0 flex-1 truncate">{e.title}</span>
-                    {current && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium text-accent-fg">Now</span>}
-                    <span className="w-16 shrink-0 text-right text-[11.5px] text-mut2">{area?.name}</span>
-                  </button>
-                );
-              })}
+              {schedule!.map((e) => (
+                <ActivityRow key={`${e.eventId}-${e.start}`} activity={e} area={ctx.areas.find((a) => a.id === e.areaId)} now={now} />
+              ))}
             </>
           )}
           {showTasks && groups.map((g) => (
@@ -139,6 +129,42 @@ export function TaskList({
       </section>
       {!selected && areaDetails && areaOpen && <AreaDetail area={areaDetails} projects={ctx.projects} onClose={() => setAreaOpen(false)} />}
       {selected && <TaskDetail key={`${selected.id}-${selected.updatedAt}`} task={selected} ctx={ctx} onClose={() => setSel(null)} />}
+    </div>
+  );
+}
+
+/**
+ * An activity on the day's schedule, lined up with the tasks below it: its time where a task's key is, and a circle
+ * where a task's status is, to mark it done (for this day only, when it repeats every week). Its title opens it.
+ */
+function ActivityRow({ activity: e, area, now }: { activity: EventOccurrence; area: Area | undefined; now: string }) {
+  const { run } = useAction();
+  const past = e.end <= now;
+  const current = e.start <= now && now < e.end;
+  const length = fmtSpan(parseLocal(e.end).getTime() - parseLocal(e.start).getTime());
+  return (
+    <div className="flex h-[38px] items-center gap-2.5 border-b border-hover pl-5 pr-4 hover:bg-hover max-sm:h-[46px] max-sm:pl-3.5">
+      <span title="Activity" className="flex w-4 shrink-0 justify-center text-mut2 max-sm:hidden"><Icon name="calendar" size={13} /></span>
+      <span className={cx("w-[54px] shrink-0 font-mono text-[11.5px]", past || e.done ? "text-dim" : "text-fg3")}>{fmtTime(e.start)}</span>
+      <button type="button" aria-label={e.done ? "Mark as not done" : "Mark as done"} title={e.weekly ? "Marks this day only" : undefined}
+        onClick={() => run(() => setEventDoneAction(e.eventId, dateOnly(e.start), !e.done))}
+        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded hover:bg-ink/5 max-sm:h-9 max-sm:w-9 max-sm:-mx-2">
+        <StatusIcon status={e.done ? "done" : "todo"} />
+      </button>
+      <button type="button" onClick={() => openActivity(e)}
+        className={cx("h-full min-w-0 flex-1 truncate text-left", e.done ? "text-mut2 line-through" : past ? "text-mut2" : "text-fg")}>
+        {e.title}
+      </button>
+      {current && !e.done && <span className="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[11.5px] font-medium text-accent-fg">Now</span>}
+      {area && (
+        <span className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] text-mut max-sm:hidden">
+          <span className="h-1.5 w-1.5 rounded-full" style={{ background: area.color }} />{area.name}
+        </span>
+      )}
+      <span title={`${fmtTime(e.start)}–${fmtTime(e.end)}`}
+        className={cx("inline-flex h-5 shrink-0 items-center gap-1.5 rounded-[5px] border border-ctl px-1.5 text-[11.5px]", past || e.done ? "text-dim" : "text-mut")}>
+        <Icon name="clock" size={11} strokeWidth={2.2} />{length}
+      </span>
     </div>
   );
 }

@@ -181,6 +181,8 @@ export interface CalEvent {
   start: string;
   end: string;
   recurrence: "weekly" | null;
+  /** The days ("YYYY-MM-DD") whose occurrence you marked done: one for a one-off activity, any for a weekly one. */
+  doneOn: string[];
 }
 
 /** One concrete occurrence of a CalEvent within a range. */
@@ -192,6 +194,8 @@ export interface EventOccurrence {
   end: string;
   /** Its event repeats every week, so a change to this occurrence changes every week. */
   weekly: boolean;
+  /** You marked this occurrence done (on its own day only, for a weekly one). */
+  done: boolean;
 }
 
 export interface Session {

@@ -209,17 +209,29 @@ export function expandOccurrences(events: CalEvent[], from: string, to: string):
         if (d.getDay() !== first.getDay() || toDateStr(d) < e.start.slice(0, 10)) continue;
         const st = new Date(d.getFullYear(), d.getMonth(), d.getDate(), first.getHours(), first.getMinutes());
         const en = new Date(st.getTime() + durMs);
-        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: stampMin(st), end: stampMin(en), weekly: true });
+        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: stampMin(st), end: stampMin(en), weekly: true, done: e.doneOn.includes(toDateStr(d)) });
       }
     } else {
       const day = e.start.slice(0, 10);
       if (day >= from.slice(0, 10) && day <= to.slice(0, 10)) {
-        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: e.start, end: e.end, weekly: false });
+        out.push({ eventId: e.id, title: e.title, areaId: e.areaId, start: e.start, end: e.end, weekly: false, done: e.doneOn.includes(day) });
       }
     }
   }
   return out.sort((a, b) => a.start.localeCompare(b.start));
 }
+
+/** The days an activity was marked done, as stored: only real dates, each once, at most a few years' worth. */
+export const doneDaysOf = (v: unknown): string[] =>
+  [...new Set(strings(Array.isArray(v) ? v : parseJson(v)).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))].sort().slice(-2000);
+
+function parseJson(v: unknown): unknown {
+  try { return typeof v === "string" ? JSON.parse(v) : null; } catch { return null; }
+}
+
+/** The days after marking one done or not done. */
+export const withDoneDay = (days: string[], day: string, done: boolean) =>
+  doneDaysOf(done ? [...days, day] : days.filter((d) => d !== day));
 
 /* ---------- reports ---------- */
 

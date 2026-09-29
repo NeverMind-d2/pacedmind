@@ -9,7 +9,7 @@ import {
 import { repoIdentity } from "../git-remote";
 import { db, tx } from "./local-db";
 import {
-  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, expandOccurrences,
+  DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, areaPictureOf, cleanDoneWhen, codexEnvProblem, criteriaOf, deriveKey, doneDaysOf, expandOccurrences, withDoneDay,
   linksOf, pictureHash, renamedKey, repoOf, snapshotOf, strings,
   type AskInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, usageOf, diffOf,
 } from "./shared";
@@ -383,7 +383,7 @@ export async function deleteSubtask(id: number) {
 
 const toEvent = (r: Row): CalEvent => ({
   id: Number(r.id), title: String(r.title), areaId: s(r.area_id), start: String(r.start_at), end: String(r.end_at),
-  recurrence: s(r.recurrence) as CalEvent["recurrence"],
+  recurrence: s(r.recurrence) as CalEvent["recurrence"], doneOn: doneDaysOf(r.done_on),
 });
 const eventsNow = () => all("SELECT * FROM events ORDER BY start_at, id").map(toEvent);
 
@@ -410,6 +410,13 @@ export async function updateEvent(id: number, patch: Partial<Omit<CalEvent, "id"
 
 export async function deleteEvent(id: number) {
   run("DELETE FROM events WHERE id = ?", id);
+}
+
+/** Marks one day's occurrence of an activity done, or not done. */
+export async function setEventDone(id: number, day: string, done: boolean) {
+  const r = get("SELECT done_on FROM events WHERE id = ?", id);
+  if (!r) return;
+  run("UPDATE events SET done_on = ? WHERE id = ?", JSON.stringify(withDoneDay(doneDaysOf(r.done_on), day, done)), id);
 }
 
 /** Expands events (including weekly ones) into occurrences between from and to (inclusive dates). */

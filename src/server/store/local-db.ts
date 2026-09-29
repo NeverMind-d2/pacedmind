@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS subtasks (
 );
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, area_id TEXT REFERENCES areas(id),
-  start_at TEXT NOT NULL, end_at TEXT NOT NULL, recurrence TEXT
+  start_at TEXT NOT NULL, end_at TEXT NOT NULL, recurrence TEXT, done_on TEXT NOT NULL DEFAULT '[]'
 );
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, agent TEXT NOT NULL,
@@ -143,6 +143,7 @@ function migrate(conn: DatabaseSync) {
     tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"], ["diff", "TEXT"]],
+    events: [["done_on", "TEXT NOT NULL DEFAULT '[]'"]],
   };
   for (const [table, columns] of Object.entries(added)) {
     const have = (conn.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
