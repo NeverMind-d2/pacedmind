@@ -11,6 +11,7 @@
     "desktop": "node scripts/build-desktop.mjs",
     "release": "node scripts/release.mjs",
     "icons": "node scripts/make-icons.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "skills": "node scripts/install-skills.mjs",
     "connect": "node scripts/connect-claude.mjs",
     "stripe:prices": "node scripts/stripe-prices.mjs",

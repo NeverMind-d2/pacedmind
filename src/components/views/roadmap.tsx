@@ -95,6 +95,8 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
   if (!months.length || months[0].x > 90) months.unshift({ x: 0, label: format(parseLocal(from), "MMMM") });
 
   const bars = barsOf(from, days, today, projects, stats, colorOf);
+  // Where today's date sits over the months, kept inside the grid.
+  const pill = nowPos >= 0 && nowPos <= days ? Math.min(Math.max(X(nowPos), 26), gridW - 26) : null;
 
   // A project that starts after another one: an arrow from the end of the first to the start of the second.
   const deps = bars.flatMap((b) => {
@@ -118,12 +120,20 @@ function ProjectTimeline({ from, days, now, projects, colorOf, markOf, stats, se
             Projects
           </div>
           <div className="relative shrink-0 overflow-hidden" style={{ width: gridW }}>
-            {months.map((m) => (
-              <span key={m.x} className="absolute top-[9px] whitespace-nowrap pl-1.5 text-[11.5px] text-mut" style={{ left: m.x }}>{m.label}</span>
-            ))}
-            {nowPos >= 0 && nowPos <= days && (
+            {months.map((m) => {
+              // Today's date covers the name of a month that starts next to it: one that starts under it or after it is
+              // named just after it, and one that started before it is named by it already.
+              const under = pill !== null && m.x + 72 > pill - 30 && m.x < pill + 30;
+              if (under && m.x <= pill) return null;
+              return (
+                <span key={m.x} className="absolute top-[9px] whitespace-nowrap pl-1.5 text-[11.5px] text-mut" style={{ left: under ? pill + 30 : m.x }}>
+                  {m.label}
+                </span>
+              );
+            })}
+            {pill !== null && (
               <span className="absolute top-[7px] flex h-[18px] -translate-x-1/2 items-center whitespace-nowrap rounded bg-accent-strong px-1.5 text-[11px] font-medium text-white"
-                style={{ left: Math.min(Math.max(X(nowPos), 26), gridW - 26) }}>
+                style={{ left: pill }}>
                 {fmtShort(today)}
               </span>
             )}
@@ -631,17 +641,12 @@ export function Roadmap(props: {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col">
-      {/* On a phone the header keeps the view switch and the number of finished sessions: the months are named above
-          the bars, and the list of projects is the project picker. */}
+      {/* On a phone the header keeps the number of finished sessions: the months are named above the bars, and the list
+          of projects is the project picker. */}
       <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-line pl-5 pr-4">
         <Icon name="roadmap" className="text-mut" />
         <h1 className="text-[14px] font-semibold text-strong">Roadmap</h1>
         <span className="text-mut2 max-md:hidden">{range}</span>
-        <div className="ml-1.5 flex h-7 items-center gap-0.5 rounded-[7px] border border-line bg-input p-0.5">
-          <span aria-current="page" className="flex h-[22px] items-center gap-1.5 rounded-[5px] bg-sel px-2.5 text-[12px] text-strong">
-            <Icon name="roadmap" size={12} strokeWidth={2} />Roadmap
-          </span>
-        </div>
         <span className="flex-1" />
         {props.waiting > 0 && (
           <Link href="/sessions" aria-label={waitingText} className="inline-flex h-[26px] items-center gap-2 rounded-full px-2.5 text-[12px] text-mut hover:bg-hover">

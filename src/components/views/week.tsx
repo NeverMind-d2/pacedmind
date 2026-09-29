@@ -477,9 +477,9 @@ export function WeekView({
                   const past = day < today;
                   return (
                     <div key={day} title={`New task on ${fmtDay(day)}`} {...addOnClick(() => ({ plannedDate: day }))}
-                      className={cx("flex min-w-0 flex-1 basis-0 items-center gap-1.5 border-l border-line px-2 hover:bg-hover", hovered === day && "bg-hover")}>
-                      <span className={cx("text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
-                      <span className={cx("inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
+                      className={cx("flex min-w-0 flex-1 basis-0 items-center gap-1.5 overflow-hidden border-l border-line px-2 hover:bg-hover", hovered === day && "bg-hover")}>
+                      <span className={cx("shrink-0 text-[12px]", isToday ? "text-strong" : past ? "text-mut2" : "text-fg3")}>{DAY_NAMES[i]}</span>
+                      <span className={cx("inline-flex h-[22px] min-w-[22px] shrink-0 items-center justify-center rounded-full px-[5px] text-[12px] font-medium",
                         isToday ? "bg-accent text-bg" : past ? "text-mut2" : "text-fg2")}>
                         {Number(day.slice(8))}
                       </span>
@@ -487,10 +487,11 @@ export function WeekView({
                       {/* While the pointer is over the day's column, a "+" in place of its deadlines says a click there adds a task.
                           A narrow day has no room for both. */}
                       {hovered === day ? <Icon name="plus" size={12} strokeWidth={2.2} className="shrink-0 text-mut2" /> : dues.length > 0 && (
+                        // In a narrow day the count or time gives way to the day's name, never over the next day.
                         <span data-item title={dues.map((t) => `${t.key} ${t.title}`).join("\n")}
-                          className={cx("inline-flex shrink-0 items-center gap-[3px] text-[11px]", late ? "text-danger" : isToday ? "text-fg2" : "text-fg3")}>
-                          <Icon name="flag" size={10} strokeWidth={2.4} />
-                          {past ? `${dues.length} missed` : (single ?? dues.length)}
+                          className={cx("inline-flex min-w-0 items-center gap-[3px] text-[11px]", late ? "text-danger" : isToday ? "text-fg2" : "text-fg3")}>
+                          <Icon name="flag" size={10} strokeWidth={2.4} className="shrink-0" />
+                          <span className="truncate">{past ? `${dues.length} missed` : (single ?? dues.length)}</span>
                         </span>
                       )}
                     </div>

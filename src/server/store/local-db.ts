@@ -407,4 +407,15 @@ function seed(conn: DatabaseSync, mode: "sample" | "empty") {
     JSON.stringify(["Should agents be allowed to delete tasks without asking?"]),
     "[]", ago(12),
   );
+
+  // How the user likes to work (Settings → How you work), which agents read before they plan or write tasks.
+  const insPreference = conn.prepare("INSERT INTO preferences (topic, text, source, updated_at) VALUES (?, ?, ?, ?)");
+  const preferences: [string, string, "you" | "agent"][] = [
+    ["Time and schedule", "Deep work in the mornings; calls and meetings after 13:00", "you"],
+    ["Time and schedule", "Keep Friday afternoons free of new work", "agent"],
+    ["Dates and deadlines", "Plan work two days before its deadline", "you"],
+    ["Writing tasks", "Titles start with a verb, and every agent task gets Done when items", "agent"],
+    ["Agents and sessions", "Codex takes the refactors and tests, Claude Code the UI work", "you"],
+  ];
+  preferences.forEach(([topic, text, source]) => insPreference.run(topic, text, source, stamp));
 }
