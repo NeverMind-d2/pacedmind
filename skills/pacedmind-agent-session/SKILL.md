@@ -26,7 +26,7 @@ PacedMind started this session so that you do one task and then hand it back for
 
    Don't report routine steps ("reading files", "running tests"). A handful of updates per session is plenty.
 4. **Capture what can be seen.** When your work changes something visible, such as a page, a screen, a document or a chart, take screenshots of the result and attach them. See [Screenshots](#screenshots).
-5. **Record follow-ups.** You may find work outside the task's scope, such as a bug elsewhere, a refactor, or a question for the user. Don't do it silently. Create a task for it with `create_task` in the same project, with a clear description and `done_when`, and list its key in your report.
+5. **Record follow-ups.** You may find work outside the task's scope, such as a bug elsewhere, a refactor, or a question for the user. Don't do it silently. Create a task for it with `create_task` in the same project, with a clear description and `done_when`, written the way the user's preferences say (`get_preferences`), and list its key in your report.
 6. **Hand it back.** When the work is ready for the user to check, call `finish_task` with the task key, the session id and a report:
    - `summary`: one or two sentences on what changed and what the user should look at first. Notifications show it.
    - `criteria`: an answer to each Done when item: its number as `item`, a `verdict` (`met`, `partly` or `not_met`) and a `note` on how you checked it or what's missing. Be honest. A `partly` with a clear note is worth more than a `met` the user disproves in a minute.

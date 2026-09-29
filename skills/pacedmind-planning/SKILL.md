@@ -7,6 +7,8 @@ description: Plan the user's day or week in PacedMind - review the agenda, fit t
 
 Planning works best as a short conversation. Look at the real schedule, propose a plan, and change PacedMind only for what the user agrees to or clearly asked for. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
 
+Start from the user's preferences (in `get_overview`, all of them in `get_preferences`): when they do deep work, when they take meetings, how much slack they want, their days off. Plan by them, and say when a plan has to break one. When the user states a new rule ("nothing before 9", "Fridays are for admin"), offer to save it with `update_preferences`.
+
 ## Plan a day
 
 1. Call `get_agenda` for the day; it defaults to today. It shows:

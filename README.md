@@ -78,6 +78,7 @@ Dates can be written as `YYYY-MM-DD` or as phrases like "friday 10:00". In sessi
 - `pacedmind-planning`: plan a day or week, move things.
 - `pacedmind-projects`: break a project down, order its tasks.
 - `pacedmind-review`: Inbox triage, the weekly review.
+- `pacedmind-intake`: add work with only the questions that matter, from your preferences, and save new ones.
 - `pacedmind-agent-session`: the start_task / finish_task protocol for agents working on a task, including the report and screenshots.
 
 ```bash

@@ -5,7 +5,7 @@ description: Review and tidy the user's PacedMind planner - triage the Inbox, de
 
 # Reviews in PacedMind
 
-A review is about decisions, not just lists. Show items in small batches, each with a suggested decision. Apply what the user confirms, then report what changed. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
+A review is about decisions, not just lists. Suggest them by the user's preferences (`get_overview` shows them), and when the user settles something that will come up again, offer to save it as a preference. Show items in small batches, each with a suggested decision. Apply what the user confirms, then report what changed. The tools come from the PacedMind MCP server, `pacedmind` (in Claude Code: `mcp__pacedmind__<tool>`).
 
 ## Triage the Inbox
 
@@ -13,7 +13,7 @@ A review is about decisions, not just lists. Show items in small batches, each w
 2. Suggest one decision for each task:
    - **Do it**: give it an area or project, a planned day, a priority and an estimate (`update_task`).
    - **Later**: an area or project, and either a planned day further out or no date at all.
-   - **Hand to an agent**: move it into a project, set `agent`, and write a description an agent can work from.
+   - **Hand to an agent**: move it into a project, set `agent` (the user's Agents and sessions preferences may say which), and write a description an agent can work from.
    - **Drop it**: set status to canceled.
    - For unclear tasks, rewrite the title and description with the user rather than guessing.
 3. Apply decisions that are the same for several tasks in one `bulk_update_tasks` call.
