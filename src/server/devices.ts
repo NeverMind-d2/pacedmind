@@ -48,7 +48,6 @@ export const localTools = (): Device["agents"] => g.__pacedmindTools ?? { claude
 /** When this computer last looked for the agents; null until the first check finished. */
 export const toolsCheckedAt = (): string | null => g.__pacedmindToolsAt ?? null;
 
-
 /**
  * This computer as the app shows it: its entry in the account's list, with what it found of the agents itself, its
  * own setting for requests from elsewhere and its version. Without an account it's the only computer (id

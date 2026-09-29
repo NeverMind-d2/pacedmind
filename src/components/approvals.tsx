@@ -9,8 +9,8 @@ import { Button, useAction } from "./ui";
 export interface ApprovalView {
   modelSettings?: import("@/lib/agent-models").ModelSelection | null;
   id: string;
-  /** Start a session, resume one, or send one back with changes (src/server/requests.ts). */
-  kind?: LaunchRequestKind;
+  /** Start a session, resume one, or send one back with changes (src/server/requests.ts); or use a folder here. */
+  kind?: LaunchRequestKind | "folder";
   key: string;
   title: string;
   /** The agent and where it runs, in words ("Claude Code · Terminal"). */
@@ -32,6 +32,7 @@ function ago(ms: number, now: number) {
 }
 
 function question(a: ApprovalView): string {
+  if (a.kind === "folder") return "Use a folder on this computer?";
   if (a.kind === "changes") return "Send a session back with changes?";
   if (a.kind === "resume") {
     if (a.surface === "cloud") return "Pull a cloud session into a terminal here?";
@@ -46,7 +47,8 @@ const asker = (a: ApprovalView) => a.from.replace(/, (sending the session back w
 /**
  * Sessions asked for from outside this window (an agent over MCP, the web app, another computer) wait here for you:
  * nothing opens a terminal on this computer until you allow it. Shows what would run and where, and for a session sent
- * back with changes, the changes as they were written: the agent acts on them, so read them before allowing it.
+ * back with changes, the changes as they were written: the agent acts on them, so read them before allowing it. A folder
+ * asked for a project, an area or a task waits here too, and is set only when you allow it.
  */
 export function Approvals({ items }: { items: ApprovalView[] }) {
   const { run } = useAction();
@@ -67,12 +69,21 @@ export function Approvals({ items }: { items: ApprovalView[] }) {
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
             {question(a)}
           </div>
-          <div className="text-[12.5px] leading-relaxed text-fg3">
-            <span className="font-mono text-fg2">{a.key}</span> {a.title}
-            <br />
-            {a.agent} in <span className="break-all font-mono text-[11.5px] text-fg2">{a.folder}</span>
-            {a.modelSettings && <p className="mt-1 text-mut2">{a.modelSettings.model} · Thinking: {a.modelSettings.effort ?? "Default"} · Speed: {a.modelSettings.speed ?? "Default"}</p>}
-          </div>
+          {a.kind === "folder" ? (
+            <div className="text-[12.5px] leading-relaxed text-fg3">
+              For {a.title}:
+              <br />
+              <span className="break-all font-mono text-[11.5px] text-fg2">{a.folder}</span>
+              <p className="mt-1 text-mut2">Its agent sessions here would start in this folder. Allow it only if that&apos;s the right one.</p>
+            </div>
+          ) : (
+            <div className="text-[12.5px] leading-relaxed text-fg3">
+              <span className="font-mono text-fg2">{a.key}</span> {a.title}
+              <br />
+              {a.agent} in <span className="break-all font-mono text-[11.5px] text-fg2">{a.folder}</span>
+              {a.modelSettings && <p className="mt-1 text-mut2">{a.modelSettings.model} · Thinking: {a.modelSettings.effort ?? "Default"} · Speed: {a.modelSettings.speed ?? "Default"}</p>}
+            </div>
+          )}
           {a.missing && a.missing.length > 0 && (
             <p className="text-[12px] leading-relaxed text-fg3">
               It needs {needList(a.missing)}, which the agent doesn&apos;t have on this computer. Another of your computers may:
@@ -91,7 +102,7 @@ export function Approvals({ items }: { items: ApprovalView[] }) {
           <div className="text-[12px] text-mut2">Asked by {asker(a)} · {ago(a.requestedAt, now)}</div>
           <div className="flex justify-end gap-2">
             <Button onClick={() => run(() => denyLaunchAction(a.id), "Refused")}>Refuse</Button>
-            <Button variant="primary" onClick={() => run(() => approveLaunchAction(a.id))}>Allow</Button>
+            <Button variant="primary" onClick={() => run(() => approveLaunchAction(a.id))}>{a.kind === "folder" ? "Use it" : "Allow"}</Button>
           </div>
         </div>
       ))}

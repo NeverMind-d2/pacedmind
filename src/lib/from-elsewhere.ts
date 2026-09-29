@@ -1,9 +1,10 @@
 import type { RemoteStart } from "./types";
 
 /*
- * The words for a computer's two settings for sessions asked for from elsewhere (the web app, another computer): what it
- * does with them (RemoteStart) and whether asking takes a two-factor code (remoteCode). Each computer changes both only
- * in its own desktop app (device.ts); Settings, the Computers page and the "Run on a computer" sheet show them.
+ * The words for a computer's two settings for sessions asked for from elsewhere (the web app, another computer, your
+ * agents): what it does with them (RemoteStart) and whether asking takes a two-factor code (remoteCode), which an agent
+ * never has. Each computer changes both only in its own desktop app (device.ts); Settings, the Computers page and the
+ * "Run on a computer" sheet show them.
  */
 
 export const REMOTE_START_LABEL: Record<RemoteStart, string> = { off: "Refuse", ask: "Ask me", auto: "Start" };
@@ -20,14 +21,14 @@ export const remoteCodeLabel = (code: boolean) => (code ? "Code needed" : "No co
  */
 export function fromElsewhereText(start: RemoteStart, code: boolean, where: "here" | "there"): string {
   const place = where === "here" ? "here" : "there";
-  const what = "Sessions asked for from the web app or another computer";
+  const what = "Sessions asked for from the web app, another computer or your agents";
   if (start === "off") return `${what} are refused${where === "here" ? "" : " there"}.`;
   const does = start === "ask"
     ? `${what} wait ${place} until you allow them.`
     : `${what} start ${place} right away, except those in the agent's cloud, which wait for you ${place}.`;
-  if (code) return `${does} Asking takes a current two-factor code.`;
-  if (where === "there") return `${does} Asking takes no code.`;
+  if (code) return `${does} Asking takes a current two-factor code, so your agents can't ask.`;
+  if (where === "there") return `${does} Asking takes no code, so your agents can ask too.`;
   return start === "ask"
-    ? `${does} Asking takes no code: any browser or computer signed in to your account can ask.`
-    : `${does} Asking takes no code, so any browser or computer signed in to your account can start an agent here without you. Keep that for a computer whose project folders you'd let an agent work in alone.`;
+    ? `${does} Asking takes no code: any browser or computer signed in to your account, and the agents you connected, can ask.`
+    : `${does} Asking takes no code, so any browser or computer signed in to your account, and the agents you connected, can start an agent here without you. Keep that for a computer whose project folders you'd let an agent work in alone.`;
 }

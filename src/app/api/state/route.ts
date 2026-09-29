@@ -85,7 +85,7 @@ export async function GET() {
       waiting,
       attention,
       asks,
-      approvals: approvals.map((a) => ({ id: a.id, kind: a.kind, key: a.key, title: a.title, agent: a.agent, from: a.from })),
+      approvals: approvals.map((a) => ({ id: a.id, kind: a.kind, key: a.key, title: a.title, agent: a.agent, from: a.from, ...(a.kind === "folder" ? { folder: a.folder } : {}) })),
       requests,
       codeFreshUntil: state ? codeFreshUntil(state) : null,
       signedIn: !!state,

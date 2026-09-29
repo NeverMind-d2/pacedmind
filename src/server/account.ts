@@ -13,7 +13,7 @@ import {
 } from "./device";
 import { CODEX_ENV, cleanDoneWhen, repoOf } from "./repo";
 import { db as localDb, localDbPath } from "./store/local-db";
-import { SETTING_KEYS, areaPictureOf, cleanPreference, deriveKey, diffOf, doneDaysOf, isPreferenceTopic, usageOf } from "./store/shared";
+import { SETTING_KEYS, areaPictureOf, cleanPreference, cleanTopic, deriveKey, diffOf, doneDaysOf, usageOf } from "./store/shared";
 import { areaIconOf } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE, renewColor } from "@/lib/colors";
@@ -470,9 +470,10 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const room = Math.max(0, MAX_PREFERENCES - known.size);
     const joining = preferences.flatMap((p) => {
       const text = cleanPreference(String(p.text ?? ""));
-      if (!isPreferenceTopic(p.topic) || !text || known.has(text.toLowerCase())) return [];
+      const topic = cleanTopic(String(p.topic ?? ""));
+      if (!topic || !text || known.has(text.toLowerCase())) return [];
       known.add(text.toLowerCase());
-      return [{ topic: p.topic, text, source: p.source === "agent" ? "agent" : "you", updated_at: match(p.updated_at, STAMP) ?? nowStamp() }];
+      return [{ topic, text, source: p.source === "agent" ? "agent" : "you", updated_at: match(p.updated_at, STAMP) ?? nowStamp() }];
     }).slice(0, room);
     if (joining.length) check(await db.from("preferences").insert(joining));
     updateDevice({
@@ -650,7 +651,8 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const insPreference = conn.prepare("INSERT INTO preferences (topic, text, source, updated_at) VALUES (?, ?, ?, ?)");
     for (const p of preferences.slice(0, MAX_PREFERENCES)) {
       const text = cleanPreference(String(p.text ?? ""));
-      if (isPreferenceTopic(p.topic) && text) insPreference.run(p.topic, text, p.source === "agent" ? "agent" : "you", String(p.updated_at ?? nowStamp()));
+      const topic = cleanTopic(String(p.topic ?? ""));
+      if (topic && text) insPreference.run(topic, text, p.source === "agent" ? "agent" : "you", String(p.updated_at ?? nowStamp()));
     }
     conn.exec("COMMIT");
   } catch (e) {

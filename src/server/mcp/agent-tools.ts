@@ -15,6 +15,7 @@ export const AGENT_ALLOWED_TOOLS = [
   "list_events",
   "get_agenda",
   "list_sessions",
+  "list_computers",
   "get_settings",
   "get_preferences",
   "get_next_task",

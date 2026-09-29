@@ -492,6 +492,7 @@ function watchSessions() {
  * with changes (`kind`, from /api/state). `agent` reads "Claude Code · Terminal".
  */
 function approvalTitle(a) {
+  if (a.kind === "folder") return `Use a folder for ${a.title}?`;
   const key = a.key ?? "a session";
   if (a.kind === "resume") return /· Cloud$/.test(a.agent ?? "") ? `Pull ${key} in from the cloud?` : `Resume ${key} with ${a.agent}?`;
   if (a.kind === "changes") return `Send ${key} back to ${String(a.agent ?? "its agent").split(" · ")[0]} with changes?`;
@@ -503,7 +504,7 @@ function notifyApproval(a) {
   if (!Notification.isSupported()) return;
   const n = new Notification({
     title: approvalTitle(a),
-    body: [a.title, `Asked by ${a.from}. Open PacedMind to allow or refuse it.`].filter(Boolean).join("\n"),
+    body: [a.kind === "folder" ? a.folder : a.title, `Asked by ${a.from}. Open PacedMind to allow or refuse it.`].filter(Boolean).join("\n"),
     icon: ICON_PNG,
   });
   notifications.add(n);

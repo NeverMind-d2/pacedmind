@@ -13,7 +13,8 @@ import * as local from "./store/local";
 
 export {
   CODEX_ENV, DEFAULT_SETTINGS, cleanDeviceName, cleanDoneWhen, codexEnvProblem, repoOf,
-  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch,
+  type AskInput, type FolderRequestInput, type LaunchRequestFilter, type LaunchRequestInput, type PushSubscriptionRow, type ReportInput, type SessionFilter,
+  type TaskFilter, type TaskInput, type TaskPatch,
 } from "./store/shared";
 
 type Store = typeof cloud;
@@ -123,6 +124,9 @@ export const updateDeviceRow = via("updateDeviceRow");
 export const listLaunchRequests = via("listLaunchRequests");
 export const createLaunchRequest = via("createLaunchRequest");
 export const settleLaunchRequest = via("settleLaunchRequest");
+export const createFolderRequest = via("createFolderRequest");
+export const listFolderRequests = via("listFolderRequests");
+export const settleFolderRequest = via("settleFolderRequest");
 
 /* ---------- what a running session waits for you to answer (asks.ts), and web push (push.ts) ---------- */
 export const createAsk = via("createAsk");

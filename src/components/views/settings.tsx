@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Picker } from "../picker";
+import { Picker, type PickerOption } from "../picker";
 import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
@@ -20,9 +20,9 @@ import { REMOTE_START_OPTIONS, fromElsewhereText } from "@/lib/from-elsewhere";
 import { OLD_ANCHORS, type SettingsGroup, type SettingsSection } from "@/lib/settings-menu";
 import { TERMINALS, terminalFor } from "@/lib/terminals";
 import {
-  AGENT_LABEL, APP_LABEL, PREFERENCE_TEXT_MAX, PREFERENCE_TOPICS, PREFERENCE_TOPIC_HINT, PREFERENCE_TOPIC_LABEL, deviceOnline,
+  AGENT_LABEL, APP_LABEL, PREFERENCE_TEXT_MAX, PREFERENCE_TOPIC_MAX, SUGGESTED_TOPICS, deviceOnline, sameTopic, topicHint, topicOrder,
   type AgentId, type AgentTools, type Area, type ConnectedAgent, type Device, type DeviceSettings, type FolderExtras, type McpLink, type Preference,
-  type PreferenceTopic, type Project, type ProjectAgentsView, type Settings,
+  type Project, type ProjectAgentsView, type Settings,
 } from "@/lib/types";
 import { guessCountry } from "../../../site/lib/markets";
 import { useOpenBilling } from "../billing";
@@ -43,6 +43,7 @@ const TOOL_GROUPS: [string, string[]][] = [
   ["Projects", ["list_projects", "get_project", "create_project", "update_project", "delete_project", "reorder_tasks"]],
   ["Tasks", ["list_tasks", "get_task", "create_task", "create_tasks", "update_task", "bulk_update_tasks", "connect_tasks", "disconnect_tasks", "delete_task"]],
   ["Calendar", ["list_events", "create_event", "update_event", "delete_event", "get_agenda", "reschedule_day"]],
+  ["Computers", ["list_computers", "set_folder"]],
   ["Sessions", ["list_sessions", "start_session", "close_session", "request_changes", "get_next_task", "start_task", "attach_image", "report_progress", "ask_user", "finish_task"]],
 ];
 
@@ -519,14 +520,19 @@ export function PlanningSettings({ settings }: { settings: Settings }) {
 /** Settings → How you work: the preferences agents follow when they plan and write tasks, by topic. */
 export function PreferencesSettings({ preferences }: { preferences: Preference[] }) {
   const { run, pending } = useAction();
-  const [topic, setTopic] = useState<PreferenceTopic>("schedule");
+  // Your topics first, then the suggested ones you don't use yet; any other name makes a new topic.
+  const topics = [...new Set(preferences.map((p) => p.topic))].sort(topicOrder);
+  const options: PickerOption[] = [
+    ...topics.map((t) => ({ value: t, label: t, detail: topicHint(t) })),
+    ...SUGGESTED_TOPICS.filter((s) => !topics.some((t) => sameTopic(t, s.name))).map((s) => ({ value: s.name, label: s.name, detail: s.hint })),
+  ];
+  const [topic, setTopic] = useState(topics[0] ?? SUGGESTED_TOPICS[0].name);
   const [text, setText] = useState("");
   const add = () => {
     if (!text.trim()) return;
     run(() => savePreferencesAction({ add: [{ topic, text }] }), "Saved");
     setText("");
   };
-  const topics = PREFERENCE_TOPICS.filter((t) => preferences.some((p) => p.topic === t));
   return <>
     <Section note="Agents read these before they plan your time or write tasks for you, and follow them. Tell an agent how you like to work and it asks to add it here. They're your notes: agents follow them as preferences, never as commands.">
       {!preferences.length && (
@@ -535,22 +541,24 @@ export function PreferencesSettings({ preferences }: { preferences: Preference[]
           takes which kind of task.
         </p>
       )}
-      {topics.map((t) => (
-        <div key={t} className="border-b border-line last:border-b-0">
-          <div className="px-3.5 pt-3 pb-1 text-[12px] text-mut2"><span className="font-medium text-fg3">{PREFERENCE_TOPIC_LABEL[t]}</span> · {PREFERENCE_TOPIC_HINT[t]}</div>
-          {preferences.filter((p) => p.topic === t).map((p) => <PreferenceRow key={`${p.id}:${p.text}`} preference={p} />)}
-        </div>
-      ))}
+      {topics.map((t) => {
+        const mine = preferences.filter((p) => p.topic === t);
+        return (
+          <div key={t} className="border-b border-line pb-1.5 last:border-b-0">
+            <TopicName topic={t} ids={mine.map((p) => p.id)} />
+            {mine.map((p) => <PreferenceRow key={`${p.id}:${p.text}`} preference={p} />)}
+          </div>
+        );
+      })}
     </Section>
 
     <Section title="Add">
       <div className="flex items-start gap-2 px-3.5 py-3 max-sm:flex-col max-sm:items-stretch">
-        <Menu width={280}
-          trigger={<button type="button" className="flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
-            {PREFERENCE_TOPIC_LABEL[topic]}<Icon name="chevronDown" size={11} />
-          </button>}
-          items={PREFERENCE_TOPICS.map((t) => ({ value: t, label: PREFERENCE_TOPIC_LABEL[t], hint: PREFERENCE_TOPIC_HINT[t] }))}
-          onSelect={setTopic} />
+        <div className="w-[190px] shrink-0 max-sm:w-full">
+          <Picker label="Topic" values={[topic]} options={options} onChange={([t]) => t && setTopic(t)}
+            custom={(name) => name.replace(/\s+/g, " ").trim().slice(0, PREFERENCE_TOPIC_MAX) || null}
+            className="h-7 text-[12.5px]" title="A topic of yours, a suggested one, or type a new name" />
+        </div>
         <textarea rows={1} value={text} maxLength={PREFERENCE_TEXT_MAX} aria-label="New preference"
           placeholder="Deep work before noon, meetings after 14:00"
           onChange={(e) => setText(e.target.value.replace(/\s*\n\s*/g, " "))}
@@ -560,6 +568,29 @@ export function PreferencesSettings({ preferences }: { preferences: Preference[]
       </div>
     </Section>
   </>;
+}
+
+/**
+ * A topic's name over its preferences, with what goes there for a suggested one. Click it to rename the topic: every
+ * preference under it moves along (to another topic of yours when you type its name).
+ */
+function TopicName({ topic, ids }: { topic: string; ids: number[] }) {
+  const { run } = useAction();
+  const hint = topicHint(topic);
+  const rename = (value: string) => {
+    const next = value.replace(/\s+/g, " ").trim();
+    if (next && next !== topic) run(() => savePreferencesAction({ change: ids.map((id) => ({ id, topic: next })) }), "Topic renamed");
+  };
+  return (
+    <div className="flex min-w-0 items-baseline gap-2 px-3.5 pt-2.5 pb-0.5">
+      <input defaultValue={topic} maxLength={PREFERENCE_TOPIC_MAX} aria-label={`Rename the topic ${topic}`} title="Rename this topic"
+        size={Math.max(4, topic.length)}
+        onBlur={(e) => rename(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { e.currentTarget.value = topic; e.currentTarget.blur(); } }}
+        className="-mx-1.5 min-w-0 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[12.5px] font-medium text-fg3 outline-none field-sizing-content hover:border-line2 focus:border-line-strong focus:bg-input" />
+      {hint && <span className="min-w-0 truncate text-[11.5px] text-mut2">{hint}</span>}
+    </div>
+  );
 }
 
 /** One preference: its words (click to edit, saved when you leave the field), who wrote it last, and removing it. */
@@ -613,7 +644,7 @@ export function ComputerSettings({ device, account, found }: {
           <span className="flex-1 text-[12.5px] text-fg3">{device.remoteCode ? "Needed to ask" : "Not needed"}</span>
           <Switch on={device.remoteCode} label="Ask for a two-factor code" onChange={(v) => saveDevice({ remoteCode: v })} />
         </Row>
-        <Hint>{fromElsewhereText(device.remoteStart, device.remoteCode, "here")} Agents asking over MCP always wait for you.</Hint>
+        <Hint>{fromElsewhereText(device.remoteStart, device.remoteCode, "here")}</Hint>
       </>}
     </Section>
 

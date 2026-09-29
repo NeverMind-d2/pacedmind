@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { ImageError, removeImageFiles, storeImage, type StoredImage } from "../attachments";
 import { deviceConfig, projectServers, revokeSessionTokens } from "../device";
-import { noteAccountServers } from "../devices";
+import { deviceIdFor, noteAccountServers, offeredDevice } from "../devices";
 import { agentExtras, folderExtras, sortReported, type ReportedServers } from "../extras";
 import { noteSessionMcp, sessionMcp } from "../session-mcp";
 import { nextReadyTask } from "../dependencies";
@@ -12,13 +12,15 @@ import { askForChanges, askFromAgent } from "../requests";
 import { activeSession, changesProblem, closeSession, edgeWouldLoop, finishTask } from "../ops";
 import * as repo from "../repo";
 import { MODE } from "../supabase";
+import { refusedStepUp } from "../step-up";
+import { computers, findComputer } from "./computers";
 import { cloudOrigin } from "../supabase-config";
 import { callerSession } from "./principal";
 import { QUESTION_CALL_MS, QUESTION_OPEN_MS, answeredText, openAsk, waitForAnswer } from "../asks";
 import { planText } from "@/lib/dates";
 import {
   AGENT_LABEL, APP_LABEL, CLOUD_LABEL, LIVE_STATUSES, MCP_NAME, OLD_MCP_NAME, SURFACE_LABEL, agentOf, isAnswers, isLiveSession,
-  type AgentId, type Report, type ReportCriterion, type Session, type Surface, type Task,
+  deviceOnline, type AgentId, type Device, type LaunchRequest, type Report, type ReportCriterion, type Session, type Surface, type Task,
 } from "@/lib/types";
 import { sessionUse, usageText } from "@/lib/usage";
 import {
@@ -100,6 +102,66 @@ const HOSTED = MODE === "web";
 
 /** Where the user sees a task in the web app. */
 const taskLink = (t: Task) => `${cloudOrigin()}/${t.projectId ? `project/${encodeURIComponent(t.projectId)}` : "inbox"}?task=${t.key}`;
+
+/**
+ * The computer a session you ask for goes to: `name` (list_computers), else the one the task or its project runs on,
+ * else (in the hosted app) the account's default. Null for this computer, which asks the user in its window itself.
+ */
+async function sessionComputer(t: Task, agent: AgentId, name?: string): Promise<Device | null> {
+  const { list, hereId } = await computers();
+  const project = t.projectId ? await repo.getProject(t.projectId) : null;
+  const pinned = deviceIdFor(t.deviceId, project?.deviceId);
+  const pinnedName = () => list.find((d) => d.id === pinned)?.name ?? "another computer";
+  if (name) {
+    const d = findComputer(name, list);
+    if (!HOSTED && d.id === hereId) return null;
+    if (pinned && pinned !== d.id) fail(`${t.key} runs on ${pinnedName()} only. Ask that one, or the user picks another computer in its details.`);
+    return d;
+  }
+  if (!HOSTED) {
+    if (!pinned || pinned === hereId) return null;
+    return list.find((d) => d.id === pinned) ?? fail(`${t.key} runs on a computer that isn't signed in any more. The user picks another in its details.`);
+  }
+  const offered = offeredDevice(t, project, list, agent).deviceId;
+  return list.find((d) => d.id === offered) ?? fail("None of the user's computers is signed in to PacedMind. Sessions run on a computer with the PacedMind desktop app.");
+}
+
+/**
+ * Asks another computer for a session: it does what its own settings say (start, ask the user there, refuse), and only
+ * where asking takes no two-factor code, since an agent never has one. Waits a few seconds for its answer.
+ */
+async function askComputer(t: Task, agent: AgentId, where: Surface | undefined, d: Device): Promise<string> {
+  const code = () =>
+    `${d.name} takes sessions from elsewhere only with the user's two-factor code, which you can't give. The user starts ${t.key} there with Start, ` +
+    `or at ${taskLink(t)} with their code; to let you ask, they switch its Two-factor code off in PacedMind on ${d.name} (Settings → General). ` +
+    "Give the user that link; don't ask again.";
+  if (d.remoteStart === "off") {
+    return `${d.name} refuses sessions asked for from elsewhere. The user starts ${t.key} there, or changes that in PacedMind on ${d.name} (Settings → General). Tell the user; don't ask again.`;
+  }
+  if (d.remoteCode) return code();
+  let r: LaunchRequest;
+  try {
+    r = await repo.createLaunchRequest({ deviceId: d.id, taskId: t.id, agent, via: "agent", kind: "start", surface: where ?? null });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    // It switched its code on since its entry said otherwise.
+    if (refusedStepUp(message)) return code();
+    fail(message);
+  }
+  // The computer looks for requests every few seconds.
+  for (let waited = 0; r.status === "pending" && waited < 12_000; waited += 1500) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    r = (await repo.listLaunchRequests({ taskId: t.id, limit: 20 })).find((x) => x.id === r.id) ?? r;
+  }
+  const what = `${AGENT_LABEL[agent]} on ${t.key}`;
+  if (r.status === "launched") return `${d.name} started ${what}${r.sessionId ? ` (session ${r.sessionId})` : ""}. It reports back here as it works.`;
+  if (r.status !== "pending") return `${d.name} didn't start ${what}: ${r.note ?? r.status}. Tell the user; don't ask again.`;
+  if (d.remoteStart === "ask" || (where ?? t.runIn) === "cloud") {
+    return `Asked ${d.name}: ${what} waits for the user to allow it in PacedMind there (up to 10 minutes). Tell the user; don't ask again.`;
+  }
+  return `Sent to ${d.name}, which starts ${what} as soon as it sees the request` +
+    `${deviceOnline(d) ? "" : `; it hasn't been online in the last few minutes, and the request waits there for 10 minutes`}.`;
+}
 
 const NO_FILES =
   "PacedMind Cloud's MCP server can't read files from your computer, so it can't attach images. Describe what they'd show in the report's details, or link to it.";
@@ -273,23 +335,26 @@ export function registerAgentTools(server: McpServer) {
   tool(server, "start_session", {
     title: "Start agent session",
     description:
-      "Ask to start Claude Code or Codex working on a task, where the task says unless `where` is given: in a terminal or the agent's desktop app on the user's computer, in the task's folder, or in the agent's cloud (Claude Code on the web, Codex cloud). Only when the user asks for it. The user allows it in the PacedMind app first; the request expires after 10 minutes.",
+      "Ask to start Claude Code or Codex working on a task on one of the user's computers: in a terminal or the agent's desktop app there, in the task's folder, or in the agent's cloud (Claude Code on the web, Codex cloud); where the task says unless `where` is given. Only when the user asks for it. " +
+      (HOSTED
+        ? "It goes to `computer` (list_computers), else to the task's computer, else the default one, which does what its own settings say: starts it, asks the user there, or refuses. A computer that takes such requests only with the user's two-factor code can't take one from you: then the answer gives a link where the user starts it."
+        : "On this computer the user allows it in the PacedMind app first (the request expires after 10 minutes). With `computer`, another of the user's computers (list_computers) does what its own settings say: starts it, asks the user there, or refuses."),
     input: z.object({
       task: taskRef,
       agent: agentSchema.optional(),
       where: z.enum(["terminal", "desktop", "cloud"]).optional()
         .describe("terminal, desktop (the Claude or Codex app, with the first message written for the user to send) or cloud"),
+      computer: z.string().max(200).optional().describe("The computer's name or id from list_computers"),
     }),
     kind: "launch",
-  }, async ({ task, agent, where }) => {
+  }, async ({ task, agent, where, computer }) => {
     const t = await findTask(task);
     notYours(t);
     if ((await repo.listSessions({ taskId: t.id, status: LIVE_STATUSES })).length) fail(`${t.key} already has a running session.`);
-    if (HOSTED) {
-      return `Starting a session runs an agent on one of the user's computers, so the user starts it themselves: with Start on ${t.key} ` +
-        `in the PacedMind desktop app, or at ${taskLink(t)} with a two-factor code. Give the user that link; don't ask again.`;
-    }
-    const a = (await askFromAgent(t, agent ?? (await agentFor(t)) ?? "claude", where)) ?? fail(`${t.key} can't run on this computer.`);
+    const who = agent ?? (await agentFor(t)) ?? "claude";
+    const there = await sessionComputer(t, who, computer);
+    if (there) return askComputer(t, who, where, there);
+    const a = (await askFromAgent(t, who, where)) ?? fail(`${t.key} can't run on this computer.`);
     return (
       `Asked the user to allow ${t.key} with ${AGENT_LABEL[a.agent]} (${SURFACE_LABEL[a.surface].toLowerCase()}): PacedMind shows the request in its window ` +
       "and a notification. It starts once they allow it (within 10 minutes). Tell the user to look at PacedMind; don't ask again." +

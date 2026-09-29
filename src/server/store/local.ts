@@ -19,7 +19,7 @@ import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   repeatOf, taskHref,
   type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
-  type LaunchRequest, type Preference, type Priority, type Project, type Report, type ReportOutcome, type Session,
+  type FolderRequest, type LaunchRequest, type Preference, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
   type Task,
 } from "@/lib/types";
@@ -784,6 +784,17 @@ export async function createLaunchRequest(): Promise<LaunchRequest> {
 }
 
 export async function settleLaunchRequest() {}
+
+/** Folders asked of other computers: there are none without an account. */
+export async function createFolderRequest(): Promise<FolderRequest> {
+  throw new Error("Sign in to PacedMind Cloud to use your other computers.");
+}
+
+export async function listFolderRequests(): Promise<FolderRequest[]> {
+  return [];
+}
+
+export async function settleFolderRequest() {}
 
 /* ---------- what a running session waits for you to answer (asks.ts) ---------- */
 

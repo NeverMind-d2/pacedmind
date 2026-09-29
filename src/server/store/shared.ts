@@ -4,9 +4,10 @@ import { addDays } from "date-fns";
 import { areaPictureProblem } from "@/lib/area-picture";
 import { parseLocal, toDateStr } from "@/lib/dates";
 import {
-  PREFERENCE_TEXT_MAX, PREFERENCE_TOPICS,
-  type AskKind, type PushSubscriptionInput, type AgentExtras, type AgentLogin, type CalEvent, type Doer, type EventOccurrence, type Harness,
-  type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type OtherSessionState, type Preference, type PreferenceSource, type PreferenceTopic, type Priority,
+  PREFERENCE_TEXT_MAX, PREFERENCE_TOPIC_MAX, topicOrder,
+  type AskKind, type PushSubscriptionInput, type AgentExtras, type AgentLogin, type CalEvent, type Doer, type EventOccurrence, type FolderRequestStatus,
+  type FolderTargetKind, type Harness,
+  type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type OtherSessionState, type Preference, type PreferenceSource, type Priority,
   type ReportCriterion, type ReportOutcome, type SessionStatus, type Settings, type Status, type Surface, type AgentId, type ReportDiff, type SessionUsage,
   type TokenCounts,
 } from "@/lib/types";
@@ -81,6 +82,21 @@ export interface LaunchRequestInput {
   surface?: Surface | null;
   targetSessionId?: string | null;
   changes?: string | null;
+}
+
+/** A folder asked of a computer (folder-requests.ts); the database fills in the rest. */
+export interface FolderRequestInput {
+  deviceId: string;
+  target: { kind: FolderTargetKind; id: string };
+  folder: string;
+  /** "web" or "desktop"; the database makes an approved agent's "agent" itself. */
+  via: "web" | "desktop" | "agent";
+}
+
+export interface FolderRequestFilter {
+  deviceId?: string;
+  status?: FolderRequestStatus[];
+  ids?: string[];
 }
 
 /** Something a running session's agent waits for you to answer, as its computer asks it (asks.ts). */
@@ -388,30 +404,31 @@ export const SETTING_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[];
 
 /* ---------- preferences ---------- */
 
-export const isPreferenceTopic = (v: unknown): v is PreferenceTopic => (PREFERENCE_TOPICS as readonly unknown[]).includes(v);
+/** A preference's text as it's kept: one line of plain characters (the database checks it too). */
+export const cleanPreference = (text: string) => oneLine(text, PREFERENCE_TEXT_MAX).trim();
 
-/** A preference's text as it's kept: one line of plain characters, at most PREFERENCE_TEXT_MAX (the database checks it too). */
-export const cleanPreference = (text: string) =>
-  text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, PREFERENCE_TEXT_MAX);
+/** A topic as it's kept: any short name, on one line. */
+export const cleanTopic = (text: string) => oneLine(text, PREFERENCE_TOPIC_MAX).trim();
 
 /** A stored preference, or null when a row isn't one (the account's rows are read as they are). */
 export function preferenceOf(r: Record<string, unknown>): Preference | null {
   const text = typeof r.text === "string" ? cleanPreference(r.text) : "";
-  if (!isPreferenceTopic(r.topic) || !text) return null;
-  return { id: Number(r.id), topic: r.topic, text, source: r.source === "agent" ? "agent" : "you", updatedAt: String(r.updated_at ?? "") };
+  const topic = typeof r.topic === "string" ? cleanTopic(r.topic) : "";
+  if (!topic || !text) return null;
+  return { id: Number(r.id), topic, text, source: r.source === "agent" ? "agent" : "you", updatedAt: String(r.updated_at ?? "") };
 }
 
 export interface PreferenceInput {
-  topic: PreferenceTopic;
+  topic: string;
   text: string;
   source: PreferenceSource;
 }
 
 export interface PreferencePatch {
-  topic?: PreferenceTopic;
+  topic?: string;
   text?: string;
   source: PreferenceSource;
 }
 
 /** In their topics' order, then as they were added. */
-export const byTopic = (a: Preference, b: Preference) => PREFERENCE_TOPICS.indexOf(a.topic) - PREFERENCE_TOPICS.indexOf(b.topic) || a.id - b.id;
+export const byTopic = (a: Preference, b: Preference) => topicOrder(a.topic, b.topic) || a.id - b.id;

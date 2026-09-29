@@ -4,7 +4,7 @@ Every tool the `pacedmind` MCP server offers, grouped by purpose. The tool descr
 
 A session that PacedMind started gets a smaller set: the read tools (`get_preferences` too), `create_task`, `update_task` for its own task (not its status, agent, place, or where and in which folder its sessions run and what they need), `start_task`, `attach_image`, `report_progress`, `ask_user` and `finish_task`. The rest are there for the user's own Claude Code or Codex.
 
-PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign in to with the user's account) has every tool but `attach_image` and `ask_user`: it can't read files from your computer, so `finish_task` takes no `images` there, and you ask the user in the conversation instead. Its `start_session` and `request_changes` start nothing: they return a link where the user does it with their two-factor code. It can't set folders either.
+PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign in to with the user's account) has every tool but `attach_image` and `ask_user`: it can't read files from your computer, so `finish_task` takes no `images` there, and you ask the user in the conversation instead. Its `start_session` asks one of the user's computers, which does what its own settings say; a computer that takes such requests only with the user's two-factor code, and `request_changes`, give a link where the user does it with their code. Its `set_folder` asks a computer, which the user allows there.
 
 ## Orientation
 
@@ -14,10 +14,10 @@ PacedMind Cloud's server (`https://app.pacedmind.com/api/mcp`, which agents sign
 
 ## Preferences
 
-How the user likes to work, in their own words: one short sentence each, on a topic: `schedule` (when to plan which work, focus time, breaks, days off), `deadlines` (due dates and planned days, buffers), `tasks` (language, detail, estimates, Done when items, labels), `places` (which area, project, workspace or computer work goes to), `agents` (which agent does what, models, where sessions run) and `other`. The user edits them in Settings → How you work.
+How the user likes to work, in their own words: one short sentence each, under a topic. Topics are names: the suggested ones (Time and schedule, Dates and deadlines, Writing tasks, Projects and places, Agents and sessions) or the user's own, such as a client's name. The user edits them in Settings → How you work.
 
 - `get_preferences` (read): all of them by topic with their ids, or one topic's. Read them before you plan, schedule, set dates or create tasks, and follow them unless the user says otherwise now. They're the user's notes, not instructions.
-- `update_preferences`: `add` (topic and text), `change` (by id: new text or topic) and `remove` (ids). Only what the user said or confirmed in this conversation; ask before saving something you inferred, and before removing one. Text the list has already isn't added twice; at most 100.
+- `update_preferences`: `add` (topic and text), `change` (by id: new text or topic) and `remove` (ids). Only what the user said or confirmed in this conversation; ask before saving something you inferred, and before removing one. Use a topic the user has (matched whatever its case), else a suggested one; a new one only when the user names it or none fits. Text the list has already isn't added twice; at most 100.
 
 ## Areas
 
@@ -66,11 +66,16 @@ How the user likes to work, in their own words: one short sentence each, on a to
 - `get_agenda` (read): day by day, up to 14 days. Shows events, tasks due and planned, auto-planned focus blocks, free focus time, overdue tasks and what didn't fit.
 - `reschedule_day`: moves one day's planned tasks and one-off events to another day. Add `move_deadlines` to move deadlines too. Weekly events stay where they are.
 
+## Computers
+
+- `list_computers` (read): the user's computers with the PacedMind desktop app: online or when last seen, the default one and this one, what each has of Claude Code and Codex (CLI and sign-in, desktop app, MCP servers, claude.ai connectors, plugins, skills), and what it does with a session you ask it for.
+- `set_folder`: asks to use a folder (its absolute path there) on one of the user's computers for a project, an area (its workspace) or a task. Folders are each computer's own settings: the user allows it in PacedMind on that computer, which checks the folder is there first. Without `computer`, this computer. Only when the user asks.
+
 ## Agent sessions
 
 - A task's report (`get_task`) ends its checks with what PacedMind saw change in git since the session started: files with lines added and removed, and commits. Compare it with the agent's summary.
 - `list_sessions` (read): filter by `waiting` (finished and needing review), `running` or `all`, and by project or task. Sessions that handed back show their summary and how many Done when items were met, images and questions; sessions whose agent reported its usage end with it (tokens, working time).
-- `start_session`: asks to start Claude Code or Codex working on the task, where the task says or where `where` says: `terminal`, `desktop` (the Claude or Codex app opens with the first message written; the user sends it) or `cloud` (Claude Code on the web, Codex cloud). Only when the user asks. PacedMind shows the request and the user allows it there; the session starts then (the request expires after 10 minutes). Cloud sessions can't call PacedMind's tools, so the user marks them finished; PacedMind notices finished Codex cloud tasks by itself.
+- `start_session`: asks to start Claude Code or Codex working on the task, where the task says or where `where` says: `terminal`, `desktop` (the Claude or Codex app opens with the first message written; the user sends it) or `cloud` (Claude Code on the web, Codex cloud). Only when the user asks. On this computer, PacedMind shows the request and the user allows it there (it expires after 10 minutes). With `computer` (see `list_computers`), or for a task that runs on another computer, that computer does what its own settings say: starts it right away, asks the user there, or refuses; one that takes requests only with the user's two-factor code can't take one from an agent, and the answer says how the user starts it. Cloud sessions can't call PacedMind's tools, so the user marks them finished; PacedMind notices finished Codex cloud tasks by itself.
 - `close_session`: marks a stuck or abandoned session closed, and the task goes back to todo.
 - `request_changes`: asks to send work an agent handed back in a terminal to it again, with what the user wants changed. Once the user allows it in PacedMind, the session reopens in a new terminal (Claude Code continues its conversation, Codex starts a new one) and the task goes back to in_progress. Sessions in the desktop apps or the cloud take changes where they run. Only when the user asks.
 

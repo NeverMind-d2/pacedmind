@@ -21,6 +21,7 @@ import { connectClaudeCode, connectCodex } from "@/server/connect";
 import { findWork, importAreas, importProjects, keyOf, type FoundArea, type FoundProject, type ImportArea, type ImportItem } from "@/server/import";
 import { linkFolder, mergeProjects } from "@/server/project-links";
 import { changePreferences, type PreferenceChanges } from "@/server/preferences";
+import { approveFolder, isFolderApproval, refuseFolder } from "@/server/folder-requests";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
@@ -531,17 +532,19 @@ export async function markSessionDoneAction(sessionId: string): Promise<Result> 
   return updateTaskAction(s.taskId, { status: "done" });
 }
 
-/** A session asked for over MCP or from elsewhere, allowed in this window. */
+/** A session or a folder asked for over MCP or from elsewhere, allowed in this window. */
 export async function approveLaunchAction(id: string): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Only the desktop app starts sessions." };
+  if (isFolderApproval(id)) return done(await approveFolder(id));
   const r = await approve(id);
   return done(r.ok ? { ok: true, message: r.message ?? "Session started" } : { ok: false, error: r.error });
 }
 
 export async function denyLaunchAction(id: string): Promise<Result> {
   await guard();
-  await deny(id);
+  if (isFolderApproval(id)) await refuseFolder(id);
+  else await deny(id);
   return done();
 }
 

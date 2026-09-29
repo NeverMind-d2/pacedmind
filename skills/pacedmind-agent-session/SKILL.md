@@ -37,7 +37,7 @@ PacedMind started this session so that you do one task and then hand it back for
    - `links` to pull requests, commits or previews, and `follow_ups` with the keys of tasks you created.
    - `outcome`: `done` when everything asked for is ready, `partial` when only part of it is, `blocked` when you can't go on without the user. After a partial or blocked hand-back, what waits for your task waits for the user.
 
-   Then stop. The only exception is when `finish_task` tells you to continue with the next task in the same session; then call `start_task` for that task as instructed.
+   Then stop.
 
 ## Screenshots
 

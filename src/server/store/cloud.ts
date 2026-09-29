@@ -12,7 +12,8 @@ import {
 import {
   DEFAULT_SETTINGS, SESSION_URL, SETTING_KEYS, appVersionOk, areaPictureOf, byTopic, cleanDeviceName, cleanDoneWhen, cleanPreference, codexEnvProblem, criteriaOf,
   deriveKey, doneDaysOf, expandOccurrences, withDoneDay, extrasOf, linksOf, loginOf, otherSessionsOf, pictureHash, renamedKey, repoOf, strings,
-  type AskInput, type LaunchRequestFilter, type LaunchRequestInput, type PreferenceInput, type PreferencePatch, type PushSubscriptionRow,
+  type AskInput, type FolderRequestFilter, type FolderRequestInput, type LaunchRequestFilter, type LaunchRequestInput, type PreferenceInput,
+  type PreferencePatch, type PushSubscriptionRow,
   type ReportInput, type SessionFilter, type TaskFilter, type TaskInput, type TaskPatch, preferenceOf, usageOf, diffOf,
 } from "./shared";
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
@@ -21,6 +22,7 @@ import { nowStamp, toDateStr } from "@/lib/dates";
 import {
   NO_AGENT_TOOLS, repeatOf, taskHref,
   type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Dependency, type Device, type Doer, type EventOccurrence,
+  type FolderRequest, type FolderRequestStatus,
   type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Preference, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
   type PushSubscriptionInput, type SessionAsk, type Subtask, type Surface, type Task,
@@ -335,9 +337,6 @@ export async function getTask(idOrKey: number | string): Promise<Task | null> {
   const r = one(await (byKey ? q.eq("key", String(idOrKey).toUpperCase()) : q.eq("id", Number(idOrKey))).maybeSingle());
   return r ? toTask(r) : null;
 }
-
-
-
 
 /** Creates a task at the end of its project (or of the loose tasks). The database gives it its key. */
 export async function createTask(input: TaskInput): Promise<Task> {
@@ -1041,6 +1040,45 @@ export async function settleLaunchRequest(
   check(await db.from("launch_requests").update({
     status, decided_at: new Date().toISOString(), session_id: extra.sessionId ?? null, note: extra.note?.slice(0, 500) ?? null,
   }).eq("id", id).eq("status", "pending"));
+}
+
+/* ---------- folders asked of a computer (folder-requests.ts) ---------- */
+
+const FOLDER_TARGETS = [["project_id", "project"], ["area_id", "area"], ["task_id", "task"]] as const;
+
+const toFolderRequest = (r: Row): FolderRequest => {
+  const [column, kind] = FOLDER_TARGETS.find(([col]) => r[col] != null) ?? FOLDER_TARGETS[0];
+  return {
+    id: String(r.id), deviceId: String(r.device_id), target: { kind, id: String(r[column]) }, folder: String(r.folder),
+    requestedVia: String(r.requested_via), requestedAt: String(r.requested_at), expiresAt: String(r.expires_at),
+    status: String(r.status) as FolderRequestStatus, decidedAt: s(r.decided_at), note: s(r.note),
+  };
+};
+
+/** Asks a computer to use a folder: the database takes it for a signed-in computer of the account, and sets the rest. */
+export async function createFolderRequest(input: FolderRequestInput): Promise<FolderRequest> {
+  const db = await accountDb();
+  const column = FOLDER_TARGETS.find(([, kind]) => kind === input.target.kind)![0];
+  const r = one(await db.from("folder_requests").insert({
+    device_id: input.deviceId, [column]: input.target.kind === "task" ? Number(input.target.id) : input.target.id, folder: input.folder,
+    requested_via: input.via,
+  }).select().single());
+  return toFolderRequest(r!);
+}
+
+export async function listFolderRequests(filter: FolderRequestFilter = {}): Promise<FolderRequest[]> {
+  const db = await accountDb();
+  let q = db.from("folder_requests").select("*");
+  if (filter.deviceId) q = q.eq("device_id", filter.deviceId);
+  if (filter.status) q = q.in("status", filter.status);
+  if (filter.ids) q = q.in("id", filter.ids);
+  return many(await q.order("requested_at", { ascending: false }).limit(100)).map(toFolderRequest);
+}
+
+/** What this computer did with a folder request (the database takes it only from the computer asked, once). */
+export async function settleFolderRequest(id: string, status: Exclude<FolderRequestStatus, "pending">, note?: string | null) {
+  const db = await accountDb();
+  check(await db.from("folder_requests").update({ status, note: note?.slice(0, 500) ?? null }).eq("id", id).eq("status", "pending"));
 }
 
 /* ---------- what a running session waits for you to answer (asks.ts) ---------- */

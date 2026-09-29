@@ -5,7 +5,8 @@ import {
   forgetSessionFiles, plannedFolder, plannedSurface, resumeProblem, resumeSession, startSession, type LaunchResult,
 } from "./launcher";
 import { deviceConfig, deviceFor, revokeAllSessionTokens, thisPlatform, updateDevice } from "./device";
-import { approvals, clearApprovals, handledRequests, type Approval } from "./approval-store";
+import { approvals, clearApprovals, handledRequests, type Approval, type ApprovalFrom } from "./approval-store";
+import { pendingFolderApprovals, syncFolderRequests } from "./folder-requests";
 import { APP_VERSION, deviceIdFor, runsHere, toolsHere } from "./devices";
 import { missingFrom } from "@/lib/needs";
 import { changesProblem, requestChanges } from "./ops";
@@ -19,18 +20,20 @@ import {
 } from "@/lib/types";
 
 /*
- * Sessions asked for from outside this computer's PacedMind window: from the web app or another computer
- * (a launch request in the cloud, which the database only accepts from a live two-factor session, with a code from
- * the last five minutes from an authenticator older than the asking session unless this computer takes requests
- * without one), or from an agent over MCP. A request from
- * elsewhere starts a session, resumes one that ran here, or sends one that ran here back to its agent with changes.
- * What happens to it is this computer's setting (device.ts):
+ * Sessions asked for from outside this computer's PacedMind window: from the web app or another computer (a launch
+ * request in the cloud, which the database only accepts from a live two-factor session, with a code from the last five
+ * minutes from an authenticator older than the asking session unless this computer takes requests without one), from an
+ * agent elsewhere (the same, from an approved agent signed in to PacedMind Cloud or an agent on another computer: only
+ * where no code is needed, since an agent never has one, and only to start a session), or from an agent over this
+ * computer's own MCP server. A request from elsewhere starts a session, resumes one that ran here, or sends one that ran
+ * here back to its agent with changes. What happens to it is this computer's setting (device.ts):
  * - off: refused;
  * - ask (the default): the request waits here until you allow or refuse it in the app;
  * - auto: acted on right away, except anything that runs in the agent's cloud, which always waits for you.
  * A request that came without a fresh code is refused while this computer's own setting asks for one (remoteCode).
- * Agents over MCP on this computer always wait for you. Each approval keeps the task, agent,
- * folder and way it runs that you were shown, and acting refuses if any of them changed in between.
+ * Agents over this computer's own MCP server always wait for you. Each approval keeps the task, agent, folder and way it
+ * runs that you were shown, and acting refuses if any of them changed in between. Folders asked for the same ways wait
+ * here too (folder-requests.ts), always for you.
  */
 
 const TTL_MS = 10 * 60_000;
@@ -47,8 +50,8 @@ export function pendingApprovals(): Approval[] {
 export interface ApprovalItem {
   modelSettings: import("@/lib/agent-models").ModelSelection | null;
   id: string;
-  /** Start a session, resume one, or send one back to its agent with changes. */
-  kind: LaunchRequestKind;
+  /** Start a session, resume one, or send one back to its agent with changes; or use a folder here. */
+  kind: LaunchRequestKind | "folder";
   key: string;
   title: string;
   /** The agent and where it runs, in words ("Claude Code · Terminal"). */
@@ -64,14 +67,15 @@ export interface ApprovalItem {
   expiresAt: number;
 }
 
-const FROM_TEXT: Record<Approval["from"], string> = {
+const FROM_TEXT: Record<ApprovalFrom, string> = {
   elsewhere: "the web app or another computer",
   agent: "an agent over MCP",
+  agentElsewhere: "an agent, from elsewhere",
 };
 
 export function approvalItems(tasks: Task[]): ApprovalItem[] {
   const byId = new Map(tasks.map((t) => [t.id, t]));
-  return pendingApprovals().map((a) => ({
+  const sessions: ApprovalItem[] = pendingApprovals().map((a) => ({
     id: a.id, kind: a.kind, key: a.key, title: byId.get(a.taskId)?.title ?? "", agent: `${AGENT_LABEL[a.agent]} · ${SURFACE_LABEL[a.surface]}`,
     surface: a.surface, folder: a.folder, modelSettings: a.modelSettings,
     from: a.changes ? `${FROM_TEXT[a.from]}, sending the session back with changes: “${excerpt(a.changes.text)}”`
@@ -79,6 +83,12 @@ export function approvalItems(tasks: Task[]): ApprovalItem[] {
     changes: a.changes?.text ?? null, missing: a.missing ?? [],
     requestedAt: a.requestedAt, expiresAt: a.expiresAt,
   }));
+  // A folder: `title` says what gets it (a project, an area's workspace, a task).
+  const folders: ApprovalItem[] = pendingFolderApprovals().map((a) => ({
+    id: a.id, kind: "folder", key: "", title: a.name, agent: "", surface: "terminal", folder: a.folder, modelSettings: null,
+    from: FROM_TEXT[a.from], changes: null, missing: [], requestedAt: a.requestedAt, expiresAt: a.expiresAt,
+  }));
+  return [...sessions, ...folders].sort((a, b) => a.requestedAt - b.requestedAt);
 }
 
 const excerpt = (text: string) => (text.length > 200 ? `${text.slice(0, 200).trimEnd()}…` : text);
@@ -90,7 +100,7 @@ type Times = { at: number; until: number };
  * agent doesn't have here. Null when the task can't run here at all.
  */
 async function ask(
-  task: Task, agent: AgentId | null, from: Approval["from"], requestId: string | null, times?: Times, surface?: Surface,
+  task: Task, agent: AgentId | null, from: ApprovalFrom, requestId: string | null, times?: Times, surface?: Surface,
 ): Promise<Approval | null> {
   const project = task.projectId ? await repo.getProject(task.projectId) : null;
   const who = agent ?? agentOf(task, project?.agent);
@@ -264,6 +274,9 @@ export async function syncDevice(): Promise<void> {
     g.__pacedmindSeen = now;
   }
 
+  // Folders asked of this computer wait for you here, whatever its setting for sessions.
+  await syncFolderRequests(d.deviceId!, now);
+
   const pending = await repo.listLaunchRequests({ deviceId: d.deviceId!, status: ["pending"] });
   const open = new Set(pending.map((r) => r.id));
   for (const [id, a] of approvals()) if (a.requestId && !open.has(a.requestId)) approvals().delete(id);
@@ -290,9 +303,15 @@ async function handle(r: LaunchRequest, settings: { remoteStart: RemoteStart; re
     repo.settleLaunchRequest(r.id, status, extra);
   if (Date.parse(r.expiresAt) <= now) return settle("expired");
   if (setting === "off") return settle("denied", { note: "Taking sessions from elsewhere is off on this computer" });
+  // An agent elsewhere asks for new sessions only, and never counts as having a code, even when the desktop app it asked
+  // through had one entered minutes before (the database takes nothing else from an agent signed in to PacedMind Cloud).
+  const agent = r.requestedVia === "agent";
+  if (agent && r.kind !== "start") return settle("denied", { note: "Agents ask for new sessions only" });
   // The database takes a request without a fresh code only while this computer's entry says it may. What counts is the
   // setting here: switched back on, it refuses them at once, before the entry has caught up.
-  if (!r.freshCode && settings.remoteCode !== false) return settle("denied", { note: "This computer takes sessions from elsewhere only with a two-factor code" });
+  if ((agent || !r.freshCode) && settings.remoteCode !== false) {
+    return settle("denied", { note: "This computer takes sessions from elsewhere only with a two-factor code" });
+  }
   const task = await repo.getTask(r.taskId);
   if (!task) return settle("failed", { note: "The task is gone" });
   if (task.agent === "human") return settle("failed", { note: `${task.key} is marked as yours` });
@@ -308,11 +327,13 @@ async function handle(r: LaunchRequest, settings: { remoteStart: RemoteStart; re
     // A session in the agent's cloud sends the project there, so it always waits for you, whatever the setting.
     if (setting === "auto" && surface !== "cloud" && folder) {
       return done(await startSession(task.id, {
-        agent: r.agent, surface, reason: r.freshCode ? "remote" : "remoteNoCode",
+        agent: r.agent, surface, reason: agent ? "agent" : r.freshCode ? "remote" : "remoteNoCode",
         expect: { key: task.key, agent: r.agent, folder, surface, modelSettings: task.modelSettings },
       }));
     }
-    if (!(await ask(task, r.agent, "elsewhere", r.id, times, surface))) await settle("failed", { note: "That task can't run on this computer" });
+    if (!(await ask(task, r.agent, agent ? "agentElsewhere" : "elsewhere", r.id, times, surface))) {
+      await settle("failed", { note: "That task can't run on this computer" });
+    }
     return;
   }
 

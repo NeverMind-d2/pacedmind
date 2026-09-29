@@ -362,29 +362,19 @@ export interface Settings {
 
 /* ---------- preferences: how you like to work, for agents ---------- */
 
-/** What a preference is about, in the order Settings and get_preferences list them. */
-export const PREFERENCE_TOPICS = ["schedule", "deadlines", "tasks", "places", "agents", "other"] as const;
-export type PreferenceTopic = (typeof PREFERENCE_TOPICS)[number];
+/**
+ * Topics to start with: Settings offers them, the MCP tools suggest them, and they're listed first, in this order. The
+ * user names their own too: a topic is any short name.
+ */
+export const SUGGESTED_TOPICS: { name: string; hint: string }[] = [
+  { name: "Time and schedule", hint: "When to plan which work, focus time, breaks, days off" },
+  { name: "Dates and deadlines", hint: "Due dates and planned days, buffers, reminders" },
+  { name: "Writing tasks", hint: "Language, how much detail, estimates, Done when items, labels" },
+  { name: "Projects and places", hint: "Which area, project, workspace or computer work goes to" },
+  { name: "Agents and sessions", hint: "Which agent does what, models, where sessions run" },
+];
+
 export type PreferenceSource = "you" | "agent";
-
-export const PREFERENCE_TOPIC_LABEL: Record<PreferenceTopic, string> = {
-  schedule: "Time and schedule",
-  deadlines: "Dates and deadlines",
-  tasks: "Writing tasks",
-  places: "Projects and places",
-  agents: "Agents and sessions",
-  other: "Other",
-};
-
-/** What goes under each topic: Settings' hints, and the MCP tools' descriptions. */
-export const PREFERENCE_TOPIC_HINT: Record<PreferenceTopic, string> = {
-  schedule: "when to plan which work, focus time, breaks, days off",
-  deadlines: "how to set due dates and planned days, buffers, reminders",
-  tasks: "language, how much detail, estimates, Done when items, labels",
-  places: "which area, project, workspace or computer work goes to",
-  agents: "which agent does what, models, where sessions run",
-  other: "anything else agents should know about how you work",
-};
 
 /**
  * One thing about how the user likes to work, in their words: agents read these before they plan, schedule or create
@@ -392,16 +382,32 @@ export const PREFERENCE_TOPIC_HINT: Record<PreferenceTopic, string> = {
  */
 export interface Preference {
   id: number;
-  topic: PreferenceTopic;
+  /** What it's about: a suggested topic or the user's own, at most PREFERENCE_TOPIC_MAX characters. */
+  topic: string;
   text: string;
   /** Who wrote it last: you in PacedMind, or an agent over MCP (after asking you). */
   source: PreferenceSource;
   updatedAt: string;
 }
 
-/** At most this many preferences, each one line of at most PREFERENCE_TEXT_MAX characters (the database holds both). */
+/** At most this many preferences, each one line (the database holds all three). */
 export const MAX_PREFERENCES = 100;
 export const PREFERENCE_TEXT_MAX = 500;
+export const PREFERENCE_TOPIC_MAX = 60;
+
+export const sameTopic = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+/** The hint of a suggested topic, whatever its case; undefined for the user's own. */
+export const topicHint = (topic: string) => SUGGESTED_TOPICS.find((s) => sameTopic(s.name, topic))?.hint;
+
+/** Topics in the order they're listed: the suggested ones first, then the user's own by name. */
+export function topicOrder(a: string, b: string): number {
+  const rank = (t: string) => {
+    const i = SUGGESTED_TOPICS.findIndex((s) => sameTopic(s.name, t));
+    return i < 0 ? SUGGESTED_TOPICS.length : i;
+  };
+  return rank(a) - rank(b) || a.localeCompare(b, undefined, { sensitivity: "base" });
+}
 
 /** Windows Terminal or Command Prompt on Windows, Terminal or iTerm on macOS (src/lib/terminals.ts). */
 export type TerminalId = "wt" | "cmd" | "terminal" | "iterm";
@@ -587,6 +593,30 @@ export type LaunchRequestStatus = "pending" | "launched" | "denied" | "expired" 
  * that session back to its agent with `changes`. Resuming and changes go only to the computer the session ran on.
  */
 export type LaunchRequestKind = "start" | "resume" | "changes";
+
+/** What gets a folder on a computer: a project (its folder), an area (its workspace) or a task (its own folder). */
+export type FolderTargetKind = "project" | "area" | "task";
+export type FolderRequestStatus = "pending" | "done" | "refused" | "failed" | "expired";
+
+/**
+ * A folder asked for from outside a computer's window (folder_requests): by an agent, the web app or another computer.
+ * Folders are each computer's own settings, so it only suggests one: the computer checks it, and sets it once you allow
+ * it there (folder-requests.ts).
+ */
+export interface FolderRequest {
+  id: string;
+  deviceId: string;
+  target: { kind: FolderTargetKind; id: string };
+  /** The folder as it was asked for: untrusted text, which the computer checks and shows you before anything uses it. */
+  folder: string;
+  /** "web", "desktop" (another computer's app) or "agent" (an approved agent; the database sets it). */
+  requestedVia: string;
+  requestedAt: string;
+  expiresAt: string;
+  status: FolderRequestStatus;
+  decidedAt: string | null;
+  note: string | null;
+}
 
 /** A session asked for from elsewhere, waiting for (or decided by) the desktop app on `deviceId`. */
 export interface LaunchRequest {

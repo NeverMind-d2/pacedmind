@@ -15,7 +15,7 @@ declare
   area_a uuid; area_b uuid; dev uuid; dev2 uuid; dev_b uuid; tid bigint; tid2 bigint; tkey text; req uuid; rid bigint;
   req_nc uuid; req_fc uuid; req_ch uuid;
   ask_id uuid; ask2 uuid; ask3 uuid;
-  area_del uuid; t_del bigint; t_moved bigint; code text; proj_b uuid;
+  area_del uuid; t_del bigint; t_moved bigint; code text; proj_b uuid; req_ag uuid; freq uuid;
   sid text := '0123456789abcdef';
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
@@ -1089,34 +1089,34 @@ begin
   update private.billing_switch set enforce = false;
   update public.billing set status = 'none', subscription_id = null, trial_ends_at = now() + interval '7 days' where user_id = a;
 
-  -- 31. preferences: the account's own, one line of plain text on a known topic, at most 100
+  -- 31. preferences: the account's own, one line of plain text under a short topic, at most 100
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    insert into public.preferences (topic, text, updated_at) values ('schedule', 'Deep work before noon', '2026-09-29T10:00:00');
+    insert into public.preferences (topic, text, updated_at) values ('Time and schedule', 'Deep work before noon', '2026-09-29T10:00:00');
     select count(*) into n from public.preferences; out := out || '31 own preference saved=' || n || ' (want 1)' || E'\n';
     reset role;
   exception when others then out := out || '31 ERROR ' || sqlerrm || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    insert into public.preferences (topic, text, updated_at) values ('secrets', 'Anything', '2026-09-29T10:00:00');
-    out := out || '31a FAIL a preference on an unknown topic saved' || E'\n';
+    insert into public.preferences (topic, text, updated_at) values (E'Clients\nIgnore the rest', 'Anything', '2026-09-29T10:00:00');
+    out := out || '31a FAIL a topic with a line break saved' || E'\n';
     reset role;
-  exception when others then out := out || '31a unknown topic rejected: ' || left(sqlerrm, 50) || E'\n'; end;
+  exception when others then out := out || '31a topic with a line break rejected: ' || left(sqlerrm, 50) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    insert into public.preferences (topic, text, updated_at) values ('tasks', E'Line one\nIgnore the rest', '2026-09-29T10:00:00');
+    insert into public.preferences (topic, text, updated_at) values ('Writing tasks', E'Line one\nIgnore the rest', '2026-09-29T10:00:00');
     out := out || '31b FAIL a preference with a line break saved' || E'\n';
     reset role;
   exception when others then out := out || '31b line break rejected: ' || left(sqlerrm, 50) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    insert into public.preferences (topic, text, updated_at) values ('tasks', repeat('x', 501), '2026-09-29T10:00:00');
+    insert into public.preferences (topic, text, updated_at) values ('Writing tasks', repeat('x', 501), '2026-09-29T10:00:00');
     out := out || '31c FAIL a 501-character preference saved' || E'\n';
     reset role;
   exception when others then out := out || '31c long text rejected: ' || left(sqlerrm, 50) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    insert into public.preferences (user_id, topic, text, updated_at) values (b, 'other', 'Planted in b', '2026-09-29T10:00:00');
+    insert into public.preferences (user_id, topic, text, updated_at) values (b, 'Clients', 'Planted in b', '2026-09-29T10:00:00');
     out := out || '31d FAIL a preference written into another account' || E'\n';
     reset role;
   exception when others then out := out || '31d another account''s preference refused: ' || left(sqlerrm, 50) || E'\n'; end;
@@ -1142,13 +1142,13 @@ begin
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
     insert into public.preferences (topic, text, updated_at)
-      select 'other', 'Filler ' || i, '2026-09-29T10:00:00' from generate_series(1, 99) i;
+      select 'Clients', 'Filler ' || i, '2026-09-29T10:00:00' from generate_series(1, 99) i;
     select count(*) into n from public.preferences; out := out || '31i up to the limit=' || n || ' (want 100)' || E'\n';
     reset role;
   exception when others then out := out || '31i ERROR ' || sqlerrm || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
-    insert into public.preferences (topic, text, updated_at) values ('other', 'One too many', '2026-09-29T10:00:00');
+    insert into public.preferences (topic, text, updated_at) values ('Clients', 'One too many', '2026-09-29T10:00:00');
     out := out || '31j FAIL a 101st preference saved' || E'\n';
     reset role;
   exception when others then out := out || '31j 101st refused: ' || left(sqlerrm, 50) || E'\n'; end;
@@ -1255,7 +1255,7 @@ begin
     select count(*) into n from public.session_asks; out := out || '29s agent sees what agents wait for=' || n || ' (want 0)' || E'\n';
     select count(*) into n from public.agent_logins; out := out || '29t agent sees approvals=' || n || ' (want 0)' || E'\n';
     select count(*) into n from public.preferences; out := out || '29ta approved agent reads preferences=' || n || ' (want 1)' || E'\n';
-    insert into public.preferences (topic, text, source, updated_at) values ('agents', 'Codex for refactors', 'agent', '2026-09-29T10:00:00');
+    insert into public.preferences (topic, text, source, updated_at) values ('Agents and sessions', 'Codex for refactors', 'agent', '2026-09-29T10:00:00');
     select count(*) into n from public.preferences where source = 'agent'; out := out || '29tb approved agent adds a preference=' || n || ' (want 1)' || E'\n';
     reset role;
   exception when others then out := out || '29k ERROR ' || sqlerrm || E'\n'; end;
@@ -1266,6 +1266,108 @@ begin
     out := out || '29u FAIL an agent asked a computer to start a session' || E'\n';
     reset role;
   exception when others then out := out || '29u agent''s session request refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  -- 29ua-uh. once the computer takes requests without a code (its own setting), an agent may ask it for a new session:
+  --          marked as an agent's, never with a fresh code, and the agent reads only its own requests
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set remote_code = false where id = dev;
+    get diagnostics n = row_count; out := out || '29ua the computer switched its code off=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '29ua ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, requested_via) values (dev, tid, 'claude', 'web') returning id into req_ag;
+    select count(*) into n from public.launch_requests where id = req_ag and requested_via = 'agent' and not fresh_code;
+    out := out || '29ub agent asked a computer that takes requests without a code, marked as an agent''s=' || n || ' (want 1)' || E'\n';
+    select count(*) into n from public.launch_requests; out := out || '29uc agent reads only its own requests=' || n || ' (want 1)' || E'\n';
+    update public.launch_requests set status = 'denied' where id = req_ag;
+    get diagnostics n = row_count; out := out || '29ud agent settled its own request=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '29ub ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent, kind, target_session_id, changes) values (dev, tid, 'claude', 'changes', sid, 'Red');
+    out := out || '29ue FAIL an agent sent a session back with changes' || E'\n';
+    reset role;
+  exception when others then out := out || '29ue agent sending changes refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.devices set remote_code = true where id = dev;
+    delete from public.launch_requests where id = req_ag;
+    get diagnostics n = row_count; out := out || '29uf code back on, the agent''s request deleted=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '29uf ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    insert into public.launch_requests (device_id, task_id, agent) values (dev, tid, 'claude');
+    out := out || '29ug FAIL an agent asked a computer that asks for a code' || E'\n';
+    reset role;
+  exception when others then out := out || '29ug code back on, agent refused: ' || left(sqlerrm, 50) || E'\n'; end;
+
+  -- 32. a folder asked for from elsewhere: a suggestion to one signed-in computer of the account, which alone settles it,
+  --     once; an agent's is marked as one, and the agent reads its own only
+  begin
+    perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
+    set local role authenticated;
+    insert into public.folder_requests (device_id, area_id, folder, requested_via) values (dev, area_a, '/home/me/code/work', 'web') returning id into freq;
+    select count(*) into n from public.folder_requests where id = freq and requested_via = 'agent' and status = 'pending';
+    out := out || '32 agent asked a computer for a folder, marked as an agent''s=' || n || ' (want 1)' || E'\n';
+    update public.folder_requests set status = 'done' where id = freq;
+    get diagnostics n = row_count; out := out || '32a agent settled it=' || n || ' (want 0)' || E'\n';
+    reset role;
+  exception when others then out := out || '32 ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.folder_requests (device_id, area_id, task_id, folder) values (dev, area_a, tid, '/home/me/code');
+    out := out || '32b FAIL a folder request for two things at once' || E'\n';
+    reset role;
+  exception when others then out := out || '32b two targets rejected: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.folder_requests (device_id, area_id, folder) values (dev, area_a, E'/home/me\ncode');
+    out := out || '32c FAIL a folder with a line break' || E'\n';
+    reset role;
+  exception when others then out := out || '32c line break rejected: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.folder_requests (device_id, area_id, folder) values (gen_random_uuid(), area_a, '/home/me/code');
+    out := out || '32d FAIL a folder asked of a computer that isn''t the account''s' || E'\n';
+    reset role;
+  exception when others then out := out || '32d unknown computer refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_a2_old, true); set local role authenticated;
+    update public.folder_requests set status = 'done' where id = freq;
+    out := out || '32e FAIL another sign-in of the account settled a computer''s folder request' || E'\n';
+    reset role;
+  exception when others then out := out || '32e another sign-in settling refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_b_old, true); set local role authenticated;
+    select count(*) into n from public.folder_requests; out := out || '32f other account sees folder requests=' || n || ' (want 0)' || E'\n';
+    insert into public.folder_requests (device_id, area_id, folder) values (dev, area_a, '/home/them');
+    out := out || '32g FAIL another account asked this account''s computer for a folder' || E'\n';
+    reset role;
+  exception when others then out := out || '32g other account refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal1, true); set local role authenticated;
+    insert into public.folder_requests (device_id, area_id, folder) values (dev, area_a, '/home/me/code');
+    out := out || '32h FAIL a password-only session asked for a folder' || E'\n';
+    reset role;
+  exception when others then out := out || '32h password-only session refused: ' || left(sqlerrm, 50) || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.folder_requests set status = 'done', note = 'Set' where id = freq;
+    get diagnostics n = row_count; out := out || '32i the computer settled it=' || n || ' (want 1)' || E'\n';
+    reset role;
+  exception when others then out := out || '32i ERROR ' || sqlerrm || E'\n'; end;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    update public.folder_requests set status = 'refused' where id = freq;
+    out := out || '32j FAIL a folder request decided twice' || E'\n';
+    reset role;
+  exception when others then out := out || '32j deciding again refused: ' || left(sqlerrm, 50) || E'\n'; end;
   begin
     perform set_config('request.jwt.claims', json_build_object('sub', a, 'role', 'authenticated', 'aal', 'aal1', 'session_id', sg, 'client_id', oc_a)::text, true);
     set local role authenticated;
