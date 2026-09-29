@@ -133,8 +133,8 @@ type Drop = { kind: "grid"; day: string; min: number; len: number } | { kind: "a
 
 type Drag = {
   task: Task;
-  /** Moving the task, or stretching its block (its estimate). */
-  mode: "move" | "resize";
+  /** Moving the task, or one edge of its block: the top moves its start, the bottom its finish (its estimate). */
+  mode: "move" | "top" | "bottom";
   len: number;
   /** How far below the block's top it was picked up, in minutes. */
   grab: number;
@@ -270,11 +270,17 @@ export function WeekView({
   /* ---------- dragging ---------- */
 
   const dropAt = (x: number, py: number, d: Omit<Drag, "drop" | "x" | "y">): Drop | null => {
-    if (d.mode === "resize") {
+    if (d.mode !== "move") {
+      // An edge stays on its day, whichever column the pointer is over, and keeps the block at least a quarter hour long.
       const col = document.querySelector<HTMLElement>(`[data-drop="grid"][data-day="${d.fromDay}"]`);
       if (!col) return null;
-      const end = clamp(snap(((py - col.getBoundingClientRect().top) / PX) * 60), d.fromMin + SNAP, DAY);
-      return { kind: "grid", day: d.fromDay!, min: d.fromMin, len: end - d.fromMin };
+      const at = snap(((py - col.getBoundingClientRect().top) / PX) * 60);
+      const end = d.fromMin + d.len;
+      if (d.mode === "top") {
+        const start = clamp(at, 0, end - SNAP);
+        return { kind: "grid", day: d.fromDay!, min: start, len: end - start };
+      }
+      return { kind: "grid", day: d.fromDay!, min: d.fromMin, len: clamp(at, d.fromMin + SNAP, DAY) - d.fromMin };
     }
     const el = document.elementFromPoint(x, py)?.closest<HTMLElement>("[data-drop]");
     if (!el) return null;
@@ -301,9 +307,12 @@ export function WeekView({
     const drop = d.drop!;
     let patch: Patch;
     let message: string;
-    if (d.mode === "resize" && drop.kind === "grid") {
+    if (d.mode === "bottom" && drop.kind === "grid") {
       patch = { estimateMin: drop.len };
-      message = `${t.key} takes ${drop.len >= 60 ? `${hours(drop.len)} h` : `${drop.len} min`} now`;
+      message = `${t.key} finishes at ${hhmm(drop.min + drop.len)} now`;
+    } else if (d.mode === "top" && drop.kind === "grid") {
+      patch = { plannedTime: hhmm(drop.min), estimateMin: drop.len };
+      message = `${t.key} starts at ${hhmm(drop.min)} now`;
     } else if (drop.kind === "grid") {
       patch = { plannedDate: drop.day, plannedTime: hhmm(drop.min) };
       message = `${t.key} is planned for ${fmtDay(drop.day)} at ${hhmm(drop.min)}`;
@@ -350,7 +359,7 @@ export function WeekView({
       if (!active) {
         if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
         active = true;
-        document.body.style.cursor = d.mode === "resize" ? "ns-resize" : "grabbing";
+        document.body.style.cursor = d.mode === "move" ? "grabbing" : "ns-resize";
       }
       autoScroll(ev.clientY);
       const next = { ...d, x: ev.clientX, y: ev.clientY, drop: dropAt(ev.clientX, ev.clientY, d) };
@@ -622,8 +631,8 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
   selected: boolean;
   dragging: boolean;
   onOpen: () => void;
-  /** Given for a task you can move: picks it up, or its bottom edge to change how long it takes. */
-  onGrab?: (e: ReactPointerEvent<HTMLElement>, mode: "move" | "resize") => void;
+  /** Given for a task you can move: picks it up by its middle, or by its top or bottom edge to move its start or finish. */
+  onGrab?: (e: ReactPointerEvent<HTMLElement>, mode: Drag["mode"]) => void;
 }) {
   const top = y(b.s) + 1;
   const height = Math.max(18, y(b.e) - top - 1);
@@ -665,12 +674,18 @@ function BlockView({ block: b, past, selected, dragging, onOpen, onGrab }: {
         )}
       </span>
       {height >= 36 && <span className={cx("block font-mono text-[10px]", past ? "text-dim" : b.kind === "fixed" ? "text-mut2" : "text-mut")}>{time}</span>}
-      {/* The bottom edge of a block you placed stretches it: how long the task takes. */}
+      {/* The edges of a block you placed move its start (top) and its finish (bottom); the middle moves the whole block. */}
       {onGrab && b.kind === "pinned" && (
-        <span aria-hidden className="absolute inset-x-0 bottom-0 h-[6px] cursor-ns-resize opacity-0 group-hover:opacity-100"
-          onPointerDown={(e) => onGrab(e, "resize")}>
-          <span className="mx-auto mt-[2px] block h-[2px] w-5 rounded-full bg-mut2" />
-        </span>
+        <>
+          <span aria-hidden className="absolute inset-x-0 top-0 flex h-[6px] cursor-ns-resize items-start opacity-0 group-hover:opacity-100"
+            onPointerDown={(e) => onGrab(e, "top")}>
+            <span className="mx-auto mt-[1px] block h-[2px] w-5 rounded-full bg-mut2" />
+          </span>
+          <span aria-hidden className="absolute inset-x-0 bottom-0 flex h-[6px] cursor-ns-resize items-end opacity-0 group-hover:opacity-100"
+            onPointerDown={(e) => onGrab(e, "bottom")}>
+            <span className="mx-auto mb-[1px] block h-[2px] w-5 rounded-full bg-mut2" />
+          </span>
+        </>
       )}
     </div>
   );
