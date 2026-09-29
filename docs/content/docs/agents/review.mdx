@@ -5,7 +5,7 @@ description: Where finished agent sessions show up, how to read an agent's repor
 
 When an agent hands a task back, it sends a report: what it changed, its answer to each item of the task's **Done when** list, screenshots, and how to check the result. The session is then **finished, waiting for you** and the task is **In review**, as they are when a session is marked finished. The agent never marks its own task done: that's yours to do after looking at the result.
 
-In a flow, tasks connected **Manually** wait for that. Tasks connected **Automatically**, **In the same session** or **At a set time** can already start when the task is in review, unless the agent handed it back partly done or blocked ([below](#partly-done-or-blocked)).
+Tasks that wait for this one ([dependencies](/views/timeline#dependencies)) don't wait for your review: a task in review counts as finished for them, unless the agent handed it back partly done or blocked ([below](#partly-done-or-blocked)).
 
 ## Where finished sessions show up
 
@@ -18,7 +18,6 @@ In a flow, tasks connected **Manually** wait for that. Tasks connected **Automat
 | Task rows | *Session finished*, with a navy dot. |
 | Task details | *Claude Code finished at 12:22 · waiting for you*, *Claude Code handed back part of it at 12:22 · waiting for you* or *Claude Code got stuck at 12:22 · needs you*, with the report and **Mark done**. |
 | **Roadmap** | *2 finished sessions waiting for you* in the header, and **Open session** on the task's row. |
-| **Flows** | The session's card reads *Waiting for you*, *Partly done* or *Blocked*; its panel adds *Finished 12:22, check it and mark done*, *Handed back part of it at 12:22, check it and mark done* or *Got stuck at 12:22, it needs you*. |
 | **Timeline** | A navy outline around the task's bar and a navy dot after it. |
 | **Calendar**, week | A 45-minute block to check the result, *Check DEV-21*, planned in your focus time. |
 
@@ -54,7 +53,7 @@ The report says what the agent did; **Files changed** shows what actually change
 * each changed file with its lines added and removed, marked **A** (added), **M** (changed), **D** (deleted), **R** (renamed, with its old path) or **N** (new, not tracked by git); *binary* for a file without lines. Up to 8 show, with **Show all … files**;
 * **Show the diff**: the full diff, changes that aren't committed included, and new files git doesn't track. Added lines are raised, removed ones dimmed.
 
-*Nothing changed in git since the session started.* means just that, whatever the report says. When the folder already had changes that weren't committed at the start, the report says so: they count too. Files git didn't track that were already there, unchanged, are left out. Every report of a session compares with the session's start, also after **Request changes**; a session that continues another in the same terminal starts where that one's folder stood when it handed back.
+*Nothing changed in git since the session started.* means just that, whatever the report says. When the folder already had changes that weren't committed at the start, the report says so: they count too. Files git didn't track that were already there, unchanged, are left out. Every report of a session compares with the session's start, also after **Request changes**.
 
 Only the summary goes with the report, to your other computers and the web app. The full diff stays in PacedMind's data folder on the computer the session ran on, up to 1 MB (*The diff was longer than PacedMind keeps (1 MB), so it's cut short.*); elsewhere, **Show the diff** says *The diff itself stays on the computer the session ran on.*
 
@@ -73,7 +72,7 @@ A session without a report shows the agent's note instead, if it left one. That'
 4. Decide:
    * **Mark done** when the result is right.
    * **Request changes** when it isn't, for a session that ran in a terminal on this computer ([below](#request-changes)). You can also continue the conversation in the agent's terminal or app yourself: the agent hands the task back again, with a new report, when it's done. If it picks the task up again with `start_task` first, the session shows as **Running** in the meantime.
-   * To start over with a fresh agent: for a running session, select **Close session**, then **New session**. For a finished session, start a new one from **Sessions** (**Start session**) or with the start button in **Flows**; the finished one keeps waiting for review until the task is marked done.
+   * To start over with a fresh agent: for a running session, select **Close session**, then **New session**. For a finished session, select **New session with Claude Code** (or **Codex**) in the task's details; the finished one keeps waiting for review until the task is marked done.
 
 ## Request changes
 
@@ -115,7 +114,7 @@ An agent that can't finish everything still hands the task back, and says so in 
 
 The notification reads *DEV-21 is partly done* or *DEV-21 is blocked*, and the row in **Sessions** *partly done 12:22* or *stuck 12:22*. The session stays in **Finished, waiting for you**.
 
-A partly done or blocked hand-back holds up the flow: no task that waits for this one starts, whatever its connection, until you mark the task done, the agent hands it back again as done (for example after **Request changes**), or a newer session of the task is marked finished. Tasks connected **In the same session** don't continue in the agent's session: marking the task done starts them as a new session.
+A partly done or blocked hand-back holds up what comes after it: the tasks that wait for this one ([dependencies](/views/timeline#dependencies)) keep waiting until you mark the task done, the agent hands it back again as done (for example after **Request changes**), or a newer session of the task is marked finished. Meanwhile the **Roadmap** says *When you mark DEV-21 done* for them, the **Timeline** *Waits for you*, and `get_next_task` doesn't offer them.
 
 ## What Mark done does
 
@@ -123,11 +122,10 @@ A partly done or blocked hand-back holds up the flow: no task that waits for thi
 
 * the task's finished sessions become **Done** (*You marked it done*) and leave the waiting count;
 * the check block leaves the week plan;
-* in a flow, tasks connected **Manually** after this one can start, and so can any task whose other connections were already satisfied. After a partly done or blocked hand-back, this is also when tasks connected **Automatically** or **At a set time** start, and a task connected **In the same session** starts as a new session;
-* if this was the last task of the project's flow, projects that start after it begin their flows.
+* after a partly done or blocked hand-back, the tasks that wait for this one stop waiting for it.
 
-The message names the sessions that started, such as *Started DEV-23, DEV-24*. See [Automate with flows](/agents/flows). **Request changes** stays available afterwards, and moves the task back to **In progress**.
+Nothing starts by itself: start the next task when you're ready, for example with **Start session** next to *Waits for it:* in **Sessions**. **Request changes** stays available afterwards, and moves the task back to **In progress**.
 
 ## Follow-up work
 
-Agents record work they found outside the task as new tasks in the same project, and list them in their report, where each one opens its task. They appear in the project's task list and, when they're for an agent, in the **Flows** list **Add to the flow**.
+Agents record work they found outside the task as new tasks in the same project, and list them in their report, where each one opens its task. They appear in the project's task list.

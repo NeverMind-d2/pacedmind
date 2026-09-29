@@ -1,6 +1,6 @@
 ---
 title: Desktop app
-description: The PacedMind window and title bar, the tray or menu bar icon and its menu, notifications for finished sessions and agents waiting for you, starting at sign-in, and what happens when the app's server has a problem.
+description: The PacedMind window and title bar, the tray or menu bar icon and its menu, notifications for finished sessions, agents waiting for you and requests to allow, starting at sign-in, and what happens when the app's server has a problem.
 ---
 
 The desktop app runs PacedMind's server and shows the planner in a window. It keeps running when the window is closed, in the tray on Windows and in the menu bar on macOS, so agents can report back at any time.
@@ -31,7 +31,7 @@ Quitting stops the server: agents can't reach PacedMind, and so can't report bac
 
 ## The tray and menu bar icon
 
-On Windows, PacedMind's icon sits in the tray: click it to open the window, and right-click it for its menu. On macOS, the pd icon sits in the menu bar and follows its light or dark look: click it for its menu. The icon's tooltip reads *PacedMind*, or *PacedMind · 2 waiting for you* when sessions need you: finished sessions waiting for review, running sessions whose agent waits for you, and sessions waiting for you to allow them.
+On Windows, PacedMind's icon sits in the tray: click it to open the window, and right-click it for its menu. On macOS, the pd icon sits in the menu bar and follows its light or dark look: click it for its menu. The icon's tooltip reads *PacedMind*, or *PacedMind · 2 waiting for you* when something needs you: finished sessions waiting for review, running sessions whose agent waits for you, and requests waiting for you to allow them, for sessions and for folders.
 
 | Item | Result |
 | --- | --- |
@@ -67,6 +67,18 @@ A running session notifies you too when its agent waits for you, in its terminal
 | *DEV-22: agent stopped on an error* | Check the existing terminal to resolve the error and retry. |
 
 Below the title come the task's title and the line that the task's details show, such as *Claude Code asks for your permission in its terminal: …*. Click the notification to open the session in **Sessions**. Each time the agent starts waiting, it notifies once. See [When the agent waits for you](/agents/lifecycle#when-the-agent-waits-for-you).
+
+A request that waits for you to allow it on this computer notifies you once:
+
+| Title | When |
+| --- | --- |
+| *Start DEV-22 with Claude Code · Terminal?* | An agent, the web app or another computer asks to start a session here. |
+| *Resume DEV-22 with Claude Code · Terminal?* | The web app or another computer asks to resume a session that ran here. |
+| *Pull DEV-22 in from the cloud?* | The web app or another computer asks to pull a cloud session into a terminal here. |
+| *Send DEV-22 back to Claude Code with changes?* | An agent, the web app or another computer asks to send a session that ran here back with changes. |
+| *Use a folder for Organizer app?* | An agent asks to use a folder here for a project, an area's workspace or a task. |
+
+Below the title come the task's title, or for a folder the folder, and who asked, such as *Asked by an agent over MCP. Open PacedMind to allow or refuse it.* Click the notification to open the window, where the request waits as a card with **Refuse** and **Allow**, or **Use it** for a folder. See [When an agent asks](/agents/start-and-manage#when-an-agent-asks).
 
 PacedMind checks every five seconds while it runs, so a session sent back with **Request changes** notifies again when the agent hands the task back. Sessions that were already finished or waiting when PacedMind started don't get a notification; the icon's tooltip counts them, and the **Sessions** count includes the finished ones.
 

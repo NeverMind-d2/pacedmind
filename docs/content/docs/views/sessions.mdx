@@ -70,7 +70,7 @@ You can attach another computer's session from any computer, and from the web ap
 
 **Start session**, in the header, lists up to 20 tasks an agent could pick up now: tasks in progress, to do or in the backlog, handed to an agent (their own or the project's), and without a running session. Tasks in progress come first, then those to do, then the backlog; within each, by priority, then by project and task order. Choosing one starts that task's agent where the task runs.
 
-With no sessions yet, the view explains: *Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex, or switch on a project's flow to have them start one after another.*
+With no sessions yet, the view explains: *Sessions appear here when you start one from a task. Open a task and choose Start with Claude Code or Codex, or ask an agent in a chat to start one.*
 
 ## Session details
 
@@ -104,7 +104,7 @@ Below them come the session's fields:
 | **Runs in** | Where the session runs: *Terminal on DESKTOP-1*, *Claude app on DESKTOP-1*, or *Claude Code on the web*. |
 | **Folder** | Where the agent works. |
 | **Branch** | The branch name recorded for the session. |
-| **Started** | When, and how: *from PacedMind*, *outside PacedMind* for a session an agent reported on its own, or *in the same session* for a session that continues another one. |
+| **Started** | When, and how: *from PacedMind*, or *outside PacedMind* for a session an agent reported on its own or one you attached to the task. |
 | **Duration** | How long the agent worked: until now while it runs, else until it finished or its terminal closed. |
 | **Working** | How long the agent was at work, as it reported it, without the time it waited for you. |
 | **Tokens** | The tokens the agent read and wrote, as it reported them, such as *262k tokens, 246k of them from cache, 1.5k output*. |
@@ -114,11 +114,10 @@ Below them come the session's fields:
 | **Not available** | For Claude Code in a terminal, MCP servers the session should have but has no tools from, and why, such as *stripe needs you to sign in (/mcp in its terminal)* or *github didn't start (ENOENT)*. See [What a session actually has](/agents/start-and-manage#what-a-session-actually-has). |
 | **Session** | The session's id, which agents use in `start_task` and `finish_task`. |
 | **Claude session** | For Claude Code in a terminal, its own conversation id, used to resume it. |
-| **Continues** | For a session that carries on another one: that session (*DEV-22's session*). Select it to open it. |
 
 **Working**, **Tokens** and **Model** show for sessions in a terminal, once the agent has reported them. See [What it used](/agents/lifecycle#what-it-used).
 
-**What PacedMind heard** lists the session's events with their times, such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it finished*, *You marked it done*, *You asked for changes:* with the start of what you wrote, *You answered its questions:* with the start of your answers, *Plan: 2 of 5 steps done*, *Claude Code is waiting for you in its terminal*, *You answered in its terminal, and Claude Code went on*, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*. See [How a session runs](/agents/lifecycle#what-pacedmind-records) for all of them.
+**What PacedMind heard** lists the session's events with their times, such as *Opened Claude Code in a terminal on DESKTOP-1: you started it here. Waiting for the agent to check in.*, *Claude Code read the task over MCP*, *Claude marked it finished*, *You marked it finished*, *You marked it done*, *You asked for changes:* with the start of what you wrote, *You answered its questions:* with the start of your answers, *Plan: 2 of 5 steps done*, *Claude Code is waiting for you in its terminal*, *You answered in its terminal, and Claude Code went on*, *You closed the session*, *Terminal closed before the agent finished* or *Reopened in a terminal*. See [How a session runs](/agents/lifecycle#what-pacedmind-records) for all of them.
 
 ## Buttons
 
@@ -130,16 +129,16 @@ Below them come the session's fields:
 | **Open the Claude app** or **Open the Codex app** | A session in a desktop app. | Brings the app forward. |
 | **Open the task** or **Open Claude Code on the web** | A cloud session. | Opens the Codex cloud task, or Claude Code on the web, in the browser. |
 | **Pull into terminal** | A Claude Code on the web session. | Opens a terminal in the folder with `claude --teleport`, which pulls a cloud session and its branch in. |
-| **Mark finished** | A running session outside a terminal, which may not report back. | The session is finished and the task goes to **In review**, as if the agent had handed it back. The flow may start the next sessions. |
+| **Mark finished** | A running session outside a terminal, which may not report back. | The session is finished and the task goes to **In review**, as if the agent had handed it back. |
 | **Request changes** | A terminal session on this computer whose agent handed the task back, finished or done after you marked the task done, with the task's latest report. Not for a task that is yours, or while another session of it runs. | Opens a box above the buttons to write what should change (*What should change? Be as specific as you'd be with a colleague.*). **Send to Claude Code**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, sends it: the session reopens in a new terminal (*Sent to Claude Code in a new terminal*), and the task goes back to **In progress**. **Cancel** or <kbd>Esc</kbd> closes the box. |
 | **Answer its question** or **Answer its questions** | As for **Request changes**, when the agent's latest report has questions for you. | Opens a field for each question (*Your answer*) and one for *Anything else it should know (optional)*. **Send to Claude Code**, or <kbd>Ctrl</kbd>+<kbd>Enter</kbd>, sends your answers the way **Request changes** sends changes. See [Answer the agent's questions](/agents/review#answer-the-agents-questions). |
 | **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, or for a session outside a terminal *Close this session in PacedMind? It keeps running where it is.*, then marks the session closed. A task in progress goes back to **Todo**. |
-| **Mark done** | The agent finished. | Marks the task done. The session counts as reviewed, and the flow may start the next sessions. |
+| **Mark done** | The agent finished. | Marks the task done. The session counts as reviewed. |
 
 The line under the **Request changes** box says how the agent goes back to work: *Claude Code starts again in a new terminal, with its last report and your changes.* Claude Code and Codex both start a new conversation. PacedMind opens a new tab in Windows Terminal, and a new window otherwise. The session moves to **Running**, with *Claude Code is working on your changes since 14:05*, until the agent hands the task back with a new report. For Claude Code, **Claude session** then shows the new conversation's id. See [Request changes](/tasks/task-details#request-changes).
 
 Sessions in the Claude or Codex app, or in the cloud, don't offer **Request changes**: write the changes to the agent where it runs, with **Open the Claude app**, **Open the Codex app**, **Open the task** or **Open Claude Code on the web**. Neither do earlier sessions of a task whose newer session has the latest report, and sessions that ran on another computer: ask for their changes in PacedMind there.
 
-Under the buttons, *Next in* the project names the next open task the flow leads to, with **Start session** when that task is still to do or in the backlog and has no running session.
+Under the buttons, *Waits for it:* names an open task that waits for this session's task (a [dependency](/views/timeline#dependencies)), the first in the project's order, with **Start session** when that task is still to do or in the backlog and has no running session. Nothing starts it by itself.
 
 See [Agent sessions](/agents) for the whole life of a session.

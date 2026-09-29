@@ -96,15 +96,21 @@ Other clients: add `https://app.pacedmind.com/api/mcp` as a streamable HTTP MCP 
 
 ## What agents can do on PacedMind Cloud
 
-An agent you allowed acts as you: it reads and changes areas, projects, tasks, the calendar and flows, and reports on agent sessions with `start_task`, `report_progress` and `finish_task`. It can't:
+An agent you allowed acts as you: it reads and changes areas, projects, tasks, the calendar and your [preferences](/concepts/preferences), sees your computers (`list_computers`), and reports on agent sessions with `start_task`, `report_progress` and `finish_task`.
 
-* start sessions, resume them or send them back with changes: `start_session` and `request_changes` answer with a link to the task, where you do it with **Start** or **Request changes** and your two-factor code, or in the desktop app;
+Two things it can only ask one of your computers for:
+
+* **A new session**, with `start_session`: it goes to the computer the agent names, else the task's, else the default one. An agent never counts as having a two-factor code, so only a computer whose **Two-factor code** is off takes the request, and then that computer's **From elsewhere** setting decides: **Refuse**, **Ask me** (it waits for you there) or **Start** (at once). Where the code is on, the agent gives you a link to the task instead, where you start it with **Start** and your two-factor code, or you start it in the desktop app. See [start_session](/mcp/tools/sessions#start_session).
+* **A folder** for a project, an area or a task, with `set_folder`: the request waits up to a day for you to allow it in PacedMind on that computer, which checks the folder first. See [set_folder](/mcp/tools/computers#set_folder).
+
+It can't:
+
+* resume sessions or send them back with changes: `request_changes` answers with a link to the task, where you do it with **Request changes** and your two-factor code, or in the desktop app;
 * ask questions that wait for your answer in PacedMind: there is no `ask_user`, so it asks in its own conversation, and `report_progress` with kind `question` shows the question on the task;
 * attach images from files on its computer: there is no `attach_image`, and `finish_task` takes no `images`;
-* set folders for projects and tasks: they belong to each computer's desktop app;
-* change your computers, answer for you, delete your account, or see the account's notification keys.
+* change your computers or their settings, answer for you, delete your account, or see the account's notification keys.
 
-Everything else is the same as on the desktop app's server, with 39 of the 41 [tools](/mcp/tools).
+Everything else is the same as on the desktop app's server, with 40 of the 42 [tools](/mcp/tools).
 
 ## Connected agents
 
@@ -117,6 +123,9 @@ Signing out everywhere (**Settings → Account → Sign out all**) also ends eve
 * An agent's sign-in counts only once you allowed it on PacedMind's page from a browser signed in with your two-factor code. A password alone can't allow an agent, and each approval works for the one sign-in that comes of the request you allowed.
 * If another sign-in of the same agent starts in the same few minutes, as when someone who has your password tries to slip in, neither counts: both are signed out, and connecting the agent again asks you again. If that happens without a reason you know of, change your password.
 * The database itself checks every request against that approval, so a sign-in you didn't allow reads nothing, and one you disconnected stops working at once, not when its token expires.
+* An agent's sign-in never counts as a two-factor session, even if it verified a code itself, so it can't do what needs a fresh code: resuming sessions, answering for you, or starting a session on a computer that asks for a code.
+* **Switching a computer's two-factor code off lets your agents ask it too.** An agent you connected to PacedMind Cloud, or one on another of your computers, can then ask that computer for sessions, and with **Start** they start at once, in a folder of that computer's, on a task whose text the agent may have written. Keep the code on for any computer where you wouldn't let an agent start another agent without you. See [General](/settings#general).
+* A folder an agent asks for is only a suggestion: the computer checks that it's there, shows it to you, and sets it only when you allow it. Read the path before you allow it: sessions for that project, area or task start there.
 * Agents keep their sign-in in their own credential store; nothing about it goes into their settings files.
 * Requests from web pages (with an `Origin` header) are refused.
 

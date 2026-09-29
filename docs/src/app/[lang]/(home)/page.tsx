@@ -34,7 +34,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Concepts',
-      description: 'Areas, projects and tasks; statuses, priorities and labels; due and planned dates; and who does each task.',
+      description: 'Areas, projects and tasks; statuses, priorities and labels; due and planned dates; who does each task; and how you like to work.',
       href: '/concepts',
       icon: 'layers',
     },
@@ -46,7 +46,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Views',
-      description: 'Inbox, Today, Upcoming, Calendar, Timeline, Projects, Roadmap, Flows and Sessions, one page each.',
+      description: 'Inbox, Today, Upcoming, Calendar, Timeline, Projects, Roadmap and Sessions, one page each.',
       href: '/views',
       icon: 'calendar',
     },
@@ -57,12 +57,6 @@ const sections: Record<Lang, Tile[]> = {
       icon: 'terminal',
     },
     {
-      title: 'Flows',
-      description: 'Chain the tasks of a project so their agent sessions start one after another, automatically or on your signal.',
-      href: '/agents/flows',
-      icon: 'flow',
-    },
-    {
       title: 'Planning and work hours',
       description: 'How the auto-planner fills free focus time with your tasks, and how work hours and work days shape it.',
       href: '/planning',
@@ -70,13 +64,13 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'MCP server',
-      description: 'Connect Claude Code and Codex to PacedMind, and a reference for all 37 MCP tools.',
+      description: 'Connect Claude Code and Codex to PacedMind, and a reference for all 42 MCP tools.',
       href: '/mcp',
       icon: 'link',
     },
     {
       title: 'Agent skills',
-      description: 'Five skills that teach Claude Code and Codex to plan, review and run projects in PacedMind.',
+      description: 'Six skills that teach Claude Code and Codex to add work your way, plan, review and run projects in PacedMind.',
       href: '/skills',
       icon: 'box',
     },
@@ -88,7 +82,7 @@ const sections: Record<Lang, Tile[]> = {
     },
     {
       title: 'Settings',
-      description: 'The account and data, the theme and work hours, and this computer: its agents, how sessions start, project folders and the MCP server.',
+      description: 'The account and data, the theme, work hours and how you work, and this computer: its agents, how sessions start, project folders and the MCP server.',
       href: '/settings',
       icon: 'settings',
     },

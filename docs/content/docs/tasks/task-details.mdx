@@ -57,7 +57,7 @@ With a report on view, the heading counts the items the agent met, such as *2 of
 | **Project** | *Add to project*: **No project**, or a project. Choosing a project also sets the area. |
 | **About** | Only for a task outside a project: *Link a project*, a project of its area the task is about without being part of it. That project's page lists it under **Related**. See [To-dos](/concepts/areas-and-projects#to-dos). |
 | **Repeat** | *Doesn't repeat*, **Every day**, **Every weekday** (Monday to Friday), **Every week** or **Every month**. Marked done, the task comes back as a new one at its next date: its start and due date move on by the same number of days (a due date keeps its time), from its own date or, when that has passed, from today; without dates it's planned for the next one. Its sub-tasks come back unticked, and a message says so, such as *WRK-34 comes back as WRK-37 on Mon, 5 Oct*. The done task stops repeating, so marking it done again doesn't add another. |
-| **Done by** | **You**, **Claude Code**, **Codex**, or the project default, each with its icon or the agent's mark. See [Who does a task](/concepts/done-by). |
+| **Done by** | **You** (*No agent session*), **Claude Code**, **Codex**, or the project default, each with its icon or the agent's mark. See [Who does a task](/concepts/done-by). |
 | **Folder** | For a task an agent does, in the desktop app: the folder its sessions work in, the task's own (*own*), the project's (*project's*) or the area's workspace (*area's*). Without any of them it reads *PacedMind's folder for this task*: an empty folder PacedMind makes for it in its data folder (hover over it for where). Click it to choose a folder in the system's folder dialog; **×** goes back to the project's or area's folder. When the project (or, outside projects, the area) has no folder on this computer but PacedMind found a copy of it here, *Found here:* and that folder follow, with **Use**, which makes it the project's folder here (see [Areas and projects](/concepts/areas-and-projects#on-this-computer)). |
 | **Computer** | With more than one computer: the one its sessions go to, marked *project* or *auto* when the task doesn't choose one. **Automatic**, or a computer. |
 | **Run in** | Automatic, a terminal, the agent's desktop app, or its cloud. |
@@ -103,7 +103,7 @@ Once a task has a session, a card under the **Done when** list shows its state:
 
 A question the agent asks with `ask_user` shows under the state line, with a field for your answer and **Send answer**. See [Answer while it works](/agents/lifecycle#answer-while-it-works).
 
-The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. While the session runs, **Plan** follows, with the latest plan the agent sent with `report_progress`: its steps in order, the done ones ticked off, with a count and the time, such as *2 of 5 done · 14:05*. Under the buttons of a session that ended, the card repeats the line about trusting the folder when the next session would start in a folder Claude Code doesn't trust yet. A task handed back partly done or blocked holds its flow until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
+The agent's report follows the state line. A session without a report, such as one in the cloud, shows the agent's note in quotes instead, when it has one. While the session runs, **Plan** follows, with the latest plan the agent sent with `report_progress`: its steps in order, the done ones ticked off, with a count and the time, such as *2 of 5 done · 14:05*. Under the buttons of a session that ended, the card repeats the line about trusting the folder when the next session would start in a folder Claude Code doesn't trust yet. A task handed back partly done or blocked holds the tasks that wait for it until you mark it done: see [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
 ### The agent's report
 
@@ -156,7 +156,7 @@ The card ends with the session's folder and branch name, and these buttons:
 | **Answer its question** or **Answer its questions** | As for **Request changes**, when the agent's latest report has questions for you. | Opens a field for each question, and sends your answers to the agent. See [Answer the agent's questions](#answer-the-agents-questions). |
 | **Mark finished** | A running session outside a terminal. | Marks the session finished and the task **In review**, for sessions that can't report back. |
 | **New session with Claude Code** or **New session with Codex** | The session isn’t running, and the task isn’t done. | Starts a fresh session with the agent in **Done by**. Its arrow also lets you choose an agent and where it runs. |
-| **Mark done** | The agent finished. | Marks the task done after your review. This can start the next sessions of a flow. |
+| **Mark done** | The agent finished. | Marks the task done after your review. |
 | **Close session** | The session is running. | Asks *Close this session in PacedMind? The terminal stays open.*, then marks the session closed and sets an in-progress task back to **Todo**. |
 
 See [Review finished work](/agents/review).
@@ -212,4 +212,4 @@ The **Sub-tasks** section lists the checklist, with a counter such as *2 / 4* an
 
 ## Activity
 
-The bottom of the panel lists what happened to the task, with times: *Created*, what PacedMind heard from the latest session (such as *Started Claude Code in a terminal on DESKTOP-1*, *Claude Code read the task over MCP*, a plan the agent sent as *Plan: 2 of 5 steps done*, *Claude Code is waiting for you in its terminal*, the summary of the agent's report, *You asked for changes:* with the start of what you wrote, and *You answered its questions:* with the start of your answers), and *Marked done*. See [What PacedMind records](/agents/lifecycle#what-pacedmind-records).
+The bottom of the panel lists what happened to the task, with times: *Created*, what PacedMind heard from the latest session (such as *Opened Claude Code in a terminal on DESKTOP-1: you started it here. Waiting for the agent to check in.*, *Claude Code read the task over MCP*, a plan the agent sent as *Plan: 2 of 5 steps done*, *Claude Code is waiting for you in its terminal*, the summary of the agent's report, *You asked for changes:* with the start of what you wrote, and *You answered its questions:* with the start of your answers), and *Marked done*. See [What PacedMind records](/agents/lifecycle#what-pacedmind-records).

@@ -25,23 +25,45 @@ The states read: *starting*, *running*, *finished, waiting for the user's review
 
 ## `start_session`
 
-**Starts an agent on the user's computer or in its cloud. Agents ask the user first.**
+**Starts an agent on one of the user's computers or in its cloud. Agents ask the user first.**
 
-Starts Claude Code or Codex working on a task, in the task's folder, the same way as **Start with Claude Code** in the app: where the task runs, unless `where` says otherwise. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-runs).
+Asks to start Claude Code or Codex working on a task, in the task's folder, the same way as **Start with Claude Code** in the app: where the task runs, unless `where` says otherwise. See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-runs). Nothing starts without the user's say: on this computer they allow it in PacedMind, and another computer does what its own settings say.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
 | `task` | string | yes | The task key. |
 | `agent` | `claude` or `codex` | no | Defaults to the task's agent, else the project's, else Claude Code. |
 | `where` | `terminal`, `desktop` or `cloud` | no | A terminal, the agent's desktop app (the first message is written there, and the user sends it), or the agent's cloud (Claude Code on the web, Codex cloud). |
+| `computer` | string | no | One of the user's computers, by its name or id from [`list_computers`](/mcp/tools/computers#list_computers). |
 
-Returns *Started DEV-22 with Claude Code in a terminal on DESKTOP-1 (session 3f2a9c1b).* For the desktop app, it adds *The first message is written there; the user sends it.*; for the cloud, *Cloud sessions can't report back to PacedMind; the user marks the task finished or done.* Fails when the task already has a running session, when it's the user's own task, when the computer lacks the agent's tool or app, when the folder can't be used, or, for the cloud, without a git repository or, for Codex, without the project's Codex environment.
+Refused when the task is the user's own (*DEV-22 is marked as the user's own task (human), so it never gets an agent session. Ask the user before changing that with update_task.*) or already has a running session (*DEV-22 already has a running session.*).
 
-On PacedMind Cloud's server, `start_session` starts nothing and asks nothing: starting a session needs the user's two-factor code, or a click in the desktop app. It returns a link to the task in the web app:
+### On this computer
+
+On the desktop app's server, the session goes to this computer unless `computer` names another one or the task runs on another computer (its **Computer**, or its project's). The request waits in PacedMind's window: a card, *Start a session on this computer?*, with the task, the agent and where it runs, and the folder, with **Refuse** and **Allow**, and a notification such as *Start DEV-22 with Claude Code · Terminal?*. Nothing starts until the user allows it, within 10 minutes. The tool returns:
 
 ```text
-Starting a session runs an agent on one of the user's computers, so the user starts it themselves: with Start on DEV-22 in the PacedMind desktop app, or at https://app.pacedmind.com/project/…?task=DEV-22 with a two-factor code. Give the user that link; don't ask again.
+Asked the user to allow DEV-22 with Claude Code (terminal): PacedMind shows the request in its window and a notification. It starts once they allow it (within 10 minutes). Tell the user to look at PacedMind; don't ask again.
 ```
+
+For the cloud it adds *Cloud sessions can't report back to PacedMind; the user marks the task finished or done.* A task that can't run on this computer at all is refused: *DEV-22 can't run on this computer.* Once the user allows it, the start can still fail, for example when the computer lacks the agent's tool or app, or the folder can't be used; PacedMind's message says why. See [Start a session](/agents/start-and-manage#start-a-session).
+
+### On another computer
+
+With an account, the request goes to another of the user's computers: the one `computer` names, or the one the task runs on. On PacedMind Cloud's server, every request goes to a computer: the one `computer` names, else the task's, else its project's, else, for a task with **Needs**, one whose agent has them, else the account's default one.
+
+The request is marked as an agent's, and asks for a new session only. An agent never counts as having a two-factor code, so only a computer whose **Two-factor code** setting is off takes it. What that computer's settings do:
+
+| That computer's settings | What happens | The tool returns |
+| --- | --- | --- |
+| **From elsewhere**: **Refuse** | Nothing is sent. | *Studio Mac refuses sessions asked for from elsewhere. The user starts DEV-22 there, or changes that in PacedMind on Studio Mac (Settings → General). Tell the user; don't ask again.* |
+| **Two-factor code** on, the default | Nothing is sent. The answer gives the user a link to the task, where they start it with their code. | *Studio Mac takes sessions from elsewhere only with the user's two-factor code, which you can't give. The user starts DEV-22 there with Start, or at https://app.pacedmind.com/project/…?task=DEV-22 with their code; to let you ask, they switch its Two-factor code off in PacedMind on Studio Mac (Settings → General). Give the user that link; don't ask again.* |
+| **Two-factor code** off, **From elsewhere**: **Ask me** | The request waits for the user in PacedMind on that computer, as the card above and a notification, for 10 minutes. | *Asked Studio Mac: Claude Code on DEV-22 waits for the user to allow it in PacedMind there (up to 10 minutes). Tell the user; don't ask again.* |
+| **Two-factor code** off, **From elsewhere**: **Start** | The computer starts the session as soon as it sees the request, except one in the agent's cloud, which waits for the user there. | *Studio Mac started Claude Code on DEV-22 (session 3f2a9c1b). It reports back here as it works.* |
+
+The tool waits a few seconds for the computer's answer. When the computer hasn't answered yet and would start the session: *Sent to Studio Mac, which starts Claude Code on DEV-22 as soon as it sees the request*, followed by *; it hasn't been online in the last few minutes, and the request waits there for 10 minutes* when it's offline. When the computer refused it or couldn't start it: *Studio Mac didn't start Claude Code on DEV-22:* and the reason.
+
+A task that belongs to one computer goes only there: *DEV-22 runs on DESKTOP-1 only. Ask that one, or the user picks another computer in its details.* A session that a computer starts this way, without asking, says so in its history: *…: an agent's request from elsewhere, as this computer allows*. See [When an agent asks](/agents/start-and-manage#when-an-agent-asks).
 
 ## `close_session`
 
@@ -108,7 +130,7 @@ An agent connected to PacedMind Cloud's server, such as a session in the Claude 
 
 **Read-only. Allowed without asking.**
 
-The next task in a project that is ready to be worked on: the first task in roadmap order that is to do or in the backlog and whose connections leading to it are all satisfied. A connection from a task that an agent handed back partly done or blocked is satisfied only once that task is marked done or handed back again as done, or a newer session of it is marked finished. Returns the same details as [`get_task`](/mcp/tools/tasks#get_task), or *Nothing in … is ready right now.*
+The next task in a project that is ready to be worked on: the first task in roadmap order that is to do or in the backlog and whose [dependencies](/views/timeline#dependencies) are all finished, each task it waits for done or in review. A task that an agent handed back partly done or blocked counts as finished only once it's marked done or handed back again as done, or a newer session of it is marked finished. Returns the same details as [`get_task`](/mcp/tools/tasks#get_task), or *Nothing in … is ready right now.*
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -309,28 +331,22 @@ Answers in `criteria` match the Done when items by number, by their text, or by 
 
 The report goes to the session named in `session`, else the task's running session, else its latest session when that one has already handed the task back. When there's no session to report on, as for an agent that PacedMind didn't start, `finish_task` records one (*Started outside PacedMind*), except for a task that is the user's own.
 
-The session becomes **Finished**, with the summary as its note, which notifications and `list_sessions` show, and the task goes to **In review**. What happens next depends on `outcome`:
+The session becomes **Finished**, with the summary as its note, which notifications and `list_sessions` show, and the task goes to **In review**. Nothing starts by itself. Tasks that wait for this one ([dependencies](/views/timeline#dependencies)) count it as finished when `outcome` is `done`. After `partial` or `blocked`, they wait until the user marks it done, until the agent hands it back again as `done` (for example after `request_changes`), or until a newer session of the task is marked finished. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
 
-* `done`: the flow goes on. Sessions that waited for this task start, and a **Same session** connection continues in this session.
-* `partial` or `blocked`: nothing starts. Tasks connected after this one wait until the user marks it done, until the agent hands it back again as `done` (for example after `request_changes`), or until a newer session of the task is marked finished. A task connected with **Same session** doesn't continue in this session; it starts as a new session when the user marks this task done. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
-
-The result starts with *Recorded your report for DEV-22 (…). It waits for the user's check.* The parentheses count the Done when items met and not answered, the images and the questions, or say *summary only*. When they apply, *Not answered:* follows with the items left without an answer, unless the outcome is `blocked`, and *Left out follow-ups that aren't PacedMind tasks:* with the keys. The result ends:
-
-* for `done`, with one line for each session the flow started, such as *PacedMind started DEV-24 in a new Codex session.*, and then either *Next in this same session: DEV-23 · Session tracking over MCP.* and *Call start_task with task DEV-23 and session 9c0d1e2f, then keep working.*, when a **Same session** connection continues, or *You can stop here.*;
-* for `partial` or `blocked`, with *You handed it back as partial, so the flow waits until the user marks DEV-22 done. You can stop here.*
+The result starts with *Recorded your report for DEV-22 (…). It waits for the user's check.* The parentheses count the Done when items met and not answered, the images and the questions, or say *summary only*. When they apply, *Not answered:* follows with the items left without an answer, unless the outcome is `blocked`, and *Left out follow-ups that aren't PacedMind tasks:* with the keys. For `partial` or `blocked`, the next line says what waits: *You handed it back as partial: tasks that wait for DEV-22 wait until the user marks it done.* The result ends with *You can stop here.*
 
 For example:
 
 ```text
 Recorded your report for DEV-21 (2 of 3 Done when items met · 1 question). It waits for the user's check.
-PacedMind started DEV-24 in a new Codex session.
 You can stop here.
 ```
 
 ```text
 Recorded your report for DEV-22 (1 of 3 Done when items met · 1 not answered). It waits for the user's check.
 Not answered: "A screenshot of the task panel with the running session".
-You handed it back as partial, so the flow waits until the user marks DEV-22 done. You can stop here.
+You handed it back as partial: tasks that wait for DEV-22 wait until the user marks it done.
+You can stop here.
 ```
 
 Refused, with nothing recorded, when:
@@ -339,6 +355,6 @@ Refused, with nothing recorded, when:
 * the task has Done when items, `criteria` is empty and the outcome isn't `blocked`: *DEV-22 lists what "done" means. Answer each item in criteria (verdict met, partly or not_met, with a note), then call finish_task again:*, followed by the numbered items;
 * an `item` number doesn't exist (*DEV-22's Done when has 3 items; there's no item 4.*, or, for a task without Done when items, *DEV-22 has no Done when items. Pass the text of what you checked as item.*);
 * an image can't be used, with the same messages as `attach_image`; with several images, they end with *Nothing was recorded; fix it and call again.*;
-* there's no session to report on and the task is the user's own (*DEV-22 is marked as the user's own task (human), so it stays out of flows and agent sessions. Ask the user before changing that with update_task.*).
+* there's no session to report on and the task is the user's own (*DEV-22 is marked as the user's own task (human), so it never gets an agent session. Ask the user before changing that with update_task.*).
 
-A session that can't call `finish_task`, in the cloud or in a desktop app without PacedMind's MCP server, is marked finished in the app instead, with **Mark finished**. That has the same effect on the session, the task and the flow, but records no report; a **Same session** task after it then starts as a new session.
+A session that can't call `finish_task`, in the cloud or in a desktop app without PacedMind's MCP server, is marked finished in the app instead, with **Mark finished**. That has the same effect on the session and the task, but records no report.

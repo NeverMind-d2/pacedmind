@@ -1,4 +1,4 @@
 {
   "title": "Views",
-  "pages": ["inbox", "today", "upcoming", "calendar", "calendar-week", "timeline", "projects", "roadmap", "flows", "sessions"]
+  "pages": ["inbox", "today", "upcoming", "calendar", "calendar-week", "timeline", "projects", "roadmap", "sessions"]
 }

@@ -13,7 +13,7 @@ Quick add is the dialog for new tasks and activities. It reads the details from 
 * Click a day in the [calendar](/views/calendar) (month or [week](/views/calendar-week#add-a-task-on-a-day)) or on the [timeline](/views/timeline#add-a-task-on-a-day), or the **+** that appears on it.
 * Select **New task** in the command menu (<kbd>Ctrl</kbd>+<kbd>K</kbd>).
 
-**New task** in a list's header, a group's **+** and a click on a day fill in the place: a project list fills in the project, an area list the area, and **Today**, a day in **Upcoming**, and a day clicked in the calendar or on the timeline the planned day. A project's or an area's row on the timeline also fills in that project or area. <kbd>C</kbd>, the pen button and the command menu fill in the project or the area whose page is open, and the project that **Flows** or **Roadmap** shows; on any other page they start empty, so a task created that way goes to the Inbox unless an area, a project or `@project` is chosen.
+**New task** in a list's header, a group's **+** and a click on a day fill in the place: a project list fills in the project, an area list the area, and **Today**, a day in **Upcoming**, and a day clicked in the calendar or on the timeline the planned day. A project's or an area's row on the timeline also fills in that project or area. <kbd>C</kbd>, the pen button and the command menu fill in the project or the area whose page is open, and the project that **Roadmap** shows; on any other page they start empty, so a task created that way goes to the Inbox unless an area, a project or `@project` is chosen.
 
 ## Create a task
 
@@ -58,7 +58,7 @@ A time typed without a date goes on the planned day, when there is one: *15:00* 
 | Project | **No project**, or a project: those in the chosen area, or all of them when no area is chosen. Choosing a project also chooses its area. |
 | Labels | One chip per label typed with `#`. |
 | **Done when** | Shows the **Done when** field under the description, or hides it again while it's empty. Reads *Done when · 2* once the field has two items. |
-| Done by | **You**, **Claude Code**, **Codex**, or the project default (Claude Code when the project has no default). Tasks set to **You** stay out of agent flows. |
+| Done by | **You** (*No agent session*), **Claude Code**, **Codex**, or the project default (Claude Code when the project has no default). Tasks set to **You** never get an agent session. |
 | Run in | For agents: **Automatic**, **Terminal**, the **Claude app** or **Codex app**, or **Claude Code on the web** or **Codex cloud**. The chip shows where sessions will run, marked *auto* when **Automatic** chose it: a terminal when the agent's CLI is installed on the computer, otherwise its desktop app. |
 | Computer | With more than one computer: **Automatic**, or one of them. See below. |
 | **MCP servers** | The MCP servers and connectors the agent needs. See below. |
@@ -83,8 +83,6 @@ The **Model** chip lists the models the agent account on the task's computer rep
 **Refresh list**, at the end of the menu, checks again: on this computer it asks the agent's CLI; for another computer it reads that computer's latest report. The item shows when the list was last checked; desktop apps refresh their reports every five minutes. When the account can't list its models, the menu says to sign in to the agent on that computer.
 
 Choosing a model also selects **Terminal** and saves the computer with the task. Switching agents, models or computers clears dependent choices. PacedMind checks the selected settings again on the destination computer before starting, resuming or sending changes to a terminal session. If a choice is no longer available, the session waits for a new choice. The agent's desktop app and cloud keep their own model controls, so the chips are hidden when the task runs there.
-
-In a flow, a **same session** connection starts a new terminal session when the next task has explicit model settings, so those settings can be checked and applied. Leave **Default** to continue in the existing conversation.
 
 ## Done when
 

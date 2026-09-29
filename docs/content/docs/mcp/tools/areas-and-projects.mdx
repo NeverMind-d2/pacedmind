@@ -58,7 +58,7 @@ Returns what happened, such as *Deleted area Learning. Deleted its projects: Spa
 
 **Read-only. Allowed without asking.**
 
-Lists the projects with their area, progress, target date, color, agent, folder, flow and the project they start after.
+Lists the projects with their area, progress, target date, color, agent, folder and the project they start after.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -93,7 +93,6 @@ Adds a project to an area.
 | `folder` | string | no | The absolute path of the folder agent sessions work in. It must exist. |
 | `agent` | `claude` or `codex` | no | The default agent for the project's tasks. |
 | `starts_after` | string | no | Another project that must be finished first. |
-| `flow_on` | boolean | no | Lets the project's flow start agent sessions on its own. |
 
 Errors include *Can't use the folder …* with the reason, such as *That folder doesn't exist.*
 
@@ -113,7 +112,6 @@ Changes a project. Parameters left out keep their value; `null` clears a field.
 | `target_date` | date or `null` | no | The target date. |
 | `folder` | string or `null` | no | The absolute folder path for agent sessions. |
 | `agent` | `claude`, `codex` or `null` | no | The default agent. |
-| `flow_on` | boolean | no | Switches the flow on or off. Switching it on starts the sessions of the tasks that are ready now, and the result lists them (*Started a session for DEV-24.*). |
 | `starts_after` | string or `null` | no | A project that must be finished first, or `null` for none. |
 
 A project can't start after itself or after a project that waits for it: *… can't start after …: they would wait for each other.*

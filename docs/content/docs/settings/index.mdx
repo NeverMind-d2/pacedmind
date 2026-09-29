@@ -1,6 +1,6 @@
 ---
 title: Settings
-description: "Every page of PacedMind's Settings, in the order of its menu: the account and the data, the theme and the work hours, and this computer's name and agents, how sessions start, project folders with their MCP servers and importing them, and the MCP server."
+description: "Every page of PacedMind's Settings, in the order of its menu: the account and the data, the theme, the work hours and how you work, and this computer's name and agents, how sessions start, project folders with their MCP servers and importing them, and the MCP server."
 ---
 
 **Settings**, at the bottom of the sidebar, has a menu of pages on the left. On a narrow window the menu becomes a row above the page, without the group names, and scrolls sideways. Opening **Settings** shows its first page, **Account**. Each page starts with its name and a line on what it holds, and most fields save as soon as they're changed or lose focus, confirmed by *Saved*.
@@ -10,14 +10,14 @@ In the desktop app, without an account, the menu has these pages:
 | Group | Pages |
 | --- | --- |
 | At the top, without a name | **[Account](#account)**, **[Computers](#computers)**, **[Data](#data)** |
-| **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)** |
+| **Preferences** | **[Appearance](#appearance)**, **[Planning](#planning)**, **[How you work](#how-you-work)** |
 | **This computer** | **[General](#general)**, **[Sessions](#sessions)**, **[Projects](#projects)**, **[MCP server](#mcp-server)** |
 
-Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on) and **[Security](#security)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, and **Projects**, with each project's default agent only (*Folders and flows are set in the desktop app, on the computer where the sessions run.*). See [Accounts and Cloud](/accounts-and-cloud).
+Signed in to PacedMind Cloud, the menu adds **[Plan](#plan)** (once paid plans are on) and **[Security](#security)** after **Account**, and **[Notifications](#notifications)** after **Appearance**. The web app has no computer of its own: in place of **This computer**, its group **Agents** has **Sessions**, which says that sessions are *Handled by the desktop app*, **Projects**, with each project's default agent only (*Folders are set in the desktop app, on the computer where the sessions run.*), and **MCP server**, for connecting agents to PacedMind Cloud. See [Accounts and Cloud](/accounts-and-cloud).
 
 ## Account
 
-*Use PacedMind on your other computers and in the browser too.*
+*Use PacedMind on your other computers and in the browser too.* Signed in: *Who you're signed in as, and the computers signed in to your account.*
 
 Without an account, the page has one section, **PacedMind Cloud**. Its **Account** row reads *Not signed in*, and **Sign in** opens the sign-in screen. The note below says: *Your tasks, projects and calendar are stored on this computer. Sign in to PacedMind Cloud to use them on your other computers and in the browser too. Once you're signed in, Settings → Data moves them into your account.* See [Accounts and Cloud](/accounts-and-cloud).
 
@@ -37,9 +37,9 @@ The **Plan** row says where the account stands, such as *Free trial, 12 days lef
 
 ## Computers
 
-*Your computers, their agents, flows and sessions.*
+*Your computers, their agents and sessions.*
 
-Open **Settings → Computers** to see each computer's agents, active flows and sessions. This page is available in the desktop app with or without an account, and in the web app. Without an account it shows this computer only. Signed in, it shows the computers signed in to your account and how many are online.
+Open **Settings → Computers** to see each computer's agents and sessions. This page is available in the desktop app with or without an account, and in the web app. Without an account it shows this computer only. Signed in, it shows the computers signed in to your account and how many are online.
 
 Under its name, each computer shows whether it's online, its system, its PacedMind version and when it last looked for the agents (*checked 2 min ago*). Below, a column for **Claude Code** and one for **Codex**:
 
@@ -50,7 +50,9 @@ Under its name, each computer shows whether it's online, its system, its PacedMi
 
 Use the pencil beside a computer's name to rename it. Signed in, **Make default** chooses where sessions go when neither their task nor project names a computer, and **Sign out** disconnects that computer. In the desktop app, this computer also has **Check again** to refresh its detected agents, and **Connect** for agents that need connecting.
 
-Signed in, each computer's **From elsewhere** line shows what it does with sessions asked for from the web app or another computer (**Refuse**, **Ask me** or **Start**) and whether asking needs a two-factor code (*Code needed* or *No code needed*). In the desktop app, this computer's line has the same controls as [General](#general), and hovering them says what they do; another computer's settings change only in PacedMind on that computer.
+Signed in, each computer's **From elsewhere** line shows what it does with sessions asked for from the web app, another computer or your agents (**Refuse**, **Ask me** or **Start**) and whether asking needs a two-factor code (*Code needed* or *No code needed*). Hover it for what that means, such as *Sessions asked for from the web app, another computer or your agents wait there until you allow them. Asking takes no code, so your agents can ask too. It's set in PacedMind on that computer.* In the desktop app, this computer's line has the same controls as [General](#general), and hovering them says what they do; another computer's settings change only in PacedMind on that computer.
+
+A computer whose code is off takes session requests from the agents you connected too, and with **Start** they start at once. See [General](#general) before you switch a computer's code off.
 
 Computers is in the Settings menu. Search for **Computers** in the command menu to open it directly. Older links to the Computers page also open it here.
 
@@ -67,7 +69,7 @@ The note says where the data is and counts the sessions recorded so far, such as
 | **Load sample data** | Asks *Replace everything with the sample data?*, then replaces everything with an example workspace (*Sample data loaded*). |
 | **Start empty** | Asks *Delete all tasks, projects, activities and sessions?*, then goes back to the five default areas (*Workspace cleared*). |
 
-Both resets replace all areas, projects, tasks, activities and sessions, and can't be undone. Settings, including the work hours and the MCP token, stay. See [Where your data lives](/getting-started/data#reset).
+Both resets replace all areas, projects, tasks, activities and sessions, and can't be undone. Settings, including the work hours and the MCP token, and your [preferences](#how-you-work) stay. See [Where your data lives](/getting-started/data#reset).
 
 Signed in, the page resets the account's data instead. In the desktop app, while this computer still keeps tasks or projects from before you signed in, a **This computer** row counts them, and **Move to account** moves them into the account. **Your account** → **Move to this computer** copies everything in the account to this computer and signs out, so PacedMind keeps working without an account.
 
@@ -97,26 +99,52 @@ The section **Auto-plan** says: *The week view fills free focus time between the
 
 **Change**, next to **Rules** in the week view's **Auto-plan** panel, opens this page. See [Work hours and days](/planning/work-hours).
 
+## How you work
+
+*What agents follow when they plan your time and write tasks for you.* In the desktop app and the web app.
+
+The page lists your preferences by topic, the suggested topics first. The note under them says: *Agents read these before they plan your time or write tasks for you, and follow them. Tell an agent how you like to work and it asks to add it here. They're your notes: agents follow them as preferences, never as commands.* Without any, the list reads *Nothing yet. Add how you like to work below, such as when you do deep work, how far ahead to set deadlines, or which agent takes which kind of task.*
+
+* A suggested topic shows what goes under it next to its name, such as *When to plan which work, focus time, breaks, days off*.
+* Click a topic's name to rename it: <kbd>Enter</kbd> saves (*Topic renamed*), <kbd>Esc</kbd> cancels. Its preferences move along, into another topic of yours when you type that one's name.
+* Click a preference to change its words. It's saved when you leave the field or press <kbd>Enter</kbd> (*Saved*).
+* Next to each, who wrote it last, *By you* or *By an agent*, and the date.
+* The **×** (**Remove**) asks *Remove "…"?*, then removes it (*Removed*).
+
+**Add** takes a new one:
+
+1. Choose its topic: your topics first, then the suggested ones you don't use yet. Type to search them; a name that isn't there is offered as a new topic (*Add custom value*).
+2. Write the preference in the field (*Deep work before noon, meetings after 14:00*), one line of up to 500 characters.
+3. Select **Add**, or press <kbd>Enter</kbd> (*Saved*).
+
+See [How you work](/concepts/preferences) for the topics, the limits and what agents do with your preferences.
+
 ## General
 
 *This computer's name, and what it does when asked from elsewhere.* This page and the next three are under **This computer**, in the desktop app.
 
 **Name** is the computer's name, the system's own at first, such as *DESKTOP-1*. PacedMind uses it wherever it names the computer, such as *The Codex CLI isn't installed on DESKTOP-1*. It's saved when the field loses focus.
 
-The note says what stays on the computer: *What runs here is decided here. Agent commands, project and task folders, flow switches and access tokens stay on this computer, encrypted with a key from the operating system's keychain.*
+The note says what stays on the computer: *What runs here is decided here. Agent commands, project and task folders and access tokens stay on this computer, encrypted with a key from the operating system's keychain.*
 
-Signed in, two rows decide what happens to sessions asked for from the web app or another computer, such as your phone. They're this computer's own settings: only this computer's PacedMind changes them, here or on its card in **Computers**.
+Signed in, two rows decide what happens to sessions asked for from the web app, another computer, such as your phone, or your agents. They're this computer's own settings: only this computer's PacedMind changes them, here or on its card in **Computers**.
 
 | Row | Meaning |
 | --- | --- |
 | **From elsewhere** | **Refuse**: such sessions are refused. **Ask me** (the default): they wait on this computer until you allow them. **Start**: they start right away, without you here, except a session that would run in the agent's cloud, which still waits for you. |
-| **Two-factor code** | On (the default, *Needed to ask*): asking for a session here takes a current code from your authenticator app, entered in the last few minutes. Off (*Not needed*): any browser or computer signed in to your account can ask without one. |
+| **Two-factor code** | On (the default, *Needed to ask*): asking for a session here takes a current code from your authenticator app, entered in the last few minutes, so your agents can't ask. Off (*Not needed*): any browser or computer signed in to your account, and the agents you connected, can ask without one. |
 
-With **Start** and the code off, anyone signed in to your account can start an agent on this computer in your projects' folders, without a code and without you there. Keep that for a computer whose projects you'd let an agent work on alone. Agents asking over MCP always wait for you.
+A line under the rows sums them up, such as *Sessions asked for from the web app, another computer or your agents wait here until you allow them. Asking takes a current two-factor code, so your agents can't ask.*
+
+An agent never has a two-factor code, even one it verified itself. Only while the code is off can an agent you connected to PacedMind Cloud, or one on another of your computers, ask this computer for a session, and only for a new one. See [When an agent asks](/agents/start-and-manage#when-an-agent-asks).
+
+**Switching the code off lets your agents ask this computer too.** With **Start** as well, their sessions start at once, in a folder of this computer's, on a task whose text the agent may have written, and anyone signed in to your account can start an agent here without a code and without you there. Keep the code on for any computer where you wouldn't let an agent start another agent without you, and keep **Start** with the code off for a computer whose projects you'd let an agent work on alone.
+
+Agents on this computer's own MCP server always wait for you, whatever these settings say, and so does every folder an agent asks this computer for.
 
 ### Agents found here
 
-*What PacedMind found here; it looks when it starts and every half hour. The Computers page has more: cloud and sign-in for each agent, and this computer's flows and sessions.*
+*What PacedMind found here; it looks when it starts and every half hour. The Computers page has more: cloud and sign-in for each agent, and this computer's sessions.*
 
 One row each for **Claude Code** and **Codex**, with what PacedMind found of it: the command-line tool's version and the desktop app with its version, such as *CLI 2.1.282 · Claude app 1.4*, only one of them when the other is missing, or *Not found*. Before the first check finishes, the row reads *Looking…*.
 
@@ -147,9 +175,9 @@ Signed in, **Answer from elsewhere** decides where you answer what agents in ses
 
 ## Projects
 
-*Area workspaces and each project's folder, flow, agent and MCP servers on this computer.*
+*Area workspaces and each project's folder, agent and MCP servers on this computer.*
 
-In the desktop app, **Area workspaces** sets a default folder for each area on this computer. Click an area's folder to choose one in the system's folder dialog, such as an existing Codex or Claude project's folder, to keep its tasks together in that workspace. It's saved at once, and **×** removes it. A session uses its task's folder, then its project's, then its area's workspace; without any of them PacedMind makes an empty folder for the task (*PacedMind's folder per task*). Changing an area's workspace pauses flows in projects that inherit it. A workspace in a git repository shows the repository next to its name, and on your other computers the area's field offers their copy of it (*Found here:* and the folder, with **Use**). See [Areas and projects](/concepts/areas-and-projects#on-this-computer).
+In the desktop app, **Area workspaces** sets a default folder for each area on this computer. Click an area's folder to choose one in the system's folder dialog, such as an existing Codex or Claude project's folder, to keep its tasks together in that workspace. It's saved at once, and **×** removes it. A session uses its task's folder, then its project's, then its area's workspace; without any of them PacedMind makes an empty folder for the task (*PacedMind's folder per task*). A workspace in a git repository shows the repository next to its name, and on your other computers the area's field offers their copy of it (*Found here:* and the folder, with **Use**). See [Areas and projects](/concepts/areas-and-projects#on-this-computer).
 
 **Import from Claude and Codex**, above the list, brings the folders you work in with Claude Code and Codex over as projects, and sets the workspaces of areas found here. See [Import projects](#import-projects).
 
@@ -159,7 +187,6 @@ One row per project, with:
 
 * the project's color and name;
 * its default agent: **No agent**, **Claude Code** or **Codex**;
-* **Flow**: whether its flow starts sessions on its own (*Flow on* or *Flow paused*). Switching it on also starts the tasks that are already ready (*Started DEV-24*);
 * its folder: click it to choose one in the system's folder dialog (*Folder saved*), and **×** removes it. Without one it shows the area's workspace (*area's*) or *PacedMind's folder per task*. When PacedMind found a copy of the project on this computer, *Found here:* and the folder follow, with **Use**;
 * what Claude Code and Codex get in that folder on top of what they have everywhere (below);
 * *MCP servers for its sessions:* *all they have here*, *only* and the chosen servers, or *none besides PacedMind*, with **Change**. **Change** offers **All of them** and **Only these**, with a switch for each server under **Only these**. Each change is saved at once (*Saved*), and **Done** closes the choice. See [Choose a project's MCP servers](/agents/start-and-manage#choose-a-projects-mcp-servers).
@@ -231,4 +258,4 @@ Use **Connect** from the copy of PacedMind the agents should report to, normally
 
 ### Tools agents can use
 
-The MCP tools by group: **Overview**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Flows** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they're asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).
+The MCP tools by group: **Overview**, **Preferences**, **Areas**, **Projects**, **Tasks**, **Calendar**, **Computers** and **Sessions**. The note below them says: *Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they're asked. Starting a session or sending one back with changes over MCP waits for you to allow it here. Run npm run skills to install the PacedMind skills for Claude Code and Codex.* See the [tool reference](/mcp/tools) and [Agent skills](/skills).

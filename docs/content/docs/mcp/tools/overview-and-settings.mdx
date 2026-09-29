@@ -7,15 +7,16 @@ description: "Reference for get_overview, get_settings and update_settings: the 
 
 **Read-only. Allowed without asking.**
 
-The starting point: today's date and time, the areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running. Agents call it first to learn the ids and the current date.
+The starting point: today's date and time, the user's preferences, the areas and projects with their ids, the Inbox count, what's overdue, due or planned today, today's calendar, and agent sessions waiting for review or running. Agents call it first to learn the ids, the current date and how the user likes to work.
 
 No parameters.
 
 Returns sections:
 
 * `Now:` the weekday, date, time and ISO week, such as *Now: Thursday 2026-09-24 14:05, week 39*;
+* the user's preferences, by topic, under *The user's preferences, for planning and creating tasks (with ids in get_preferences):*. When they'd take more than about 3,000 characters, only their number: *The user's preferences: 42 preferences. Read them with get_preferences before you plan, set dates or create tasks.* Without any: *The user's preferences: none saved yet. When they tell you how they like to work, offer to save it (update_preferences).* See [Preferences](/mcp/tools/preferences);
 * **Areas**: name, id, key, color, open tasks and projects;
-* **Projects**: name, id, area, open and total tasks, percentage done, target date, color, agent, folder, whether the flow is on, and which project it starts after;
+* **Projects**: name, id, area, open and total tasks, percentage done, target date, color, agent, folder, and which project it starts after;
 * **Inbox**: the number of open tasks without an area;
 * **Overdue**, **Due today** and **Planned for today**: one line per task;
 * **Calendar today**: the day's activities with their event ids;

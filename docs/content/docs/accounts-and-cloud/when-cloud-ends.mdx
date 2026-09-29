@@ -27,7 +27,6 @@ Everything in the account can still be read and deleted, on every computer and i
 | **Load sample data**, **Start empty** and **Move to account** in **Settings → Data** | Refused |
 | Agents connected over MCP | Reading works. Adding or changing anything, such as a session's report, gets the same message. |
 | Starting a session | Refused, on this computer and on your other computers: they can't be asked to start one. |
-| Flows | Start no sessions. |
 | Your computers | Still show as signed in. |
 | **Move to this computer** | Works. See [below](#move-to-this-computer). |
 | Deleting the account | Works. See [below](#delete-the-account). |
@@ -42,12 +41,12 @@ The account's data can move to one computer and stay there without an account, o
 
 1. In the desktop app on the computer that should keep the data, open **Settings → Data**. The **Move to this computer** button on the banner goes there too.
 2. In the **Your account** row, *Keep it on this computer, without an account*, select **Move to this computer**.
-3. Confirm the question *Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there, and flows are off until you switch them on. Your account keeps its data until you delete it.*
+3. Confirm the question *Copy everything in your account to this computer and sign out? It replaces what this computer keeps without an account (a copy of that stays next to it). Images agents saved on your other computers stay there. Your account keeps its data until you delete it.*
 
 PacedMind then copies the data, signs this computer out, and opens **Today** with the data as this computer's own.
 
-* Tasks keep their keys, such as WRK-12. Sessions and their reports come along, with the images agents attached on this computer.
-* The project and task folders set on this computer stay with their projects and tasks. The flows are off until each project's **Flow on** is switched on again. See [Flows](/agents/flows#when-the-flow-starts-a-session).
+* Tasks keep their keys, such as WRK-12. Sessions and their reports come along, with the images agents attached on this computer, and so do your [preferences](/concepts/preferences).
+* The project and task folders set on this computer stay with their projects and tasks.
 * What this computer kept without an account before is replaced. When it had projects or tasks, a copy of its database stays in the data folder as `organizer-before-move-<time>.db`. See [Where your data lives](/getting-started/data).
 * The account keeps its data until it's deleted, and your other computers stay signed in to it.
 

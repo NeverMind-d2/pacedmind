@@ -1,6 +1,6 @@
 ---
 title: Start, resume and close sessions
-description: Where agent sessions start from, which agent runs them and where, in a terminal, a desktop app or the cloud, which folder they use, what agents may do without asking, which other MCP servers they get, and how to resume, finish or close a session.
+description: Where agent sessions start from, what happens when an agent asks for one, which agent runs them and where, in a terminal, a desktop app or the cloud, which folder they use, what agents may do without asking, which other MCP servers they get, and how to resume, finish or close a session.
 ---
 
 ## Start a session
@@ -11,10 +11,10 @@ A session can start from several places:
 | --- | --- |
 | A task's details | **Start with Claude Code** (or **Codex**, the task's agent) under **Session**, where the task runs. The arrow next to it (**Choose agent and where it runs**) offers each agent in each place: **Claude Code in a terminal**, **Claude Code in the Claude app**, **Claude Code on the web**, **Codex in a terminal**, **Codex in the Codex app** and **Codex cloud**. |
 | **Sessions** | **Start session** in the header, then a task. |
-| **Sessions**, a finished session | **Start session** next to *Next in* the project, for the next task in the flow. |
-| **Flows** | Select a session and choose **Start in terminal**, **Open in Claude app** (or **Open in Codex app**) or **Send to the cloud**, as its **Runs in** says. |
-| A flow | Automatically, when the task's turn comes and the flow is on. See [Automate with flows](/agents/flows). |
-| An agent | With the MCP tool `start_session`, when you ask it to. Agents ask first, because it starts an agent on your computer or in its cloud. |
+| **Sessions**, a session's details | **Start session** next to *Waits for it:*, for a task that waits for the session's task. |
+| An agent | With the MCP tool `start_session`, when you ask it to. See [When an agent asks](#when-an-agent-asks). |
+
+Nothing starts a session by itself: [dependencies](/views/timeline#dependencies) between tasks only order the work.
 
 A message confirms the start, such as *Started DEV-22 in a new terminal*, *Opened DEV-22 in the Claude app. Press Enter or select Send there to start.*, *Sending DEV-22 to Claude Code on the web. The terminal shows its link.* or *Sending DEV-24 to Codex cloud*. A session can't start when:
 
@@ -25,13 +25,22 @@ A message confirms the start, such as *Started DEV-22 in a new terminal*, *Opene
 * for the cloud, the folder isn't in a git repository (*Claude Code on the web works on a git repository, and C:\code\notes isn't in one. Give DEV-22 or its project a repository folder.*);
 * for Codex cloud, the project has no Codex environment yet (*Pick the Codex cloud environment Organizer app runs in first: its label from chatgpt.com/codex/settings/environments.*).
 
+### When an agent asks
+
+An agent you talk to asks for a session with `start_session` when you ask it to. Where the session would run decides what happens:
+
+* **On this computer**, the request waits in PacedMind's window: a card, *Start a session on this computer?*, with the task, the agent and where it runs, the folder, and who asked (*Asked by an agent over MCP*), with **Refuse** and **Allow**, and a notification such as *Start DEV-22 with Claude Code · Terminal?*. Nothing starts until you allow it, within 10 minutes.
+* **On another of your computers**, with an account: when the agent names that computer, or the task runs there, or the agent is connected to PacedMind Cloud. The request is marked as an agent's and asks for a new session only. An agent never counts as having a two-factor code, so only a computer whose **Two-factor code** is off takes it. That computer's **From elsewhere** setting then decides, as for any request without a code: **Refuse**, **Ask me** (the same card there, *Asked by an agent, from elsewhere*) or **Start**, at once. Where the code is on, the agent gets a link to the task instead, where you start it with **Start** and your code. A session started at once says so in its history: *…: an agent's request from elsewhere, as this computer allows*.
+
+Switching a computer's two-factor code off lets the agents you connected ask it for sessions, and with **Start** they start at once, in a folder of that computer's, on a task whose text the agent may have written. Keep the code on for any computer where you wouldn't let an agent start another agent without you. See [General](/settings#general).
+
 ## Which agent runs
 
 Unless an agent is chosen at the start, a session runs with the task's own agent (its **Done by**), else the project's default agent, else Claude Code. Starting a session also sets the task's **Done by** to the agent that ran it.
 
 ## Where a session runs
 
-A session runs in one of three places, chosen per task under **Runs in** in the [flow editor](/views/flows#the-session-panel), or by an agent with `update_task`:
+A session runs in one of three places, chosen per task with **Run in**, in its [details](/tasks/task-details#fields) or in [quick add](/tasks/quick-add#the-chips), with the arrow next to **Start with Claude Code**, or by an agent with `update_task`:
 
 | Place | What PacedMind does | How the session reports back |
 | --- | --- | --- |
@@ -45,9 +54,9 @@ A cloud session works on a copy of a repository. Claude Code on the web uses the
 
 ## Complete startup
 
-A new terminal session stays **Starting** until its agent checks in with PacedMind. Both Claude Code and Codex can first need sign-in, folder trust, hook review or another choice. Answer those prompts in the existing terminal. If the agent has not checked in after about 90 seconds, PacedMind shows **Check agent startup** in the task, **Sessions** and **Flows**, and sends a notification. If setup is complete, ask the agent to call PacedMind's `start_task`.
+A new terminal session stays **Starting** until its agent checks in with PacedMind. Both Claude Code and Codex can first need sign-in, folder trust, hook review or another choice. Answer those prompts in the existing terminal. If the agent has not checked in after about 90 seconds, PacedMind shows **Check agent startup** in the task and in **Sessions**, and sends a notification. If setup is complete, ask the agent to call PacedMind's `start_task`.
 
-A session opened in the **Claude app** or **Codex app** immediately shows **Send the first message** and sends a notification. Open that app, complete any setup prompts and send the prepared message by pressing Enter or selecting Send. The launch link fills in the message; it does not submit it. For a first message submitted automatically, choose **Terminal** under **Runs in**. Terminal setup prompts can still need an answer.
+A session opened in the **Claude app** or **Codex app** immediately shows **Send the first message** and sends a notification. Open that app, complete any setup prompts and send the prepared message by pressing Enter or selecting Send. The launch link fills in the message; it does not submit it. For a first message submitted automatically, set the task's **Run in** to a terminal. Terminal setup prompts can still need an answer.
 
 If the agent stops because its model is unavailable, PacedMind shows **Paused: model at capacity**, separately from **Paused: usage limit**. In the existing terminal, use `/model` to choose another available model and retry, or wait and retry later. PacedMind does not change the model automatically. Other failures show **Paused: agent error** with directions to check the terminal. A successful retry clears the notice when the agent starts another turn or uses a tool.
 
@@ -57,9 +66,11 @@ PacedMind reads Codex's local failed-turn records even when its hooks have not b
 
 ## Where a session works
 
-A session uses the first folder set in this order: the task's **own folder**, its **project's folder**, then its **area's workspace**. Set the task's **Folder** in its details or the flow editor, the project's folder in **Settings → Projects** or the **Roadmap** panel, and the area's workspace from **… → Workspace…** on the area or **Settings → Projects → Area workspaces**. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
+A session uses the first folder set in this order: the task's **own folder**, its **project's folder**, then its **area's workspace**. Set the task's **Folder** in its details, the project's folder in **Settings → Projects** or the **Roadmap** panel, and the area's workspace from **… → Workspace…** on the area or **Settings → Projects → Area workspaces**. A task's own folder suits work that shouldn't share the project's checkout, such as a second copy of the repository.
 
-To keep an area's Codex sessions in an existing Codex project, choose that project's folder as the area's workspace; it's saved at once. Tasks and projects without their own folder inherit it, so they share one workspace. This is saved only on this computer. Changing it pauses flows in projects that inherit it; switch those flows on again after checking the folder.
+To keep an area's Codex sessions in an existing Codex project, choose that project's folder as the area's workspace; it's saved at once. Tasks and projects without their own folder inherit it, so they share one workspace. This is saved only on this computer.
+
+An agent can ask for a folder too, with `set_folder`, when you tell it where a project, an area's workspace or a task's own folder is on one of your computers. The request only suggests the folder. The computer checks that it's there, then shows a card, *Use a folder on this computer?*, with what gets it, the folder and who asked, and a notification such as *Use a folder for Organizer app?*. **Use it** sets the folder, as choosing it here would (*Organizer app uses C:\code\app here now*); **Refuse** drops it. A request from an agent on this computer waits 30 minutes; one from elsewhere, up to a day for that computer. Read the path before you allow it: sessions for that project, area or task start there. See [set_folder](/mcp/tools/computers#set_folder).
 
 The folder must be an absolute path to an existing folder, without the characters `"` `%` `!` `^` `&` `|` `<` `>` `` ` `` `$`. Otherwise the start is refused, before any session is recorded, with a message such as:
 
@@ -71,7 +82,7 @@ The folder must be an absolute path to an existing folder, without the character
 
 For a task's own folder, the message ends with *Change it in the task's details.* instead.
 
-A task without a task folder, project folder or area workspace gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The task's details show it as *PacedMind's folder for this task*, and the **Flows** panel as *PacedMind's folder*. A configured folder that no longer exists is reported as an error; the session does not silently switch to a scratch folder.
+A task without a task folder, project folder or area workspace gets a scratch folder of its own: `%APPDATA%\Organizer\data\workspaces\<task key>`, such as `…\workspaces\wrk-12`, or on macOS `~/Library/Application Support/Organizer/data/workspaces/<task key>`. The task's details show it as *PacedMind's folder for this task*. A configured folder that no longer exists is reported as an error; the session does not silently switch to a scratch folder.
 
 ### Trusting the folder
 
@@ -122,13 +133,17 @@ When a project limits the MCP servers its sessions get on this computer, Claude 
 
 ## What agents may do without asking
 
-Claude Code sessions started by PacedMind in a terminal may use these MCP tools without asking you first:
+Sessions PacedMind starts in a terminal reach PacedMind with a token of their own, which works only for their task, only while they run, and only for these 20 MCP tools:
 
-* reading: `get_overview`, `list_areas`, `list_projects`, `get_project`, `list_tasks`, `get_task`, `list_events`, `get_agenda`, `get_flow`, `list_sessions`, `get_settings`, `get_next_task`;
+* reading: `get_overview`, `list_areas`, `list_projects`, `get_project`, `list_tasks`, `get_task`, `list_events`, `get_agenda`, `list_sessions`, `list_computers`, `get_settings`, `get_preferences`, `get_next_task`;
 * the session protocol: `start_task`, `attach_image`, `report_progress`, `ask_user`, `finish_task`;
-* adding and updating tasks: `create_task`, `update_task`.
+* adding tasks and updating its own: `create_task`, for open tasks (to do or in the backlog), and `update_task`, for the session's own task, without its status, agent, project, area, where it runs, folder or needs.
 
-Everything else, such as deleting, moving calendar events, changing projects, starting other sessions or sending work back with `request_changes`, asks for your approval in the agent's terminal first. For Claude Code in a terminal, PacedMind passes this list at start; Codex, and the sessions in the desktop apps, follow their own approval settings.
+Claude Code runs them without asking you first: PacedMind passes this list when it starts it. Codex follows its own approval settings.
+
+The token doesn't list any other tool, and the others refuse it: *Sessions that PacedMind started can't use delete_task. Ask the user to do it in PacedMind.* So such a session can't delete anything, move calendar events, change projects, settings or preferences, ask for folders, start other sessions or send work back with `request_changes`, whatever it's asked. You do those in PacedMind, or with an agent you connected yourself.
+
+Sessions in the Claude app or the Codex app use your own connection to PacedMind (see [Connect your agents](/settings#connect-your-agents)), with every tool, and follow the apps' own approval settings.
 
 ## Other MCP servers, plugins and skills
 
@@ -169,7 +184,6 @@ Your computers can differ in what their agents have: each has its own MCP server
 PacedMind matches the needs against what each computer said its agent has: its MCP servers for all projects and, on this computer, in the task's folder, the claude.ai connectors its sessions got, and its plugins. Names match regardless of case, spaces and dashes, so `google-drive` matches *Google Drive*.
 
 * **Start** on a computer whose agent lacks something the task needs still starts the session, and the message says what's missing, such as *Started DEV-44 in a new terminal. Claude Code doesn't have Gmail here, which DEV-44 needs.* When your data is in PacedMind Cloud and another of your computers has it all, **Start** opens **Run on a computer** with that computer picked instead, and **Start here anyway** to start on this one after all.
-* **A flow** doesn't start such a task on its own: it asks you in the app, like a start it can't make alone, with *It needs Gmail, which the agent doesn't have on this computer.* **Allow** starts it here; **Refuse** leaves it for you to send elsewhere. See [When the flow starts a session](/agents/flows#when-the-flow-starts-a-session).
 * **Run on a computer** shows, under each computer, *Has Gmail* or *Doesn't have Gmail*, and picks one that has everything the task needs, online first.
 * **A request that expired** because its computer didn't answer offers **Try another computer**, which opens **Run on a computer** without that computer picked.
 
@@ -199,7 +213,7 @@ Sessions elsewhere have their own buttons:
 
 ## Mark a session finished
 
-A session in the cloud, or in a desktop app that isn't connected to PacedMind, can't hand its task back. **Mark finished**, in the task's details, in **Sessions** and in the flow editor, does it for the session: the session becomes **Finished** (*You marked it finished*), without a report, the task goes to **In review**, and the flow starts what waited for it. Review the work, then **Mark done** as for any session.
+A session in the cloud, or in a desktop app that isn't connected to PacedMind, can't hand its task back. **Mark finished**, in the task's details and in **Sessions**, does it for the session: the session becomes **Finished** (*You marked it finished*), without a report, and the task goes to **In review**. Review the work, then **Mark done** as for any session.
 
 ## Close a session
 
@@ -213,4 +227,4 @@ After a session finishes, closes or fails, **New session with Claude Code** (or 
 
 ## One running session per task
 
-A task has at most one running session. The flow doesn't start a session for a task that has one, and starting another by hand says *DEV-22 already has a running session*.
+A task has at most one running session: starting another says *DEV-22 already has a running session*.

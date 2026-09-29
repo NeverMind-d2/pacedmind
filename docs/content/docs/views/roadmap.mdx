@@ -3,7 +3,7 @@ title: Roadmap
 description: The roadmap shows when each project runs and in which order a project's tasks come, and holds the project's session settings.
 ---
 
-The **Roadmap** answers two questions: when do the projects run, and in which order does one project's work happen. **Roadmap** and **Flow**, at the top left, switch between this view and the same project's [flow](/views/flows).
+The **Roadmap** answers two questions: when do the projects run, and in which order does one project's work happen.
 
 <img src="/docs/screenshots/roadmap.png" alt="The Roadmap with the project timeline, the task order and the session settings" width="1920" height="1200" loading="lazy" />
 
@@ -13,7 +13,7 @@ The **Roadmap** answers two questions: when do the projects run, and in which or
 * *2 finished sessions waiting for you*, when agents have finished work to review. Select it to open **Sessions**.
 * The project picker, at the right, which switches the selected project.
 
-The roadmap opens on the project from its link (**Open roadmap** in a project's menu, or **Roadmap** on a project page), else on the first project with tasks in a flow, else on the first project.
+The roadmap opens on the project from its link (**Open roadmap** in a project's menu, or **Roadmap** on a project page), else on the first project with open tasks, else on the first project.
 
 ## Project timeline
 
@@ -34,11 +34,11 @@ The lower left part, **Task order**, lists the selected project's tasks (cancele
 
 Each row shows the position, the status, the key and the title, then:
 
-* where the task stands in the flow: *After DEV-19, DEV-21*, *Start of flow*, or *Done by you* for tasks that are yours;
-* what the task is doing or waiting for, such as *Running in Claude Code*, *Finished 12:22, waiting for you* (with a navy dot), *Partly done 12:22, waiting for you*, *Blocked 12:22, needs you*, *When you mark DEV-21 done*, *Starts Tue 09:00*, *Waits for DEV-22* or *Planned for today*;
+* the tasks it waits for ([dependencies](/views/timeline#dependencies)), such as *After DEV-19, DEV-21*, or *Done by you* for a task that is yours and waits for none;
+* what the task is doing or waiting for, such as *Running in Claude Code*, *Finished 12:22, waiting for you* (with a navy dot), *Partly done 12:22, waiting for you*, *Blocked 12:22, needs you*, *When you mark DEV-21 done*, *Waits for DEV-22*, *Ready to start* or *Planned for today*;
 * **Open session**, for a finished session that waits for review.
 
-Hover a row and use the arrows (**Move up**, **Move down**) to change the order. Select a row to open the task's details. **Open as flow** opens the project in **Flows**.
+Hover a row and use the arrows (**Move up**, **Move down**) to change the order. Select a row to open the task's details.
 
 After the list, a dashed row names the project that starts once this one is done, such as *Then Portfolio site, 3 tasks, once Organizer app is done*, with its estimated start.
 
@@ -48,10 +48,10 @@ The right part, **Sessions** and the project's name, sets how the project's agen
 
 | Setting | Meaning |
 | --- | --- |
-| **Flow on** | *Next sessions start on their own*, or *Paused*. See [Automate with flows](/agents/flows). |
 | **Default agent** | **Claude Code** or **Codex**, for tasks that don't name their agent. |
 | **Opens in** | The terminal sessions open in, as set in **Settings → Sessions**: **Windows Terminal** or **Command Prompt** on Windows, **Terminal** or **iTerm** on macOS. |
-| **Folder** | The folder sessions work in (*A new folder per task* when empty). Type the path and press <kbd>Enter</kbd>; <kbd>Esc</kbd> undoes the edit. |
+| **Folder** | The folder sessions work in on this computer: the project's own, the area's workspace (*area's*), or *PacedMind's folder per task* when there's neither. Click it to choose a folder in the system's folder dialog (in a browser, type the path and press <kbd>Enter</kbd>); **×** removes it. |
+| **Codex cloud** | The Codex cloud environment the project's tasks run in when they run in Codex cloud: its label or id from chatgpt.com/codex/settings/environments (*Environment label or id* when empty). It's saved when the field loses focus or on <kbd>Enter</kbd>. |
 | **Starts after** | *Nothing, starts any time*, or a project that must finish first. |
 | **After this project** | *Nothing*, or the project that starts once this one is done. Choosing one replaces any project that followed before. |
 

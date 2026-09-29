@@ -936,8 +936,8 @@ export function McpSettings({ mcp }: { mcp: McpView }) {
 
     <Section title="Tools agents can use"
       note={<>Sessions started from PacedMind may read, add and update tasks, and report on their own task; nothing else, whatever they&apos;re asked. {mcp.cloud
-        ? "Your own agents can use every tool, but starting a session or sending one back with changes gives you a link: it needs your two-factor code, or a click in the desktop app."
-        : "Starting a session or sending one back with changes over MCP waits for you to allow it here."} Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
+        ? "Your own agents can use every tool. A session they ask for goes to one of your computers, which starts it, asks you or refuses, as its own settings say; one that takes requests only with your two-factor code, and sending a session back with changes, give you a link instead. Folders they ask for wait for you on that computer."
+        : "Starting a session or sending one back with changes over MCP, and a folder an agent asks for, wait for you to allow them here."} Run <span className="font-mono">npm run skills</span> to install the PacedMind skills for Claude Code and Codex.</>}>
       {TOOL_GROUPS.map(([group, names]) => (
         <div key={group} className="flex items-start gap-3 border-b border-line px-3.5 py-2.5 last:border-b-0">
           <span className="w-[72px] shrink-0 text-[12.5px] text-mut2">{group}</span>

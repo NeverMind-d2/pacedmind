@@ -52,10 +52,10 @@ npm run build                                                    # catches both
 ## 4. Voice and tone
 
 - **Impersonal, factual, instructional.** Describe what the app does and how to use it. No marketing, no hype, no exclamation marks.
-- **Plain, direct, present tense.** Prefer the product or the element as the subject (*"PacedMind opens a terminal…"*, *"**Tidy up** arranges the sessions…"*), and the imperative for steps (*"Select **Start in Claude Code**."*).
+- **Plain, direct, present tense.** Prefer the product or the element as the subject (*"PacedMind opens a terminal…"*, *"**Request changes** sends the work back…"*), and the imperative for steps (*"Select **Start with Claude Code**."*).
 - **UI labels in bold**, exactly as the app writes them. App messages and placeholder texts in italics, exactly as the app writes them. Keys as `<kbd>`.
 - Tables for options and comparisons, numbered lists for steps, short paragraphs.
-- Use *select* for buttons and menu items, *click* for direct manipulation (a row, a chip, a canvas), *drag* for drag and drop.
+- Use *select* for buttons and menu items, *click* for direct manipulation (a row, a chip, a timeline bar), *drag* for drag and drop.
 
 ---
 

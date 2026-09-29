@@ -1,6 +1,6 @@
 ---
 title: Areas and projects
-description: Create, rename, recolor, reorder, move, merge and delete areas and projects, select several at once, keep one project across your computers, give an area an icon or a picture of your own, and set a project's target date, folder, default agent and flow.
+description: Create, rename, recolor, reorder, move, merge and delete areas and projects, select several at once, keep one project across your computers, give an area an icon or a picture of your own, and set a project's target date, folder, default agent and the project it starts after.
 ---
 
 Areas are the top level of the planner. Each project belongs to exactly one area, and a project's tasks belong to its area too.
@@ -57,7 +57,7 @@ Selecting an area in the sidebar opens its task list: every task in the area, in
 
 Not everything belongs in a project. Logging your hours, replying to an email or booking a room are small things of an area, sometimes about one of its projects without being part of it. They go in the area's **To-dos**: the first row under each area in the sidebar, with the number of open ones.
 
-**To-dos** lists the area's tasks that aren't in a project, grouped by status, and **New task** (or <kbd>C</kbd> on the page) adds one there. They show in Today, Upcoming and the calendar like any task, and count nowhere in a project's progress, roadmap or flow.
+**To-dos** lists the area's tasks that aren't in a project, grouped by status, and **New task** (or <kbd>C</kbd> on the page) adds one there. They show in Today, Upcoming and the calendar like any task, and count nowhere in a project's progress or roadmap.
 
 A to-do can still be about a project: set **About** in its details (or add it from the project page's **Related** group). The project's page then lists it under **Related**, and the task's row shows the project with a link mark. A to-do can also **Repeat**; see [Task details](/tasks/task-details).
 
@@ -73,7 +73,7 @@ A project groups the tasks of one piece of work and adds dates and agent setting
 | Start date | When work starts. Set to the creation day. | Through an agent over MCP (`update_project`) |
 | Folder | The folder agent sessions work in, usually a code repository. A task can have its own instead. | **Settings → Projects**, or the **Roadmap** panel |
 | Default agent | Claude Code or Codex. New tasks in the project get it as their **Done by**; changing it later affects new tasks and tasks set to the project default. | **Settings → Projects**, or the **Roadmap** panel |
-| Flow | Whether the project's flow may start sessions on its own. | The **Flows** header, the **Roadmap** panel, or **Settings → Projects** |
+| Codex cloud | The Codex cloud environment its tasks run in when they run in Codex cloud: its label or id. | The **Roadmap** panel |
 | Starts after | Another project that must be finished first. | The **Roadmap** panel |
 
 A project's **progress** is the share of its tasks that are done, not counting canceled ones. It shows as a ring in the sidebar and as a bar on the **Projects** page.
@@ -97,13 +97,12 @@ Right-click a project in the sidebar or on the **Projects** page, or use its **�
 | **Rename** | Edits the name in place. |
 | **Open tasks** | Opens the project's task list. |
 | **Open roadmap** | Opens the project in **Roadmap**. |
-| **Open flow** | Opens the project in **Flows**. |
 | **Color** | The ten palette colors, plus **Same as** the area to follow the area's color. |
 | **Move to area** | Moves the project, and all its tasks, to another area. |
 | **Merge into…** | Merges the project into another one you pick, after a confirmation. See [Merge projects](#merge-projects). |
 | **Delete project…** | Deletes the project after a confirmation. |
 
-Deleting a project keeps its tasks: they stay in the area without a project. The project's folder, default agent and flow settings are removed.
+Deleting a project keeps its tasks: they stay in the area without a project. The project's folder and default agent settings are removed.
 
 ## Order and select several
 
@@ -160,7 +159,7 @@ Two projects for the same work, such as the ones two computers made before they 
 
 ### The project page
 
-Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens*; see [What it used](/agents/lifecycle#what-it-used)), and has **Roadmap** and **Flow** buttons for the project's other views. In the desktop app, a folder button says whether the project is on this computer: its folder's name (click to choose another), **Found here · Use**, *Area's workspace*, or *Not on this computer* (click to choose its folder). When PacedMind knows the project's repository, or else its area's, a link such as **github.com/owner/name** opens it. An area's page has the same link for its workspace's repository. In a narrow list, such as with a task's details open, these buttons show their icons only. **New task** adds a task to the project.
+Selecting a project opens its task list, grouped by status. The header shows the area, the target date and, once agents reported it, what they used on the project's tasks (*agents: 1.2M tokens*; see [What it used](/agents/lifecycle#what-it-used)), and has a **Roadmap** button that opens the project's roadmap. In the desktop app, a folder button says whether the project is on this computer: its folder's name (click to choose another), **Found here · Use**, *Area's workspace*, or *Not on this computer* (click to choose its folder). When PacedMind knows the project's repository, or else its area's, a link such as **github.com/owner/name** opens it. An area's page has the same link for its workspace's repository. In a narrow list, such as with a task's details open, these buttons show their icons only. **New task** adds a task to the project.
 
 Below the project's own tasks, **Related** lists its area's to-dos that are about it (their **About** is the project). They don't count in the project's progress. The group starts folded when all of them are done, and its **+** adds a to-do about the project.
 
@@ -174,7 +173,7 @@ A project's folder is where Claude Code or Codex works when PacedMind starts a s
 
 In **Settings → Projects**, the **Roadmap** panel and the project's header, you choose the folder in the system's folder dialog, and it's checked as soon as it's saved. A folder that breaks these rules later, say because it was moved, shows its problem when a session starts, as *Can't use the folder …* with the reason and *Change it in Settings.* Agents setting a folder over MCP get the same check right away.
 
-A task can have a folder of its own, such as a second checkout of the repository, chosen with **Folder** in its details or in the flow editor. Its sessions then work there instead of in the project's folder. That folder is checked as soon as it's set.
+A task can have a folder of its own, such as a second checkout of the repository, chosen with **Folder** in its details. Its sessions then work there instead of in the project's folder. That folder is checked as soon as it's set.
 
 Tasks without their own folder, in a project without a folder or outside projects, get an empty folder per task that PacedMind makes in its data folder (*PacedMind's folder*). See [Start, resume and close sessions](/agents/start-and-manage#where-a-session-works).
 
@@ -186,4 +185,4 @@ The folders come from Claude Code's and Codex's own records on this computer, re
 
 ## Projects in sequence
 
-**Starts after** makes one project wait for another. On the **Roadmap**, an arrow leads from the end of the first project's bar to the start of the second. When the last task in the first project's flow is marked done, PacedMind starts the first sessions of the next project's flow, if that flow is on. See [Automate with flows](/agents/flows#projects-in-sequence).
+**Starts after** makes one project wait for another. On the **Roadmap**, an arrow leads from the end of the first project's bar to the start of the second, and the first project's task order ends with the project that comes next. Like a dependency between tasks, it only orders the work: nothing starts by itself. See [Roadmap](/views/roadmap).

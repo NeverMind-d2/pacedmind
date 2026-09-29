@@ -1,22 +1,23 @@
 ---
 title: Concepts
-description: How PacedMind organizes work into areas, projects and tasks, and how activities, focus blocks, agent sessions and flows fit around them.
+description: How PacedMind organizes work into areas, projects and tasks, and how dependencies, activities, focus blocks, agent sessions and your preferences fit around them.
 ---
 
-PacedMind organizes work in three levels: **areas** hold **projects**, and projects hold **tasks**. The calendar adds fixed **activities**, the auto-planner suggests **focus blocks**, and **agent sessions** and **flows** let Claude Code and Codex work on tasks.
+PacedMind organizes work in three levels: **areas** hold **projects**, and projects hold **tasks**. **Dependencies** order a project's tasks, the calendar adds fixed **activities**, the auto-planner suggests **focus blocks**, and **agent sessions** let Claude Code and Codex work on tasks. Your **preferences** tell agents how you like to work.
 
 ## The building blocks
 
 | Term | What it is |
 | --- | --- |
 | **Area** | A part of life or work, such as Work, Personal or Health. Each area has a color and a short key, like WRK, that task keys start with. |
-| **Project** | A body of work inside one area, with a target date. A project can have a working folder, a default agent and a flow. |
+| **Project** | A body of work inside one area, with a target date. A project can have a working folder and a default agent. |
 | **Task** | One piece of work. It lives in a project, directly in an area, or in the **Inbox** when it has neither. Every task has a key, like WRK-12. |
 | **Sub-task** | A checklist item inside a task. |
+| **Dependency** | One task waiting for another in the same project. It orders the work; nothing starts by itself. |
 | **Activity** | A fixed entry in the calendar, such as a meeting or a workout, one-off or weekly. |
 | **Focus block** | Time the auto-planner suggests for one of your tasks, inside your work hours. Focus blocks are computed each time and never stored. |
 | **Agent session** | Claude Code or Codex working on one task, in a terminal that PacedMind opened. |
-| **Flow** | The order in which a project's agent sessions start: which task comes after which, and how. |
+| **Preference** | One line on how you like to work, under a topic, which agents follow when they plan your time and write tasks for you. |
 
 ## How tasks are placed
 
@@ -26,7 +27,7 @@ PacedMind organizes work in three levels: **areas** hold **projects**, and proje
 
 Each task has two independent dates: the **due date** (its deadline) and the **planned date** (the day to work on it). See [Due and planned dates](/concepts/dates).
 
-Each task also has someone who does it: **you**, **Claude Code** or **Codex**. Tasks that are yours stay out of flows and fill your own focus time; tasks for an agent can run as sessions. See [Who does a task](/concepts/done-by).
+Each task also has someone who does it: **you**, **Claude Code** or **Codex**. Tasks that are yours never get an agent session and fill your own focus time; tasks for an agent can run as sessions. See [Who does a task](/concepts/done-by).
 
 ## Reading the colors
 
@@ -40,7 +41,8 @@ PacedMind uses color for a small number of meanings:
 ## Pages in this section
 
 * **[Areas and projects](/concepts/areas-and-projects)**: keys, colors, project settings, moving and deleting.
-* **[Tasks](/concepts/tasks)**: keys, statuses, priorities, labels, estimates and sub-tasks.
+* **[Tasks](/concepts/tasks)**: keys, statuses, priorities, labels, estimates, sub-tasks and dependencies.
 * **[Due and planned dates](/concepts/dates)**: the difference, and how each view uses them.
 * **[Who does a task](/concepts/done-by)**: the **Done by** field and what it changes.
+* **[How you work](/concepts/preferences)**: your preferences, their topics, and what agents do with them.
 * **[Calendar activities](/concepts/activities)**: fixed and weekly activities, and how to change them.

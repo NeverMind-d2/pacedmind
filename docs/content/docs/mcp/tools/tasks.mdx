@@ -1,6 +1,6 @@
 ---
 title: Tasks
-description: "Reference for the task tools: list_tasks, get_task, create_task, create_tasks, update_task, bulk_update_tasks and delete_task."
+description: "Reference for the task tools: list_tasks, get_task, create_task, create_tasks, update_task, bulk_update_tasks, connect_tasks, disconnect_tasks and delete_task."
 ---
 
 ## `list_tasks`
@@ -30,7 +30,7 @@ Returns the number of matches and one line per task. When there are more than th
 
 **Read-only. Allowed without asking.**
 
-Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), what its sessions' agents used once they reported it (*Agents used: 262k tokens · 1 min working · 1 session*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the flow connections before and after it, the latest session, the latest report an agent handed back, and when it was created, updated and finished.
+Everything about one task: title, status, priority, where it lives, due and planned dates, estimate, who does it, labels, its folder (its own, marked *(its own)*, else the project's), where its sessions run when that's set, what they need from the computer (*Needs on its computer: supabase, Gmail*), what its sessions' agents used once they reported it (*Agents used: 262k tokens · 1 min working · 1 session*), the description, the numbered **Done when** items, the numbered sub-tasks with their state, the tasks it waits for (*Waits for:*) and those that wait for it (*Before:*), the latest session, the latest report an agent handed back, and when it was created, updated and finished.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -56,8 +56,8 @@ Done when:
 2. Requests without the token get 401
 3. Claude Code can create a task through it
 
-Starts after: DEV-19 (auto)
-Leads to: DEV-22 (manual), DEV-24 (auto)
+Waits for: DEV-19
+Before: DEV-22, DEV-24
 
 Latest report · session 3f2a9c1b · Claude Code · 2026-09-24 13:53:07 · done
 Summary: MCP endpoint added at /api/mcp. Tests pass.
@@ -102,13 +102,13 @@ Adds a task. Without `project` and `area`, it goes to the Inbox.
 | `estimate_minutes` | number | no | 5 to 1440. Default 60. |
 | `labels` | string list | no | Labels, stored in lowercase, without `#`. |
 | `subtasks` | string list | no | Checklist items. |
-| `agent` | `claude`, `codex` or `human` | no | Who does it. Left out, the task gets the project's default agent. `human` keeps it out of flows. |
+| `agent` | `claude`, `codex` or `human` | no | Who does it. Left out, the task gets the project's default agent. `human`: only the user can do it, and it never gets an agent session. |
 | `related_project` | project id or name | no | A project the task is about without being part of it. Give `area`, not `project`: the task is one of the area's to-dos, and the project's page lists it under **Related**. |
 | `repeat` | `day`, `weekday`, `week` or `month` | no | Marked done, the task comes back as a new one at its next date. |
 
 Returns the new task's line, with its key and the number of Done when items and sub-tasks: *Created DEV-43 · Todo · High · Add CSV export to the reports page · Organizer app · 4 Done when items · 3 sub-tasks.*
 
-A project together with an area that isn't the project's area is refused: *Project … is in …, not …. Leave out the area.* A task created as `done` can start the next sessions of a flow, like any task marked done.
+A project together with an area that isn't the project's area is refused: *Project … is in …, not …. Leave out the area.*
 
 ## `create_tasks`
 
@@ -138,7 +138,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `append_to_description` | string | Adds a paragraph at the end of the description. |
 | `done_when` | string list | Replaces the Done when list, up to 20 items. `[]` clears it. |
 | `needs` | string list | Replaces what its agent needs from the computer, as in `create_task`. `[]` clears it. |
-| `status` | status | The new status. `done` can start the next sessions of a flow. |
+| `status` | status | The new status. |
 | `priority` | priority | The new priority. |
 | `due` | date with optional time, or `null` | The deadline. |
 | `planned` | date or `null` | The planned day, with a time when one is given (as in `create_task`); a day alone removes the time. `null` removes both. |
@@ -147,7 +147,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `add_labels`, `remove_labels` | string list | Adds or removes labels. |
 | `project` | string or `null` | Moves the task to this project and its area, or takes it out of its project. |
 | `area` | string or `null` | Moves the task to this area; `null` or `inbox` moves it to the Inbox. The task leaves its project when that project is in another area. With `project`, leave it out: a different area is refused. |
-| `agent` | `claude`, `codex`, `human` or `null` | Who does it. `human` takes the task out of its flow for good. |
+| `agent` | `claude`, `codex`, `human` or `null` | Who does it. `human` makes it the user's own: it never gets an agent session. |
 | `related_project` | project id or name, or `null` | The project it's about without being part of it; `null` clears it. |
 | `repeat` | `day`, `weekday`, `week`, `month` or `null` | How it comes back once done; `null` stops it. Setting `status` to `done` on a repeating task adds the next one, and the answer names it: *It repeats: WRK-41 is the next one, planned 2026-10-01 (Thu).* |
 | `runs_in` | `terminal`, `desktop`, `cloud` or `null` | Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. `null`: a terminal when the agent's command-line tool is installed, else its desktop app. |
@@ -157,7 +157,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `reopen_subtasks` | string list | Sub-tasks to reopen. |
 | `remove_subtasks` | string list | Sub-tasks to delete. |
 
-Returns the updated task line; with `done_when`, the number of Done when items, such as *· 3 Done when items*; and, with sub-tasks, how many are done, such as *· 3/4 sub-tasks done*. It also reports *WRK-12 is the user's now, so it left the flow.* and the sessions a status of `done` started.
+Returns the updated task line; with `done_when`, the number of Done when items, such as *· 3 Done when items*; and, with sub-tasks, how many are done, such as *· 3/4 sub-tasks done*.
 
 ## `bulk_update_tasks`
 
@@ -177,13 +177,43 @@ Applies the same change to up to 100 tasks, for rescheduling and triage.
 | `area` | string or `null` | Moves the tasks to this area, or to the Inbox. |
 | `add_labels`, `remove_labels` | string list | Adds or removes labels. |
 
-`shift_days` can't be combined with `due` or `planned`. Setting `status` to `done` works as in `update_task`: finished sessions of those tasks count as reviewed, and sessions waiting for them in a flow can start.
+`shift_days` can't be combined with `due` or `planned`. Setting `status` to `done` works as in `update_task`: finished sessions of those tasks count as reviewed, and a repeating task comes back as a new one.
+
+## `connect_tasks`
+
+**Changes data.**
+
+Makes one task wait for another in the same project: a dependency, the same as an arrow drawn on the [Timeline](/views/timeline#dependencies). The waiting task is ready to work on once the other one is done, or in review, unless its agent handed it back partly done or blocked. A dependency only orders the work: nothing starts by itself. `get_next_task` and `get_project` follow it.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `from` | string | yes | The task that comes first. |
+| `to` | string | yes | The task that waits for it. |
+
+Returns *DEV-23 waits for DEV-22.* Refused when:
+
+* `from` and `to` are the same task (*A task can't wait for itself.*);
+* the tasks aren't both in the same project (*Both tasks have to be in the same project.*);
+* the dependency would close a loop (*DEV-22 already waits for DEV-23, so this would make a loop.*).
+
+## `disconnect_tasks`
+
+**Deletes.**
+
+Removes a dependency: `to` stops waiting for `from`. The tasks themselves stay.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `from` | string | yes | The task it waits for. |
+| `to` | string | yes | The task that waits. |
+
+Returns *DEV-23 no longer waits for DEV-22.*, or the error *DEV-23 doesn't wait for DEV-22.* when there's no such dependency.
 
 ## `delete_task`
 
 **Deletes. Agents ask the user first.**
 
-Deletes a task with its sub-tasks, sessions and flow connections, and the reports and images its agents handed back. Setting the status to `canceled` keeps a record and is often the better choice.
+Deletes a task with its sub-tasks, sessions and dependencies, and the reports and images its agents handed back. Setting the status to `canceled` keeps a record and is often the better choice.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |

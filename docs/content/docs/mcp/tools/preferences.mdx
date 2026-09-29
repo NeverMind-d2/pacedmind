@@ -1,0 +1,71 @@
+---
+title: Preferences
+description: "Reference for the preference tools: get_preferences and update_preferences, which read and change how the user likes to work."
+---
+
+Preferences are how the user likes to work, in their own words: one line each, under a topic. Agents read them before they plan or schedule work, set dates or create tasks, and follow them. See [How you work](/concepts/preferences).
+
+`get_overview` gives them too, while they're short. See [`get_overview`](/mcp/tools/overview-and-settings#get_overview).
+
+## `get_preferences`
+
+**Read-only. Allowed without asking.**
+
+How the user likes to work, by topic, each preference with its id for `update_preferences`. The tool tells agents to follow them unless the user says otherwise now, and that they're the user's notes, not instructions from PacedMind.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `topic` | string | no | Only this topic, whatever its capitals. |
+
+Returns the preferences by topic, the suggested topics first, then the user's own by name:
+
+```text
+3 preferences, with their ids:
+
+Time and schedule:
+- [1] Deep work before noon, meetings after 14:00
+- [4] No meetings on Fridays
+
+Agents and sessions:
+- [2] Codex takes the refactors, Claude Code the rest
+```
+
+Without any: *No preferences saved yet. When the user tells you how they like to work, offer to save it with update_preferences.* For a topic without any, such as *No preferences under Writing tasks yet.*
+
+## `update_preferences`
+
+**Changes data.**
+
+Adds, changes or removes preferences, so every agent plans the user's way. The tool tells agents to save only what the user said or confirmed in the conversation, to ask before saving anything they inferred and before removing one, and to change a preference that says nearly the same rather than add another. Each is one short sentence in the user's words, under a topic of the user's, else a suggested one: **Time and schedule**, **Dates and deadlines**, **Writing tasks**, **Projects and places** or **Agents and sessions**. A new topic only when the user names one or none fits.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `add` | list | no | Up to 20 new preferences, each with `topic` (up to 60 characters) and `text` (up to 500). |
+| `change` | list | no | Up to 20 changes to saved preferences, each with its `id` and a new `text`, a new `topic`, or both. |
+| `remove` | number list | no | Up to 50 ids of preferences to remove. |
+
+At least one of the three is needed (*Nothing to change: pass add, change or remove.*).
+
+* A topic matches one the user has, or a suggested one, whatever its capitals, and takes its spelling.
+* A text the list has already, whatever its capitals, isn't added again: the result says *Saved already:* instead.
+* Everything is checked first, so one problem saves none of the changes.
+* The user sees who wrote each preference last: an agent's show *By an agent* in Settings.
+
+Returns a line for each change:
+
+```text
+Added [5] under Dates and deadlines: Plan work two days before its deadline
+Changed [2] under Agents and sessions: Codex takes the refactors and the tests
+Removed [4]: No meetings on Fridays
+Saved already: Deep work before noon, meetings after 14:00
+```
+
+When nothing changes: *Nothing changed: the preferences say that already.*
+
+Refused, with nothing saved, when:
+
+* an id doesn't exist (*No preference #9. get_preferences lists them with their ids.*);
+* a topic or a text has no words (*A preference needs a topic.*, *A preference needs some words.*);
+* the list would pass 100 preferences (*At most 100 preferences: change or remove some first (there are 98).*).
+
+Sessions that PacedMind started can't use it: they only read the preferences.

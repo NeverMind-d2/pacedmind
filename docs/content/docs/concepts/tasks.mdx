@@ -1,6 +1,6 @@
 ---
 title: Tasks
-description: Task keys, the six statuses, priorities, labels, estimates, descriptions, Done when lists and sub-tasks, and the difference between canceling and deleting.
+description: Task keys, the six statuses, priorities, labels, estimates, descriptions, Done when lists, sub-tasks and dependencies, and the difference between canceling and deleting.
 ---
 
 A task is one piece of work. Besides its title, it has a key, a status, a priority, two dates, an estimate, labels, a description, a **Done when** list, sub-tasks, and someone who does it.
@@ -27,8 +27,6 @@ Each status has its own icon: a dashed circle for **Backlog**, an empty circle f
 Click a task's status icon in a list to mark it done, or to set a done or canceled task back to **Todo**. The details panel offers all six statuses.
 
 Done and canceled tasks leave the Inbox and Upcoming. **Today** keeps a task that was due today and got done today, crossed out, until the day ends. In area and project lists, finished tasks collect in the **Done** and **Canceled** groups, which start collapsed. Marking a task done records when; any other status clears that time.
-
-Marking a task done can start agent sessions that wait for it in a flow. See [Automate with flows](/agents/flows).
 
 ## Priority
 
@@ -69,6 +67,16 @@ Add items in the details panel, under the description, or with **Done when** in 
 
 For work an agent will do, the list is its acceptance criteria. The agent reads it when it picks the task up, and its report answers each item with **Met**, **Partly met** or **Not met**, and a note on how it checked. The details panel then shows each answer next to its item. See [Review finished work](/agents/review#the-report).
 
+## Dependencies
+
+A task can wait for other tasks in the same project, such as a release that waits for its tests: a **dependency**. Dependencies only order the work. Nothing starts by itself, and the task's dates stay as they are.
+
+* Draw them on the **Timeline**, from one task's bar to another task's row. See [Dependencies](/views/timeline#dependencies).
+* The **Roadmap**'s task order names what each task waits for, such as *After DEV-19*. Agents add them with `connect_tasks`.
+* What a task waits for counts as finished once it's **Done** or **In review**. After an agent handed it back partly done or blocked, it counts once you mark it done. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
+
+Dependencies stay within one project and never form a loop. Tasks that are yours can have them too.
+
 ## Where a task lives
 
 A task is in a project, directly in an area, or in the Inbox. In the details panel:
@@ -81,6 +89,6 @@ A task created in a project gets the project's default agent as its doer. See [W
 
 ## Cancel or delete
 
-**Canceled** keeps the task, its history and its sessions, out of the way. Deleting removes the task together with its sub-tasks, its session records, the agents' reports and their images, and its flow connections, and can't be undone.
+**Canceled** keeps the task, its history and its sessions, out of the way. Deleting removes the task together with its sub-tasks, its session records, the agents' reports and their images, and its dependencies, and can't be undone.
 
 Delete a task from its details panel (the trash button), from its menu in the calendar (**Delete task**), or through an agent. The details panel asks *Delete WRK-12?* first; the calendar menu asks for a second click.

@@ -3,14 +3,20 @@ title: Where your data lives
 description: The files PacedMind keeps on the computer, including the images in agents' reports, who can reach its server, and how to back up, move or reset the data.
 ---
 
-PacedMind keeps everything in one SQLite database on the computer: areas, projects, tasks, activities, flows, agent sessions and their reports, the computers it runs on and settings, including the MCP access token. The images in agents' reports are files next to it. The app's server reads and writes both; nothing is sent elsewhere. The exception is a session you send to an agent's cloud: the agent's own tool takes the task's title, description, **Done when** list and sub-tasks there.
+Without an account, PacedMind keeps your data in one SQLite database on the computer: areas, projects, tasks and the dependencies between them, activities, your preferences, agent sessions and their reports, and the planning settings, such as the work hours. With PacedMind Cloud, that data is in your account instead, and the database keeps what this computer had without an account. See [Accounts and Cloud](/accounts-and-cloud).
+
+What this computer decides for itself stays on it either way, in its own settings file, `device.json`: its name, the agent commands and the terminal, the project and task folders, which MCP servers each project's sessions get, what it does with sessions asked for from elsewhere, and the MCP access tokens. The desktop app encrypts that file, and the one that keeps your sign-in to PacedMind Cloud, with a key from the operating system's keychain. The images in agents' reports are files next to the database.
+
+The app's server reads and writes these files; without an account, nothing is sent elsewhere. The exception is a session you send to an agent's cloud: the agent's own tool takes the task's title, description, **Done when** list and sub-tasks there.
 
 ## File locations
 
 | What | Where |
 | --- | --- |
 | The database | `%APPDATA%\Organizer\data\organizer.db`, with `organizer.db-wal` and `organizer.db-shm` next to it |
-| This computer's id in PacedMind, which sessions use to know where they run | `%APPDATA%\Organizer\data\device.json` |
+| This computer's own settings: its id and name in PacedMind, the agent commands and terminal, the project and task folders, the MCP access tokens and what it does with sessions asked for from elsewhere, encrypted | `%APPDATA%\Organizer\data\device.json` |
+| Your sign-in to PacedMind Cloud, encrypted | `%APPDATA%\Organizer\data\session.json` |
+| The key that encrypts those two files, itself protected by the operating system (DPAPI on Windows, the Keychain on macOS) | `%APPDATA%\Organizer\data\data-key.bin` |
 | Files for each agent session: the start script and, for Claude Code, its MCP and hook settings, or for Codex, the token file its `notify` program reads | `%APPDATA%\Organizer\data\sessions\<session id>\` |
 | Images from agents' reports, copied when the agent attaches them, one file per image | `%APPDATA%\Organizer\data\attachments\` |
 | Working folders for tasks without their own folder, a project folder or an area workspace, one per task, named after its key in lowercase | `%APPDATA%\Organizer\data\workspaces\<task key>\`, such as `workspaces\wrk-12` |
@@ -40,7 +46,7 @@ The database is written continuously while PacedMind runs, so copy it only while
 
 To restore, quit PacedMind, delete the `organizer.db*` files and the `attachments` folder in the `data` folder, put the copied ones in their place, and start it. Don't leave an old `-wal` file next to a restored database.
 
-The same steps move PacedMind to another computer: install it there, quit it, and replace its `data` folder with the copy. Project folders are stored as full paths, so check them in **Settings → Projects** afterwards, and tasks' own folders in their details.
+The same steps move this computer's data to another computer: install PacedMind there, quit it, and replace its `data` folder with the copy. The database comes along, with your tasks and preferences. This computer's own settings don't: the other computer's keychain can't read their key, so PacedMind there sets `device.json` and `session.json` aside and starts them over. Set the project and task folders again in **Settings → Projects** and in the tasks' details, connect your agents again, since the MCP token is new, and sign in again if you use an account. With an account, your data is in the account anyway: sign in on the other computer instead.
 
 ## Reset
 
@@ -51,7 +57,7 @@ The same steps move PacedMind to another computer: install it there, quit it, an
 | **Load sample data** | Replaces everything with an example workspace. Asks *Replace everything with the sample data?* first. |
 | **Start empty** | Deletes all tasks, projects, activities and sessions and restores the five default areas. Asks *Delete all tasks, projects, activities and sessions?* first. |
 
-Neither can be undone. Both keep the settings: work hours, how sessions start, and the MCP access token. They change the database and delete the `attachments` folder with the images of agents' reports. The `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
+Neither can be undone. Both keep your preferences and the settings: work hours, how sessions start, and the MCP access token. They change the database and delete the images of its agents' reports; this computer forgets the folders it had for the projects and tasks that are gone. The `sessions` and `workspaces` folders stay on disk, and can be deleted by hand while PacedMind is closed.
 
 ## Reinstalling and uninstalling
 

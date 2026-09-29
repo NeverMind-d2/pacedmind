@@ -1,6 +1,6 @@
 ---
 title: Tool reference
-description: Conventions shared by all 41 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
+description: Conventions shared by all 42 tools of PacedMind's MCP server (references, dates, statuses, clearing values, errors) and an index of every tool.
 ---
 
 The pages in this section describe every tool of the `pacedmind` MCP server with its parameters and what it returns. Agents see the same descriptions and parameter schemas in their MCP client; this reference is for the people who use and configure them.
@@ -17,8 +17,10 @@ The pages in this section describe every tool of the `pacedmind` MCP server with
 | The Inbox | `inbox`, `none` or `no area`, where an area is expected | `area: "inbox"` |
 | Calendar activity | Its event id, from `list_events` or `get_agenda` | `event: 7` |
 | Session | Its id, from `list_sessions` | `session: "3f2a9c1b"` |
+| Computer | Its name, whatever its capitals, the start of its name when no other starts the same way, or its id, from `list_computers` | `computer: "Studio Mac"` |
+| Preference | Its id, from `get_preferences` | `remove: [4]` |
 
-A name that matches several projects or areas returns an error listing them.
+A name that matches several projects or areas returns an error listing them. A computer that doesn't match one returns an error that lists the user's computers.
 
 ### Dates
 
@@ -53,17 +55,19 @@ Each tool is marked for the client as one of:
 * **read-only**: never changes anything;
 * **changes data**: creates or updates;
 * **deletes**: removes something;
-* **starts an agent**: `start_session`, which starts an agent on the user's computer or in its cloud, and `request_changes`, which reopens an agent's session in a new terminal on the user's computer.
+* **starts an agent**: `start_session`, which starts an agent on one of the user's computers or in its cloud, and `request_changes`, which reopens an agent's session in a new terminal on the user's computer.
 
-In Claude Code sessions that PacedMind starts, 18 tools run without asking; the rest ask for approval in the agent's terminal. They're marked **Allowed without asking** on the tool pages. Codex sessions follow Codex's own approval settings.
+Sessions that PacedMind starts get 20 of the tools, marked **Allowed without asking** on the tool pages. Claude Code runs them without asking; Codex follows its own approval settings. A session's token doesn't list the other tools, and they refuse it: *Sessions that PacedMind started can't use delete_task. Ask the user to do it in PacedMind.* See [What agents may do without asking](/agents/start-and-manage#what-agents-may-do-without-asking).
 
 ## All tools
 
 | Tool | Purpose |
 | --- | --- |
-| [`get_overview`](/mcp/tools/overview-and-settings#get_overview) | Today's date, areas and projects with their ids, what's due, the calendar and sessions. Start here. |
+| [`get_overview`](/mcp/tools/overview-and-settings#get_overview) | Today's date, the user's preferences, areas and projects with their ids, what's due, the calendar and sessions. Start here. |
 | [`get_settings`](/mcp/tools/overview-and-settings#get_settings) | Work hours, work days, how sessions start, and the MCP address. |
 | [`update_settings`](/mcp/tools/overview-and-settings#update_settings) | Change the work hours, break and work days. |
+| [`get_preferences`](/mcp/tools/preferences#get_preferences) | How the user likes to work, by topic. |
+| [`update_preferences`](/mcp/tools/preferences#update_preferences) | Add, change or remove preferences the user said or confirmed. |
 | [`list_areas`](/mcp/tools/areas-and-projects#list_areas) | Areas with id, key, color, icon and counts. |
 | [`create_area`](/mcp/tools/areas-and-projects#create_area) | Add an area. |
 | [`update_area`](/mcp/tools/areas-and-projects#update_area) | Rename an area, or change its color or icon. |
@@ -80,6 +84,8 @@ In Claude Code sessions that PacedMind starts, 18 tools run without asking; the 
 | [`create_tasks`](/mcp/tools/tasks#create_tasks) | Add up to 50 tasks at once. |
 | [`update_task`](/mcp/tools/tasks#update_task) | Change anything about a task, including its sub-tasks, its folder and where its sessions run. |
 | [`bulk_update_tasks`](/mcp/tools/tasks#bulk_update_tasks) | Apply one change to up to 100 tasks. |
+| [`connect_tasks`](/mcp/tools/tasks#connect_tasks) | Make a task wait for another in its project. |
+| [`disconnect_tasks`](/mcp/tools/tasks#disconnect_tasks) | Remove a dependency. |
 | [`delete_task`](/mcp/tools/tasks#delete_task) | Delete a task. |
 | [`list_events`](/mcp/tools/calendar#list_events) | Calendar activities in a date range, with ids. |
 | [`create_event`](/mcp/tools/calendar#create_event) | Add an activity, one-off or weekly. |
@@ -87,13 +93,10 @@ In Claude Code sessions that PacedMind starts, 18 tools run without asking; the 
 | [`delete_event`](/mcp/tools/calendar#delete_event) | Remove an activity. |
 | [`get_agenda`](/mcp/tools/calendar#get_agenda) | The day-by-day plan with focus blocks. |
 | [`reschedule_day`](/mcp/tools/calendar#reschedule_day) | Move one day's plans to another day. |
-| [`get_flow`](/mcp/tools/flows#get_flow) | A project's flow. |
-| [`connect_tasks`](/mcp/tools/flows#connect_tasks) | Make one task's session start after another's. |
-| [`disconnect_tasks`](/mcp/tools/flows#disconnect_tasks) | Remove a connection. |
-| [`add_to_flow`](/mcp/tools/flows#add_to_flow) | Put a task on the flow canvas. |
-| [`remove_from_flow`](/mcp/tools/flows#remove_from_flow) | Take a task off the flow canvas. |
+| [`list_computers`](/mcp/tools/computers#list_computers) | The user's computers, what their agents have, and what each does with a session you ask for. |
+| [`set_folder`](/mcp/tools/computers#set_folder) | Ask a computer to use a folder for a project, an area or a task. |
 | [`list_sessions`](/mcp/tools/sessions#list_sessions) | Agent sessions, newest first. |
-| [`start_session`](/mcp/tools/sessions#start_session) | Start an agent on a task: in a terminal, its desktop app or its cloud. |
+| [`start_session`](/mcp/tools/sessions#start_session) | Ask to start an agent on a task, on this computer or another: in a terminal, its desktop app or its cloud. |
 | [`close_session`](/mcp/tools/sessions#close_session) | Mark a stuck session closed. |
 | [`request_changes`](/mcp/tools/sessions#request_changes) | Send an agent's work back to it with the changes the user wants. |
 | [`get_next_task`](/mcp/tools/sessions#get_next_task) | The next ready task in a project. |
@@ -106,8 +109,9 @@ In Claude Code sessions that PacedMind starts, 18 tools run without asking; the 
 ## Pages in this section
 
 * **[Overview and settings](/mcp/tools/overview-and-settings)**
+* **[Preferences](/mcp/tools/preferences)**
 * **[Areas and projects](/mcp/tools/areas-and-projects)**
 * **[Tasks](/mcp/tools/tasks)**
 * **[Calendar and agenda](/mcp/tools/calendar)**
-* **[Flows](/mcp/tools/flows)**
+* **[Computers](/mcp/tools/computers)**
 * **[Sessions](/mcp/tools/sessions)**

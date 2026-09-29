@@ -1,0 +1,74 @@
+---
+title: Computers
+description: "Reference for the computer tools: list_computers, what each of the user's computers has and does with a session an agent asks for, and set_folder, which asks a computer to use a folder."
+---
+
+Agent sessions run on the user's computers, the ones with the PacedMind desktop app, and each computer keeps its own folders and settings. These tools show an agent the computers and let it ask one for a folder. Starting a session on one is [`start_session`](/mcp/tools/sessions#start_session) with `computer`.
+
+## `list_computers`
+
+**Read-only. Allowed without asking.**
+
+The user's computers: for each, whether it's online or when it was last seen, which one is the default and which one is this computer, what it has of Claude Code and Codex, and what it does with a session an agent asks it for. The user changes these in PacedMind on each computer.
+
+No parameters.
+
+Each computer starts with a line of its name and id, its system, *this computer* or whether it's online (*last seen 3 h ago* when not), *default* for the default one, and its PacedMind version. Below it:
+
+* what it does with a session the agent asks for:
+  * this computer: *Sessions you ask for here wait for the user to allow them in PacedMind on this computer.*
+  * **From elsewhere** set to **Refuse**: *Refuses sessions asked for from elsewhere.*
+  * **Two-factor code** on: *Takes sessions from elsewhere only with the user's two-factor code, so you can't ask it: the user starts them there, or switches its Two-factor code off in PacedMind on that computer (Settings → General).*
+  * **Two-factor code** off, with **Start**: *Starts the sessions you ask for right away (one in the agent's cloud waits for the user there).*
+  * **Two-factor code** off, with **Ask me**: *Asks the user there before a session you ask for starts.*
+* for another computer, its settings in a few words, such as *From elsewhere: Ask me, with a two-factor code.*;
+* for Claude Code and Codex, what it found: the command-line tool's version and whether it's signed in, the desktop app, its MCP servers, the claude.ai connectors, plugins and skills, or *not found*.
+
+For example:
+
+```text
+DESKTOP-1 (id 2f6c1d0e-8a57-4b1e-9f3a-0c4d2e6b8a91) · Windows · this computer · default · PacedMind 0.1.0
+- Sessions you ask for here wait for the user to allow them in PacedMind on this computer.
+- Claude Code: CLI 2.1.282, signed in (claude.ai, max) · Claude app 1.4 · MCP servers: github, playwright · claude.ai connectors: Gmail
+- Codex: CLI 0.150.0, signed in (chatgpt) · no other MCP servers
+
+Studio Mac (id 9b3e7f21-5c0a-4d68-a1e2-7f8d9c0b1a24) · macOS · last seen 3 h ago · PacedMind 0.1.0
+- Asks the user there before a session you ask for starts.
+- From elsewhere: Ask me, without a code.
+- Claude Code: CLI 2.1.282, signed in (claude.ai, pro) · MCP servers: github
+- Codex: not found
+```
+
+Without an account, there's only this computer, and the result starts with *Without an account there's only this computer.* With none signed in: *None of the user's computers is signed in to PacedMind yet. Sessions run on a computer with the PacedMind desktop app.*
+
+## `set_folder`
+
+**Changes data. Agents ask the user first.**
+
+Asks to use a folder on one of the user's computers for a project (its folder), an area (its workspace, which the area's projects without a folder of their own share) or a task (its own folder): where agent sessions for it start on that computer. Folders are each computer's own settings, so the tool only asks: the user allows it in PacedMind on that computer, which first checks that the folder is there. Agents use it only when the user asks, with the folder's absolute path on that computer.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `project` | string | one of these three | The project's id or name. |
+| `area` | string | | The area's id, name or key: the folder becomes its workspace. |
+| `task` | string | | The task key: the folder becomes the task's own. |
+| `folder` | string | yes | The folder's absolute path on that computer, up to 1000 characters. |
+| `computer` | string | no | The computer's name or id, from `list_computers`. Without it, this computer; on PacedMind Cloud's server, the only computer signed in. |
+
+Name exactly one of `project`, `area` and `task` (*Name one of project, area or task.*).
+
+**On this computer**, PacedMind checks the folder at once. A folder that can't be one there is refused with the reason, such as *C:\code\ap can't be a folder on this computer: That folder doesn't exist.* Otherwise PacedMind's window shows a card, *Use a folder on this computer?*, with **Refuse** and **Use it**, and a notification, *Use a folder for Organizer app?*. The request waits 30 minutes. It returns:
+
+```text
+Asked the user to use C:\code\app for the project Organizer app on this computer: PacedMind shows it in its window, and sets it once they allow it (within 30 minutes). Tell the user to look at PacedMind; don't ask again.
+```
+
+**On another computer**, the request waits up to a day for that computer, which checks the folder once it sees the request and then shows the same card. It returns:
+
+```text
+Asked Studio Mac to use /Users/anna/code/app for the project Organizer app. It waits for the user to allow it in PacedMind on Studio Mac (up to a day). That computer checks the folder is there first. Tell the user; don't ask again.
+```
+
+It adds *; Studio Mac hasn't been online in the last few minutes* when that computer isn't online. A newer request for the same project, area or task replaces one still waiting. Without an account there's only this computer: *Without an account there's only this computer.*
+
+**Use it** sets the folder as choosing it in PacedMind would, after checking it again (*Organizer app uses C:\code\app here now*). **Refuse** drops the request. See [Where a session works](/agents/start-and-manage#where-a-session-works).

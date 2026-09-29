@@ -77,7 +77,7 @@ The color is the area's or the project's; the fill and the outline show the stat
 | Dashed outline, no fill | Backlog |
 | Dashed outline, light fill | Todo |
 
-The label inside or next to the bar gives the state in a few words: *In progress*, *Claude Code, running*, *Finished 12:22*, *Partly done 12:22*, *Blocked 12:22*, *Waits for 21 and 22*, *Waits for you*, *Manual start*, *Same session*, *Ready*, *Planned*, *Due 17:00*. Hover the bar for the full sentence, such as *When you mark DEV-21 done* or *Finished 12:22, waiting for you*.
+The label inside or next to the bar gives the state in a few words: *In progress*, *Claude Code, running*, *Finished 12:22*, *Partly done 12:22*, *Blocked 12:22*, *Waits for 21 and 22*, *Waits for you*, *Ready*, *Planned*, *Due 17:00*. Hover the bar for the full sentence, such as *When you mark DEV-21 done* or *Finished 12:22, waiting for you*.
 
 The **Sessions** layer draws each session as a line under the bar: in the area's color while it runs, navy when it finished and waits for review, faded when done, and gray when it was closed or failed. Hover it for the agent, the times and the state.
 
@@ -99,7 +99,17 @@ A click without a drag opens the task.
 
 ## Dependencies
 
-A dependency makes one task wait for another: it starts after the first one is finished. Dependencies are the same connections that a project's [flow](/views/flows) uses, so they follow the same rules. When the project's flow is on, a dependency can start the waiting task's agent session, as a connection on the canvas would. The **Flows** canvas shows a dependency when both tasks are on it.
+A dependency makes one task wait for another, such as a release that waits for its tests. Dependencies only order the work: nothing starts by itself. When a task's turn comes, start its agent session, or pick it up yourself when it's yours.
+
+The task the other one waits for counts as finished once it's **Done** or **In review**. When its agent handed it back **Partly done** or **Blocked**, the tasks that wait for it keep waiting until you mark it done. See [Partly done or blocked](/agents/review#partly-done-or-blocked).
+
+On the timeline, a waiting task that hasn't started and has no planned day starts after the tasks it waits for. Its label says where it stands: *Waits for 22*, *Waits for you* after a partly done or blocked hand-back (*When you mark DEV-21 done* on hover), or *Ready* once everything it waits for is finished.
+
+Dependencies show elsewhere too:
+
+* the **Roadmap**'s task order names what each task waits for, such as *After DEV-19, DEV-21*. See [Task order](/views/roadmap#task-order);
+* **Sessions** names a task that waits for the selected session's task, under *Waits for it:*, with **Start session**. See [Buttons](/views/sessions#buttons);
+* agents read them in `get_task` (*Waits for:* and *Before:*), and `get_next_task` offers the first open task of a project whose dependencies are finished. They add and remove dependencies with `connect_tasks` and `disconnect_tasks`. See [Tasks](/mcp/tools/tasks#connect_tasks).
 
 ### Draw a dependency
 
@@ -118,12 +128,10 @@ The line turns gray and a note explains why when a dependency isn't allowed:
 | *… are in different projects. Dependencies stay within one project.* | Both tasks must be in the same project, or both outside any project. |
 | *… already waits for …, so this would make a loop* | No circles. |
 
-A new dependency takes the way the waiting task already starts in its flow (automatically, manually, and so on), or **Automatically** when it has no other connection. See [Automate with flows](/agents/flows).
-
 ### Remove a dependency
 
 Click a dependency line. A menu names it, such as *DEV-23 waits for DEV-22*, and offers **Remove dependency**. The message confirms: *DEV-23 no longer waits for DEV-22*.
 
 ### Dependencies for your own tasks
 
-Tasks that are yours can have dependencies too, to show what they wait for. PacedMind never starts a session for them; the bar says *Ready* when everything before it is finished.
+Tasks that are yours can have dependencies too, to show what they wait for: the bar says *Ready* when everything before it is finished.
