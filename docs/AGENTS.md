@@ -65,14 +65,14 @@ npm run build                                                    # catches both
 - **Vendor names** behind the product (hosting, databases, services). Claude Code, Codex, Windows Terminal and the MCP standard are part of the product and may be named.
 - **Roadmap dates**, and features that aren't in the code.
 - **Internal architecture** beyond what users need: file locations and the local server's address are in, implementation details are out.
-- **Personal data**: screenshots come from the development server's sample data, with the folder paths replaced.
+- **Personal data**: screenshots come from the development server's sample data, taken by `npm run screenshots`, which shows nothing of the computer that takes them.
 
 ---
 
 ## 6. When the app changes
 
 - A new or renamed **MCP tool**: update `mcp/tools/*.mdx`, the tool table in `mcp/index.mdx` and `mcp/tools/index.mdx`, and the list of tools allowed without asking in `agents/start-and-manage.mdx` when `AGENT_ALLOWED_TOOLS` changes.
-- A new **view** or a changed sidebar: `views/`, `getting-started/first-launch.mdx`, `views/index.mdx`, and the screenshots.
+- A new **view** or a changed sidebar: `views/`, `getting-started/first-launch.mdx`, `views/index.mdx`, and the screenshots (`npm run screenshots -- docs` in the repository's root takes them all again).
 - New **keyboard shortcuts**: `keyboard-shortcuts/index.mdx`.
 - **Settings**: `settings/index.mdx`.
 - Anything in the **desktop app** (tray, notifications, install): `desktop-app/index.mdx`, `getting-started/`.

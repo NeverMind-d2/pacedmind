@@ -14,6 +14,8 @@ With a PacedMind Cloud account, Claude Code, Codex and other MCP clients use Pac
 
 Sessions that PacedMind starts in a terminal don't use it: they reach the desktop app's own server on their computer, with a token that works only for their task. See [MCP server](/mcp).
 
+[pacedmind.com/connect](https://pacedmind.com/connect) has the steps for each agent: the commands to copy for Claude Code and Codex, **Add to Cursor** and **Add to VS Code**, and the address for Claude, ChatGPT and other clients.
+
 ## Let your agent connect it
 
 Paste this into Claude Code, Codex or another agent with a terminal:
@@ -60,15 +62,40 @@ This adds the section below to `~/.codex/config.toml`, which the Codex command-l
 url = "https://app.pacedmind.com/api/mcp"
 ```
 
+### Cursor and VS Code
+
+**Add to Cursor** and **Add to VS Code** on [pacedmind.com/connect](https://pacedmind.com/connect) open the editor with PacedMind's server filled in: select **Install** there. By hand, add it to the editor's `mcp.json`.
+
+Cursor (`~/.cursor/mcp.json`, or `.cursor/mcp.json` in a project):
+
+```json
+{ "mcpServers": { "pacedmind": { "url": "https://app.pacedmind.com/api/mcp" } } }
+```
+
+VS Code (`mcp.json` in your user settings, or `.vscode/mcp.json` in a workspace):
+
+```json
+{ "servers": { "pacedmind": { "type": "http", "url": "https://app.pacedmind.com/api/mcp" } } }
+```
+
+When the editor starts the server, it asks you to sign in, and the browser opens PacedMind's page (see [Allow the agent](#allow-the-agent)).
+
+### Claude and ChatGPT
+
+* **Claude**: under Customize → Connectors, select + and Add custom connector, enter `https://app.pacedmind.com/api/mcp`, then connect it.
+* **ChatGPT**: turn on developer mode under Settings → Apps → Advanced settings, then create an app with `https://app.pacedmind.com/api/mcp` and OAuth.
+
+Both then open PacedMind's page, where you allow them.
+
 ### Other MCP clients
 
-Any MCP client that supports OAuth sign-in, such as a custom connector in Claude or ChatGPT: add `https://app.pacedmind.com/api/mcp` as the server's address and follow its sign-in. The client finds PacedMind's sign-in on its own (OAuth protected resource metadata at `https://app.pacedmind.com/.well-known/oauth-protected-resource/api/mcp`) and registers itself.
+Any MCP client that supports OAuth sign-in: add `https://app.pacedmind.com/api/mcp` as the server's address and follow its sign-in. The client finds PacedMind's sign-in on its own (OAuth protected resource metadata at `https://app.pacedmind.com/.well-known/oauth-protected-resource/api/mcp`) and registers itself.
 
 **Settings → Connect your agents** shows the same commands with **Copy commands**.
 
 ## Allow the agent
 
-The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn't signed in to PacedMind, it asks for your email, password and two-factor code first, then comes back to the page.
+The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn't signed in to PacedMind, it asks for your email, password and two-factor code first, then comes back to the page. Without an account, **Create an account** there makes one: once you open the link in the confirmation email in the same browser and set up your authenticator app, it comes back to the page too.
 
 The page asks *Allow Claude Code to use PacedMind?*, with the agent's name as the agent gives it. It shows the server the agent connects to, `app.pacedmind.com` (PacedMind Cloud), and where the sign-in is handed back to the agent: for Claude Code and Codex, an address such as `127.0.0.1:61154` or `localhost:53963` on this computer, where the agent waits only while it signs in. That address isn't the MCP server. An agent you allowed before asks *Allow this agent to use PacedMind again?*
 

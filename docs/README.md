@@ -94,7 +94,7 @@ The Polish pages are then published under `/docs/pl/...`, with `hreflang` altern
 
 ## Screenshots
 
-`public/screenshots/` holds screenshots of the app's views, taken from the development server (`npm run dev` in the repository root) with its sample data, in the dark theme, at 1920 × 1200. Before taking new ones, replace the sample data's folder paths, which contain the local user name. Pages embed them with a plain `<img>` and the `/docs` prefix, as Next's image optimizer isn't available in a static export.
+`public/screenshots/` holds screenshots of the app's views, from the development server's sample data, in the dark theme, at 1920 × 1200. `npm run screenshots -- docs` in the repository root takes them all again: it runs a development server of its own with an empty home folder, so no folder, session or setting of this computer shows, and its clock reads 10:40 today. A new screenshot goes into its list in `scripts/screenshots.mjs`. Pages embed them with a plain `<img>` and the `/docs` prefix, as Next's image optimizer isn't available in a static export.
 
 ## GitHub links
 
