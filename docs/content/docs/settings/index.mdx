@@ -41,9 +41,16 @@ The **Plan** row says where the account stands, such as *Free trial, 12 days lef
 
 Open **Settings → Computers** to see each computer's agents, active flows and sessions. This page is available in the desktop app with or without an account, and in the web app. Without an account it shows this computer only. Signed in, it shows the computers signed in to your account and how many are online.
 
+Under its name, each computer shows whether it's online, its system, its PacedMind version and when it last looked for the agents (*checked 2 min ago*). Below, a column for **Claude Code** and one for **Codex**:
+
+* how its CLI is signed in, such as *Claude account · Max* or *ChatGPT*, or *Signed out*;
+* **CLI**, **App**, **Cloud** and **PacedMind**: gray when the agent has it, dashed when it doesn't. Hover one for its version, or why it's missing. **PacedMind** says whether sessions PacedMind doesn't start itself, such as those in the desktop app, report to this PacedMind; otherwise it says *old name* (connected under PacedMind's earlier name, `organizer`), *reports elsewhere* (set up for another copy, such as a development one) or *not connected*;
+* **MCP servers**, one per line with the brand's mark (the first letter for a server PacedMind has no mark for), and for Claude Code the **claude.ai connectors** its sessions got from the account its CLI is signed in to;
+* how many plugins, skills and hooks it has; hover a count for the names.
+
 Use the pencil beside a computer's name to rename it. Signed in, **Make default** chooses where sessions go when neither their task nor project names a computer, and **Sign out** disconnects that computer. In the desktop app, this computer also has **Check again** to refresh its detected agents, and **Connect** for agents that need connecting.
 
-Signed in, each computer's **From elsewhere** line shows what it does with sessions asked for from the web app or another computer (**Refuse**, **Ask me** or **Start**) and whether asking needs a two-factor code (*Code needed* or *No code needed*). In the desktop app, this computer's line has the same controls as [General](#general); another computer's settings change only in PacedMind on that computer.
+Signed in, each computer's **From elsewhere** line shows what it does with sessions asked for from the web app or another computer (**Refuse**, **Ask me** or **Start**) and whether asking needs a two-factor code (*Code needed* or *No code needed*). In the desktop app, this computer's line has the same controls as [General](#general), and hovering them says what they do; another computer's settings change only in PacedMind on that computer.
 
 Computers is in the Settings menu. Search for **Computers** in the command menu to open it directly. Older links to the Computers page also open it here.
 
@@ -115,9 +122,9 @@ One row each for **Claude Code** and **Codex**, with what PacedMind found of it:
 
 **Open Computers**, next to the heading, opens **Settings → Computers**. There, this computer's card has:
 
-* for each agent, its **CLI** and **Desktop app**, such as *Not installed*, whether it can send sessions to its **Cloud**, its **Sign-in**, and under **MCP** whether sessions PacedMind doesn't start itself, such as those in the desktop app, report to this PacedMind: *Connected*, *Old name* (connected under PacedMind's earlier name, `organizer`), *Reports elsewhere* (set up for another copy, such as a development one) or *Not connected*;
+* a column for each agent: how it's signed in, its **CLI**, **App**, **Cloud** and **PacedMind** connection, its MCP servers and connectors with their marks, and its plugins, skills and hooks (see [Computers](#computers));
 * **Check again**, which looks for the agents right away (*Checked DESKTOP-1*);
-* **Connect** under **MCP**, for an agent that isn't connected to this PacedMind, the same as **Connect** under [Connect your agents](#connect-your-agents).
+* **Connect** next to **PacedMind**, for an agent that isn't connected to this PacedMind, the same as **Connect** under [Connect your agents](#connect-your-agents).
 
 ## Sessions
 

@@ -14,7 +14,8 @@ import {
 } from "@/lib/types";
 import { ConfirmDialog } from "../dialog";
 import { InlineName } from "../entity-menu";
-import { AgentIcon, Icon, SurfaceIcon } from "../icons";
+import { AgentIcon, Icon, SurfaceIcon, type IconName } from "../icons";
+import { ToolIcon } from "../tool-icon";
 import { Button, Dot, Segmented, Switch, cx, useAction } from "../ui";
 
 /* ---------- data from the server ---------- */
@@ -67,34 +68,6 @@ function methodName(m: string | undefined): string | null {
 }
 
 const planName = (p: string | undefined) => (p ? p.charAt(0).toUpperCase() + p.slice(1) : null);
-
-/** One fact about an agent on a computer: what to show, whether it's there (grayscale), and what explains it. */
-type Fact = { main: string; sub?: string | null; on: boolean; title?: string };
-
-function facts(agent: AgentId, t: AgentTools): Record<"cli" | "app" | "cloud" | "mcp" | "login", Fact> {
-  const cloud = CLOUD_LABEL[agent];
-  return {
-    cli: t.cli ? { main: t.cli.version, on: true } : { main: "Not installed", on: false },
-    app: t.app ? { main: t.app.version ?? "Installed", on: true } : { main: "Not installed", on: false },
-    // Both clouds take sessions from the agent's CLI (claude --cloud, codex cloud exec), signed in to the account there.
-    cloud: !t.cli
-      ? { main: "Needs the CLI", sub: cloud, on: false, title: `${cloud} sessions start from the ${AGENT_LABEL[agent]} CLI` }
-      : t.login.state === "out"
-        ? { main: "CLI signed out", sub: cloud, on: false, title: `Sign the ${AGENT_LABEL[agent]} CLI in there to send sessions to ${cloud}` }
-        : { main: t.login.state === "in" ? "Ready" : "Available", sub: cloud, on: true,
-          title: t.login.state === "in" ? undefined : `Starts from the ${AGENT_LABEL[agent]} CLI; it didn't say whether it's signed in` },
-    mcp: { main: MCP_TEXT[t.mcp], on: mcpReaches(t.mcp), title: MCP_HINT[t.mcp] },
-    login: t.login.state === "in"
-      ? { main: "Signed in", sub: [methodName(t.login.method), planName(t.login.plan)].filter(Boolean).join(" · ") || null, on: true }
-      : t.login.state === "out"
-        ? { main: "Signed out", on: false }
-        : { main: t.cli ? "Unknown" : "—", on: false, title: t.cli ? "The CLI didn't say" : "No CLI to ask" },
-  };
-}
-
-const ROWS: { id: keyof ReturnType<typeof facts>; label: string }[] = [
-  { id: "cli", label: "CLI" }, { id: "app", label: "Desktop app" }, { id: "cloud", label: "Cloud" }, { id: "mcp", label: "MCP" }, { id: "login", label: "Sign-in" },
-];
 
 /** "4 min ago", "3 h ago", "yesterday", "5 days ago" or "on 12 Sep". */
 function ago(iso: string, now: number): string {
@@ -177,7 +150,8 @@ export function ComputersView({ devices, hereId, account, registering, projects,
 
   return (
     <section aria-label="Computers" className="@container flex min-w-0 flex-col gap-5 max-md:gap-4">
-      <p className="text-[12.5px] text-mut2">{subtitle}</p>
+      <p title={account ? "What runs on a computer is decided there, in its desktop app. It's online when it checked in during the last two minutes." : undefined}
+        className="text-[12.5px] text-mut2">{subtitle}</p>
       {registering && (
         <div className="flex items-center gap-3 rounded-lg border border-line2 px-4 py-3.5 text-[12.5px] text-mut">
           <Icon name="laptop" size={16} className="shrink-0 text-mut2" />
@@ -231,14 +205,6 @@ export function ComputersView({ devices, hereId, account, registering, projects,
             Sign in
           </Link>
         </div>
-      )}
-
-      {account && devices.length > 0 && (
-        <p className="text-[12px] leading-relaxed text-mut2">
-          What runs on a computer is decided there: its agent commands, folders, flow switches, what it does with sessions asked
-          for from elsewhere and whether asking needs a two-factor code are set in its desktop app. A computer is online when it
-          checked in during the last two minutes; what it has of the agents, it looks for when it starts and every half hour.
-        </p>
       )}
 
       {leaving && (
@@ -311,6 +277,14 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
               <span>{platformName(d.platform)}</span>
               <Sep />
               <span>{d.appVersion ? `PacedMind ${d.appVersion}` : "PacedMind version unknown"}</span>
+              {d.checkedAt && (
+                <>
+                  <Sep />
+                  <span title="When it last looked for Claude Code and Codex: when it starts and every half hour" suppressHydrationWarning>
+                    checked {ago(d.checkedAt, now)}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -329,7 +303,7 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
         </div>
       </header>
 
-      <Agents d={d} here={here && desktop} pending={pending} now={now} onConnect={onConnect} />
+      <Agents d={d} here={here && desktop} pending={pending} onConnect={onConnect} />
 
       <div className="flex flex-col gap-3 border-t border-line px-4 py-3.5 max-md:px-3.5">
         {account && (
@@ -337,7 +311,7 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
             <FromElsewhere d={d} editable={here && desktop} onChange={onRemote} />
           </Line>
         )}
-        <Line label="Flows on" title="Projects whose flow may start sessions by itself on this computer. Each computer switches its own.">
+        <Line label="Flows on" title="Projects whose flow may start sessions by itself on this computer. Each computer switches its own, in Flows.">
           {flows.length ? (
             <div className="flex min-h-8 flex-wrap items-center gap-1.5">
               {flows.map((p) => (
@@ -349,7 +323,7 @@ function Computer({ d, here, desktop, account, online, now, flows, sessions, ren
               ))}
             </div>
           ) : (
-            <p className="flex min-h-8 items-center text-[12.5px] text-mut2 @max-xl:min-h-0">{here && desktop ? "None here. Switch a project's flow on in Flows." : "None"}</p>
+            <p className="flex min-h-8 items-center text-[12.5px] text-mut2 @max-xl:min-h-0">None</p>
           )}
         </Line>
         <Line label="Sessions">
@@ -396,15 +370,12 @@ function FromElsewhere({ d, editable, onChange }: {
     );
   }
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <div className="flex min-h-8 flex-wrap items-center gap-x-4 gap-y-2">
-        <Segmented value={d.remoteStart} options={REMOTE_START_OPTIONS} onChange={(v) => onChange({ remoteStart: v })} />
-        <label className="flex items-center gap-2 text-[12.5px] text-fg3">
-          <Switch on={d.remoteCode} label="Ask for a two-factor code" onChange={(v) => onChange({ remoteCode: v })} />
-          Two-factor code
-        </label>
-      </div>
-      <p className="text-[12px] leading-relaxed text-mut2">{fromElsewhereText(d.remoteStart, d.remoteCode, "here")}</p>
+    <div title={fromElsewhereText(d.remoteStart, d.remoteCode, "here")} className="flex min-h-8 flex-wrap items-center gap-x-4 gap-y-2">
+      <Segmented value={d.remoteStart} options={REMOTE_START_OPTIONS} onChange={(v) => onChange({ remoteStart: v })} />
+      <label className="flex items-center gap-2 text-[12.5px] text-fg3">
+        <Switch on={d.remoteCode} label="Ask for a two-factor code" onChange={(v) => onChange({ remoteCode: v })} />
+        Two-factor code
+      </label>
     </div>
   );
 }
@@ -440,137 +411,123 @@ function SessionRow({ s, now }: { s: ComputerSession; now: number }) {
 
 /* ---------- its agents ---------- */
 
-/**
- * What a computer found of each agent. Wide: one row per agent. Narrow (a phone): one row per fact, with the two agents
- * side by side, so a card stays short.
- */
-function Agents({ d, here, pending, now, onConnect }: {
+/** What a computer found of each agent: a column per agent, side by side; a narrow card stacks them. */
+function Agents({ d, here, pending, onConnect }: {
   d: Device;
   /** This computer, in its own desktop app: its agents can be connected from here. */
   here: boolean;
-  pending: boolean; now: number; onConnect: (agent: AgentId) => void;
+  pending: boolean; onConnect: (agent: AgentId) => void;
 }) {
-  const heading = (
-    <div className="flex min-h-5 flex-wrap items-baseline gap-x-2 text-[12px]">
-      <span className="font-medium text-fg3">Claude Code and Codex</span>
-      {d.checkedAt && <span className="text-mut2" suppressHydrationWarning>as of {ago(d.checkedAt, now)}</span>}
-    </div>
-  );
   if (!d.checkedAt) {
     return (
-      <div className="flex flex-col gap-1 border-t border-line px-4 py-3 max-md:px-3.5">
-        {heading}
-        <p className="text-[12.5px] text-mut2">{here ? "Looking for Claude Code and Codex…" : "It hasn't looked for Claude Code and Codex yet."}</p>
-      </div>
+      <p className="border-t border-line px-4 py-3 text-[12.5px] text-mut2 max-md:px-3.5">
+        {here ? "Looking for Claude Code and Codex…" : "It hasn't looked for Claude Code and Codex yet."}
+      </p>
     );
   }
-  const of = { claude: facts("claude", d.agents.claude), codex: facts("codex", d.agents.codex) };
-  // Connecting writes this computer's agent config, so only its own window offers it.
-  const connect = (agent: AgentId) => {
-    const t = d.agents[agent];
-    return here && t.mcp !== "connected" && (t.cli || t.app || agent === "codex") ? (
-      <Button size="sm" disabled={pending} onClick={() => onConnect(agent)} className="mt-1 self-start"
-        title={agent === "claude"
-          ? "Adds PacedMind's MCP server to Claude Code for all projects, with your token, so the Claude app's sessions can report back"
-          : "Adds PacedMind's MCP server to ~/.codex/config.toml (kept as config.toml.pacedmind-backup), so the Codex app's sessions can report back"}>
-        Connect
-      </Button>
-    ) : null;
-  };
-  const grid = "grid grid-cols-[132px_repeat(5,minmax(0,1fr))] gap-x-3";
   return (
-    <div className="border-t border-line">
-      <div className="px-4 pt-3 max-md:px-3.5">{heading}</div>
-
-      {/* Wide: an agent per row. */}
-      <div className="hidden px-4 pb-1.5 @2xl:block">
-        <div aria-hidden className={cx(grid, "h-8 items-center text-[11.5px] text-mut2")}>
-          <span>Agent</span>
-          {ROWS.map((r) => <span key={r.id}>{r.label}</span>)}
-        </div>
-        {AGENTS.map((a) => (
-          <div key={a} className={cx(grid, "items-start border-t border-line py-2.5 text-[12.5px]")}>
-            <span className="flex items-center gap-2 text-fg2">
-              <AgentIcon agent={a} size={14} className="text-fg3" />{AGENT_LABEL[a]}
-            </span>
-            {ROWS.map((r) => (
-              <span key={r.id} className="flex min-w-0 flex-col">
-                <span className="sr-only">{r.label}: </span>
-                <Value f={of[a][r.id]} />
-                {r.id === "mcp" && connect(a)}
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* Narrow: a fact per row, the agents side by side. */}
-      <div className="px-4 pb-2 @2xl:hidden max-md:px-3.5">
-        <div className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)] gap-x-3 border-b border-line py-2 text-[12.5px]">
-          <span />
-          {AGENTS.map((a) => (
-            <span key={a} className="flex min-w-0 items-center gap-1.5 text-fg2">
-              <AgentIcon agent={a} size={13} className="text-fg3" /><span className="truncate">{AGENT_LABEL[a]}</span>
-            </span>
-          ))}
-        </div>
-        {ROWS.map((r) => (
-          <div key={r.id} className="grid grid-cols-[88px_minmax(0,1fr)_minmax(0,1fr)] items-start gap-x-3 border-b border-line py-2 text-[12.5px] last:border-b-0">
-            <span className="text-[12px] text-mut2">{r.label}</span>
-            {AGENTS.map((a) => (
-              <span key={a} className="flex min-w-0 flex-col">
-                <span className="sr-only">{AGENT_LABEL[a]}: </span>
-                <Value f={of[a][r.id]} />
-                {r.id === "mcp" && connect(a)}
-              </span>
-            ))}
-          </div>
-        ))}
-      </div>
-      <Extras d={d} />
-    </div>
-  );
-}
-
-/**
- * What each agent's sessions get on that computer besides PacedMind, by name, as its config files say (extras.ts),
- * and what its sessions there got from the account its CLI is signed in to, as the last one said: each computer's CLI
- * can be signed in to another account, with other connectors.
- */
-function Extras({ d }: { d: Device }) {
-  const lines = AGENTS.flatMap((a) => {
-    const t = d.agents[a];
-    const h = t.extras;
-    if (!h || (!t.cli && !t.app)) return [];
-    const parts = [
-      h.mcp.length ? `MCP servers ${h.mcp.join(", ")}` : "no other MCP servers",
-      h.account?.length ? `${a === "claude" ? "claude.ai connectors" : "connectors from its account"} ${h.account.join(", ")}` : null,
-      h.plugins.length ? `plugins ${h.plugins.join(", ")}` : null,
-      h.skills ? `${h.skills} ${h.skills === 1 ? "skill" : "skills"}` : null,
-      h.hooks.length ? `hooks on ${h.hooks.join(", ")}` : null,
-    ].filter(Boolean);
-    return [{ a, text: parts.join(" · ") }];
-  });
-  if (!lines.length) return null;
-  return (
-    <div className="flex flex-col gap-1.5 border-t border-line px-4 py-2.5 text-[12.5px] max-md:px-3.5"
-      title="Read from Claude Code's and Codex's own settings on that computer; what comes from the account its CLI is signed in to, as the last session PacedMind started there said. A project's folder can add more: see Settings.">
-      <span className="text-[12px] text-mut2">Besides PacedMind, their sessions also get</span>
-      {lines.map(({ a, text }) => (
-        <div key={a} className="flex items-start gap-2">
-          <AgentIcon agent={a} size={13} className="mt-[3px] shrink-0 text-fg3" />
-          <span className="min-w-0 break-words text-fg2">{text}</span>
-        </div>
+    <div className="grid grid-cols-2 border-t border-line @max-xl:grid-cols-1">
+      {AGENTS.map((a, i) => (
+        <AgentColumn key={a} agent={a} t={d.agents[a]} first={i === 0} pending={pending} onConnect={onConnect}
+          // Connecting writes this computer's agent config, so only its own window offers it.
+          connectable={here && d.agents[a].mcp !== "connected" && (!!d.agents[a].cli || !!d.agents[a].app || a === "codex")} />
       ))}
     </div>
   );
 }
 
-function Value({ f }: { f: Fact }) {
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function AgentColumn({ agent, t, first, connectable, pending, onConnect }: {
+  agent: AgentId; t: AgentTools; first: boolean; connectable: boolean; pending: boolean; onConnect: (agent: AgentId) => void;
+}) {
+  const x = t.extras;
+  const cloud = CLOUD_LABEL[agent];
+  const signIn = t.login.state === "in"
+    ? [methodName(t.login.method), planName(t.login.plan)].filter(Boolean).join(" · ") || "Signed in"
+    : t.login.state === "out" ? "Signed out" : null;
+  // Plugins, skills and hooks as counts; their names are in the tooltips.
+  const more = x ? [
+    x.plugins.length ? { text: count(x.plugins.length, "plugin"), title: x.plugins.join(", ") } : null,
+    x.skills ? { text: count(x.skills, "skill"), title: undefined } : null,
+    x.hooks.length ? { text: count(x.hooks.length, "hook"), title: `On ${x.hooks.join(", ")}` } : null,
+  ].filter((m) => m !== null) : [];
+
   return (
-    <span title={f.title} className="flex min-w-0 flex-col">
-      <span className={cx("break-words", f.on ? "text-fg2" : "text-dim")}>{f.main}</span>
-      {f.sub && <span className="break-words text-[11.5px] leading-snug text-mut2">{f.sub}</span>}
+    <div className={cx("flex min-w-0 flex-col gap-3 px-4 py-3.5 max-md:px-3.5", !first && "border-l border-line @max-xl:border-l-0 @max-xl:border-t")}>
+      <div className="flex min-h-6 min-w-0 items-center gap-2">
+        <AgentIcon agent={agent} size={15} className="shrink-0 text-fg2" />
+        <h4 className="shrink-0 text-[13px] font-medium text-strong">{AGENT_LABEL[agent]}</h4>
+        <span className="flex-1" />
+        {signIn && (
+          <span title={`Its CLI: ${t.login.state === "in" ? "signed in" : "signed out"}`}
+            className={cx("min-w-0 truncate text-[12px]", t.login.state === "in" ? "text-mut" : "text-dim")}>{signIn}</span>
+        )}
+      </div>
+
+      {!t.cli && !t.app ? <p className="text-[12.5px] text-dim">Not installed</p> : (
+        <>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip icon="terminal" on={!!t.cli} title={t.cli ? `CLI ${t.cli.version}` : "No CLI"}>CLI</Chip>
+            <Chip icon="appWindow" on={!!t.app} title={t.app ? `${APP_LABEL[agent]}${t.app.version ? ` ${t.app.version}` : ""}` : `No ${APP_LABEL[agent]}`}>App</Chip>
+            <Chip icon="cloud" on={!!t.cli && t.login.state !== "out"}
+              title={!t.cli ? `${cloud} sessions start from the ${AGENT_LABEL[agent]} CLI` : t.login.state === "out" ? `Sign the CLI in to send sessions to ${cloud}` : `Sessions can go to ${cloud}`}>
+              Cloud
+            </Chip>
+            <Chip icon="plug" on={mcpReaches(t.mcp)} title={MCP_HINT[t.mcp]}>
+              {t.mcp === "connected" ? "PacedMind" : `PacedMind: ${MCP_TEXT[t.mcp].toLowerCase()}`}
+            </Chip>
+            {connectable && (
+              <Button size="sm" disabled={pending} onClick={() => onConnect(agent)}
+                title={agent === "claude"
+                  ? "Adds PacedMind's MCP server to Claude Code for all projects, with your token, so the Claude app's sessions can report back"
+                  : "Adds PacedMind's MCP server to ~/.codex/config.toml (kept as config.toml.pacedmind-backup), so the Codex app's sessions can report back"}>
+                Connect
+              </Button>
+            )}
+          </div>
+
+          {x && <Tools label="MCP servers" names={x.mcp}
+            title="Read from its own settings on that computer. A project's folder can add more: see Settings → Projects." />}
+          {x?.account?.length ? (
+            <Tools label={agent === "claude" ? "claude.ai connectors" : "Connectors"} names={x.account}
+              title="From the account its CLI is signed in to, as the last session PacedMind started there said." />
+          ) : null}
+          {more.length > 0 && (
+            <p className="text-[12px] text-mut2">
+              {more.map((m, i) => <span key={m.text} title={m.title}>{i > 0 && <span aria-hidden className="text-faint"> · </span>}{m.text}</span>)}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A thing an agent has there or not: gray when it has it, dashed and dim when it doesn't. */
+function Chip({ icon, on, title, children }: { icon: IconName; on: boolean; title?: string; children: ReactNode }) {
+  return (
+    <span title={title} className={cx("inline-flex h-6 max-w-full items-center gap-1.5 rounded-md border px-2 text-[12px]",
+      on ? "border-line2 text-fg2" : "border-dashed border-line2 text-dim")}>
+      <Icon name={icon} size={12} className="shrink-0" />
+      <span className="truncate">{children}</span>
     </span>
+  );
+}
+
+/** MCP servers or connectors, one per line with its brand's mark. */
+function Tools({ label, names, title }: { label: string; names: string[]; title: string }) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <span title={title} className="pb-0.5 text-[11.5px] text-mut2">
+        {label}{names.length > 0 && <span className="text-dim"> {names.length}</span>}
+      </span>
+      {names.length ? names.map((n) => (
+        <span key={n} className="flex h-7 min-w-0 items-center gap-2 text-[12.5px] text-fg2">
+          <ToolIcon name={n} size={14} className="text-fg3" />
+          <span className="truncate">{n.replace(/^claude[._ ]?ai[ _]/i, "")}</span>
+        </span>
+      )) : <span className="text-[12.5px] text-dim">None</span>}
+    </div>
   );
 }

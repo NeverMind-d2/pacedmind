@@ -84,7 +84,9 @@ SOFTWARE.
 
 The Claude mark in `src/components/icons.tsx`, and the GitHub mark in `site/components/github-mark.tsx`, come from [Simple Icons](https://simpleicons.org), which dedicates its icons to the public domain (CC0 1.0).
 
-Claude is a trademark of Anthropic, and Codex of OpenAI. PacedMind uses their names and marks only to show which agent runs a session. GitHub is a trademark of GitHub, Inc.; the website uses its mark only on links to PacedMind's repository.
+The brand marks Settings → Computers shows next to MCP servers and connectors, in `src/components/tool-icon-paths.ts` (made by `scripts/tool-icons.mjs`), come from Simple Icons too.
+
+Claude is a trademark of Anthropic, and Codex of OpenAI. PacedMind uses their names and marks only to show which agent runs a session. GitHub is a trademark of GitHub, Inc.; the website uses its mark only on links to PacedMind's repository. The marks next to MCP servers and connectors are trademarks of their owners, shown only to name the service a server or connector reaches.
 
 ## Google's "G"
 
