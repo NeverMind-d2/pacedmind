@@ -13,7 +13,7 @@ import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE } from "@/lib/colors";
 import { dateOnly, parseLocal, timeOf, toDateStr, toDateTimeStr } from "@/lib/dates";
 import {
-  AGENT_LABEL, PRIORITY_LABEL, STATUS_LABEL, isAnswers,
+  AGENT_LABEL, PRIORITY_LABEL, REPEAT_LABEL, STATUS_LABEL, isAnswers,
   type Area, type Attachment, type CalEvent, type Priority, type Project, type Report, type Session, type Status, type Task, type ReportDiff
 } from "@/lib/types";
 import { NO_USE, addUse, agentUseLine, hasUse, sessionUse } from "@/lib/usage";
@@ -267,6 +267,8 @@ export function taskLine(t: Task, n: Names): string {
   parts.push(t.title, n.place(t));
   if (t.dueDate) parts.push(`due ${fmtWhen(t.dueDate)}`);
   if (t.plannedDate) parts.push(`planned ${plannedWhen(t)}`);
+  if (t.repeat) parts.push(REPEAT_LABEL[t.repeat].toLowerCase());
+  if (t.relatedProjectId) parts.push(`about ${n.project(t.relatedProjectId)}`);
   if (t.labels.length) parts.push(t.labels.map((l) => `#${l}`).join(" "));
   return parts.join(" · ");
 }
@@ -286,7 +288,9 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     `${t.key} · ${t.title}`,
     `Status: ${STATUS_LABEL[t.status]} · Priority: ${PRIORITY_LABEL[t.priority]}`,
     `Where: ${project ? `project ${project.name} (${project.id}) in ${n.area(project.areaId)}` : t.areaId ? `area ${n.area(t.areaId)}` : "Inbox"}`,
+    t.relatedProjectId ? `About: project ${n.project(t.relatedProjectId)} (${t.relatedProjectId}), without being part of it` : null,
     t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? plannedWhen(t) : "none"}` : null,
+    t.repeat ? `Repeats: ${REPEAT_LABEL[t.repeat].toLowerCase()}; done, it comes back as a new task at its next date` : null,
     `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent === "human" ? " · Done by: the user (human), not in flows" : t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,

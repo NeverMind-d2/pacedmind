@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import { folderProblem } from "../folders";
 import { nextReadyTask } from "../flow";
-import { afterTaskDone, keepYoursOutOfFlow, startsAfterWouldLoop } from "../ops";
+import { afterTaskDone, keepYoursOutOfFlow, repeatTask, startsAfterWouldLoop } from "../ops";
 import * as repo from "../repo";
 import { MODE } from "../supabase";
 import { usage } from "../views";
@@ -11,7 +11,7 @@ import { callerSession } from "./principal";
 import { nextColor } from "@/lib/colors";
 import { MAX_NEEDS } from "@/lib/needs";
 import { addDaysStr, dateOnly, timeOf, toDateStr } from "@/lib/dates";
-import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Status, type Task } from "@/lib/types";
+import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Repeat, type Status, type Task } from "@/lib/types";
 import {
   AREA_ICON_EXAMPLES, PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail, iconFrom,
   findArea, findAreaOrInbox, findProject, findTask, fmtWhen, isOpen, names, prioritySchema, priorityOf, projectLine,
@@ -71,6 +71,9 @@ const doneWhenSchema = z.array(z.string()).max(20)
 const needsSchema = z.array(z.string().max(48)).max(MAX_NEEDS)
   .describe("What its agent needs from the computer its session runs on, by name: MCP servers or claude.ai connectors, e.g. [\"supabase\", \"Gmail\"]. PacedMind offers a computer that has them. Only what differs between computers: a project's own folder brings its servers everywhere");
 
+const repeatSchema = z.enum(["day", "weekday", "week", "month"])
+  .describe("Makes it come back: once done, a new task appears at the next date (every day, weekday Mon-Fri, week or month after its planned day or deadline)");
+
 const newTaskFields = {
   description: z.string().optional().describe("Details in Markdown, which the app shows formatted: why it matters, context, constraints, links. Short paragraphs or a list, `code` for paths and commands"),
   done_when: doneWhenSchema.optional(),
@@ -84,6 +87,9 @@ const newTaskFields = {
   subtasks: z.array(z.string()).optional().describe("Checklist items"),
   agent: doerSchema.optional()
     .describe("claude or codex when an AI agent should do the task; human when only the user can (it then stays out of flows). Leave it out for the project's default"),
+  related_project: projectRef.optional()
+    .describe("A project the task is about without being part of it, for small things like replying to an email about it: the task stays in its area (give area, not project), and the project's page lists it under Related"),
+  repeat: repeatSchema.optional(),
 };
 
 const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim().replace(/^#/, "").toLowerCase()).filter(Boolean))];
@@ -91,6 +97,7 @@ const cleanLabels = (labels: string[]) => [...new Set(labels.map((l) => l.trim()
 type NewTask = {
   title: string; description?: string; done_when?: string[]; needs?: string[]; status?: (typeof STATUS_NAMES)[number]; priority?: (typeof PRIORITY_NAMES)[number];
   due?: string; planned?: string; estimate_minutes?: number; labels?: string[]; subtasks?: string[]; agent?: Doer;
+  related_project?: string; repeat?: Repeat;
 };
 
 /** Creates a task. The caller runs afterTaskDone for tasks created as done. */
@@ -110,6 +117,8 @@ async function createOne(input: NewTask, place: { projectId: string | null; area
     estimateMin: input.estimate_minutes,
     labels: cleanLabels(input.labels ?? []),
     agent: input.agent,
+    relatedProjectId: input.related_project ? (await findProject(input.related_project)).id : null,
+    repeat: input.repeat ?? null,
   });
   for (const s of input.subtasks ?? []) if (s.trim()) await repo.addSubtask(t.id, s);
   return (await repo.getTask(t.id))!;
@@ -517,6 +526,8 @@ export function registerPlanningTools(server: McpServer) {
       priority: prioritySchema.optional(),
       due: dateTimeInput.nullable().optional(),
       planned: plannedInput.nullable().optional(),
+      related_project: projectRef.nullable().optional().describe("A project it's about without being part of it (it stays in its area), or null to clear"),
+      repeat: repeatSchema.nullable().optional().describe("How it comes back once done, or null to stop it repeating"),
       estimate_minutes: z.number().int().min(5).max(24 * 60).optional(),
       labels: z.array(z.string()).optional().describe("Replaces all labels"),
       add_labels: z.array(z.string()).optional(),
@@ -567,6 +578,8 @@ export function registerPlanningTools(server: McpServer) {
       dueDate,
       plannedDate: planned === undefined ? undefined : planned?.plannedDate ?? null,
       plannedTime: planned === undefined ? undefined : planned?.plannedTime ?? null,
+      relatedProjectId: args.related_project === undefined ? undefined : args.related_project === null ? null : (await findProject(args.related_project)).id,
+      repeat: args.repeat,
       estimateMin: args.estimate_minutes,
       labels: args.labels || args.add_labels || args.remove_labels ? labels : undefined,
       projectId,
@@ -580,7 +593,10 @@ export function registerPlanningTools(server: McpServer) {
     for (const s of remove) await repo.deleteSubtask(s.id);
     for (const s of args.add_subtasks ?? []) if (s.trim()) await repo.addSubtask(t.id, s);
     const leftFlow = args.agent === "human" && (await keepYoursOutOfFlow(t.id)) ? [`${t.key} is the user's now, so it left the flow.`] : [];
+    // A repeating task comes back first, so the answer can name the new one.
+    const again = status === "done" && t.status !== "done" ? await repeatTask(t.id) : null;
     const started = status === "done" && t.status !== "done" ? await launched(await afterTaskDone(t.id)) : [];
+    if (again) started.unshift(`It repeats: ${again.key} is the next one, planned ${fmtWhen(again.plannedDate ?? again.dueDate!)}.`);
     const after = (await repo.getTask(t.id))!;
     const subs = (args.done_when ? ` · ${plural(after.doneWhen.length, "Done when item")}` : "") +
       (after.subtasks.length ? ` · ${after.subtasks.filter((s) => s.done).length}/${after.subtasks.length} sub-tasks done` : "");

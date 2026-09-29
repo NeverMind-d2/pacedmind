@@ -20,7 +20,9 @@ export interface TaskGroup {
   tasks: Task[];
   tone?: "danger";
   /** Defaults for the quick-add opened from this group's + button. */
-  add?: { plannedDate?: string; projectId?: string; areaId?: string };
+  add?: QuickAddDefaults;
+  /** Starts collapsed, like Done and Canceled. */
+  folded?: boolean;
 }
 
 export function openAdd(detail: QuickAddDefaults = {}) {
@@ -49,7 +51,9 @@ export function TaskList({
   const [areaOpen, setAreaOpen] = useState(true);
   const [sel, setSel] = useState<string | null>(initialKey ?? null);
   const [filter, setFilter] = useState<"all" | "tasks" | "activities">("all");
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ done: true, canceled: true });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => ({
+    done: true, canceled: true, ...Object.fromEntries(pageGroups.filter((g) => g.folded).map((g) => [g.id, true])),
+  }));
   const [display, setDisplay] = useTaskDisplay();
   const groups = arrange(pageGroups, display);
   const all = pageGroups.flatMap((g) => g.tasks);

@@ -6,7 +6,8 @@ import { afterDone, afterFinished, afterFlowOn, startFromFlow } from "./flow";
 import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
 import { noteContinued, takeDiff } from "./diff";
-import { nowStamp } from "@/lib/dates";
+import { addDaysStr, dateOnly, dayDiff, nowStamp, timeOf, toDateStr } from "@/lib/dates";
+import { nextRepeat } from "@/lib/repeat";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
 import {
   AGENT_LABEL, ANSWERS_HEADING, LIVE_STATUSES, isAnswers, isLiveSession,
@@ -20,6 +21,7 @@ import {
  * that waited for it. A cloud session never reports back, so marking its task done ends it too.
  */
 export async function afterTaskDone(taskId: number): Promise<LaunchResult[]> {
+  await repeatTask(taskId);
   const finished = await repo.listSessions({ taskId, status: ["finished"] });
   for (const s of finished) {
     await repo.updateSession(s.id, { status: "done" });
@@ -35,6 +37,32 @@ export async function afterTaskDone(taskId: number): Promise<LaunchResult[]> {
     forgetSessionFiles(finished.map((s) => s.id));
   }
   return afterDone(taskId);
+}
+
+/**
+ * A repeating task that's done comes back as a new one, at its next date: its planned day and deadline move on by
+ * the same number of days (the deadline keeps its time), a task with neither gets the next day from today, and its
+ * sub-tasks come back unticked. The repeat moves on to the new task, so the done one repeats only once. Null when
+ * the task doesn't repeat, isn't done, or already came back.
+ */
+export async function repeatTask(taskId: number): Promise<Task | null> {
+  const t = await repo.getTask(taskId);
+  if (!t?.repeat || t.status !== "done") return null;
+  const today = toDateStr(new Date());
+  const from = t.plannedDate ?? (t.dueDate ? dateOnly(t.dueDate) : today);
+  const next = nextRepeat(t.repeat, from, today);
+  const shift = dayDiff(from, next);
+  const moved = (v: string) => (timeOf(v) ? `${addDaysStr(v, shift)}T${timeOf(v)}` : addDaysStr(v, shift));
+  await repo.updateTask(t.id, { repeat: null });
+  const again = await repo.createTask({
+    title: t.title, description: t.description, areaId: t.areaId, projectId: t.projectId, relatedProjectId: t.relatedProjectId,
+    priority: t.priority, estimateMin: t.estimateMin, labels: t.labels, doneWhen: t.doneWhen, needs: t.needs, agent: t.agent,
+    runIn: t.runIn, deviceId: t.deviceId, modelSettings: t.modelSettings, repeat: t.repeat,
+    plannedDate: t.plannedDate || !t.dueDate ? next : null, plannedTime: t.plannedDate ? t.plannedTime : null,
+    dueDate: t.dueDate ? moved(t.dueDate) : null,
+  });
+  for (const s of t.subtasks) await repo.addSubtask(again.id, s.title);
+  return again;
 }
 
 /** The session an agent works in on a task: the one it names, else the task's running one. */

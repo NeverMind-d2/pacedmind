@@ -25,6 +25,8 @@ import { Button, Menu, Segmented, Switch, cx, toast, useAction } from "./ui";
 export type QuickAddDefaults = {
   deviceId?: string | null; agent?: Doer | null; runIn?: Surface | null;
   projectId?: string | null; areaId?: string | null; plannedDate?: string | null; mode?: "task" | "activity"; start?: string | null;
+  /** A project the new task is about without being part of it (from its page's Related group). */
+  relatedProjectId?: string | null;
 };
 
 // The project a page shows when its address doesn't say which (Flows and Roadmap pick one), while that page is open.
@@ -60,7 +62,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
   const [ov, setOv] = useState<{
     areaId?: string | null; projectId?: string | null; status?: Status; priority?: Priority; due?: string | null; planned?: string | null; weekly?: boolean; duration?: number;
     agent?: Doer | null; runIn?: Surface | null; deviceId?: string | null; needs?: string[];
-    modelSettings?: ModelSelection | null; modelProject?: string | null;
+    modelSettings?: ModelSelection | null; modelProject?: string | null; related?: string | null;
   }>({});
   const input = useRef<HTMLInputElement>(null);
   const { pending, run } = useAction();
@@ -102,6 +104,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
 
   const parsed = useMemo(() => parseQuickAdd(text), [text]);
   const planned = ov.planned !== undefined ? ov.planned : (defaults.plannedDate ?? null);
+  const related = ov.related !== undefined ? ov.related : (defaults.relatedProjectId ?? null);
   // A time typed without a day is on the planned day, when there is one: the day quick add was opened for, say.
   const typed = parsed.date && parsed.timeOnly && planned ? `${planned}T${timeOf(parsed.date)}` : parsed.date;
   const projectFromText = parsed.projectQuery
@@ -159,6 +162,7 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
       run(async () => {
         const r = await createTaskAction({
           title, description: desc, areaId, projectId, status, priority, dueDate: due, plannedDate: planned,
+          relatedProjectId: projectId ? null : related,
           labels: parsed.labels, estimateMin: parsed.durationMin ?? undefined, doneWhen: doneItems,
           agent: doer, runIn, modelSettings, deviceId: agent ? deviceId : null, needs: agent ? needs : [],
         });
@@ -277,6 +281,10 @@ export function QuickAdd({ areas, projects }: { areas: Area[]; projects: Project
                 items={[{ value: null as string | null, label: "No project" },
                   ...projects.filter((p) => !areaId || p.areaId === areaId).map((p) => ({ value: p.id as string | null, label: p.name }))]}
                 onSelect={(v) => setOv((o) => ({ ...o, projectId: v, areaId: v ? projects.find((p) => p.id === v)?.areaId ?? o.areaId : o.areaId }))} />
+              {!projectId && related && (
+                <button type="button" onClick={() => setOv((o) => ({ ...o, related: null }))} title="About this project, without being part of it. Click to remove"
+                  className={chip}><Icon name="link" size={13} />About {projects.find((p) => p.id === related)?.name ?? "a project"}<Icon name="x" size={11} /></button>
+              )}
               {parsed.labels.map((l) => (
                 <span key={l} className={cx(chip, found)}><Icon name="tag" size={13} />{l}</span>
               ))}

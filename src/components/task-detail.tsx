@@ -17,8 +17,9 @@ import { blockMinutes } from "@/lib/planner";
 import { desktopStartText } from "@/lib/session-health";
 import { agentUseLine, hasUse } from "@/lib/usage";
 import {
-  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, REOPEN_CONFIRM, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING, VERDICT_LABEL, agentOf, isAnswers,
-  type AgentId, type Doer, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
+  AGENT_LABEL, APP_LABEL, CLOUD_LABEL, DOER_LABEL, PRIORITY_LABEL, REOPEN_CONFIRM, REPEATS, REPEAT_LABEL, STATUS_LABEL, TRUST_FIRST, TRUST_WAITING,
+  VERDICT_LABEL, agentOf, isAnswers,
+  type AgentId, type Doer, type Repeat, type Priority, type Report, type ReportCriterion, type Session, type SessionEvent, type Status, type Surface,
   type Task, type TaskContext,
 } from "@/lib/types";
 import { DateField } from "./date-field";
@@ -109,6 +110,7 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
   const [newLabel, setNewLabel] = useState("");
   const area = ctx.areas.find((a) => a.id === task.areaId) ?? null;
   const project = ctx.projects.find((p) => p.id === task.projectId) ?? null;
+  const related = ctx.projects.find((p) => p.id === task.relatedProjectId) ?? null;
   const session = ctx.sessions[task.id] ?? null;
   const use = ctx.agentUse?.[task.id];
   const events = session ? ctx.sessionEvents[session.id] ?? [] : [];
@@ -394,6 +396,21 @@ export function TaskDetail({ task, ctx, onClose }: { task: Task; ctx: TaskContex
             <Menu trigger={<button type="button" className={cx(pv, !project && "text-mut2")}><Icon name="layers" size={14} />{project?.name ?? "Add to project"}</button>}
               items={[{ value: null as string | null, label: "No project" }, ...ctx.projects.map((p) => ({ value: p.id as string | null, label: p.name }))]}
               onSelect={(v) => save({ projectId: v, modelSettings: null, ...(v ? { areaId: ctx.projects.find((p) => p.id === v)?.areaId ?? task.areaId } : {}) })} />
+          </Prop>
+          {/* Outside a project, a task can still be about one: its page lists it under Related, and it counts nowhere there. */}
+          {!project && (
+            <Prop label="About">
+              <Menu trigger={<button type="button" className={cx(pv, !related && "text-mut2")}><Icon name="link" size={14} />{related?.name ?? "Link a project"}</button>}
+                items={[{ value: null as string | null, label: "No project" },
+                  ...ctx.projects.filter((p) => !task.areaId || p.areaId === task.areaId).map((p) => ({ value: p.id as string | null, label: p.name }))]}
+                onSelect={(v) => save({ relatedProjectId: v })} />
+            </Prop>
+          )}
+          <Prop label="Repeat">
+            <Menu trigger={<button type="button" className={cx(pv, !task.repeat && "text-mut2")}><Icon name="repeat" size={14} />
+              {task.repeat ? REPEAT_LABEL[task.repeat] : "Doesn't repeat"}</button>}
+              items={[{ value: null as Repeat | null, label: "Doesn't repeat" }, ...REPEATS.map((r) => ({ value: r as Repeat | null, label: REPEAT_LABEL[r] }))]}
+              onSelect={(v) => save({ repeat: v })} />
           </Prop>
           <Prop label="Done by">
             <Menu width={240}

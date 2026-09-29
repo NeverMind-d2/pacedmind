@@ -15,7 +15,7 @@ declare
   area_a uuid; area_b uuid; dev uuid; dev2 uuid; dev_b uuid; tid bigint; tid2 bigint; tkey text; req uuid; rid bigint;
   req_nc uuid; req_fc uuid; req_ch uuid;
   ask_id uuid; ask2 uuid; ask3 uuid;
-  area_del uuid; t_del bigint; t_moved bigint; code text;
+  area_del uuid; t_del bigint; t_moved bigint; code text; proj_b uuid;
   sid text := '0123456789abcdef';
   n int; out text := '';
   now_s bigint := extract(epoch from now())::bigint;
@@ -116,6 +116,16 @@ begin
     out := out || '4 FAIL cross-account reference allowed' || E'\n';
     reset role;
   exception when others then out := out || '4 cross-account area blocked: ' || left(sqlerrm, 90) || E'\n'; end;
+
+  -- 4b. nor say it's about another account's project
+  insert into public.projects (user_id, area_id, name) values (b, area_b, 'Theirs') returning id into proj_b;
+  begin
+    perform set_config('request.jwt.claims', claims_aal2_old, true); set local role authenticated;
+    insert into public.tasks (key, area_id, related_project_id, title, created_at, updated_at)
+      values ('', area_a, proj_b, 'x', '2026-09-25T10:00:00', '2026-09-25T10:00:00');
+    out := out || '4b FAIL task related to another account''s project accepted' || E'\n';
+    reset role;
+  exception when others then out := out || '4b cross-account related project blocked: ' || left(sqlerrm, 80) || E'\n'; end;
 
   -- 5. own task gets a key
   begin

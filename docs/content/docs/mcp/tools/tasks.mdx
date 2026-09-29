@@ -103,6 +103,8 @@ Adds a task. Without `project` and `area`, it goes to the Inbox.
 | `labels` | string list | no | Labels, stored in lowercase, without `#`. |
 | `subtasks` | string list | no | Checklist items. |
 | `agent` | `claude`, `codex` or `human` | no | Who does it. Left out, the task gets the project's default agent. `human` keeps it out of flows. |
+| `related_project` | project id or name | no | A project the task is about without being part of it. Give `area`, not `project`: the task is one of the area's to-dos, and the project's page lists it under **Related**. |
+| `repeat` | `day`, `weekday`, `week` or `month` | no | Marked done, the task comes back as a new one at its next date. |
 
 Returns the new task's line, with its key and the number of Done when items and sub-tasks: *Created DEV-43 · Todo · High · Add CSV export to the reports page · Organizer app · 4 Done when items · 3 sub-tasks.*
 
@@ -146,6 +148,8 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `project` | string or `null` | Moves the task to this project and its area, or takes it out of its project. |
 | `area` | string or `null` | Moves the task to this area; `null` or `inbox` moves it to the Inbox. The task leaves its project when that project is in another area. With `project`, leave it out: a different area is refused. |
 | `agent` | `claude`, `codex`, `human` or `null` | Who does it. `human` takes the task out of its flow for good. |
+| `related_project` | project id or name, or `null` | The project it's about without being part of it; `null` clears it. |
+| `repeat` | `day`, `weekday`, `week`, `month` or `null` | How it comes back once done; `null` stops it. Setting `status` to `done` on a repeating task adds the next one, and the answer names it: *It repeats: WRK-41 is the next one, planned 2026-10-01 (Thu).* |
 | `runs_in` | `terminal`, `desktop`, `cloud` or `null` | Where its agent sessions run: a terminal or the agent's desktop app on the user's computer, or the agent's cloud. `null`: a terminal when the agent's command-line tool is installed, else its desktop app. |
 | `folder` | string or `null` | An absolute folder its sessions work in instead of the project's, checked right away. `null` goes back to the project's folder. |
 | `add_subtasks` | string list | New sub-tasks. |

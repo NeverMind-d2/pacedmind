@@ -1,8 +1,9 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { updateTaskAction } from "@/app/actions";
 import { attentionOf, attentionWords, dueInfo } from "@/lib/dates";
-import { AGENT_LABEL, PRIORITY_LABEL, type Task, type TaskContext } from "@/lib/types";
+import { AGENT_LABEL, PRIORITY_LABEL, REPEAT_LABEL, type Task, type TaskContext } from "@/lib/types";
 import { Icon, PriorityIcon, StatusIcon } from "./icons";
 import { cx, useAction } from "./ui";
 
@@ -54,6 +55,10 @@ export function SessionChip({ task, ctx }: { task: Task; ctx: TaskContext }) {
 
 export function TaskRow({ task, ctx, selected, onSelect }: { task: Task; ctx: TaskContext; selected: boolean; onSelect: () => void }) {
   const { run } = useAction();
+  // On the page of the project it's about, the project goes without saying.
+  const path = usePathname();
+  const about = task.relatedProjectId && !task.projectId && path !== `/project/${task.relatedProjectId}`
+    ? ctx.projects.find((p) => p.id === task.relatedProjectId) : undefined;
   const done = task.status === "done" || task.status === "canceled";
   return (
     // On a phone: taller rows and a bigger target for the status, without the key and labels.
@@ -70,6 +75,19 @@ export function TaskRow({ task, ctx, selected, onSelect }: { task: Task; ctx: Ta
         {task.title}
       </button>
       <SessionChip task={task} ctx={ctx} />
+      {/* A project it's about, without being in it; and whether it comes back once done. */}
+      {about && (
+        <span title="About this project, without being part of it"
+          className="inline-flex h-5 min-w-0 max-w-[160px] shrink items-center gap-1 rounded-[5px] border border-line2 px-1.5 text-[11.5px] text-mut max-sm:hidden">
+          <Icon name="link" size={11} className="shrink-0" />
+          <span className="truncate">{about.name}</span>
+        </span>
+      )}
+      {task.repeat && (
+        <span title={REPEAT_LABEL[task.repeat]} aria-label={REPEAT_LABEL[task.repeat]} className="shrink-0 text-mut2">
+          <Icon name="repeat" size={13} />
+        </span>
+      )}
       {task.labels.slice(0, 2).map((l) => (
         <span key={l} className="inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-ctl px-2 text-[11.5px] text-mut max-sm:hidden">
           <span className="h-1.5 w-1.5 rounded-full bg-mut2" />{l}

@@ -101,7 +101,10 @@ export function usage(areas: Area[], projects: Project[], tasks: Task[]): Usage 
   return {
     areas: Object.fromEntries(areas.map((a) => {
       const ts = tasks.filter((t) => inArea(t, a.id));
-      return [a.id, { projects: projects.filter((p) => p.areaId === a.id).length, tasks: ts.length, open: ts.filter(isOpen).length }];
+      return [a.id, {
+        projects: projects.filter((p) => p.areaId === a.id).length, tasks: ts.length, open: ts.filter(isOpen).length,
+        loose: ts.filter((t) => !t.projectId && isOpen(t)).length,
+      }];
     })),
     projects: Object.fromEntries(projects.map((p) => {
       const ts = tasks.filter((t) => t.projectId === p.id);

@@ -35,6 +35,8 @@ export interface TaskInput {
   /** "HH:mm" on the planned day; cleared with the planned day. */
   plannedTime?: string | null;
   estimateMin?: number;
+  relatedProjectId?: string | null;
+  repeat?: import("@/lib/types").Repeat | null;
   labels?: string[];
   doneWhen?: string[];
   needs?: string[];

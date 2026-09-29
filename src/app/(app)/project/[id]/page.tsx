@@ -15,10 +15,12 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
   const project = await repo.getProject(id);
   // Deleted (maybe just now, from its own menu): show the overview instead of a 404.
   if (!project) redirect("/projects");
-  const [areas, tasks] = await Promise.all([repo.listAreas(), repo.listTasks({ projectId: id })]);
+  const [areas, tasks, areaTasks] = await Promise.all([repo.listAreas(), repo.listTasks({ projectId: id }), repo.listTasks({ areaId: project.areaId })]);
+  // Tasks about the project without being part of it: they live in its area's To-dos and count nowhere here.
+  const related = areaTasks.filter((t) => t.relatedProjectId === id && !t.projectId && t.status !== "canceled");
   const area = areas.find((a) => a.id === project.areaId);
   const link = "inline-flex h-7 items-center gap-1.5 rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover";
-  const ctx = await taskContext(tasks);
+  const ctx = await taskContext([...tasks, ...related]);
   // What the agents used on the project's tasks, as they reported it.
   const use = Object.values(ctx.agentUse ?? {}).reduce(addUse, NO_USE);
   return (
@@ -26,7 +28,14 @@ export default async function ProjectPage(props: PageProps<"/project/[id]">) {
       icon="layers"
       title={project.name}
       subtitle={[area?.name, project.targetDate && `target ${fmtShort(project.targetDate)}`, hasUse(use) && agentUseShort(use)].filter(Boolean).join(" · ")}
-      groups={groupByStatus(tasks)}
+      groups={[
+        ...groupByStatus(tasks),
+        ...(related.length ? [{
+          id: "related", name: "Related", folded: related.every((t) => t.status === "done"),
+          tasks: related.sort((a, b) => Number(a.status === "done") - Number(b.status === "done") || a.sortOrder - b.sortOrder),
+          add: { projectId: null, areaId: project.areaId, relatedProjectId: id },
+        }] : []),
+      ]}
       ctx={ctx}
       initialKey={typeof sp.task === "string" ? sp.task : null}
       addDefaults={{ projectId: id }}

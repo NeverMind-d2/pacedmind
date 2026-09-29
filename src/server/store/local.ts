@@ -16,7 +16,7 @@ import {
 import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
-  taskHref,
+  repeatOf, taskHref,
   type AgentId, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence, type FlowEdge,
   type LaunchRequest, type Priority, type Project, type Report, type ReportOutcome, type Session,
   type PushSubscriptionInput, type SessionAsk, type SessionEvent, type SessionStatus, type Settings, type Status, type Subtask, type Surface,
@@ -137,6 +137,7 @@ export async function deleteProject(id: string) {
   tx(() => {
     run("UPDATE projects SET after_project_id = NULL WHERE after_project_id = ?", id);
     run("UPDATE tasks SET project_id = NULL WHERE project_id = ?", id);
+    run("UPDATE tasks SET related_project_id = NULL WHERE related_project_id = ?", id);
     run("DELETE FROM projects WHERE id = ?", id);
   });
   forgetProject(id);
@@ -234,6 +235,7 @@ export async function mergeProject(fromId: string, intoId: string) {
   tx(() => {
     run("UPDATE tasks SET project_id = ?, area_id = ?, sort_order = sort_order + ?, updated_at = ? WHERE project_id = ?",
       intoId, into.areaId, last, nowStamp(), fromId);
+    run("UPDATE tasks SET related_project_id = ? WHERE related_project_id = ?", intoId, fromId);
     run("UPDATE projects SET after_project_id = NULL WHERE id = ? AND after_project_id = ?", intoId, fromId);
     run("UPDATE projects SET after_project_id = ? WHERE after_project_id = ?", intoId, fromId);
     run("UPDATE projects SET agent = COALESCE(agent, ?), codex_env = COALESCE(codex_env, ?), repo = COALESCE(repo, ?) WHERE id = ?",
@@ -257,7 +259,8 @@ function subtasksFor(ids: number[]): Map<number, Subtask[]> {
 const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
-  dueDate: s(r.due_date), plannedDate: s(r.planned_date), plannedTime: r.planned_date ? s(r.planned_time) : null, estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
+  dueDate: s(r.due_date), plannedDate: s(r.planned_date), plannedTime: r.planned_date ? s(r.planned_time) : null, estimateMin: Number(r.estimate_min),
+  relatedProjectId: s(r.related_project_id), repeat: repeatOf(r.repeat), labels: strings(json(r.labels, [])),
   doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
   modelSettings: modelSelectionOf(json(r.model_settings, null)),
@@ -317,18 +320,21 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
     `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, planned_time, estimate_min,
-       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings, related_project_id, repeat)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
     input.dueDate ?? null, input.plannedDate ?? null, (input.plannedDate && input.plannedTime) || null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
     JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
     input.agent === "human" ? null : input.runIn ?? null, sort, stamp, stamp, JSON.stringify(checkedModelSelection(input.modelSettings)),
+    input.relatedProjectId ?? null, input.repeat ?? null,
   );
   return taskNow(Number(r.lastInsertRowid))!;
 }
 
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
-  dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min", reminder: "reminder", agent: "agent", runIn: "run_in",
+  dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min",
+  relatedProjectId: "related_project_id", repeat: "repeat", reminder: "reminder", agent: "agent", runIn: "run_in",
   sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
 };
 

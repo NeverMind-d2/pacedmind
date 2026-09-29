@@ -11,7 +11,7 @@ import { checkThisDevice, deviceIdFor, offeredDevice, runsHere, thisDeviceId, to
 import { deviceWithNeeds, missingFrom, needList } from "@/lib/needs";
 import { mcpUrl, plannedFolder, resumeSession, startSession, type LaunchResult } from "@/server/launcher";
 import {
-  afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, requestChanges, saveProject,
+  afterTaskDone, changesProblem, closeSession, edgeWouldLoop, finishTask, keepYoursOutOfFlow, removeFromFlow, repeatTask, requestChanges, saveProject,
 } from "@/server/ops";
 import { approve, cutOffAgents, deny } from "@/server/requests";
 import { commandProblem, deviceConfig, rotateOwnerToken, setAreaFolder, setProjectServers, updateDevice } from "@/server/device";
@@ -29,7 +29,7 @@ import { attachOutsideSession, type AttachInput } from "@/server/attach";
 import { areaIconOf, isAreaIcon } from "@/lib/area-icons";
 import { READ_ONLY_MESSAGE, type BillingPeriod } from "@/lib/billing";
 import { areaPictureProblem } from "@/lib/area-picture";
-import { addDaysStr, dateOnly, dayDiff, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
+import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
   AGENT_LABEL, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
   type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
@@ -79,7 +79,13 @@ export async function updateTaskAction(id: number, patch: repo.TaskPatch): Promi
     return { ok: false, error: errorOf(e) };
   }
   if (patch.agent === "human" && (await keepYoursOutOfFlow(id))) return done({ ok: true, message: `${before.key} is yours now, so it left the flow` });
-  if (patch.status === "done" && before.status !== "done") return done({ ok: true, message: await launched(await afterTaskDone(id)) });
+  if (patch.status === "done" && before.status !== "done") {
+    // A repeating task comes back first, so the message can say when.
+    const again = await repeatTask(id);
+    const started = await launched(await afterTaskDone(id));
+    const back = again && `${before.key} comes back as ${again.key} on ${fmtDay(again.plannedDate ?? again.dueDate!)}`;
+    return done({ ok: true, message: [back, started].filter(Boolean).join(". ") || undefined });
+  }
   if (patch.folder !== undefined && project?.flowOn && !(await repo.getProject(project.id))?.flowOn) {
     return done({ ok: true, message: `${project.name}'s flow is off now. Switch it on again to let it start sessions in the new folder.` });
   }

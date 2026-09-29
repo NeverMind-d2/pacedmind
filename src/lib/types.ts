@@ -7,6 +7,12 @@ export type Priority = 0 | 1 | 2 | 3 | 4;
 export type AgentId = "claude" | "codex";
 /** Who does a task: an agent, or you ("human"). Tasks that are yours stay out of flows and agent sessions. */
 export type Doer = AgentId | "human";
+
+/** How a task comes back once it's done: every day, every weekday (Monday to Friday), every week or every month. */
+export type Repeat = "day" | "weekday" | "week" | "month";
+export const REPEATS: Repeat[] = ["day", "weekday", "week", "month"];
+export const REPEAT_LABEL: Record<Repeat, string> = { day: "Every day", weekday: "Every weekday", week: "Every week", month: "Every month" };
+export const repeatOf = (v: unknown): Repeat | null => (REPEATS.includes(v as Repeat) ? (v as Repeat) : null);
 /** How the target task's session starts once the source task is ready. */
 export type EdgeMode = "auto" | "manual" | "session" | "time";
 export type SessionStatus = "starting" | "running" | "finished" | "done" | "closed" | "failed";
@@ -150,6 +156,13 @@ export interface Task {
   /** "HH:mm": when on its planned day, for `estimateMin` minutes (a block in the week calendar). Null lets the auto-planner place it. */
   plannedTime: string | null;
   estimateMin: number;
+  /**
+   * A project it's about without being part of it (it lives in its area): its page lists it under Related, and it
+   * counts nowhere in the project's progress, dates or flow.
+   */
+  relatedProjectId: string | null;
+  /** Done, it comes back as a new task at its next date (ops.ts, repeatTask). */
+  repeat: Repeat | null;
   labels: string[];
   /** What must be true when the task is finished, one checkable outcome per item. Agents answer each when they hand it back. */
   doneWhen: string[];
@@ -693,7 +706,8 @@ export interface TaskContext {
 
 /** Task counts per area and project, for the sidebar, the overview and delete confirmations. */
 export interface Usage {
-  areas: Record<string, { projects: number; tasks: number; open: number }>;
+  /** loose: the open tasks right in the area, without a project (its To-dos). */
+  areas: Record<string, { projects: number; tasks: number; open: number; loose: number }>;
   /** pct is the done share of tasks that aren't canceled. */
   projects: Record<string, { tasks: number; open: number; done: number; pct: number }>;
 }

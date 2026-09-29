@@ -449,13 +449,20 @@ export function Sidebar({ areas: savedAreas, projects: savedProjects, counts, us
                       onSave={(name) => { setRenaming(null); run(() => updateAreaAction(a.id, { name })); }} />
                   </div>
                 ) : (
-                  <MenuRow href={`/area/${a.id}`} active={active(`/area/${a.id}`)} label={a.name} {...state} drag={rowDrag("area", a.id)} drop={null} dragged={false}
+                  <MenuRow href={`/area/${a.id}`} active={path === `/area/${a.id}`} label={a.name} {...state} drag={rowDrag("area", a.id)} drop={null} dragged={false}
                     group={{ expanded: !shut, onToggle: () => setCollapsed((c) => ({ ...c, [a.id]: !shut })), onAdd: () => newProject(a.id) }}>
                     <AreaDot area={a} />
                     <span className="flex-1 truncate">{a.name}</span>
                   </MenuRow>
                 )}
                 {!shut && <div className="ml-7 flex flex-col gap-px border-l border-line pl-2" {...listDrop("project", a.id)}>
+                  {/* The area's own tasks, outside its projects: small things like replying to an email or logging hours. */}
+                  <Link href={`/area/${a.id}/todos`} title={`Tasks in ${a.name} outside its projects`}
+                    className={cx(item, active(`/area/${a.id}/todos`) && "bg-sel text-strong")}>
+                    <Icon name="check" size={15} className="shrink-0 text-mut2" />
+                    <span className="flex-1 truncate">To-dos</span>
+                    {(usage.areas[a.id]?.loose ?? 0) > 0 && <span className="text-[11.5px] text-mut2">{usage.areas[a.id].loose}</span>}
+                  </Link>
                   {list.map((p) => renaming === `project:${p.id}` ? (
                     <div key={p.id} className={editing}>
                       <ProgressRing pct={usage.projects[p.id]?.pct ?? 0} color={projectColor(p, areas)} size={16} />

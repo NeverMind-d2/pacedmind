@@ -19,7 +19,7 @@ import { areaIconOf, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { nowStamp, toDateStr } from "@/lib/dates";
 import {
-  NO_AGENT_TOOLS, taskHref,
+  NO_AGENT_TOOLS, repeatOf, taskHref,
   type AgentId, type AgentTools, type Area, type AskStatus, type Attachment, type CalEvent, type ConnectedAgent, type Device, type Doer, type EdgeMode, type EventOccurrence,
   type FlowEdge, type LaunchRequest, type LaunchRequestKind, type LaunchRequestStatus, type OtherSession, type Priority, type Project,
   type RemoteStart, type Report, type ReportOutcome, type Session, type SessionEvent, type SessionStatus, type Settings, type Status,
@@ -284,6 +284,7 @@ export async function mergeProject(fromId: string, intoId: string) {
   const last = many(await db.from("tasks").select("sort_order").eq("project_id", intoId).order("sort_order", { ascending: false }).limit(1));
   const moving = many(await db.from("tasks").select("id, sort_order").eq("project_id", fromId));
   check(await db.from("tasks").update({ project_id: intoId, area_id: into.areaId, updated_at: nowStamp() }).eq("project_id", fromId));
+  check(await db.from("tasks").update({ related_project_id: intoId }).eq("related_project_id", fromId));
   // After the project's own tasks, in their order. There's no "sort_order + n" through the API, so one by one.
   const after = Number(last[0]?.sort_order ?? 0);
   for (const batch of chunks(moving, 20)) {
@@ -306,7 +307,8 @@ const toSubtask = (r: Row): Subtask => ({ id: Number(r.id), taskId: Number(r.tas
 const toTask = (r: Row): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
-  dueDate: s(r.due_date), plannedDate: s(r.planned_date), plannedTime: r.planned_date ? s(r.planned_time) : null, estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
+  dueDate: s(r.due_date), plannedDate: s(r.planned_date), plannedTime: r.planned_date ? s(r.planned_time) : null, estimateMin: Number(r.estimate_min),
+  relatedProjectId: s(r.related_project_id), repeat: repeatOf(r.repeat), labels: (r.labels as string[] | null) ?? [],
   doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
   modelSettings: modelSelectionOf(r.model_settings),
@@ -351,6 +353,7 @@ export async function taskStatuses(): Promise<Map<number, Status>> {
 /** Creates a task at the end of its project (or of the loose tasks). The database gives it its key. */
 export async function createTask(input: TaskInput): Promise<Task> {
   if (input.deviceId != null && !isUuid(input.deviceId)) throw new Error("Unknown computer");
+  if (input.relatedProjectId != null && !isUuid(input.relatedProjectId)) throw new Error("Unknown project");
   const db = await accountDb();
   const project = input.projectId ? await getProject(input.projectId) : null;
   const areaId = input.areaId ?? project?.areaId ?? null;
@@ -362,6 +365,8 @@ export async function createTask(input: TaskInput): Promise<Task> {
     key: "", area_id: areaId, project_id: input.projectId ?? null, title: input.title.trim(), description: input.description ?? "",
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
     ...(input.plannedDate && input.plannedTime ? { planned_time: input.plannedTime } : {}),
+    ...(input.relatedProjectId ? { related_project_id: input.relatedProjectId } : {}),
+    ...(input.repeat ? { repeat: input.repeat } : {}),
     estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
     run_in: input.agent === "human" ? null : input.runIn ?? null,
@@ -374,6 +379,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
   dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
+  relatedProjectId: "related_project_id", repeat: "repeat",
   reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
 };
 
@@ -393,6 +399,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
     if ((patch.folder || null) !== before && projectId && flowArmed(projectId)) setFlowArmed(projectId, false);
   }
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
+  if (patch.relatedProjectId != null && !isUuid(patch.relatedProjectId)) throw new Error("Unknown project");
   const values = columns(patch, TASK_COLS);
   if (patch.modelSettings !== undefined) values.model_settings = checkedModelSelection(patch.modelSettings);
   if (patch.plannedDate === null) values.planned_time = null;
