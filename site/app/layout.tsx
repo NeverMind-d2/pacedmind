@@ -10,9 +10,9 @@ import "./globals.css";
 // Jost for the page: geometric, with round bowls and a single-storey "a" like the wordmark. Every
 // subset stays available; `subsets` only picks what's preloaded, and the first paint needs Latin.
 const jost = Jost({ variable: "--font-jost", subsets: ["latin"] });
-// The app's own typefaces, for the screens of the app. The screens stay hidden until the deck has
-// measured itself, so these aren't preloaded: they load once the browser lays the screens out,
-// instead of competing with the first paint.
+// The app's own typefaces, for its pieces drawn further down the page (the day strip, the command
+// palette's results) and the commands to copy. None of them is in the first view, so these aren't
+// preloaded: they load once the browser lays those parts out, instead of competing with the first paint.
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"], preload: false });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], preload: false });
 

@@ -1,8 +1,9 @@
 import Link from "next/link";
+import type { StaticImageData } from "next/image";
 import prices from "@/prices.json";
 import { SITE, downloadEvent, signInEvent, sourceEvent } from "@/lib/site";
 import type { Market } from "@/lib/markets";
-import { CLOUD, DAY, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, TRY, VIEWS as VIEW_COPY } from "@/lib/content";
+import { CLOUD, CONNECT, DAY, DOWNLOAD_NOTE, FAQ, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, TRY, VIEWS as VIEW_COPY } from "@/lib/content";
 import { faqPage, graph, pageMetadata, softwareApplication, softwareSourceCode } from "@/lib/seo";
 import { starsAtBuild } from "@/lib/github";
 import { JsonLd } from "@/components/json-ld";
@@ -11,13 +12,18 @@ import { GitHubMark } from "@/components/github-mark";
 import { StarCount } from "@/components/star-count";
 import { Wordmark } from "@/components/wordmark";
 import { ScreenDeck, type DeckItem } from "@/components/screen-deck";
-import { TodayScreen } from "@/components/screens/today";
-import { TimelineScreen } from "@/components/screens/timeline";
-import { Icon } from "@/components/screens/parts";
+import { Icon, SCREEN } from "@/components/screens/parts";
+import { Connect, ConnectAnchors } from "@/components/connect";
 import { DeparturesBoard } from "@/components/departures-board";
 import { DayStrip } from "@/components/day-strip";
 import { CommandPalette } from "@/components/command-palette";
 import { CountryPicker, PlanPrice } from "@/components/plan-price";
+import todayLight from "@/screens/today-light.webp";
+import todayDark from "@/screens/today-dark.webp";
+import weekLight from "@/screens/week-light.webp";
+import weekDark from "@/screens/week-dark.webp";
+import timelineLight from "@/screens/timeline-light.webp";
+import timelineDark from "@/screens/timeline-dark.webp";
 
 export const metadata = pageMetadata("/");
 
@@ -26,8 +32,29 @@ const markets: Market[] = Object.entries(prices.markets)
   .map(([code, { name, currency, locale, amount }]) => ({ code, name, currency, locale, amount }))
   .sort((a, b) => a.name.localeCompare(b.name));
 
+/**
+ * A screenshot of the app (site/screens, taken by `npm run screenshots` in the app from its sample data), in the page's
+ * theme. All of them show in the first view, the first one in front, which the browser fetches first.
+ */
+function Shot({ light, dark, alt, first = false }: { light: StaticImageData; dark: StaticImageData; alt: string; first?: boolean }) {
+  return (
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcSet={dark.src} />
+      <img src={light.src} width={SCREEN.w} height={SCREEN.h} alt={alt} fetchPriority={first ? "high" : "low"} decoding="async"
+        className="block h-full w-full rounded-[14px] border border-app-line2 bg-app-bg" />
+    </picture>
+  );
+}
+
 // The screens render here, on the server; the deck only moves them.
-const SCREENS = { Today: <TodayScreen />, Timeline: <TimelineScreen /> };
+const SCREENS = {
+  Today: <Shot first light={todayLight} dark={todayDark}
+    alt="PacedMind's Today view: the day's events, then the tasks that are overdue, due today and planned for today, one with an agent's session finished." />,
+  Week: <Shot light={weekLight} dark={weekDark}
+    alt="PacedMind's week calendar: events, planned tasks and agent sessions by the hour, beside the tasks still to plan." />,
+  Timeline: <Shot light={timelineLight} dark={timelineDark}
+    alt="PacedMind's Timeline: a project's tasks over the coming weeks, with the tasks each one waits for, an agent's finished session and the deadlines." />,
+};
 const VIEWS: DeckItem[] = VIEW_COPY.map((view) => ({ ...view, screen: SCREENS[view.tab] }));
 
 // Beside the text, the screens take the column's width. In a short window they give up to 120 px of it, so the
@@ -58,6 +85,7 @@ export default async function Home() {
       <header className="mx-auto flex h-[76px] max-w-[1440px] items-center justify-between px-5 sm:px-8">
         <Link href="/" aria-label="PacedMind" className="rounded-[7px]"><Emblem size={30} /></Link>
         <nav className="flex items-center gap-[18px] text-[16px] text-mut sm:gap-[30px]">
+          <a href="#connect" className="hover:text-ink max-md:hidden">Connect</a>
           <a href="#agents" className="hover:text-ink max-sm:hidden">Agents</a>
           <a href="#pricing" className="hover:text-ink">Pricing</a>
           <a href={SITE.docs} className="hover:text-ink">Docs</a>
@@ -94,8 +122,31 @@ export default async function Home() {
               {DOWNLOAD_NOTE}{" "}
               <a href="#open-source" className="whitespace-nowrap underline decoration-line underline-offset-4 hover:text-ink hover:decoration-mut">{OPEN_SOURCE.hero}</a>
             </p>
+            {/* The quick way to an agent: each link opens its steps in the Connect section. */}
+            <nav aria-label="Connect your agent" className="mt-9 border-t border-line pt-6">
+              <p className="text-[15px] text-mut">{CONNECT.hero}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {CONNECT.agents.filter((a) => a.id !== "other").map((a) => (
+                  <a key={a.id} href={`#connect-${a.id}`}
+                    className="flex h-9 items-center gap-2 rounded-[9px] border border-line px-3 text-[15px] text-text hover:border-mut hover:text-ink">
+                    <Icon name={a.icon} size={14} className="text-mut" />
+                    {a.name}
+                  </a>
+                ))}
+              </div>
+            </nav>
           </div>
           <ScreenDeck items={VIEWS} className={{ stage: `min-w-0 ${DECK_WIDTH}`, controls: `lg:col-start-2 ${DECK_WIDTH}` }} />
+        </section>
+
+        {/*
+          Connecting the agent you use, right under the promise: pick it, run one command or add it with one click, then
+          allow it in the browser. The hero's links to one agent land at the top and pick it.
+        */}
+        <section id="connect" className="relative mt-24 scroll-mt-8 sm:mt-[150px]">
+          <ConnectAnchors />
+          <Heading title={CONNECT.title} subtitle={CONNECT.subtitle} intro={CONNECT.intro} />
+          <Connect className="mt-12 sm:mt-16" />
         </section>
 
         {/*

@@ -14,6 +14,9 @@ export const SITE = {
   app: "https://app.pacedmind.com",
   // Where Cloud's button leads: the web app's sign-in page, open on creating an account.
   createAccount: "https://app.pacedmind.com/login?create=1",
+  // PacedMind Cloud's MCP server, which agents connect to and sign in to with the account (cloudMcpUrl() in the app's
+  // src/server/supabase-config.ts).
+  mcp: "https://app.pacedmind.com/api/mcp",
   // Who runs PacedMind and PacedMind Cloud, for the terms, privacy policy and refunds (app/terms, app/privacy,
   // app/refunds), as the business register (CEIDG) has it.
   operator: {
@@ -75,6 +78,11 @@ export function trackDownload(os: "windows" | "mac", place: "palette") {
 /** Makes Umami count a click on a link to the web app as a "Sign in" event, with where the link is. */
 export function signInEvent(place: "header" | "footer") {
   return { "data-umami-event": "Sign in", "data-umami-event-place": place };
+}
+
+/** Makes Umami count a step of connecting an agent as a "Connect" event: which agent, and copying or installing. */
+export function connectEvent(agent: string, step: "copy" | "install") {
+  return { "data-umami-event": "Connect", "data-umami-event-agent": agent, "data-umami-event-step": step };
 }
 
 /** Makes Umami count a click on a link to the source code as a "GitHub" event, with where the link is. */

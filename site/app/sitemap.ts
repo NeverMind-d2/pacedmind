@@ -32,12 +32,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: absoluteUrl("/"),
       lastModified: newest(
         // The page's words, screens and metadata.
-        lastCommit("--", "app/page.tsx", "app/layout.tsx", "lib/content.ts", "components"),
+        lastCommit("--", "app/page.tsx", "app/layout.tsx", "lib/content.ts", "components", "screens"),
         // A price that changed, but not the date of a routine price check.
         lastCommit("-G", '"amount"', "--", "prices.json"),
       ),
       changeFrequency: "monthly",
       priority: 1,
+    },
+    // Connecting an agent: the home page's Connect section on a page of its own.
+    {
+      url: absoluteUrl("/connect"),
+      lastModified: lastCommit("--", "app/connect", "components/connect.tsx", "lib/content.ts"),
+      changeFrequency: "monthly",
+      priority: 0.6,
     },
     // The terms, privacy policy and refund policy.
     ...["/terms", "/privacy", "/refunds"].map((path) => ({

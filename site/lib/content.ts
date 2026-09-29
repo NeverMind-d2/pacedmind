@@ -1,4 +1,5 @@
 import { SITE } from "@/lib/site";
+import type { IconName } from "@/components/screens/parts";
 
 /**
  * The page's words, shared by the home page, /llms.txt, /llms-full.txt and the structured data, so
@@ -20,12 +21,17 @@ export const SEARCH_TITLE = `${NAME}: a calm planner for tasks and coding agents
 export const SEARCH_DESCRIPTION =
   "A calm planner for tasks, time blocks and deadlines. It starts Claude Code and Codex sessions and tells you when one is waiting. Free for Windows and macOS.";
 
-/** The views in the screen deck. */
+/** The views in the screen deck, in the order of their screenshots (site/screens, `npm run screenshots` in the app). */
 export const VIEWS = [
   {
     tab: "Today",
     title: "Plan the day you have",
-    body: "Tasks, time blocks, deadlines and events share one calendar. When an agent finishes, PacedMind tells you and books a short check in your day.",
+    body: "What's scheduled, overdue, due and planned for today, in one list. When an agent finishes, PacedMind tells you and books a short check in your day.",
+  },
+  {
+    tab: "Week",
+    title: "Give every task its hour",
+    body: "Drag tasks onto your week, or let the auto-planner fill the free time around your events. Your agents' tasks show in their own colors.",
   },
   {
     tab: "Timeline",
@@ -33,6 +39,104 @@ export const VIEWS = [
     body: "Every project, deadline and agent session on one timeline, next to the hours you have planned for each day. Arrows show which task waits for which.",
   },
 ] as const;
+
+/** One agent's way to connect to PacedMind Cloud: a command, a button or the address, and what happens next. */
+export type ConnectAgent = {
+  id: string;
+  name: string;
+  icon: IconName;
+  how: string;
+  /** Commands for a terminal, copied together. */
+  commands?: readonly string[];
+  /** A link that opens the agent's app, which asks to add the server. */
+  install?: { label: string; href: string };
+  /** Whether the server's address is there to copy. */
+  address?: boolean;
+  then: string;
+};
+
+/**
+ * Connecting an agent to PacedMind Cloud's MCP server, in the home page's #connect section and at /connect. The
+ * commands are the app's (src/server/connect.ts, Settings → Connect your agents) and the docs'
+ * (docs/content/docs/mcp/connect-cloud.mdx); every agent then signs in in the browser, where you select Allow.
+ */
+const cursorInstall = `cursor://anysphere.cursor-deeplink/mcp/install?name=pacedmind&config=${encodeURIComponent(btoa(JSON.stringify({ url: SITE.mcp })))}`;
+const vscodeInstall = `vscode:mcp/install?${encodeURIComponent(JSON.stringify({ name: "pacedmind", type: "http", url: SITE.mcp }))}`;
+const inBrowser = "PacedMind opens in your browser: sign in and select Allow.";
+
+export const CONNECT = {
+  title: "Connect your agent.",
+  subtitle: "One command, then Allow.",
+  intro:
+    "Claude Code, Codex, Cursor, ChatGPT and other agents plan with you through PacedMind Cloud's MCP server: they read your day, add tasks and report on their work. You allow each one in the browser, so there's no token to copy.",
+  /** The /connect page's description. */
+  description:
+    "Connect Claude Code, Codex, Cursor, VS Code, Claude or ChatGPT to PacedMind Cloud's MCP server: one command or one click, then Allow in the browser.",
+  /** Above the agents' links in the hero. */
+  hero: "Or connect the agent you already use:",
+  account: "No account yet? PacedMind's page lets you create one, with 7 days free and no card.",
+  local:
+    "Rather keep your plan on your computer? The desktop app is free without an account and connects Claude Code and Codex to itself, in Settings → Connect your agents.",
+  details: "Connection details",
+  agents: [
+    {
+      id: "claude-code",
+      name: "Claude Code",
+      icon: "terminal",
+      how: "Run these in a terminal.",
+      commands: [`claude mcp add --transport http --scope user pacedmind ${SITE.mcp}`, "claude mcp login pacedmind"],
+      then: `After the second one, ${inBrowser} Claude Code, and the Code sessions in the Claude app, can then use it.`,
+    },
+    {
+      id: "codex",
+      name: "Codex",
+      icon: "terminal",
+      how: "Run these in a terminal.",
+      commands: [`codex mcp add pacedmind --url ${SITE.mcp}`, "codex mcp login pacedmind"],
+      then: `After the second one, ${inBrowser} The Codex app uses the same setup.`,
+    },
+    {
+      id: "cursor",
+      name: "Cursor",
+      icon: "code",
+      how: "Add PacedMind to Cursor with one click.",
+      install: { label: "Add to Cursor", href: cursorInstall },
+      then: `Cursor shows the server with its address filled in: select Install. When it asks you to sign in, ${inBrowser}`,
+    },
+    {
+      id: "vscode",
+      name: "VS Code",
+      icon: "code",
+      how: "Add PacedMind to VS Code with one click.",
+      install: { label: "Add to VS Code", href: vscodeInstall },
+      then: `VS Code shows the server: select Install. When it asks you to sign in, ${inBrowser}`,
+    },
+    {
+      id: "claude",
+      name: "Claude",
+      icon: "appWindow",
+      how: "In Claude, open Customize → Connectors, select + and then Add custom connector, and paste this address.",
+      address: true,
+      then: `Select Add, then Connect. ${inBrowser}`,
+    },
+    {
+      id: "chatgpt",
+      name: "ChatGPT",
+      icon: "appWindow",
+      how: "In ChatGPT, turn on Developer mode in Settings → Apps → Advanced settings. Then create an app with this address and OAuth.",
+      address: true,
+      then: `When ChatGPT connects it, ${inBrowser}`,
+    },
+    {
+      id: "other",
+      name: "Other",
+      icon: "plus",
+      how: "In any MCP client that signs in with OAuth, add this address as a streamable HTTP server.",
+      address: true,
+      then: `The client finds PacedMind's sign-in and registers by itself. Then ${inBrowser}`,
+    },
+  ] satisfies ConnectAgent[] as readonly ConnectAgent[],
+};
 
 /*
  * The sections between the hero and the pricing tell one day two ways: your day beside the agents' (DAY) and where
@@ -152,8 +256,12 @@ export const FAQ = [
     answer: "Start a session from a task, and PacedMind opens Claude Code or Codex in a terminal or in the agent's desktop app, where you talk to the agent as usual, or sends the task to the agent's cloud. You can also ask an agent in any chat to start one on any of your computers, and each asks you first unless you let it start them itself. Nothing starts on its own: the dependencies you draw on the Timeline only put the work in order. When an agent finishes, PacedMind tells you and books a short check in your day.",
   },
   {
+    question: "How do I connect my agent to PacedMind?",
+    answer: `With PacedMind Cloud, agents use its MCP server at ${SITE.mcp}. For Claude Code, run "claude mcp add --transport http --scope user pacedmind ${SITE.mcp}" and then "claude mcp login pacedmind"; for Codex, "codex mcp add pacedmind --url ${SITE.mcp}" and then "codex mcp login pacedmind". Cursor and VS Code add it with one click from pacedmind.com/connect, and Claude and ChatGPT as a custom connector. The agent then opens PacedMind in your browser, where you sign in and select Allow. Without an account, the desktop app connects Claude Code and Codex to itself, in Settings → Connect your agents.`,
+  },
+  {
     question: "Which coding agents does PacedMind work with?",
-    answer: "Claude Code and Codex, in a terminal, in their desktop apps or in their cloud. Support for more agent harnesses is coming soon.",
+    answer: "PacedMind starts Claude Code and Codex, in a terminal, in their desktop apps or in their cloud; support for more agent harnesses is coming soon. Any agent that speaks MCP, such as Cursor, VS Code, Claude or ChatGPT, can plan with you through PacedMind Cloud.",
   },
   {
     question: "Do I need Claude Code or Codex to use PacedMind?",

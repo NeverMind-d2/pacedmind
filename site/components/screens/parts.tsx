@@ -1,12 +1,10 @@
-import type { ReactNode } from "react";
-import { Wordmark } from "../wordmark";
+// Pieces of the app drawn on the page (the command palette's results, the day strip), from its own sizes, icons and
+// color tokens (src/components/ in the app), so they follow the page's light or dark theme; and the size of the
+// screenshots in the hero's deck.
 
-// Stills of the app, built from its own sizes, icons and color tokens (src/components/ in the app),
-// so they follow the page's light or dark theme. Every screen is SCREEN.w × SCREEN.h.
-
+/** The deck's screens: screenshots of this shape (site/screens, `npm run screenshots` in the app), drawn this size. */
 export const SCREEN = { w: 1056, h: 640 };
 export const AREA = { work: "#7D93B5", personal: "#7FA894", dev: "#7AA3AD" };
-export const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
 
 const PATHS = {
   back: "M19 12H5M11 6l-6 6 6 6",
@@ -31,6 +29,7 @@ const PATHS = {
   code: "M16 18l6-6-6-6 M8 6l-6 6 6 6",
   pullRequest: "M15 18a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M3 6a3 3 0 1 0 6 0a3 3 0 1 0 -6 0 M13 6h3a2 2 0 0 1 2 2v7 M6 9v12",
   star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z",
+  copy: "M11 9h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2z M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
 };
 export type IconName = keyof typeof PATHS;
 
@@ -66,111 +65,12 @@ export function StatusIcon({ status }: { status: Status }) {
   );
 }
 
-export function PriorityIcon({ priority }: { priority: 0 | 2 | 3 | 4 }) {
-  const lit = { 0: 0, 2: 3, 3: 2, 4: 1 }[priority];
-  const fill = (n: number) => (lit >= n ? "var(--color-app-fg3)" : "var(--color-app-ctl)");
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" className="shrink-0">
-      <rect x="1" y="8" width="3" height="5" rx="1" fill={fill(1)} />
-      <rect x="5.5" y="5" width="3" height="8" rx="1" fill={fill(2)} />
-      <rect x="10" y="2" width="3" height="11" rx="1" fill={fill(3)} />
-    </svg>
-  );
-}
-
-export function Pill({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <span className={`inline-flex h-5 shrink-0 items-center gap-1.5 rounded-full border border-app-ctl px-2 text-[11.5px] text-app-mut ${className}`}>
-      {children}
-    </span>
-  );
-}
-
-export function Header({ icon, title, sub, children }: { icon: IconName; title: string; sub?: string; children?: ReactNode }) {
-  return (
-    <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-app-line pl-5 pr-4">
-      <Icon name={icon} className="text-app-mut" />
-      <span className="text-[14px] font-semibold text-app-strong">{title}</span>
-      {sub && <span className="text-app-mut2">{sub}</span>}
-      <span className="flex-1" />
-      {children}
-    </div>
-  );
-}
-
 export function Group({ name, count }: { name: string; count: number }) {
   return (
     <div className="flex h-[34px] shrink-0 items-center gap-2 border-b border-app-line bg-app-raised pl-5 pr-4 text-[12.5px] font-medium text-app-fg2">
       <Icon name="chevronDown" size={12} strokeWidth={2.4} className="text-app-mut2" />
       {name}
       <span className="font-normal text-app-mut2">{count}</span>
-    </div>
-  );
-}
-
-export function Segmented({ options, current }: { options: [IconName | null, string][]; current: string }) {
-  return (
-    <span className="flex rounded-[7px] border border-app-line p-0.5">
-      {options.map(([icon, label]) => (
-        <span key={label} className={`flex items-center gap-1.5 rounded-[5px] px-2.5 py-[3px] text-[12.5px] ${label === current ? "bg-app-sel text-app-strong" : "text-app-mut"}`}>
-          {icon && <Icon name={icon} size={13} />}{label}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-const NAV: [string, IconName, number?][] = [
-  ["Inbox", "inbox"], ["Today", "sun", 5], ["Upcoming", "clock"], ["Calendar", "calendar"], ["Timeline", "timeline"],
-  ["Projects", "box"], ["Roadmap", "roadmap"], ["Sessions", "terminal", 1],
-];
-
-/**
- * The app's window: title bar with the wordmark, the sidebar, and the view's panel. Its made-up tasks
- * and times are never quoted in a search result (data-nosnippet).
- */
-export function AppWindow({ id, current, label, children }: { id: string; current: string; label: string; children: ReactNode }) {
-  return (
-    <div role="img" aria-label={label} data-nosnippet=""
-      className="flex flex-col overflow-hidden rounded-[14px] border border-app-line2 bg-app-bg font-app text-[13px] text-app-fg"
-      style={{ width: SCREEN.w, height: SCREEN.h }}>
-      <div aria-hidden="true" className="flex h-10 shrink-0 items-center gap-0.5 border-b border-app-line px-2 text-app-mut">
-        <span className="flex h-8 w-8 items-center justify-center"><Icon name="back" size={15} /></span>
-        <span className="flex h-8 w-8 items-center justify-center opacity-40"><Icon name="forward" size={15} /></span>
-        <Wordmark id={`${id}-wordmark`} className="ml-2 w-[112px] text-app-strong" />
-      </div>
-      <div aria-hidden="true" className="flex min-h-0 flex-1">
-        <div className="flex w-[220px] shrink-0 flex-col gap-px p-2 pt-2.5">
-          <span className="mb-2 flex h-8 items-center gap-2.5 px-2.5 text-app-mut">
-            <Icon name="search" size={15} />Search
-            <span className="flex-1" />
-            <span className="font-mono text-[11px] text-app-dim">Ctrl K</span>
-          </span>
-          {NAV.map(([name, icon, count]) => {
-            const on = name === current;
-            return (
-              <span key={name} className={`flex h-[30px] items-center gap-2.5 rounded-md px-2.5 ${on ? "bg-app-sel text-app-strong" : "text-app-fg2"}`}>
-                <Icon name={icon} size={15} className={on ? "text-app-fg2" : "text-app-mut"} />
-                {name}
-                <span className="flex-1" />
-                {count && <span className="text-[12px] text-app-mut2">{count}</span>}
-              </span>
-            );
-          })}
-          <span className="mb-1 mt-4 px-2.5 text-[12px] text-app-mut2">Areas</span>
-          {([["Work", "WRK", AREA.work], ["Personal", "PER", AREA.personal], ["Dev", "DEV", AREA.dev]] as const).map(([name, key, color]) => (
-            <span key={key} className="flex h-[30px] items-center gap-2.5 px-2.5 text-app-fg2">
-              <span className="mx-[3.5px] h-2 w-2 rounded-full" style={{ background: color }} />
-              {name}
-              <span className="flex-1" />
-              <span className="font-mono text-[11px] text-app-dim">{key}</span>
-            </span>
-          ))}
-        </div>
-        <div className="m-2 ml-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[10px] border border-app-line bg-app-panel">
-          {children}
-        </div>
-      </div>
     </div>
   );
 }

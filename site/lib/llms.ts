@@ -1,7 +1,10 @@
 import prices from "@/prices.json";
 import { SITE, absoluteUrl } from "@/lib/site";
 import { formatPlanPrice, yearlyMarket } from "@/lib/markets";
-import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS } from "@/lib/content";
+import {
+  CLOUD, CONNECT, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, OPEN_SOURCE, PLACES, PRICING, SUMMARY, TAGLINE, VIEWS,
+  type ConnectAgent,
+} from "@/lib/content";
 
 /**
  * /llms.txt and /llms-full.txt (https://llmstxt.org): PacedMind in plain Markdown for answer engines
@@ -10,6 +13,17 @@ import { CLOUD, COST, DAY, DESCRIPTION, DOWNLOAD_NOTE, FAQ, NAME, ONE_DEVICE, OP
 
 const DOCS = absoluteUrl(SITE.docs);
 const list = (items: readonly string[]) => items.map((item) => `- ${item}`).join("\n");
+const FENCE = "```";
+
+/** One agent's way to connect, as the Connect section shows it. */
+function connectSteps(agent: ConnectAgent) {
+  const steps = [agent.how];
+  if (agent.commands) steps.push(`${FENCE}bash\n${agent.commands.join("\n")}\n${FENCE}`);
+  if (agent.install) steps.push(`[${agent.install.label}](${agent.install.href})`);
+  if (agent.address) steps.push(`\`${SITE.mcp}\``);
+  steps.push(agent.then);
+  return `### ${agent.name}\n\n${steps.join("\n\n")}`;
+}
 
 export function llmsTxt() {
   return `# ${NAME}
@@ -30,12 +44,13 @@ ${NAME} is a desktop planner for Windows and macOS. Tasks, time blocks, deadline
 
 ## Website
 
-- [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today and Timeline views.
+- [Home page](${absoluteUrl("/")}): What ${NAME} does, with its Today, Week and Timeline views.
+- [Connect your agent](${absoluteUrl("/connect")}): ${CONNECT.description}
 - [Your day](${absoluteUrl("/#day")}): Your plan and your agents' sessions on one day, with the checks PacedMind books.
 - [Agents](${absoluteUrl("/#agents")}): Where agent sessions run: a terminal, the agent's app or the cloud.
 - [Open source](${absoluteUrl("/#open-source")}): The source code on GitHub under the GNU AGPL, and how to build ${NAME} from it.
 - [Pricing](${absoluteUrl("/#pricing")}): The free plan for one device, and Cloud with its price in your country.
-- [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents, API keys, where your plan is stored, and the source code.
+- [Frequently asked questions](${absoluteUrl("/#faq")}): Price, systems, agents and connecting them, API keys, where your plan is stored, and the source code.
 
 ## Download
 
@@ -74,6 +89,16 @@ ${DOWNLOAD_NOTE} ${OPEN_SOURCE.hero}
 ## Views
 
 ${VIEWS.map(({ tab, title, body }) => `### ${tab}: ${title}\n\n${body}`).join("\n\n")}
+
+## ${CONNECT.title}
+
+${CONNECT.subtitle} ${CONNECT.intro} The same steps are at ${absoluteUrl("/connect")}.
+
+PacedMind Cloud's MCP server: ${SITE.mcp} (streamable HTTP, OAuth sign-in).
+
+${CONNECT.agents.map(connectSteps).join("\n\n")}
+
+${CONNECT.account} ${CONNECT.local}
 
 ## ${DAY.title}
 
