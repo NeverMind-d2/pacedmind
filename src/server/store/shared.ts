@@ -32,6 +32,8 @@ export interface TaskInput {
   priority?: Priority;
   dueDate?: string | null;
   plannedDate?: string | null;
+  /** "HH:mm" on the planned day; cleared with the planned day. */
+  plannedTime?: string | null;
   estimateMin?: number;
   labels?: string[];
   doneWhen?: string[];

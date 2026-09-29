@@ -306,7 +306,7 @@ const toSubtask = (r: Row): Subtask => ({ id: Number(r.id), taskId: Number(r.tas
 const toTask = (r: Row): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
-  dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
+  dueDate: s(r.due_date), plannedDate: s(r.planned_date), plannedTime: r.planned_date ? s(r.planned_time) : null, estimateMin: Number(r.estimate_min), labels: (r.labels as string[] | null) ?? [],
   doneWhen: (r.done_when as string[] | null) ?? [], needs: cleanNeeds(strings(r.needs)), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: s(r.run_in) as Surface | null, deviceId: s(r.device_id), folder: MODE === "desktop" ? taskFolder("cloud", Number(r.id)) : null,
   modelSettings: modelSelectionOf(r.model_settings),
@@ -361,6 +361,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const r = one(await db.from("tasks").insert({
     key: "", area_id: areaId, project_id: input.projectId ?? null, title: input.title.trim(), description: input.description ?? "",
     status: input.status ?? "todo", priority: input.priority ?? 0, due_date: input.dueDate ?? null, planned_date: input.plannedDate ?? null,
+    ...(input.plannedDate && input.plannedTime ? { planned_time: input.plannedTime } : {}),
     estimate_min: input.estimateMin ?? 60, labels: input.labels ?? [], done_when: cleanDoneWhen(input.doneWhen ?? []), needs: cleanNeeds(input.needs ?? []),
     agent: input.agent ?? project?.agent ?? null, sort_order: Number(last[0]?.sort_order ?? 0) + 1, created_at: stamp, updated_at: stamp,
     run_in: input.agent === "human" ? null : input.runIn ?? null,
@@ -372,7 +373,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
 
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
-  dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
+  dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min", labels: "labels", doneWhen: "done_when",
   reminder: "reminder", agent: "agent", runIn: "run_in", deviceId: "device_id", sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
 };
 
@@ -394,6 +395,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   if (patch.deviceId !== undefined && patch.deviceId !== null && !isUuid(patch.deviceId)) throw new Error("Unknown computer");
   const values = columns(patch, TASK_COLS);
   if (patch.modelSettings !== undefined) values.model_settings = checkedModelSelection(patch.modelSettings);
+  if (patch.plannedDate === null) values.planned_time = null;
   if (patch.doneWhen) values.done_when = cleanDoneWhen(patch.doneWhen);
   if (patch.needs) values.needs = cleanNeeds(patch.needs);
   if (patch.status) values.completed_at = patch.status === "done" ? nowStamp() : null;

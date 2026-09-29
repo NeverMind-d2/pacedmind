@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { AgentId, Area, Priority, Status, Surface, Verdict } from "@/lib/types";
 import type { AreaIcon } from "@/lib/area-icons";
 import { AREA_ICON_PATHS } from "./area-icon-paths";
@@ -83,9 +84,9 @@ const AGENT_MARK: Record<AgentId, string> = {
 };
 
 /** The mark of the agent that runs a session: Claude's spark or Codex's prompt. */
-export function AgentIcon({ agent, size = 14, className }: { agent: AgentId; size?: number; className?: string }) {
+export function AgentIcon({ agent, size = 14, className, style }: { agent: AgentId; size?: number; className?: string; style?: CSSProperties }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true" style={{ flex: "none" }}>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true" style={{ flex: "none", ...style }}>
       <path d={AGENT_MARK[agent]} fillRule="evenodd" clipRule="evenodd" />
     </svg>
   );

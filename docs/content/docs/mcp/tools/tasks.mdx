@@ -98,7 +98,7 @@ Adds a task. Without `project` and `area`, it goes to the Inbox.
 | `status` | status | no | Defaults to `todo`. |
 | `priority` | priority | no | Defaults to `none`. |
 | `due` | date, optional time | no | The deadline. |
-| `planned` | date | no | The day to work on it. |
+| `planned` | date | no | The day to work on it. With a time (*friday 10:00*), also the time: a block in the week view, as long as the estimate, which the auto-planner leaves alone. |
 | `estimate_minutes` | number | no | 5 to 1440. Default 60. |
 | `labels` | string list | no | Labels, stored in lowercase, without `#`. |
 | `subtasks` | string list | no | Checklist items. |
@@ -139,7 +139,7 @@ Changes anything about a task. Parameters left out keep their value; `null` clea
 | `status` | status | The new status. `done` can start the next sessions of a flow. |
 | `priority` | priority | The new priority. |
 | `due` | date with optional time, or `null` | The deadline. |
-| `planned` | date or `null` | The planned day. |
+| `planned` | date or `null` | The planned day, with a time when one is given (as in `create_task`); a day alone removes the time. `null` removes both. |
 | `estimate_minutes` | number | 5 to 1440. |
 | `labels` | string list | Replaces all labels. |
 | `add_labels`, `remove_labels` | string list | Adds or removes labels. |
@@ -167,8 +167,8 @@ Applies the same change to up to 100 tasks, for rescheduling and triage.
 | `status` | status | The new status. |
 | `priority` | priority | The new priority. |
 | `due` | date with optional time, or `null` | A new deadline for all. |
-| `planned` | date or `null` | A new planned day for all. |
-| `shift_days` | number | Moves each task's due and planned dates by this many days, -365 to 365, keeping times. |
+| `planned` | date or `null` | A new planned day for all, with a time when one is given. |
+| `shift_days` | number | Moves each task's due and planned dates by this many days, -365 to 365, keeping times (a planned task's too). |
 | `project` | string or `null` | Moves the tasks to this project, or out of their projects. |
 | `area` | string or `null` | Moves the tasks to this area, or to the Inbox. |
 | `add_labels`, `remove_labels` | string list | Adds or removes labels. |

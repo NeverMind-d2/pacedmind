@@ -27,10 +27,17 @@ const CHECK_MIN = 45;
 
 type Interval = { day: string; from: number; to: number };
 
+/** The minutes a task given a time on its planned day takes there: its estimate, at least a quarter of an hour. */
+export const blockMinutes = (t: Pick<Task, "estimateMin">) => Math.max(15, t.estimateMin || 0);
+
+/** An open task you gave a time on its planned day: it stays where you put it, and the planner works around it. */
+export const isPinned = (t: Task): t is Task & { plannedDate: string; plannedTime: string } =>
+  !!t.plannedDate && !!t.plannedTime && t.status !== "done" && t.status !== "canceled";
+
 /**
- * Greedy auto time-blocking: fills free focus time (work hours minus lunch and fixed events)
- * with open tasks, most urgent first. Agent tasks are skipped, but a finished agent session
- * adds a short "check" block for you.
+ * Greedy auto time-blocking: fills free focus time (work hours minus lunch, fixed events and tasks
+ * you put at a time yourself) with open tasks, most urgent first. Agent tasks are skipped, but a
+ * finished agent session adds a short "check" block for you.
  */
 export function planTimeBlocks(input: {
   tasks: Task[];
@@ -44,6 +51,7 @@ export function planTimeBlocks(input: {
   const today = toDateStr(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
 
+  const pinned = tasks.filter(isPinned);
   const free: Interval[] = [];
   let capacity = 0;
   for (let i = 0; i < input.days; i++) {
@@ -55,6 +63,11 @@ export function planTimeBlocks(input: {
     for (const e of events) {
       if (dateOnly(e.start) !== day) continue;
       busy.push([minutesOf(e.start.slice(11, 16)) - BUFFER, minutesOf(e.end.slice(11, 16)) + BUFFER]);
+    }
+    for (const t of pinned) {
+      if (t.plannedDate !== day) continue;
+      const at = minutesOf(t.plannedTime);
+      busy.push([at - BUFFER, at + blockMinutes(t) + BUFFER]);
     }
     if (day === today) busy.push([0, Math.ceil(nowMin / 15) * 15]);
     for (const [bs, be] of busy) {
@@ -109,7 +122,7 @@ export function planTimeBlocks(input: {
     return `${overdue}|${due}|${t.plannedDate ?? "9999-12-31"}|${pr}|${String(t.id).padStart(6, "0")}`;
   };
   const mine = tasks
-    .filter((t) => (t.status === "todo" || t.status === "progress") && (!t.agent || t.agent === "human"))
+    .filter((t) => (t.status === "todo" || t.status === "progress") && (!t.agent || t.agent === "human") && !isPinned(t))
     .filter((t) => t.dueDate || t.plannedDate || t.priority === 1 || t.priority === 2)
     .sort((a, b) => rank(a).localeCompare(rank(b)));
 

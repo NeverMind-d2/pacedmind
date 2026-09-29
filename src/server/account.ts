@@ -261,6 +261,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
     const STAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
     const MINUTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
     const DAY = /^\d{4}-\d{2}-\d{2}$/;
+    const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
     const COLOR = /^#[0-9A-Fa-f]{6}$/;
     const now = nowStamp();
     const SURFACES = ["terminal", "desktop", "cloud"] as const;
@@ -336,6 +337,7 @@ export async function importLegacy(): Promise<{ areas: number; projects: number;
         title: clip(t.title, 500) || "Untitled", description: String(t.description ?? "").slice(0, 100000),
         status: oneOf(t.status, ["backlog", "todo", "progress", "review", "done", "canceled"]) ?? "todo", priority: int(t.priority, 0, 4, 0),
         due_date: match(t.due_date, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/), planned_date: match(t.planned_date, DAY),
+        planned_time: match(t.planned_date, DAY) ? match(t.planned_time, TIME) : null,
         estimate_min: int(t.estimate_min, 0, 10080, 60), labels: labelsOf(t.labels),
         reminder: match(t.reminder, /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?)?$/), agent: oneOf(t.agent, ["claude", "codex", "human"]),
         sort_order: int(t.sort_order, -1e9, 1e9, 0), flow_x: num(t.flow_x), flow_y: num(t.flow_y),
@@ -566,8 +568,8 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
     const project = (v: unknown) => (v == null ? null : projectId.get(String(v)) ?? null);
 
     const insTask = conn.prepare(`INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date,
-      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when, needs, model_settings)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      estimate_min, labels, reminder, agent, sort_order, flow_x, flow_y, created_at, updated_at, completed_at, run_in, done_when, needs, model_settings,
+      planned_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     for (const t of tasks) {
       const r = insTask.run(
         String(t.key), area(t.area_id), project(t.project_id), String(t.title), String(t.description ?? ""), String(t.status), Number(t.priority ?? 0),
@@ -575,6 +577,7 @@ export async function moveToThisComputer(): Promise<{ areas: number; projects: n
         t.flow_x == null ? null : Number(t.flow_x), t.flow_y == null ? null : Number(t.flow_y), String(t.created_at), String(t.updated_at),
         s(t.completed_at), s(t.run_in), json(t.done_when), json(cleanNeeds(Array.isArray(t.needs) ? t.needs.filter((x): x is string => typeof x === "string") : [])),
         JSON.stringify(modelSelectionOf(t.model_settings)),
+        s(t.planned_date) && /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t.planned_time)) ? String(t.planned_time) : null,
       );
       taskId.set(Number(t.id), Number(r.lastInsertRowid));
     }

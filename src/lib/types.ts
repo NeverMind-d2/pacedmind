@@ -147,6 +147,8 @@ export interface Task {
   dueDate: string | null;
   /** "YYYY-MM-DD": the day you mean to work on it. */
   plannedDate: string | null;
+  /** "HH:mm": when on its planned day, for `estimateMin` minutes (a block in the week calendar). Null lets the auto-planner place it. */
+  plannedTime: string | null;
   estimateMin: number;
   labels: string[];
   /** What must be true when the task is finished, one checkable outcome per item. Agents answer each when they hand it back. */

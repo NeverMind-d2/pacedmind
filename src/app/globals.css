@@ -37,6 +37,10 @@
 
 :root {
   color-scheme: dark;
+  /* The agents' own colors, only as a light wash on their sessions and tasks in the week calendar. Here rather than
+     in @theme, which leaves out the variables no class uses. */
+  --color-claude: #d97757;
+  --color-codex: #7b8cff;
   --shadow-popover: 0 24px 64px rgb(0 0 0 / 0.55);
 }
 
@@ -72,6 +76,8 @@ html[data-theme="light"] {
   --color-danger-hover: #ffe3dd;
   --color-danger-line: #e8b9b2;
   --color-danger-fg: #9e332b;
+  --color-claude: #c2603e;
+  --color-codex: #4f5fd9;
   --shadow-popover: 0 16px 48px rgb(24 24 30 / 0.16);
 }
 

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
   area_id TEXT REFERENCES areas(id), project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
   title TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'todo',
-  priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
+  priority INTEGER NOT NULL DEFAULT 0, due_date TEXT, planned_date TEXT, planned_time TEXT, estimate_min INTEGER NOT NULL DEFAULT 60,
   labels TEXT NOT NULL DEFAULT '[]', reminder TEXT, agent TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
   flow_x REAL, flow_y REAL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT,
   run_in TEXT, device_id TEXT, folder TEXT, done_when TEXT NOT NULL DEFAULT '[]', needs TEXT NOT NULL DEFAULT '[]', model_settings TEXT
@@ -140,7 +140,7 @@ function migrate(conn: DatabaseSync) {
   const added: Record<string, [string, string][]> = {
     areas: [["icon", "TEXT"], ["picture", "TEXT"], ["repo", "TEXT"]],
     projects: [["color", "TEXT"], ["device_id", "TEXT"], ["codex_env", "TEXT"], ["repo", "TEXT"]],
-    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"]],
+    tasks: [["run_in", "TEXT"], ["device_id", "TEXT"], ["folder", "TEXT"], ["done_when", "TEXT NOT NULL DEFAULT '[]'"], ["needs", "TEXT NOT NULL DEFAULT '[]'"], ["model_settings", "TEXT"], ["planned_time", "TEXT"]],
     sessions: [["surface", "TEXT NOT NULL DEFAULT 'terminal'"], ["device_id", "TEXT"], ["url", "TEXT"], ["usage", "TEXT"]],
     reports: [["changes", "TEXT"], ["changes_at", "TEXT"], ["diff", "TEXT"]],
     events: [["done_on", "TEXT NOT NULL DEFAULT '[]'"]],

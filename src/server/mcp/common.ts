@@ -182,6 +182,19 @@ export function when(input: string, time: "optional" | "required" | "drop" = "op
   return time === "drop" ? value.slice(0, 10) : value;
 }
 
+export const plannedInput = z.string().describe(
+  'The day the user means to work on it: YYYY-MM-DD or words like "friday". With a time ("friday 10:00", YYYY-MM-DDTHH:mm) it also becomes a block at that time in the week calendar, as long as its estimate, which the auto-planner leaves alone',
+);
+
+/** A planned day, and the time on it when the input names one. */
+export function plannedOf(input: string): { plannedDate: string; plannedTime: string | null } {
+  const value = when(input);
+  return { plannedDate: dateOnly(value), plannedTime: timeOf(value) };
+}
+
+/** When a task is planned: its day, with the time it was put at. */
+const plannedWhen = (t: Task) => fmtWhen(t.plannedTime ? `${t.plannedDate}T${t.plannedTime}` : t.plannedDate!);
+
 /** "2026-09-26 (Fri)" or "2026-09-26 14:00 (Fri)". */
 export function fmtWhen(value: string): string {
   const t = timeOf(value);
@@ -253,7 +266,7 @@ export function taskLine(t: Task, n: Names): string {
   if (t.priority) parts.push(PRIORITY_LABEL[t.priority]);
   parts.push(t.title, n.place(t));
   if (t.dueDate) parts.push(`due ${fmtWhen(t.dueDate)}`);
-  if (t.plannedDate) parts.push(`planned ${fmtWhen(t.plannedDate)}`);
+  if (t.plannedDate) parts.push(`planned ${plannedWhen(t)}`);
   if (t.labels.length) parts.push(t.labels.map((l) => `#${l}`).join(" "));
   return parts.join(" · ");
 }
@@ -273,7 +286,7 @@ export async function describeTask(t: Task, given?: Names): Promise<string> {
     `${t.key} · ${t.title}`,
     `Status: ${STATUS_LABEL[t.status]} · Priority: ${PRIORITY_LABEL[t.priority]}`,
     `Where: ${project ? `project ${project.name} (${project.id}) in ${n.area(project.areaId)}` : t.areaId ? `area ${n.area(t.areaId)}` : "Inbox"}`,
-    t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? fmtWhen(t.plannedDate) : "none"}` : null,
+    t.dueDate || t.plannedDate ? `Due: ${t.dueDate ? fmtWhen(t.dueDate) : "none"} · Planned for: ${t.plannedDate ? plannedWhen(t) : "none"}` : null,
     `Estimate: ${fmtMinutes(t.estimateMin)}${t.agent === "human" ? " · Done by: the user (human), not in flows" : t.agent ? ` · Agent: ${AGENT_LABEL[t.agent]}` : ""}`,
     t.labels.length ? `Labels: ${t.labels.join(", ")}` : null,
     t.folder ? `Folder: ${t.folder} (its own)` : project?.folder ? `Folder: ${project.folder}` : null,

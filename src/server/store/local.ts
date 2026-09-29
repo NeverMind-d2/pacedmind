@@ -257,7 +257,7 @@ function subtasksFor(ids: number[]): Map<number, Subtask[]> {
 const toTask = (r: Row, subs: Subtask[]): Task => ({
   id: Number(r.id), key: String(r.key), areaId: s(r.area_id), projectId: s(r.project_id), title: String(r.title),
   description: String(r.description ?? ""), status: String(r.status) as Status, priority: Number(r.priority) as Priority,
-  dueDate: s(r.due_date), plannedDate: s(r.planned_date), estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
+  dueDate: s(r.due_date), plannedDate: s(r.planned_date), plannedTime: r.planned_date ? s(r.planned_time) : null, estimateMin: Number(r.estimate_min), labels: strings(json(r.labels, [])),
   doneWhen: strings(json(r.done_when, [])), needs: cleanNeeds(strings(json(r.needs, []))), reminder: s(r.reminder), agent: s(r.agent) as Doer | null,
   runIn: SURFACES.has(String(r.run_in)) ? (String(r.run_in) as Surface) : null, deviceId: null, folder: taskFolder("local", Number(r.id)),
   modelSettings: modelSelectionOf(json(r.model_settings, null)),
@@ -316,10 +316,10 @@ export async function createTask(input: TaskInput): Promise<Task> {
   const stamp = nowStamp();
   const sort = Number(get("SELECT COALESCE(MAX(sort_order), 0) + 1 AS n FROM tasks WHERE project_id IS ?", input.projectId ?? null)!.n);
   const r = run(
-    `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, estimate_min,
-       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO tasks (key, area_id, project_id, title, description, status, priority, due_date, planned_date, planned_time, estimate_min,
+       labels, done_when, needs, agent, run_in, sort_order, created_at, updated_at, model_settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     nextKey(areaId), areaId, input.projectId ?? null, input.title.trim(), input.description ?? "", input.status ?? "todo", input.priority ?? 0,
-    input.dueDate ?? null, input.plannedDate ?? null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
+    input.dueDate ?? null, input.plannedDate ?? null, (input.plannedDate && input.plannedTime) || null, input.estimateMin ?? 60, JSON.stringify(input.labels ?? []),
     JSON.stringify(cleanDoneWhen(input.doneWhen ?? [])), JSON.stringify(cleanNeeds(input.needs ?? [])), input.agent ?? project?.agent ?? null,
     input.agent === "human" ? null : input.runIn ?? null, sort, stamp, stamp, JSON.stringify(checkedModelSelection(input.modelSettings)),
   );
@@ -328,7 +328,7 @@ export async function createTask(input: TaskInput): Promise<Task> {
 
 const TASK_COLS: Record<string, string> = {
   areaId: "area_id", projectId: "project_id", title: "title", description: "description", status: "status", priority: "priority",
-  dueDate: "due_date", plannedDate: "planned_date", estimateMin: "estimate_min", reminder: "reminder", agent: "agent", runIn: "run_in",
+  dueDate: "due_date", plannedDate: "planned_date", plannedTime: "planned_time", estimateMin: "estimate_min", reminder: "reminder", agent: "agent", runIn: "run_in",
   sortOrder: "sort_order", flowX: "flow_x", flowY: "flow_y",
 };
 
@@ -346,6 +346,7 @@ export async function updateTask(id: number, patch: TaskPatch) {
   }
   const values = columns(patch, TASK_COLS);
   if (patch.modelSettings !== undefined) values.model_settings = JSON.stringify(checkedModelSelection(patch.modelSettings));
+  if (patch.plannedDate === null) values.planned_time = null;
   if (patch.labels) values.labels = JSON.stringify(patch.labels);
   if (patch.doneWhen) values.done_when = JSON.stringify(cleanDoneWhen(patch.doneWhen));
   if (patch.needs) values.needs = JSON.stringify(cleanNeeds(patch.needs));

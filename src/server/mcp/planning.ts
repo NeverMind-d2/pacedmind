@@ -15,7 +15,7 @@ import { AGENT_LABEL, LIVE_STATUSES, STATUS_LABEL, type Doer, type Status, type 
 import {
   AREA_ICON_EXAMPLES, PALETTE_NAMES, agentSchema, areaRef, colorFrom, colorName, dateInput, dateTimeInput, describeTask, doerSchema, eventLine, fail, iconFrom,
   findArea, findAreaOrInbox, findProject, findTask, fmtWhen, isOpen, names, prioritySchema, priorityOf, projectLine,
-  plural, projectRef, statusOf, statusSchema, taskLine, taskRef, todayLine, tool, when,
+  plannedInput, plannedOf, plural, projectRef, statusOf, statusSchema, taskLine, taskRef, todayLine, tool, when,
   type PRIORITY_NAMES, type STATUS_NAMES,
 } from "./common";
 
@@ -78,7 +78,7 @@ const newTaskFields = {
   status: statusSchema.optional().describe("Defaults to todo"),
   priority: prioritySchema.optional(),
   due: dateTimeInput.optional().describe("Deadline, with an optional time"),
-  planned: dateInput.optional().describe("The day the user means to work on it"),
+  planned: plannedInput.optional(),
   estimate_minutes: z.number().int().min(5).max(24 * 60).optional().describe("How long it takes; the auto-planner uses it. Default 60"),
   labels: z.array(z.string()).optional(),
   subtasks: z.array(z.string()).optional().describe("Checklist items"),
@@ -106,7 +106,7 @@ async function createOne(input: NewTask, place: { projectId: string | null; area
     status: input.status ? statusOf(input.status) : "todo",
     priority: input.priority ? priorityOf(input.priority) : 0,
     dueDate: input.due ? when(input.due) : null,
-    plannedDate: input.planned ? when(input.planned, "drop") : null,
+    ...(input.planned ? plannedOf(input.planned) : { plannedDate: null }),
     estimateMin: input.estimate_minutes,
     labels: cleanLabels(input.labels ?? []),
     agent: input.agent,
@@ -492,7 +492,7 @@ export function registerPlanningTools(server: McpServer) {
       sessionMayCreate(t.status);
       if (!t.title.trim()) fail("Every task needs a title.");
       if (t.due) when(t.due);
-      if (t.planned) when(t.planned, "drop");
+      if (t.planned) when(t.planned);
     }
     const created: Task[] = [];
     for (const t of args.tasks) created.push(await createOne(t, place));
@@ -516,7 +516,7 @@ export function registerPlanningTools(server: McpServer) {
       status: statusSchema.optional(),
       priority: prioritySchema.optional(),
       due: dateTimeInput.nullable().optional(),
-      planned: dateInput.nullable().optional(),
+      planned: plannedInput.nullable().optional(),
       estimate_minutes: z.number().int().min(5).max(24 * 60).optional(),
       labels: z.array(z.string()).optional().describe("Replaces all labels"),
       add_labels: z.array(z.string()).optional(),
@@ -556,7 +556,7 @@ export function registerPlanningTools(server: McpServer) {
     const remove = pickSubtasks(t, args.remove_subtasks ?? []);
     const status = args.status ? statusOf(args.status) : undefined;
     const dueDate = clearable(args.due, (v) => when(v));
-    const plannedDate = clearable(args.planned, (v) => when(v, "drop"));
+    const planned = clearable(args.planned, plannedOf);
     await repo.updateTask(t.id, {
       title: args.title?.trim(),
       description,
@@ -565,7 +565,8 @@ export function registerPlanningTools(server: McpServer) {
       status,
       priority: args.priority ? priorityOf(args.priority) : undefined,
       dueDate,
-      plannedDate,
+      plannedDate: planned === undefined ? undefined : planned?.plannedDate ?? null,
+      plannedTime: planned === undefined ? undefined : planned?.plannedTime ?? null,
       estimateMin: args.estimate_minutes,
       labels: args.labels || args.add_labels || args.remove_labels ? labels : undefined,
       projectId,
@@ -595,7 +596,7 @@ export function registerPlanningTools(server: McpServer) {
       status: statusSchema.optional(),
       priority: prioritySchema.optional(),
       due: dateTimeInput.nullable().optional(),
-      planned: dateInput.nullable().optional(),
+      planned: plannedInput.nullable().optional(),
       shift_days: z.number().int().min(-365).max(365).optional().describe("Move due and planned dates by this many days (times are kept)"),
       project: projectRef.nullable().optional(),
       area: areaRef.nullable().optional(),
@@ -607,7 +608,7 @@ export function registerPlanningTools(server: McpServer) {
     const tasks = await Promise.all(args.tasks.map(findTask));
     if (args.shift_days && (args.due !== undefined || args.planned !== undefined)) fail("Use either shift_days or due/planned, not both.");
     const due = clearable(args.due, (v) => when(v));
-    const planned = clearable(args.planned, (v) => when(v, "drop"));
+    const planned = clearable(args.planned, plannedOf);
     const status = args.status ? statusOf(args.status) : undefined;
     const drop = new Set(cleanLabels(args.remove_labels ?? []));
     const moves = await Promise.all(tasks.map((t) => moveTarget(t, args.project, args.area)));
@@ -620,7 +621,9 @@ export function registerPlanningTools(server: McpServer) {
         status,
         priority: args.priority ? priorityOf(args.priority) : undefined,
         dueDate: args.shift_days ? shiftValue(t.dueDate, args.shift_days) : due,
-        plannedDate: args.shift_days ? shiftValue(t.plannedDate, args.shift_days) : planned,
+        // Shifted, a task keeps the time it was put at.
+        plannedDate: args.shift_days ? shiftValue(t.plannedDate, args.shift_days) : planned === undefined ? undefined : planned?.plannedDate ?? null,
+        plannedTime: args.shift_days || planned === undefined ? undefined : planned?.plannedTime ?? null,
         projectId,
         areaId,
         labels,

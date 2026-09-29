@@ -1,10 +1,16 @@
 import { getISOWeek } from "date-fns";
-import { WeekView, type SessionLane } from "@/components/views/week";
+import { WeekView, type SessionBlock } from "@/components/views/week";
 import { planWeek } from "@/server/calendar";
 import * as repo from "@/server/repo";
-import { taskContext } from "@/server/views";
+import { isOpen, taskContext } from "@/server/views";
 import { addDaysStr, dateOnly, fmtShort, mondayOf, parseLocal, toDateStr, toDateTimeStr } from "@/lib/dates";
-import { isLiveSession, type Session } from "@/lib/types";
+import { isLiveSession, type Session, type Task } from "@/lib/types";
+
+const STATUS_RANK: Record<string, number> = { progress: 0, review: 1, todo: 2, backlog: 3 };
+const byUrgency = (a: Task, b: Task) =>
+  (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9) || (a.priority || 5) - (b.priority || 5) || a.sortOrder - b.sortOrder || a.id - b.id;
+/** How many of the tasks still to place the side list gets. */
+const TO_PLACE = 80;
 
 export default async function WeekPage(props: PageProps<"/calendar/week">) {
   const sp = await props.searchParams;
@@ -15,24 +21,38 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
   const end = addDaysStr(start, 6);
   const days = Array.from({ length: 7 }, (_, i) => addDaysStr(start, i));
   const current = start <= today && today <= end;
+  const inWeek = (d: string | null) => !!d && dateOnly(d) >= start && dateOnly(d) <= end;
 
   const [all, sessions, settings, events] = await Promise.all([repo.listTasks(), repo.listSessions(), repo.getSettings(), repo.occurrences(start, end)]);
   const plan = await planWeek({ start, end, now, tasks: all, sessions, settings });
 
-  const keyOf = new Map(all.map((t) => [t.id, t.key]));
+  const byId = new Map(all.map((t) => [t.id, t]));
   const stopOf = (s: Session) => s.finishedAt ?? s.endedAt ?? (isLiveSession(s) ? null : s.startedAt);
-  const inWeek = sessions.filter((s) => {
+  const weekSessions = sessions.filter((s) => {
     const stop = stopOf(s);
-    return keyOf.has(s.taskId) && s.status !== "failed" && dateOnly(s.startedAt) <= end && (!stop || dateOnly(stop) >= start);
+    return byId.has(s.taskId) && s.status !== "failed" && dateOnly(s.startedAt) <= end && (!stop || dateOnly(stop) >= start);
   });
-  const lanes: SessionLane[] = inWeek.map((s) => ({ id: s.id, key: keyOf.get(s.taskId)!, agent: s.agent, start: s.startedAt, end: stopOf(s) }));
+  const runs: SessionBlock[] = weekSessions.map((s) => {
+    const t = byId.get(s.taskId)!;
+    return { id: s.id, taskId: t.id, key: t.key, title: t.title, agent: s.agent, start: s.startedAt, end: stopOf(s), status: s.status };
+  });
 
+  const placed = new Set((plan?.blocks ?? []).map((b) => b.taskId));
   const ids = new Set([
-    ...(plan?.blocks ?? []).map((b) => b.taskId),
+    ...placed,
     ...(plan?.unplaced ?? []).map((u) => u.taskId),
-    ...inWeek.map((s) => s.taskId),
+    ...weekSessions.map((s) => s.taskId),
   ]);
-  const tasks = all.filter((t) => ids.has(t.id) || (t.dueDate && dateOnly(t.dueDate) >= start && dateOnly(t.dueDate) <= end));
+  // Everything the week shows: planned for one of its days (at a time or not), due in it, placed by the auto-plan or
+  // worked on by an agent.
+  const shown = all.filter((t) => ids.has(t.id) || (t.status !== "canceled" && (inWeek(t.plannedDate) || inWeek(t.dueDate))));
+  // The side list: open tasks not on this week yet, or whose planned day passed, most urgent first. Dragged onto a
+  // day, they get it.
+  const toPlace = all
+    .filter((t) => isOpen(t) && !placed.has(t.id) && !inWeek(t.plannedDate) && (!t.plannedDate || t.plannedDate < today))
+    .sort(byUrgency);
+  const listed = toPlace.slice(0, TO_PLACE);
+  const tasks = [...shown, ...listed.filter((t) => !shown.includes(t))];
 
   const from = start.slice(0, 7) === end.slice(0, 7) ? String(Number(start.slice(8))) : fmtShort(start);
   const month = addDaysStr(start, 3).slice(0, 7);
@@ -45,8 +65,9 @@ export default async function WeekPage(props: PageProps<"/calendar/week">) {
       current={current}
       events={events}
       plan={plan}
-      lanes={lanes}
+      runs={runs}
       tasks={tasks}
+      toPlace={{ ids: listed.map((t) => t.id), total: toPlace.length }}
       rules={{
         workStart: settings.workStart, workEnd: settings.workEnd, lunchStart: settings.lunchStart, lunchEnd: settings.lunchEnd,
         workDays: settings.workDays,
