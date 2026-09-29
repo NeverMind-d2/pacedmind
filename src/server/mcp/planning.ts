@@ -193,7 +193,7 @@ export function registerPlanningTools(server: McpServer) {
     const today = toDateStr(now);
     const [n, tasks, events, eventList, waiting, running, preferences] = await Promise.all([
       names(), repo.listTasks(), repo.occurrences(today, today), repo.listEvents(),
-      repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listPreferences(),
+      repo.listSessions({ status: ["finished"] }), repo.listSessions({ status: LIVE_STATUSES }), repo.listPreferences().catch(() => []),
     ]);
     const areas = [...n.areas.values()];
     const projects = [...n.projects.values()];

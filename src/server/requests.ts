@@ -199,6 +199,8 @@ const g = globalThis as unknown as {
   __pacedmindRowName?: string;
   /** This computer's other sessions as last written to the account's list. */
   __pacedmindOthersSent?: string;
+  /** Looking for folder requests failed once already: said once in the log. */
+  __pacedmindFolderSyncFailed?: boolean;
 };
 
 /**
@@ -274,8 +276,12 @@ export async function syncDevice(): Promise<void> {
     g.__pacedmindSeen = now;
   }
 
-  // Folders asked of this computer wait for you here, whatever its setting for sessions.
-  await syncFolderRequests(d.deviceId!, now);
+  // Folders asked of this computer wait for you here, whatever its setting for sessions. A failure there (an account's
+  // database from before folder requests, say) mustn't keep the sessions asked for below from being handled.
+  await syncFolderRequests(d.deviceId!, now).catch((e) => {
+    if (!g.__pacedmindFolderSyncFailed) console.error("[organizer] folder requests", e);
+    g.__pacedmindFolderSyncFailed = true;
+  });
 
   const pending = await repo.listLaunchRequests({ deviceId: d.deviceId!, status: ["pending"] });
   const open = new Set(pending.map((r) => r.id));
