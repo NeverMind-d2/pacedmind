@@ -88,6 +88,8 @@ export interface DeviceConfig {
   sessionTokens: Record<string, { sessionId: string; taskId: number; issuedAt: string; expires?: number }>;
   /** Once the import of the folders you work in with Claude Code and Codex was offered here (it opens by itself once). */
   importOffered: boolean;
+  /** Copies of projects and areas found here ("id>folder") you said not to link, so the offer doesn't come back for them. */
+  linkOfferSeen: string[];
   /**
    * Once connecting Claude Code and Codex to PacedMind Cloud's MCP server was offered here after signing in (it shows
    * by itself once per account; Settings → Connect does the same any time).
@@ -130,6 +132,7 @@ function defaults(userId: string | null, keep?: DeviceConfig): DeviceConfig {
     ownerToken: newOwnerToken(),
     sessionTokens: {},
     importOffered: false,
+    linkOfferSeen: [],
     withoutAccount: false,
   };
 }

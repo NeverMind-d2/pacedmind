@@ -6,6 +6,7 @@ import { afterDone, afterFinished, afterFlowOn, startFromFlow } from "./flow";
 import { changesSurfaceProblem, forgetSessionFiles, reopenForChanges, reopenProblem, type LaunchResult } from "./launcher";
 import { MODE } from "./supabase";
 import { noteContinued, takeDiff } from "./diff";
+import { markProject } from "./marker";
 import { addDaysStr, dateOnly, dayDiff, nowStamp, timeOf, toDateStr } from "@/lib/dates";
 import { nextRepeat } from "@/lib/repeat";
 import { GRID, NODE_H, freeSpot, layoutFlow } from "@/lib/flow-layout";
@@ -143,6 +144,10 @@ export async function startedLines(started: LaunchResult[]): Promise<string[]> {
 export async function saveProject(id: string, patch: Partial<Omit<Project, "id">>): Promise<LaunchResult[]> {
   const wasOn = (await repo.getProject(id))?.flowOn;
   await repo.updateProject(id, patch);
+  if (patch.folder) {
+    const p = await repo.getProject(id);
+    if (p) await markProject(p);
+  }
   return patch.flowOn && !wasOn ? afterFlowOn(id) : [];
 }
 

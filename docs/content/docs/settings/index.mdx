@@ -151,7 +151,9 @@ Signed in, **Answer from elsewhere** decides where you answer what agents in ses
 
 In the desktop app, **Area workspaces** sets a default folder for each area on this computer. Click an area's folder to choose one in the system's folder dialog, such as an existing Codex or Claude project's folder, to keep its tasks together in that workspace. It's saved at once, and **×** removes it. A session uses its task's folder, then its project's, then its area's workspace; without any of them PacedMind makes an empty folder for the task (*PacedMind's folder per task*). Changing an area's workspace pauses flows in projects that inherit it. A workspace in a git repository shows the repository next to its name, and on your other computers the area's field offers their copy of it (*Found here:* and the folder, with **Use**). See [Areas and projects](/concepts/areas-and-projects#on-this-computer).
 
-**Import from Claude and Codex**, above the list, brings the folders you work in with Claude Code and Codex over as projects. See [Import projects](#import-projects).
+**Import from Claude and Codex**, above the list, brings the folders you work in with Claude Code and Codex over as projects, and sets the workspaces of areas found here. See [Import projects](#import-projects).
+
+Signed in, when linked folders here don't have their `pacedmind.md` yet, a note above says how many, with **Add pacedmind.md**: it writes the file into each, so your other computers find their copies. See [pacedmind.md](/concepts/areas-and-projects#pacedmindmd).
 
 One row per project, with:
 
@@ -182,20 +184,28 @@ A folder is checked when it's saved: one that doesn't exist, or whose path a ter
 
 ### Import projects
 
-The first time PacedMind opens, it offers to bring your projects over; **Import from Claude and Codex** opens the same window later. PacedMind reads, without changing them, the records Claude Code and Codex keep on this computer: the Claude app's Code sessions and Claude Code's projects, the Codex app's projects, and Codex's trusted folders and sessions.
+The first time PacedMind opens, it offers to bring your projects over; **Import from Claude and Codex** opens the same window later. PacedMind reads, without changing them, the records Claude Code and Codex keep on this computer: the Claude app's Code sessions and Claude Code's projects, the Codex app's projects, and Codex's trusted folders and sessions. It also looks into and around the folders found there for git repositories, two levels down at most, leaving out hidden folders (worktrees among them), dependencies and build output.
 
-*Bring your projects over* lists the folders found, most recently used first, such as *PacedMind found 10 folders you work in with Claude Code and Codex on this computer, 7 of them with both.* Each row shows:
+What it finds becomes areas and projects:
+
+* a folder that isn't a repository but holds some is an **area**, with that folder as its workspace, and each folder in it a **project**: a repository, or a folder of several repositories that is one project (a folder with one repository in it stands for that repository);
+* a folder near the top of your folders (two levels below your user folder at most, like *Documents/Projects*) whose folders are areas themselves is a folder of areas: its areas are areas, and the repositories right in it projects of no area;
+* an area inside another is one of its projects: areas don't nest;
+* the other folders you work in are projects.
+
+*Bring your projects over* lists each area folder with its projects under it, then **Other folders**, most recently used first. An area row shows its name (click it to change it), its folder and what it becomes: an area you already have, with how it was recognised (*pacedmind.md*, *repository*, *its projects* or *same name*), or **New area**. Its menu picks another area of yours, **New area**, or **One project**, which takes the whole folder as one project (of yours, when its `pacedmind.md` or name matches one) and hides the folders in it. An area already set up on this computer shows *workspace here* and can't be unticked; its projects go to it. Each project row shows:
 
 * a tick box, and the name the project gets: the name given in the Codex app, else the folder's name. Click the name of a ticked folder to change it;
 * the folder;
 * the marks of the agents that worked there, with the exact sources in the tooltip, such as *Claude app, Codex app*;
-* when either agent last worked there, such as *today* or *3 days ago*; or *Already a project*, or *Can't be used* for a folder whose path can't be passed to a terminal.
+* when either agent, or git, last worked there (a commit, checkout or fetch), such as *today* or *3 days ago*; or *Already a project*, or *Can't be used* for a folder whose path can't be passed to a terminal;
+* *7 repositories* for a project that spans several, and *copy of FE* for another copy of a repository already listed or of a project you have, which isn't ticked.
 
-A folder used by both Claude Code and Codex is listed once. Sessions in a git worktree, or in a subfolder of a repository, count for the repository, wherever the worktree is. Temporary and scratch folders, folders that no longer exist, and your user folder with its Documents, Desktop and Downloads are left out. Folders used in the last four months are ticked, except one that holds two or more of the others, such as a folder of projects.
+A folder used by both Claude Code and Codex is listed once. Sessions in a git worktree, or in a subfolder of a repository, count for the repository, wherever the worktree is. Temporary and scratch folders, PacedMind's own task folders, folders that no longer exist, and your user folder with its Documents, Desktop and Downloads are left out. Projects worked on in the last four months are ticked, and so are the areas that hold one or are areas you have; nothing in a folder named like an archive (*Archive*, *Archiwum*, *Old*, *Backup*) is ticked. On macOS, PacedMind doesn't look into Desktop, Documents, Downloads or cloud drives, where the system would ask first.
 
 A folder that is a copy of a project you already have, such as one made on another computer, joins that project instead of becoming another: it holds the same git repository, or else has the same name, and the project has no folder on this computer yet. Its row shows the project's name and **Existing project**, and it's ticked however long ago it was used. Select **Existing project** to make it a new project instead (the tag then reads **New project**, which puts it back). See [Projects on several computers](/concepts/areas-and-projects#projects-on-several-computers).
 
-Choose the area under **Add to**, then select **Add 9 projects** (*Added 9 projects*). Each new project gets its folder, on this computer, and as its default agent the one that worked there last; each project a folder joins gets that folder on this computer (*Linked PacedMind to its folder here*). On the first start, **Not now** closes the window for good; opened from here, the window has **Cancel** instead, and **Import from Claude and Codex** is always here.
+New projects outside an area go to the area under **Other projects to** (**Add to** when nothing was found in areas). Then select the button, such as **Add 2 areas, 1 workspace and 9 projects** (*Added the areas Persate, MLE, added 9 projects, set the workspace of Preseed*). A new area gets its folder as its workspace here; an area you have gets it when it has none here yet. Each new project gets its folder, on this computer, and as its default agent the one that worked there last; each project a folder joins gets that folder on this computer. On the first start, **Not now** closes the window for good; opened from here, the window has **Cancel** instead, and **Import from Claude and Codex** is always here.
 
 ## MCP server
 

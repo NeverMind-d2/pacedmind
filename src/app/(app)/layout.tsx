@@ -11,6 +11,7 @@ import { Approvals } from "@/components/approvals";
 import { RemoteStart } from "@/components/remote-start";
 import { ImportOffer } from "@/components/import-projects";
 import { CloudConnectOffer } from "@/components/cloud-connect-offer";
+import { LinkOffer, type Linkable } from "@/components/link-offer";
 import { Toaster } from "@/components/ui";
 import { BillingBanner } from "@/components/billing";
 import * as repo from "@/server/repo";
@@ -24,6 +25,7 @@ import { approvalItems } from "@/server/requests";
 import { readPlan } from "@/server/billing";
 import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
+import type { FoundFolder } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +63,15 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   const found = offer ? localTools() : null;
   const links = offer ? mcpLinks(mcpUrl(), true) : null;
   const cloudOffer = found && links ? (["claude", "codex"] as const).filter((a) => found[a].cli && links[a] !== "cloud") : [];
+  // Signed in, after the import's first offer: your projects and areas from other computers whose copy is surely here
+  // (their pacedmind.md or their repository, and only one such folder), to link in one click.
+  const seen = new Set(MODE === "desktop" ? deviceConfig().linkOfferSeen : []);
+  const sure = (list: FoundFolder[] | undefined) =>
+    list?.[0] && list[0].how !== "name" && list.filter((f) => f.how === list[0].how).length === 1 ? list[0] : null;
+  const linkable: Linkable[] = folders && state && deviceConfig().importOffered ? [
+    ...projects.flatMap((p) => { const f = sure(folders.projects[p.id]); return f && !seen.has(`${p.id}>${f.folder}`) ? [{ kind: "project" as const, id: p.id, name: p.name, folder: f.folder, how: f.how }] : []; }),
+    ...areas.flatMap((a) => { const f = sure(folders.areas[a.id]); return f && !seen.has(`${a.id}>${f.folder}`) ? [{ kind: "area" as const, id: a.id, name: a.name, folder: f.folder, how: f.how }] : []; }),
+  ] : [];
   const paletteTasks = tasks.map((t) => ({
     key: t.key, title: t.title, status: t.status,
     href: t.projectId ? `/project/${t.projectId}?task=${t.key}` : t.areaId ? `/area/${t.areaId}?task=${t.key}` : `/inbox?task=${t.key}`,
@@ -88,6 +99,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
       {MODE === "desktop" && !deviceConfig().importOffered && <ImportOffer areas={areas} />}
       {/* Once signed in, it offers (once) to connect the agents here to PacedMind Cloud's MCP server. */}
       {cloudOffer.length > 0 && <CloudConnectOffer agents={cloudOffer} />}
+      {/* One card at a time: the agents' connection first. */}
+      {!cloudOffer.length && linkable.length > 0 && <LinkOffer items={linkable} areas={areas} />}
     </div>
     </ExecutionProvider>
   );

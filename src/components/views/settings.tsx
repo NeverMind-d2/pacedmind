@@ -6,7 +6,7 @@ import { useRouter, useSelectedLayoutSegment } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   connectAgentAction, createProjectAction, disconnectAgentAction, importLegacyAction, manageBillingAction, moveToThisComputerAction, resetDataAction, rotateMcpTokenAction, subscribeAction,
-  linkFoundFolderAction, updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
+  linkFoundFolderAction, markFoldersAction, updateDeviceSettingsAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
   changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
@@ -616,13 +616,15 @@ export function SessionSettings({ device, account, platform }: {
 }
 
 /** Settings → Projects: each project's agent, and in the desktop app its folder, flow and MCP servers here. */
-export function ProjectSettings({ projects, areas, desktop, agents, copies = {} }: {
+export function ProjectSettings({ projects, areas, desktop, agents, copies = {}, unmarked = 0 }: {
   projects: Project[]; areas: Area[];
   desktop: boolean;
   /** This computer's copies of the repositories areas' workspaces hold elsewhere, by repository (Area.repo). */
   copies?: Record<string, string[]>;
   /** By project: what agents get in its folder here and which MCP servers its sessions get; null in the web app. */
   agents: Record<string, ProjectAgentsView> | null;
+  /** How many linked folders here don't have their pacedmind.md yet. */
+  unmarked?: number;
 }) {
   const { run } = useAction();
   const { folders } = useExecution();
@@ -630,6 +632,16 @@ export function ProjectSettings({ projects, areas, desktop, agents, copies = {} 
   const defaultArea = areas.find((a) => a.key === "DEV")?.id ?? areas[0]?.id ?? "";
   const [newProject, setNewProject] = useState({ name: "", areaId: defaultArea, folder: "", agent: "claude" as AgentId | null });
   return <>
+    {desktop && unmarked > 0 && (
+      <div className="flex items-center gap-3 rounded-lg border border-line2 px-3.5 py-3">
+        <Icon name="link" size={14} className="shrink-0 text-mut2" />
+        <p className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-fg3">
+          {unmarked} linked folder{unmarked > 1 ? "s" : ""} here {unmarked > 1 ? "don't" : "doesn't"} have a pacedmind.md yet. It names the project
+          or area, so your other computers find their copy of the folder, even without a repository.
+        </p>
+        <Button size="sm" onClick={() => run(() => markFoldersAction())}>Add pacedmind.md</Button>
+      </div>
+    )}
     {desktop && <Section title="Area workspaces" note="Connect an area to an existing Codex or Claude project by choosing its folder on this computer. Tasks and projects without their own folder inherit it.">
       {areas.map((area) => <div key={`${area.id}:${area.folder ?? ""}`} className="border-b border-line px-3.5 py-3 last:border-b-0">
         <AreaWorkspace area={area} found={area.repo ? copies[area.repo] ?? [] : []} />

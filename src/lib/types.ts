@@ -90,7 +90,11 @@ export function repoLink(repo: string | null | undefined): { label: string; url:
 export interface FoundFolder {
   folder: string;
   repo: string | null;
-  how: "repo" | "name";
+  /**
+   * How it was recognised: its pacedmind.md names it, it holds the same repository, the projects of yours in it are
+   * that area's (an area's folder), or it has the same name.
+   */
+  how: "marker" | "repo" | "projects" | "name";
 }
 
 /**

@@ -138,6 +138,16 @@ Each computer notes which git repository a project's folder holds, as the addres
 
 On macOS, PacedMind doesn't read the repository of a folder in Desktop, Documents or Downloads, in iCloud Drive or another cloud drive: macOS would first ask whether it may. Such a folder joins a project by its name.
 
+### pacedmind.md
+
+Signed in to PacedMind Cloud, linking a folder to a project, or making it an area's workspace, writes a small `pacedmind.md` into it. Its header names the project or the area by its id, the same on all your computers; its text tells agents where the folder's tasks are. Keep it in the repository: every clone then carries it, and another computer recognises its copy of the folder by it, even without a repository or a matching name. A folder that is both a project's and its area's workspace names both in one file, and text of your own in the file stays as it is. **Settings → Projects** offers **Add pacedmind.md** for folders linked before it existed.
+
+### Linking on another computer
+
+A computer looks for its copies of your projects and areas workspaces among the folders you work in with Claude Code and Codex, and next to and inside the folders of your projects and areas there: first by `pacedmind.md`, then by repository, then by name. What it finds shows as **Found here · Use** on the project page and in Settings, and in [Import projects](/settings#import-projects), which lists the **Area workspaces** found too.
+
+When it's sure (a `pacedmind.md` or a repository, one folder for it), a card offers them at the bottom right: *Found on this computer*, with each project or area and its folder. **Link** gives each its folder here in one go, **Review** opens the import to pick, and **Not now** keeps the card from coming back for those folders. Nothing is linked without you: a folder decides where agents work.
+
 ### Merge projects
 
 Two projects for the same work, such as the ones two computers made before they knew of each other, become one with **Merge into…**, from the project menu or from the menu of several selected projects. The confirmation says how many tasks move.

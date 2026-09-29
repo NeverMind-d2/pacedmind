@@ -1,11 +1,12 @@
 import "server-only";
-import { deviceConfig, forgetProject, projectFolder, setProjectFolder } from "./device";
+import { deviceConfig, forgetProject, projectFolder, setAreaFolder, setProjectFolder } from "./device";
 import { thisDeviceId } from "./devices";
 import { repoIdentity } from "./git-remote";
+import { markArea, markProject } from "./marker";
 import * as repo from "./repo";
 import { usesCloud } from "./scope";
 import { MODE } from "./supabase";
-import type { Project } from "@/lib/types";
+import type { Area, Project } from "@/lib/types";
 
 /*
  * One project on all your computers. A project is the account's, but its folder is each computer's own (device.ts), so
@@ -56,6 +57,23 @@ export async function linkProjects() {
 export async function linkFolder(project: Project, folder: string) {
   await repo.updateProject(project.id, { folder });
   if (project.deviceId && project.deviceId !== thisDeviceId()) await repo.updateProject(project.id, { deviceId: null });
+  // So your other computers find their copy of it by its pacedmind.md.
+  await markProject({ ...project, folder });
+}
+
+/**
+ * Makes `folder` this computer's workspace of an area you have on another computer, as picking it in Settings does:
+ * the area's projects without a folder here inherit it (their flows pause), and the area gets its repository and its
+ * pacedmind.md. Returns why it couldn't, or null.
+ */
+export async function linkWorkspace(area: Area, folder: string): Promise<string | null> {
+  const inheriting = (await repo.listProjects()).filter((p) => p.areaId === area.id && !p.folder).map((p) => p.id);
+  const error = setAreaFolder(area.id, folder, inheriting);
+  if (error) return error;
+  const holds = repoIdentity(folder);
+  if (holds && holds !== area.repo) await repo.setAreaRepo(area.id, holds);
+  await markArea({ ...area, folder });
+  return null;
 }
 
 /**

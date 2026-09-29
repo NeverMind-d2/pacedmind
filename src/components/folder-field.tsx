@@ -127,14 +127,15 @@ export function Found({ found, foundFor, onUse, disabled, className }: {
   found: FoundFolder[]; foundFor?: string; onUse: (folder: string) => void; disabled?: boolean; className?: string;
 }) {
   const [first, ...more] = found;
-  const why = (f: FoundFolder) => f.how === "repo" ? `It holds ${repoLink(f.repo)?.label ?? f.repo}` : "It has the same name";
+  const why = (f: FoundFolder) => f.how === "marker" ? "Its pacedmind.md names it"
+    : f.how === "repo" ? `It holds ${repoLink(f.repo)?.label ?? f.repo}` : f.how === "projects" ? "Its projects are this area's" : "It has the same name";
   return <div className={cx("flex min-w-0 items-center gap-1.5 text-[11.5px] text-mut2", className)}>
     <span className="shrink-0">Found here:</span>
     <span className="min-w-0 truncate font-mono text-fg3" title={`Found on this computer${foundFor ? ` for ${foundFor}` : ""}: ${first.folder}\n${why(first)}`}>
       {shortFolder(first.folder)}
     </span>
     {more.length > 0 && <Menu align="right" width={320} trigger={<button type="button" className="shrink-0 rounded px-1 hover:bg-hover hover:text-fg2">+{more.length}</button>}
-      items={found.map((f) => ({ value: f.folder, label: <span className="font-mono text-[11.5px]" title={f.folder}>{f.folder}</span>, hint: f.how === "repo" ? "repository" : "name" }))}
+      items={found.map((f) => ({ value: f.folder, label: <span className="font-mono text-[11.5px]" title={f.folder}>{f.folder}</span>, hint: f.how === "marker" ? "pacedmind.md" : f.how === "repo" ? "repository" : f.how === "projects" ? "its projects" : "name" }))}
       onSelect={onUse} />}
     <Button size="sm" disabled={disabled} onClick={() => onUse(first.folder)} className="shrink-0" title={why(first)}>Use</Button>
   </div>;

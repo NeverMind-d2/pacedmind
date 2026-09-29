@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { differenceInCalendarDays } from "date-fns";
-import { dismissImportAction, findProjectsAction, importProjectsAction } from "@/app/actions";
-import type { FoundProject, ImportSource } from "@/server/import";
+import { dismissImportAction, findWorkAction, importProjectsAction } from "@/app/actions";
+import type { FoundArea, FoundProject, ImportSource } from "@/server/import";
 import type { AgentId, Area } from "@/lib/types";
 import { AgentIcon, AreaMark, Icon } from "./icons";
 import { Button, Menu, cx, useAction } from "./ui";
@@ -12,6 +12,14 @@ import { Button, Menu, cx, useAction } from "./ui";
 const SOURCE_LABEL: Record<ImportSource, string> = {
   "claude-app": "Claude app", "claude-cli": "Claude Code CLI", "codex-app": "Codex app", "codex-cli": "Codex CLI",
 };
+
+const HOW_LABEL: Record<NonNullable<FoundArea["joins"]>["how"], string> = {
+  marker: "pacedmind.md", repo: "repository", projects: "its projects", name: "same name",
+};
+
+/** An area folder's choice: a new area, taken as one project, or (any other value) the id of an area you have. */
+const NEW = "new";
+const ONE = "one";
 
 /** "today", "yesterday", "5 days ago", "3 months ago", in calendar days. */
 function ago(ms: number, now: number): string {
@@ -22,6 +30,9 @@ function ago(ms: number, now: number): string {
   const months = Math.round(days / 30.4);
   return months < 12 ? `${months} month${months > 1 ? "s" : ""} ago` : "over a year ago";
 }
+
+/** When anything last happened there: an agent's session, or git's own files. */
+const lastOf = (p: FoundProject) => Math.max(p.touched, ...Object.values(p.used).map((v) => v ?? 0));
 
 /** The agent a project should start with: the one that worked there last. */
 function lastAgent(p: FoundProject): AgentId | null {
@@ -37,17 +48,43 @@ function defaultArea(areas: Area[]): string {
   return (areas.find((a) => /dev|code|project|build/i.test(a.name)) ?? areas[0])?.id ?? "";
 }
 
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function Check({ on, off, label, onClick }: { on: boolean; off?: boolean; label: string; onClick: () => void }) {
+  return (
+    <button type="button" role="checkbox" aria-checked={on} disabled={off} aria-label={label} onClick={onClick}
+      className={cx("flex h-4 w-4 shrink-0 items-center justify-center rounded border-[1.5px]",
+        on ? "border-accent bg-accent" : off ? "border-line" : "border-line-strong")}>
+      {on && <Icon name="check" size={11} strokeWidth={3} className="text-white" />}
+    </button>
+  );
+}
+
+/** A found folder's name you can change before it becomes a new project or area. */
+function NameField({ value, label, onChange }: { value: string; label: string; onChange: (v: string) => void }) {
+  return (
+    <input value={value} aria-label={label} onChange={(e) => onChange(e.target.value)}
+      className="-mx-1 h-[22px] min-w-0 flex-1 rounded bg-transparent px-1 text-[13px] text-fg outline-none hover:bg-input focus:bg-input" />
+  );
+}
+
 /**
- * Brings the folders you work in with Claude Code and Codex over as projects. Opens by itself the first time
- * PacedMind starts (`auto`, only when it finds something), and from Settings.
+ * Brings what you work on with Claude Code and Codex on this computer over: a folder of repositories as an area (a new
+ * one, or one you have, as its workspace here), the repositories in it as its projects, and the other folders you work
+ * in as projects. What you have on your other computers joins what it is. Opens by itself the first time PacedMind
+ * starts (`auto`, only when it finds something), and from Settings.
  */
 export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]; auto?: boolean; onClose: () => void }) {
   const { run, pending } = useAction();
-  const [found, setFound] = useState<FoundProject[] | null>(null);
+  const [found, setFound] = useState<{ projects: FoundProject[]; areas: FoundArea[] } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [names, setNames] = useState<Record<string, string>>({});
   // Folders that could join a project you have but should become projects of their own.
   const [apart, setApart] = useState<Set<string>>(new Set());
+  // Area folders to set up, what each becomes (NEW, ONE or an area's id), and the names of new ones.
+  const [boxOn, setBoxOn] = useState<Set<string>>(new Set());
+  const [target, setTarget] = useState<Record<string, string>>({});
+  const [boxNames, setBoxNames] = useState<Record<string, string>>({});
   const [areaId, setAreaId] = useState(() => defaultArea(areas));
   const [now] = useState(() => Date.now());
   const closeRef = useRef(onClose);
@@ -56,17 +93,20 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
   // Looks once when it opens; pages refreshing behind it don't start over.
   useEffect(() => {
     let live = true;
-    findProjectsAction().then((list) => {
+    findWorkAction().then((work) => {
       if (!live) return;
-      const open = list.filter((p) => !p.projectId && !p.problem);
+      const open = work.projects.filter((p) => !p.projectId && !p.problem);
+      const boxes = work.areas.filter((b) => !b.areaId && !b.problem);
       // Nothing to bring over: the first-start offer quietly goes away.
-      if (auto && !open.length) {
+      if (auto && !open.length && !boxes.length) {
         void dismissImportAction();
         closeRef.current();
         return;
       }
-      setFound(list);
-      setPicked(new Set(list.filter((p) => p.suggested).map((p) => p.folder)));
+      setFound(work);
+      setPicked(new Set(work.projects.filter((p) => p.suggested).map((p) => p.folder)));
+      setBoxOn(new Set(boxes.filter((b) => b.suggested).map((b) => b.folder)));
+      setTarget(Object.fromEntries(work.areas.map((b) => [b.folder, b.joins?.id ?? NEW])));
     }, () => {
       if (live && auto) closeRef.current();
     });
@@ -85,12 +125,6 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
   });
 
   if (auto && !found) return null;
-  const area = areas.find((a) => a.id === areaId);
-  const available = found?.filter((p) => !p.projectId && !p.problem) ?? [];
-  const both = available.filter((p) => p.used.claude !== undefined && p.used.codex !== undefined).length;
-  const count = available.filter((p) => picked.has(p.folder)).length;
-  const joining = (p: FoundProject) => !!p.joins && !apart.has(p.folder);
-  const joins = available.filter(joining).length;
   const flip = (set: typeof setPicked, folder: string) =>
     set((s) => {
       const next = new Set(s);
@@ -98,22 +132,142 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
       else next.add(folder);
       return next;
     });
-  const toggle = (folder: string) => flip(setPicked, folder);
+
+  const boxes = found?.areas ?? [];
+  const projects = found?.projects ?? [];
+  const isOne = (b: FoundArea) => !b.areaId && target[b.folder] === ONE;
+  // An area folder whose projects go to its area: one already set up here, or one picked as an area.
+  const active = (b: FoundArea) => !!b.areaId || (boxOn.has(b.folder) && !isOne(b));
+  const boxOf = (p: FoundProject) => (p.area ? boxes.find((b) => b.folder === p.area) : undefined);
+  // The projects in a folder taken as one project are part of it.
+  const shown = projects.filter((p) => { const b = boxOf(p); return !(b && boxOn.has(b.folder) && isOne(b)); });
+  const available = shown.filter((p) => !p.projectId && !p.problem);
+  const joining = (p: FoundProject) => !!p.joins && !apart.has(p.folder);
+  const pickedProjects = available.filter((p) => picked.has(p.folder));
+  const pickedBoxes = boxes.filter((b) => !b.areaId && !b.problem && boxOn.has(b.folder));
+  const newAreas = pickedBoxes.filter((b) => !isOne(b) && target[b.folder] === NEW).length;
+  const spaces = pickedBoxes.filter((b) => !isOne(b) && target[b.folder] !== NEW).length;
+  const ones = pickedBoxes.filter(isOne);
+  const projectCount = pickedProjects.length + ones.length;
+  // New projects outside a picked area go to the area chosen at the bottom.
+  const needsArea = pickedProjects.some((p) => !joining(p) && !(boxOf(p) && active(boxOf(p)!))) || ones.some((b) => !b.asProject);
+  const area = areas.find((a) => a.id === areaId);
+
   const submit = () => {
-    const items = available.filter((p) => picked.has(p.folder)).map((p) => ({
-      folder: p.folder, name: (names[p.folder] ?? p.name).trim() || p.name, agent: lastAgent(p), projectId: joining(p) ? p.joins!.id : null,
+    const items = [
+      ...pickedProjects.map((p) => ({
+        folder: p.folder, name: (names[p.folder] ?? p.name).trim() || p.name, agent: lastAgent(p), projectId: joining(p) ? p.joins!.id : null,
+        area: boxOf(p) && active(boxOf(p)!) ? p.area : null,
+      })),
+      ...ones.map((b) => ({ folder: b.folder, name: (boxNames[b.folder] ?? b.name).trim() || b.name, agent: null, projectId: b.asProject?.id ?? null, area: null })),
+    ];
+    const areaItems = pickedBoxes.filter((b) => !isOne(b)).map((b) => ({
+      folder: b.folder, name: (boxNames[b.folder] ?? b.name).trim() || b.name, areaId: target[b.folder] === NEW ? null : target[b.folder],
     }));
     run(async () => {
-      const r = await importProjectsAction(items, areaId);
+      const r = await importProjectsAction(items, areaId, areaItems);
       if (r.ok) onClose();
       return r;
     });
   };
 
+  const projectRow = (p: FoundProject, indent: boolean) => {
+    const taken = !!p.projectId;
+    const off = taken || !!p.problem;
+    const on = !off && picked.has(p.folder);
+    const last = lastOf(p);
+    const agents = (["claude", "codex"] as AgentId[]).filter((a) => p.used[a] !== undefined);
+    return (
+      <div key={p.folder} className={cx("flex items-center gap-3 rounded-lg py-2 pr-3", indent ? "pl-9" : "pl-3", !off && "hover:bg-hover")}>
+        <Check on={on} off={off} label={`Import ${p.name}`} onClick={() => flip(setPicked, p.folder)} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            {joining(p) ? (
+              <span className={cx("truncate text-[13px]", on ? "text-fg" : "text-fg2")}>{p.joins!.name}</span>
+            ) : on ? (
+              <NameField value={names[p.folder] ?? p.name} label={`Name for ${p.folder}`} onChange={(v) => setNames((n) => ({ ...n, [p.folder]: v }))} />
+            ) : (
+              <span className={cx("truncate text-[13px]", off ? "text-mut2" : "text-fg2")}>{p.name}</span>
+            )}
+            {p.joins && !off && (
+              <button type="button" onClick={() => flip(setApart, p.folder)}
+                title={joining(p) ? `Your project ${p.joins.name} gets this folder here. Select to make a new project instead.` : `Select to give this folder to your project ${p.joins.name} instead.`}
+                className={cx("flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 text-[11px]",
+                  joining(p) ? "border-accent/50 text-accent-fg" : "border-line2 text-mut2 hover:text-fg3")}>
+                <Icon name={joining(p) ? "link" : "plus"} size={11} />{joining(p) ? "Existing project" : "New project"}
+              </button>
+            )}
+            {p.holds > 1 && <span className="shrink-0 text-[11px] text-mut2">{p.holds} repositories</span>}
+            {p.copyOf && !off && <span title="Another copy of the same repository" className="shrink-0 text-[11px] text-mut2">copy of {p.copyOf}</span>}
+          </div>
+          <span title={p.folder} className="truncate font-mono text-[11px] text-mut2">{p.folder}</span>
+        </div>
+        <span title={p.sources.map((s) => SOURCE_LABEL[s]).join(", ")} className="flex shrink-0 items-center gap-1.5 text-mut">
+          {agents.map((a) => <AgentIcon key={a} agent={a} size={13} />)}
+        </span>
+        <span title={p.problem ?? undefined} className="w-[112px] shrink-0 text-right text-[12px] text-mut2 max-sm:w-[76px]">
+          {taken ? "Already a project" : p.problem ? "Can't be used" : last ? ago(last, now) : ""}
+        </span>
+      </div>
+    );
+  };
+
+  const areaRow = (b: FoundArea) => {
+    const linked = !!b.areaId;
+    const on = linked || boxOn.has(b.folder);
+    const t = target[b.folder] ?? NEW;
+    const mine = linked ? areas.find((a) => a.id === b.areaId) : t !== NEW && t !== ONE ? areas.find((a) => a.id === t) : undefined;
+    const choice: ReactNode = linked ? null : (
+      <Menu width={230}
+        trigger={
+          <button type="button" className={cx("flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 text-[11px]",
+            t === NEW ? "border-line2 text-mut2 hover:text-fg3" : "border-accent/50 text-accent-fg")}>
+            <Icon name={t === ONE ? "layers" : t === NEW ? "plus" : "link"} size={11} />
+            {t === ONE ? (b.asProject ? `Project ${b.asProject.name}` : "One project") : t === NEW ? "New area" : "Existing area"}
+            <Icon name="chevronDown" size={10} />
+          </button>
+        }
+        items={[
+          { value: NEW, label: "New area", icon: <Icon name="plus" size={13} /> },
+          ...areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} />,
+            hint: b.joins?.id === a.id ? HOW_LABEL[b.joins.how] : undefined })),
+          { value: ONE, label: b.asProject ? `One project: ${b.asProject.name}` : "One project, not an area", icon: <Icon name="layers" size={13} /> },
+        ]}
+        onSelect={(v) => { setTarget((x) => ({ ...x, [b.folder]: v })); setBoxOn((s) => new Set(s).add(b.folder)); }} />
+    );
+    return (
+      <div className="flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-hover">
+        <Check on={on} off={linked || !!b.problem} label={`Set up ${b.name}`} onClick={() => flip(setBoxOn, b.folder)} />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="flex min-w-0 items-center gap-2">
+            {mine ? <AreaMark area={mine} size={14} /> : <Icon name={t === ONE ? "layers" : "folder"} size={14} className="shrink-0 text-mut2" />}
+            {mine ? (
+              <span className={cx("truncate text-[13px] font-medium", on ? "text-fg" : "text-fg2")}>{mine.name}</span>
+            ) : on && !linked ? (
+              <NameField value={boxNames[b.folder] ?? b.name} label={`Name for ${b.folder}`} onChange={(v) => setBoxNames((n) => ({ ...n, [b.folder]: v }))} />
+            ) : (
+              <span className="truncate text-[13px] font-medium text-fg2">{b.name}</span>
+            )}
+            {choice}
+            {linked && <span className="shrink-0 text-[11px] text-mut2">workspace here</span>}
+          </div>
+          <span title={b.folder} className="truncate font-mono text-[11px] text-mut2">{b.folder}</span>
+        </div>
+        <span title={b.problem ?? undefined} className="shrink-0 text-right text-[12px] text-mut2">
+          {b.problem ? "Can't be used" : !linked && t !== NEW && t !== ONE && b.joins?.id === t ? HOW_LABEL[b.joins.how] : ""}
+        </span>
+      </div>
+    );
+  };
+
+  const loose = shown.filter((p) => !boxOf(p));
+  const joins = available.filter(joining).length;
+  const parts = [newAreas && count(newAreas, "area"), spaces && count(spaces, "workspace"), projectCount && count(projectCount, "project")].filter(Boolean);
+
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-start justify-center bg-overlay px-4 pt-[9vh]" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div role="dialog" aria-modal="true" aria-label="Bring your projects over"
-        className="flex max-h-[80vh] w-[680px] max-w-full flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]">
+        className="flex max-h-[80vh] w-[720px] max-w-full flex-col overflow-hidden rounded-xl border border-line2 bg-raised shadow-[var(--shadow-popover)]">
         <div className="flex flex-col gap-1.5 border-b border-line px-6 pb-4 pt-5 max-sm:px-4">
           <div className="flex items-center gap-2">
             <AgentIcon agent="claude" size={15} className="text-fg3" />
@@ -122,80 +276,47 @@ export function ImportProjects({ areas, auto = false, onClose }: { areas: Area[]
           </div>
           <p className="text-[12.5px] leading-relaxed text-mut">
             {found
-              ? available.length
+              ? available.length || boxes.some((b) => !b.areaId)
                 ? <>
-                  PacedMind found {available.length} folder{available.length > 1 ? "s" : ""} you work in with Claude Code and Codex on this computer{both ? `, ${both} of them with both` : ""}. Each one becomes a project whose tasks run their sessions in that folder.
-                  {joins > 0 && ` ${joins === 1 ? "One is a copy of a project you already have" : `${joins} are copies of projects you already have`}, from its repository or its name: ${joins === 1 ? "it joins that project" : "they join those projects"}, so ${joins === 1 ? "its" : "their"} sessions can start on this computer too.`}
+                  A folder of repositories becomes an area, and the repositories in it its projects.
+                  {joins > 0 && ` ${joins === 1 ? "One is a project you already have" : `${joins} are projects you already have`}: ${joins === 1 ? "it gets" : "they get"} ${joins === 1 ? "its folder" : "their folders"} here.`}
                 </>
-                : "Every folder you work in with Claude Code and Codex on this computer is already a project."
-              : "Looking through Claude Code and Codex on this computer…"}
+                : "Everything you work on with Claude Code and Codex on this computer is already here."
+              : "Looking through your folders, Claude Code and Codex on this computer…"}
           </p>
         </div>
 
         <div className="min-h-[120px] flex-1 overflow-y-auto px-3 py-2">
-          {found?.map((p) => {
-            const taken = !!p.projectId;
-            const off = taken || !!p.problem;
-            const on = !off && picked.has(p.folder);
-            const last = Math.max(0, ...Object.values(p.used).map((v) => v ?? 0));
-            const agents = (["claude", "codex"] as AgentId[]).filter((a) => p.used[a] !== undefined);
-            return (
-              <div key={p.folder} className={cx("flex items-center gap-3 rounded-lg px-3 py-2", !off && "hover:bg-hover")}>
-                <button type="button" role="checkbox" aria-checked={on} disabled={off} aria-label={`Import ${p.name}`}
-                  onClick={() => toggle(p.folder)}
-                  className={cx("flex h-4 w-4 shrink-0 items-center justify-center rounded border-[1.5px]",
-                    on ? "border-accent bg-accent" : off ? "border-line" : "border-line-strong")}>
-                  {on && <Icon name="check" size={11} strokeWidth={3} className="text-white" />}
-                </button>
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {joining(p) ? (
-                      <span className={cx("truncate text-[13px]", on ? "text-fg" : "text-fg2")}>{p.joins!.name}</span>
-                    ) : on ? (
-                      <input value={names[p.folder] ?? p.name} aria-label={`Name for ${p.folder}`}
-                        onChange={(e) => setNames((n) => ({ ...n, [p.folder]: e.target.value }))}
-                        className="-mx-1 h-[22px] min-w-0 flex-1 rounded bg-transparent px-1 text-[13px] text-fg outline-none hover:bg-input focus:bg-input" />
-                    ) : (
-                      <span className={cx("truncate text-[13px]", off ? "text-mut2" : "text-fg2")}>{p.name}</span>
-                    )}
-                    {p.joins && !off && (
-                      <button type="button" onClick={() => flip(setApart, p.folder)}
-                        title={joining(p) ? `Your project ${p.joins.name} gets this folder here. Select to make a new project instead.` : `Select to give this folder to your project ${p.joins.name} instead.`}
-                        className={cx("flex h-5 shrink-0 items-center gap-1 rounded border px-1.5 text-[11px]",
-                          joining(p) ? "border-accent/50 text-accent-fg" : "border-line2 text-mut2 hover:text-fg3")}>
-                        <Icon name={joining(p) ? "link" : "plus"} size={11} />{joining(p) ? "Existing project" : "New project"}
-                      </button>
-                    )}
-                  </div>
-                  <span title={p.folder} className="truncate font-mono text-[11px] text-mut2">{p.folder}</span>
-                </div>
-                <span title={p.sources.map((s) => SOURCE_LABEL[s]).join(", ")} className="flex shrink-0 items-center gap-1.5 text-mut">
-                  {agents.map((a) => <AgentIcon key={a} agent={a} size={13} />)}
-                </span>
-                <span title={p.problem ?? undefined} className="w-[112px] shrink-0 text-right text-[12px] text-mut2 max-sm:w-[76px]">
-                  {taken ? "Already a project" : p.problem ? "Can't be used" : last ? ago(last, now) : ""}
-                </span>
-              </div>
-            );
-          })}
+          {boxes.map((b) => (
+            <div key={b.folder} className="border-b border-line py-1 last:border-b-0">
+              {areaRow(b)}
+              {!(boxOn.has(b.folder) && isOne(b)) && shown.filter((p) => boxOf(p) === b).map((p) => projectRow(p, true))}
+            </div>
+          ))}
+          {loose.length > 0 && boxes.length > 0 && <h3 className="px-3 pb-1 pt-3 text-[12px] font-medium text-mut2">Other folders</h3>}
+          {loose.map((p) => projectRow(p, false))}
         </div>
 
         {/* On a narrow phone the buttons go to a line of their own, on the right. */}
         <div className="flex items-center gap-2 border-t border-line px-6 py-3.5 max-sm:flex-wrap max-sm:px-4">
-          <span className="whitespace-nowrap text-[12.5px] text-mut2">Add to</span>
-          <Menu width={200}
-            trigger={
-              <button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
-                {area && <AreaMark area={area} size={13} />}{area?.name ?? "Pick an area"}<Icon name="chevronDown" size={11} className="text-mut2" />
-              </button>
-            }
-            items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} /> }))}
-            onSelect={setAreaId} />
+          {needsArea && (
+            <>
+              <span className="whitespace-nowrap text-[12.5px] text-mut2">{boxes.length ? "Other projects to" : "Add to"}</span>
+              <Menu width={200}
+                trigger={
+                  <button type="button" className="flex h-7 items-center gap-1.5 rounded-md border border-line2 px-2 text-[12.5px] text-fg2 hover:bg-hover">
+                    {area && <AreaMark area={area} size={13} />}{area?.name ?? "Pick an area"}<Icon name="chevronDown" size={11} className="text-mut2" />
+                  </button>
+                }
+                items={areas.map((a) => ({ value: a.id, label: a.name, icon: <AreaMark area={a} size={13} /> }))}
+                onSelect={setAreaId} />
+            </>
+          )}
           <span className="flex-1" />
           <div className="ml-auto flex gap-2">
             <Button variant="ghost" onClick={close}>{auto ? "Not now" : "Cancel"}</Button>
-            <Button variant="primary" disabled={pending || !count || !areaId} onClick={submit}>
-              {count ? `Add ${count} project${count > 1 ? "s" : ""}` : "Add projects"}
+            <Button variant="primary" disabled={pending || !parts.length || (needsArea && !areaId)} onClick={submit}>
+              {parts.length ? `Add ${parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0]}` : "Add projects"}
             </Button>
           </div>
         </div>

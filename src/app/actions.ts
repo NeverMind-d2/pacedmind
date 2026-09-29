@@ -16,8 +16,9 @@ import {
 import { approve, cutOffAgents, deny } from "@/server/requests";
 import { commandProblem, deviceConfig, rotateOwnerToken, setAreaFolder, setProjectServers, updateDevice } from "@/server/device";
 import { folderProblem } from "@/server/folders";
+import { markAll, markArea, markProject } from "@/server/marker";
 import { connectClaudeCode, connectCodex } from "@/server/connect";
-import { findProjects, importProjects, type FoundProject, type ImportItem } from "@/server/import";
+import { findWork, importAreas, importProjects, keyOf, type FoundArea, type FoundProject, type ImportArea, type ImportItem } from "@/server/import";
 import { linkFolder, mergeProjects } from "@/server/project-links";
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
@@ -32,7 +33,8 @@ import { areaPictureProblem } from "@/lib/area-picture";
 import { addDaysStr, dateOnly, dayDiff, fmtDay, parseLocal, timeOf, toDateTimeStr } from "@/lib/dates";
 import {
   AGENT_LABEL, LIVE_STATUSES, agentOf, deviceOnline, isLiveSession,
-  type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface, type TerminalId,
+  type AgentId, type Device, type EdgeMode, type LaunchRequestKind, type Project, type RemoteStart, type Settings, type Surface,
+  type TerminalId,
 } from "@/lib/types";
 
 type Result = { ok: boolean; error?: string; message?: string };
@@ -640,6 +642,7 @@ export async function createProjectAction(input: {
   const problem = input.folder ? folderProblem(input.folder) : null;
   if (problem) return { ok: false, error: `Can't use the folder ${input.folder}: ${problem}` };
   const p = await repo.createProject(input);
+  await markProject(p);
   refresh();
   return { ok: true, id: p.id, message: `Created ${p.name}` };
 }
@@ -685,6 +688,8 @@ export async function setAreaFolderAction(id: string, folder: string | null): Pr
   // The repository it holds, so your other computers can offer their copy of it.
   const holds = next ? repoIdentity(next) : null;
   if (holds && holds !== area.repo) await repo.setAreaRepo(id, holds);
+  // And by its pacedmind.md, whether it holds a repository or not.
+  if (next) await markArea({ ...area, folder: next });
   return done({ ok: true, message: changed && inheriting.some((p) => p.flowOn)
     ? "Workspace saved. Flows that inherit it are paused; switch them on again to use the new folder."
     : "Workspace saved" });
@@ -978,29 +983,96 @@ export async function disconnectAgentAction(id: string): Promise<Result> {
   return done({ ok: true, message: "Disconnected. It has to sign in and be allowed again." });
 }
 
-/** Folders you work in with Claude Code and Codex on this computer, for the import. */
-export async function findProjectsAction(): Promise<FoundProject[]> {
+/**
+ * Links the copies found here that you picked (the offer's Link, one click): a project gets its folder here as the
+ * import gives it, an area its workspace. Each only if it has none here yet.
+ */
+export async function linkFoundAction(items: { kind: "project" | "area"; id: string; folder: string }[]): Promise<Result> {
   await guard();
-  if (MODE !== "desktop") return [];
-  return findProjects();
+  if (MODE !== "desktop") return { ok: false, error: "Folders are set in the PacedMind desktop app." };
+  const list = Array.isArray(items) ? items.filter((i) => i && typeof i.id === "string" && typeof i.folder === "string") : [];
+  const projects = await repo.listProjects();
+  let linked = 0;
+  const skipped: string[] = [];
+  for (const i of list.filter((x) => x.kind === "project")) {
+    const p = projects.find((x) => x.id === i.id && !x.folder);
+    if (!p || folderProblem(i.folder)) {
+      skipped.push(p?.name ?? "a project");
+      continue;
+    }
+    try {
+      await linkFolder(p, i.folder);
+      linked++;
+    } catch {
+      skipped.push(p.name);
+    }
+  }
+  const areas = await repo.listAreas();
+  const spaces = await importAreas(list.filter((x) => x.kind === "area").flatMap((x) => {
+    const a = areas.find((y) => y.id === x.id && !y.folder);
+    return a ? [{ folder: x.folder, name: a.name, areaId: a.id }] : [];
+  }));
+  linked += spaces.linked.length;
+  skipped.push(...spaces.skipped);
+  updateDevice({ linkOfferSeen: [...deviceConfig().linkOfferSeen, ...list.map((x) => `${x.id}>${x.folder}`)].slice(-500) });
+  return done(linked
+    ? { ok: true, message: `Linked ${linked} folder${linked === 1 ? "" : "s"} on this computer${skipped.length ? `. Skipped ${skipped.join(", ")}` : ""}` }
+    : { ok: false, error: skipped.length ? `Couldn't link ${skipped.join(", ")}` : "Nothing to link" });
 }
 
-export async function importProjectsAction(items: ImportItem[], areaId: string): Promise<Result> {
+/** "Not now": the offer doesn't come back for these copies (it does for others found later). */
+export async function dismissLinkOfferAction(keys: string[]): Promise<Result> {
+  await guard();
+  if (MODE === "desktop" && Array.isArray(keys)) {
+    updateDevice({ linkOfferSeen: [...deviceConfig().linkOfferSeen, ...keys.filter((k) => typeof k === "string").slice(0, 200)].slice(-500) });
+  }
+  return done();
+}
+
+/** Writes pacedmind.md into this computer's linked folders that don't have it, so your other computers find them. */
+export async function markFoldersAction(): Promise<Result> {
+  await guard();
+  if (MODE !== "desktop") return { ok: false, error: "Folders are on the computer, in the PacedMind desktop app." };
+  const n = await markAll();
+  return done({ ok: true, message: n ? `Added pacedmind.md to ${n} folder${n === 1 ? "" : "s"}` : "Every linked folder has its pacedmind.md" });
+}
+
+/** What the import offers on this computer: the folders that may be projects, and the ones that hold them, areas. */
+export async function findWorkAction(): Promise<{ projects: FoundProject[]; areas: FoundArea[] }> {
+  await guard();
+  if (MODE !== "desktop") return { projects: [], areas: [] };
+  return findWork();
+}
+
+/**
+ * Sets up the picked areas (each the workspace here of an area you have, or a new area), then the picked projects,
+ * each in its area: the one its folder is in when that's set up, else `areaId`.
+ */
+export async function importProjectsAction(items: ImportItem[], areaId: string, areas: ImportArea[] = []): Promise<Result> {
   await guard();
   if (MODE !== "desktop") return { ok: false, error: "Import from the desktop app on the computer with the folders." };
-  const valid = items.filter((i) => i && typeof i.folder === "string" && typeof i.name === "string" && (i.projectId == null || typeof i.projectId === "string"));
-  // Every folder that joins a project needs no area; a new project does.
-  if (valid.some((i) => !i.projectId) && !(await repo.listAreas()).some((a) => a.id === areaId)) return { ok: false, error: "Pick an area for the projects" };
-  const { created, linked, skipped } = await importProjects(valid, areaId);
+  const valid = items.filter((i) => i && typeof i.folder === "string" && typeof i.name === "string" && (i.projectId == null || typeof i.projectId === "string")
+    && (i.area == null || typeof i.area === "string"));
+  const spaces = await importAreas(Array.isArray(areas) ? areas.slice(0, 200) : []);
+  const known = new Set((await repo.listAreas()).map((a) => a.id));
+  const areaOf = (i: ImportItem) => (i.area ? spaces.areaOf.get(keyOf(i.area)) : undefined) ?? (known.has(areaId) ? areaId : null);
+  // A folder that joins a project needs no area; a new project does.
+  if (valid.some((i) => !i.projectId && !areaOf(i))) return { ok: false, error: "Pick an area for the projects" };
+  const { created, linked, skipped } = await importProjects(valid, areaOf);
+  skipped.push(...spaces.skipped);
   updateDevice({ importOffered: true });
-  const names = (ps: Project[]) => (ps.length === 1 ? ps[0].name : `${ps.length} projects`);
+  const count = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
+  const names = (ps: Project[]) => count(ps.length, ps[0]?.name ?? "", "projects");
   const made = [
-    created.length ? `Added ${names(created)}` : "",
-    linked.length ? `${created.length ? "linked" : "Linked"} ${names(linked)} to ${linked.length === 1 ? "its" : "their"} folder${linked.length === 1 ? "" : "s"} here` : "",
-  ].filter(Boolean).join(" and ");
-  return done(made
-    ? { ok: true, message: skipped.length ? `${made}. Skipped ${skipped.join(", ")}.` : made }
-    : { ok: false, error: skipped.length ? `Couldn't add ${skipped.join(", ")}` : "Pick a project to add" });
+    spaces.created.length ? `added the area${spaces.created.length > 1 ? "s" : ""} ${spaces.created.join(", ")}` : "",
+    created.length ? `added ${names(created)}` : "",
+    linked.length ? `linked ${names(linked)} to ${linked.length === 1 ? "its" : "their"} folder${linked.length === 1 ? "" : "s"} here` : "",
+    spaces.linked.length ? `set the workspace of ${spaces.linked.join(", ")}` : "",
+  ].filter(Boolean).join(", ");
+  const sentence = made && made[0].toUpperCase() + made.slice(1);
+  return done(sentence
+    ? { ok: true, message: skipped.length ? `${sentence}. Skipped ${skipped.join(", ")}.` : sentence }
+    : { ok: false, error: skipped.length ? `Couldn't add ${skipped.join(", ")}` : "Pick a project or an area to add" });
 }
 
 /** The import opens by itself once on each computer; after that it's in Settings. */
