@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ComputersSettings } from "@/components/computers-settings";
 import {
@@ -18,6 +19,7 @@ import { cloudMcpUrl } from "@/server/supabase-config";
 import { foldersOfRepos } from "@/server/import";
 import { unmarked } from "@/server/marker";
 import { settingsMenu, type SettingsSection } from "@/lib/settings-menu";
+import { isNativeCompanion } from "@/lib/native-client";
 import type { DeviceSettings, ProjectAgentsView } from "@/lib/types";
 
 type Auth = NonNullable<Awaited<ReturnType<typeof authState>>>;
@@ -25,6 +27,7 @@ type Auth = NonNullable<Awaited<ReturnType<typeof authState>>>;
 function accountView(state: Auth): AccountView {
   return {
     email: state.user.email ?? null,
+    mfaEnabled: state.mfaEnabled,
     factors: state.factors.filter((f) => f.factor_type === "totp").map((f, i) => ({
       id: f.id, name: f.friendly_name?.replace(/\s·.*$/, "") || `Authenticator ${i + 1}`, added: f.created_at.slice(0, 10),
     })),
@@ -64,7 +67,7 @@ async function body(section: SettingsSection, state: Auth | null, desktop: boole
     }
     case "plan": {
       const plan = await readPlan();
-      return plan && <PlanSettings plan={plan} />;
+      return plan && <PlanSettings plan={plan} nativeCompanion={!desktop && isNativeCompanion((await headers()).get("user-agent"))} />;
     }
     case "security":
       return state && <SecuritySettings account={accountView(state)} />;

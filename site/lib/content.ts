@@ -50,6 +50,7 @@ export type ConnectAgent = {
   commands?: readonly string[];
   /** A link that opens the agent's app, which asks to add the server. */
   install?: { label: string; href: string };
+  open?: { label: string; href: string };
   /** Whether the server's address is there to copy. */
   address?: boolean;
   then: string;
@@ -66,7 +67,7 @@ const inBrowser = "PacedMind opens in your browser: sign in and select Allow.";
 
 export const CONNECT = {
   title: "Connect your agent.",
-  subtitle: "One command, then Allow.",
+  subtitle: "Pick your agent, then Allow.",
   intro:
     "Claude Code, Codex, Cursor, ChatGPT and other agents plan with you through PacedMind Cloud's MCP server: they read your day, add tasks and report on their work. You allow each one in the browser, so there's no token to copy.",
   /** The /connect page's description. */
@@ -74,7 +75,7 @@ export const CONNECT = {
     "Connect Claude Code, Codex, Cursor, VS Code, Claude or ChatGPT to PacedMind Cloud's MCP server: one command or one click, then Allow in the browser.",
   /** Above the agents' links in the hero. */
   hero: "Or connect the agent you already use:",
-  account: "No account yet? PacedMind's page lets you create one, with 7 days free and no card.",
+  account: "No account yet? Create one with 7 days free and no card. Connect your planner right away; add two-factor sign-in later to control sessions on your computers.",
   local:
     "Rather keep your plan on your computer? The desktop app is free without an account and connects Claude Code and Codex to itself, in Settings → Connect your agents.",
   details: "Connection details",
@@ -117,15 +118,17 @@ export const CONNECT = {
       icon: "appWindow",
       how: "In Claude, open Customize → Connectors, select + and then Add custom connector, and paste this address.",
       address: true,
-      then: `Select Add, then Connect. ${inBrowser}`,
+      open: { label: "Open Claude connectors", href: "https://claude.ai/settings/connectors" },
+      then: `Name it PacedMind, select Add, then Connect. ${inBrowser} On a team, an owner may need to add it first. Try asking: What should I work on today?`,
     },
     {
       id: "chatgpt",
       name: "ChatGPT",
       icon: "appWindow",
-      how: "In ChatGPT, turn on Developer mode in Settings → Apps → Advanced settings. Then create an app with this address and OAuth.",
+      how: "In ChatGPT, turn on Developer mode in Settings → Security and login. Open Plugins, select +, name it PacedMind and add this address with OAuth.",
       address: true,
-      then: `When ChatGPT connects it, ${inBrowser}`,
+      open: { label: "Open ChatGPT plugins", href: "https://chatgpt.com/plugins" },
+      then: `${inBrowser} Add PacedMind from the tools menu in a new chat. Developer mode depends on your account and workspace settings. Try asking: What should I work on today?`,
     },
     {
       id: "other",

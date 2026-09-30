@@ -1,6 +1,7 @@
 import "server-only";
 import { deviceConfig, deviceFor, type DeviceConfig } from "./device";
 import { MODE, NotSignedIn, authState } from "./supabase";
+import { canUsePlanner } from "@/lib/auth-access";
 
 /*
  * Whose data this server works with. Signed in to PacedMind Cloud, the account's, in Supabase (the hosted
@@ -15,7 +16,7 @@ export async function usesCloud(): Promise<boolean> {
 
 /**
  * This computer's settings for the data in use, for starting sessions and answering agents: the signed-in
- * account's once it passed its second factor, or this computer's own without an account.
+ * account's after its required sign-in steps, or this computer's own without an account.
  */
 export async function activeDevice(): Promise<DeviceConfig> {
   const state = await authState();
@@ -23,6 +24,6 @@ export async function activeDevice(): Promise<DeviceConfig> {
     if (MODE === "web") throw new NotSignedIn();
     return deviceConfig();
   }
-  if (state.aal !== "aal2") throw new NotSignedIn("Finish signing in with your two-factor code first.");
+  if (!state.clientId && !canUsePlanner(state)) throw new NotSignedIn("Finish signing in with your two-factor code first.");
   return deviceFor(state.user.id);
 }

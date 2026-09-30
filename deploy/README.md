@@ -69,6 +69,8 @@ It uploads the working tree, builds the app on the server, switches `/srv/pacedm
 
 When several sessions share one checkout, each may have unfinished work in it: `SITE_ONLY=1` uploads `site/out`, `docs/out` and the Caddy config and keeps the app that runs, and `APP_ONLY=1` rebuilds the app without uploading `site/out` or `docs/out`.
 
+The web upload excludes the entire separate `mobile/` project, including its dependencies, native projects, bundles, local configuration and signing credentials. Mobile binaries are built and distributed separately. The hosted native sign-in callback remains part of `src/app/auth/` and is included in normal web deployments.
+
 Before the web app launched, `APP_PLACEHOLDER=1 deploy/deploy.sh pacedmind` deployed only the site and docs and sent `app.pacedmind.com` to the site (`app-placeholder.caddy`). Now that the app runs, `deploy.sh` refuses that flag, since it would hide the app.
 
 A checkout without the hosted web mode (`src/server/supabase.ts`) refuses to deploy the app: it would put a planner without sign-in on the internet.

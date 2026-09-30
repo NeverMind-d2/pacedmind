@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { MODE, authState, supabase } from "@/server/supabase";
 import { cloudMcpUrl } from "@/server/supabase-config";
 import { nextStep, withNext } from "@/server/auth-flow";
+import { computerAccessProblem } from "@/server/computer-access";
 import { AuthShell } from "@/app/login/shell";
 import { ConsentForm } from "./consent-form";
 import { isLoopbackCallback } from "@/lib/oauth-callback";
@@ -74,6 +75,7 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
   const to = destination(details?.redirect_uri ?? held ?? "");
   // The MCP server the agent gets: this app's own. Where the sign-in goes back to (`to`) is the agent's, not the server.
   const server = new URL(cloudMcpUrl()).host;
+  const computerAccess = !(await computerAccessProblem());
 
   return (
     // Re-reading a consumed authorization would replace the completion screen with an expired-request error.
@@ -82,8 +84,11 @@ export default async function ConsentPage(props: PageProps<"/oauth/consent">) {
         <h1 className="text-[15px] font-semibold text-strong">{name ? `Allow ${name} to use PacedMind?` : "Allow this agent to use PacedMind again?"}</h1>
         <p className="text-[13px] leading-relaxed text-fg3">
           It will act as you in PacedMind Cloud: read and change your areas, projects, tasks and calendar, and report on
-          agent sessions. It can&apos;t start sessions on your computers, answer for you, change your computers or delete your account.
+          agent sessions. It can&apos;t answer for you, change your computers or delete your account.
         </p>
+        <p className="text-[13px] leading-relaxed text-fg3">{computerAccess
+          ? "It may ask computers that accept requests without a fresh code to start sessions or use folders. Each computer's own settings and approvals still apply."
+          : "This connection has planner access only. To let it request sessions or folders on computers later, set up two-factor sign-in, sign in again and reconnect it."}</p>
         <div className="flex flex-col gap-1.5 rounded-md border border-line2 px-3 py-2.5 text-[12.5px] text-fg3">
           <span>Connects to <span className="font-mono text-fg2">{server}</span> (PacedMind Cloud)</span>
           <span>

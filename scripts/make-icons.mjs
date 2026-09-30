@@ -3,6 +3,7 @@
 //   desktop/icon.icns                   – app icon on macOS, on Apple's icon grid
 //   desktop/trayTemplate.png (+ @2x)    – macOS menu bar icon: black on clear, so macOS can tint it
 //   src/app/favicon.ico                 – browser tab
+//   mobile/assets/                      – opaque iOS and padded Android adaptive icons
 // Run with: npm run icons
 import fs from "node:fs";
 import path from "node:path";
@@ -210,6 +211,17 @@ write("desktop/trayTemplate.png", png(16, glyph(16)));
 write("desktop/trayTemplate@2x.png", png(32, glyph(32)));
 write("src/app/favicon.ico", ico([16, 32, 48]));
 write("public/brand/pacedmind-emblem.png", png(512, render(512)));
+
+// iOS supplies its own mask and requires an opaque icon. Composite on the brand's black background.
+const mobileIcon = render(1024, 0.06);
+for (let pixel = 0; pixel < mobileIcon.length; pixel += 4) {
+  const alpha = mobileIcon[pixel + 3] / 255;
+  for (let channel = 0; channel < 3; channel++) mobileIcon[pixel + channel] = Math.round(mobileIcon[pixel + channel] * alpha);
+  mobileIcon[pixel + 3] = 255;
+}
+write("mobile/assets/icon.png", png(1024, mobileIcon));
+// Keep the visible mark within Android's adaptive-icon safe zone, whichever mask the launcher uses.
+write("mobile/assets/adaptive-icon.png", png(1024, render(1024, 0.2)));
 
 // An editable vector export, using the same circles and stems as render().
 const emblem = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">

@@ -4,6 +4,11 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
+    "test:auth": "node --conditions=react-server --import tsx --test tests/auth-access.test.ts tests/auth-state.test.ts tests/native-auth.test.ts",
+    "test:sql": "node scripts/test-sql-security.mjs",
+    "test:connectors": "node --conditions=react-server --import tsx --test tests/connector-contract.test.ts",
+    "test:platforms": "node --test tests/windows-store.test.mjs",
+    "stores:check": "node scripts/check-store-readiness.mjs",
     "test:sessions": "node --conditions=react-server --import tsx --test tests/session-health.test.ts",
     "test:models": "node --conditions=react-server --import tsx --test tests/agent-models.test.ts",
     "dev": "next dev -p 4320 -H 127.0.0.1",
@@ -41,6 +46,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.14",
     "@electron/packager": "^20.3.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^26.6.2",

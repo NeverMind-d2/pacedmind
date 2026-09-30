@@ -128,7 +128,8 @@ export function registerComputerTools(server: McpServer) {
       computer: z.string().max(200).optional()
         .describe(HOSTED ? "The computer's name or id (list_computers); without it, the only one signed in" : "The computer's name or id (list_computers); without it, this computer"),
     }),
-    kind: "write",
+    kind: "create",
+    openWorld: true,
   }, async ({ project, area, task, folder, computer }) => {
     const named = [project, area, task].filter((x) => x !== undefined);
     if (named.length !== 1) fail("Name one of project, area or task.");

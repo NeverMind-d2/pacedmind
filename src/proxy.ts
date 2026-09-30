@@ -23,6 +23,7 @@ const WEB_PUBLIC = [
   /^\/login(\/|$)/, /^\/auth\//, /^\/api\/health$/,
   /^\/api\/mcp\/?$/, // agents, with their own OAuth token (src/server/auth.ts)
   /^\/\.well-known\/oauth-(protected-resource|authorization-server)(\/|$)/, // where agents sign in; public
+  /^\/\.well-known\/openai-apps-challenge$/, // public domain-ownership proof for connector submission
   /^\/oauth\/consent$/, // approving an agent's sign-in; sends you to sign in first, keeping the request
 ];
 

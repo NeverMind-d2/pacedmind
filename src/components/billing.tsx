@@ -28,12 +28,20 @@ export function useOpenBilling() {
  * Above every page once billing is on, only when the plan needs you: the trial's last days, a payment that didn't go
  * through, or Cloud that has ended and is read-only. Settings → Plan has the rest.
  */
-export function BillingBanner({ plan, desktop }: { plan: Plan; desktop: boolean }) {
+export function BillingBanner({ plan, desktop, nativeCompanion = false }: { plan: Plan; desktop: boolean; nativeCompanion?: boolean }) {
   const { open, pending } = useOpenBilling();
   const router = useRouter();
   const days = daysLeft(plan.trialEndsAt);
   let text: ReactNode;
   let actions: ReactNode;
+  // The native companion uses existing entitlements; it does not sell subscriptions or lead to a checkout.
+  if (nativeCompanion) {
+    return plan.state === "lapsed" ? (
+      <div role="status" className="border-b border-line bg-panel px-3.5 py-2 text-[12.5px] text-fg2">
+        PacedMind Cloud is read-only. You can still see and delete your data.
+      </div>
+    ) : null;
+  }
   if (plan.state === "trial" && days <= 3) {
     text = <span suppressHydrationWarning>Your free trial of PacedMind Cloud ends {days === 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`}. After that it{"'"}s read-only until you subscribe.</span>;
     actions = <Button size="sm" variant="primary" onClick={() => router.push("/settings/plan")}>Subscribe</Button>;

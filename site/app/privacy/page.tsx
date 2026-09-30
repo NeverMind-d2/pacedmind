@@ -52,7 +52,20 @@ export default function Privacy() {
         <><strong>Stripe</strong> sells the subscription as the merchant of record, takes payments and keeps your payment details and billing address, as a controller of its own for them (<a href="https://stripe.com/privacy" className="underline underline-offset-2 hover:text-ink">Stripe&rsquo;s privacy policy</a>). Stripe may process data in the United States under the EU&rsquo;s standard contractual clauses and the EU–US Data Privacy Framework.</>,
         <><strong>Browser push services</strong> (Google, Mozilla, Apple, Microsoft) carry the notifications you turn on.</>,
       ]} />
-      <p>We don&rsquo;t sell your data or share it with anyone else, except when the law requires it.</p>
+      <p>We don&rsquo;t sell your data. We share it with the providers above, services you connect as described below, and when the law requires it.</p>
+
+      <H2>Agents and connectors you authorize</H2>
+      <p>
+        When you connect ChatGPT, Claude or another MCP client and select Allow, that service can read and change your
+        planner on your behalf. Tool responses can include your tasks, projects, areas, events, preferences, computer
+        summaries and session reports. Those responses reach the service you connected and are subject to its privacy
+        policy. Your password, authenticator secrets and local files are not returned by planner tools.
+      </p>
+      <p>
+        PacedMind keeps the agent&rsquo;s OAuth approval and sign-in so it can enforce access. Disconnect it in
+        Settings → Connected agents to end its access. Disconnecting does not erase information already saved in that
+        service&rsquo;s conversations; use that service&rsquo;s controls to manage it.
+      </p>
 
       <H2>This website</H2>
       <p>
@@ -70,8 +83,9 @@ export default function Privacy() {
 
       <H2>Security</H2>
       <p>
-        Every account signs in with two factors. The database lets each account see only its own data, and only from a session that passed
-        both factors. Connections are encrypted, and the desktop app encrypts its sign-in on your computer.
+        You can start planning before setting up two-factor sign-in. Once enabled, it is required when you sign in;
+        controlling computers requires it too. The database limits each account to its own data and checks the permissions
+        of each session. Connections are encrypted, and the desktop app encrypts its sign-in on your computer.
       </p>
 
       <H2>Your rights</H2>

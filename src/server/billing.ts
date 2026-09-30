@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { MODE, authState, supabase } from "./supabase";
 import { planOf, type BillingPeriod, type Plan } from "@/lib/billing";
+import { canUsePlanner } from "@/lib/auth-access";
 
 /*
  * The signed-in account's PacedMind Cloud plan, and the way to Stripe's pages for subscribing and managing it. Stripe
@@ -12,7 +13,7 @@ import { planOf, type BillingPeriod, type Plan } from "@/lib/billing";
 
 async function fetchPlan(): Promise<Plan | null> {
   const state = await authState();
-  if (!state || state.aal !== "aal2") return null;
+  if (!canUsePlanner(state)) return null;
   const { data, error } = await (await supabase()).rpc("cloud_plan");
   return error ? null : planOf(data);
 }
@@ -28,7 +29,7 @@ const g = globalThis as unknown as { __pacedmindPlan?: { plan: Plan | null; at: 
  */
 export async function cloudWritable(): Promise<boolean> {
   const state = await authState();
-  if (!state || state.aal !== "aal2") return true;
+  if (!state || !canUsePlanner(state)) return true;
   const cached = g.__pacedmindPlan;
   if (!cached || cached.user !== state.user.id || Date.now() - cached.at > 60_000) {
     g.__pacedmindPlan = { plan: await fetchPlan(), at: Date.now(), user: state.user.id };

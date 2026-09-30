@@ -26,6 +26,7 @@ import { approveFolder, isFolderApproval, refuseFolder } from "@/server/folder-r
 import { STEP_UP_REFUSED, codeFreshUntil, refusedStepUp, verifyCode } from "@/server/step-up";
 import { MODE, readAuthState, supabase } from "@/server/supabase";
 import { guardAction as guard } from "@/server/guard";
+import { computerAccessProblem } from "@/server/computer-access";
 import { answerHere, askedHere, withdrawHere } from "@/server/asks";
 import { PUSH_ENDPOINT, ensurePushKeys } from "@/server/push";
 import { repoIdentity } from "@/server/git-remote";
@@ -193,6 +194,8 @@ export async function startSessionAction(
   taskId: number, agent?: AgentId | null, surface?: Surface, anyway = false,
 ): Promise<Result & Remote> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to run the session" };
   const task = await repo.getTask(taskId);
   if (!task) return { ok: false, error: "Task not found" };
@@ -225,6 +228,8 @@ export async function startSessionAction(
  */
 async function requestTarget(deviceId: string | null | undefined): Promise<Device | string> {
   if (!(await usesCloud())) return "Sign in to PacedMind Cloud to use your other computers.";
+  const access = await computerAccessProblem();
+  if (access) return access;
   const device = deviceId ? await repo.getDevice(deviceId) : null;
   if (!device || device.revokedAt) return "That computer isn't signed in to PacedMind anymore.";
   if (device.remoteStart === "off") return `${device.name} doesn't take sessions from elsewhere. Change that in its Settings.`;
@@ -313,6 +318,8 @@ export async function requestSessionAction(
  */
 export async function resumeSessionAction(sessionId: string, surface?: Surface): Promise<Result & Remote> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   if (surface && !SURFACES.has(surface)) return { ok: false, error: "Unknown place to open the session" };
   const s = await repo.getSession(sessionId);
   if (!s) return { ok: false, error: "Session not found" };
@@ -331,6 +338,8 @@ export async function resumeSessionAction(sessionId: string, surface?: Surface):
  */
 export async function reopenSessionAction(sessionId: string): Promise<Result> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   if (MODE !== "desktop") return { ok: false, error: "Reopen it from the PacedMind desktop app on the computer it runs on." };
   const s = await repo.getSession(sessionId);
   if (!s) return { ok: false, error: "Session not found" };
@@ -404,6 +413,8 @@ export async function closeSessionAction(sessionId: string): Promise<Result> {
  */
 export async function requestChangesAction(sessionId: string, changes: string): Promise<Result & Remote> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   const s = await repo.getSession(sessionId);
   if (!s) return { ok: false, error: "Session not found" };
   if (MODE === "web" || !runsHere(s.deviceId)) {
@@ -444,6 +455,8 @@ export async function requestChangesRemoteAction(sessionId: string, text: string
  */
 export async function answerAskAction(askId: string, answer: string, code = ""): Promise<Requested> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   const ask = typeof askId === "string" ? await repo.getAsk(askId) : null;
   if (!ask || ask.status !== "pending" || Date.parse(ask.expiresAt) <= Date.now()) {
     return done({ ok: false, error: "The agent isn't waiting for this answer any more." });
@@ -536,6 +549,8 @@ export async function markSessionDoneAction(sessionId: string): Promise<Result> 
 /** A session or a folder asked for over MCP or from elsewhere, allowed in this window. */
 export async function approveLaunchAction(id: string): Promise<Result> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   if (MODE !== "desktop") return { ok: false, error: "Only the desktop app starts sessions." };
   if (isFolderApproval(id)) return done(await approveFolder(id));
   const r = await approve(id);
@@ -794,6 +809,8 @@ export async function updateDeviceSettingsAction(patch: {
   trustFolders?: boolean; remoteAnswers?: boolean;
 }): Promise<Result> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   if (MODE !== "desktop") return { ok: false, error: "These are set in the PacedMind desktop app." };
   for (const command of [patch.claudeCommand, patch.codexCommand]) {
     const problem = command === undefined ? null : commandProblem(command);
@@ -833,6 +850,8 @@ export async function updateDeviceSettingsAction(patch: {
  */
 export async function renameDeviceAction(deviceId: string, name: string): Promise<Result> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   const clean = repo.cleanDeviceName(name ?? "");
   if (!clean) return { ok: false, error: "Give the computer a name" };
   const here = MODE === "desktop" && (deviceId === deviceConfig().deviceId || (deviceId === "" && !(await usesCloud())));
@@ -852,6 +871,8 @@ export async function renameDeviceAction(deviceId: string, name: string): Promis
 /** Makes a signed-in computer the account's default: sessions go there when neither the task nor its project names one. */
 export async function setDefaultDeviceAction(deviceId: string): Promise<Result> {
   await guard();
+  const access = await computerAccessProblem();
+  if (access) return { ok: false, error: access };
   if (!(await usesCloud())) return { ok: false, error: "Without an account, this computer is the only one." };
   try {
     await repo.setDefaultDevice(deviceId);

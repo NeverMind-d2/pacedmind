@@ -1,4 +1,5 @@
 import "server-only";
+import { computerAccessProblem } from "./computer-access";
 import crypto from "node:crypto";
 import * as repo from "./repo";
 import {
@@ -229,6 +230,7 @@ export async function syncDevice(): Promise<void> {
   if (MODE !== "desktop") return;
   const state = await authState();
   if (!state || state.aal !== "aal2") return;
+  if (await computerAccessProblem()) return;
   let d = deviceFor(state.user.id);
 
   if (!d.deviceId) {

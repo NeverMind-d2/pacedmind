@@ -27,7 +27,7 @@ export const SITE = {
     email: "mbednarczyk@preseed.tech",
   },
   // When the terms, privacy policy and refund policy last changed.
-  legalUpdated: "28 September 2026",
+  legalUpdated: "30 September 2026",
   // Whether Cloud takes subscriptions yet. Until billing launches the page says "Coming soon"; switch it on together
   // with the database's billing switch (supabase/migrations, private.billing_switch).
   cloudOpen: true,

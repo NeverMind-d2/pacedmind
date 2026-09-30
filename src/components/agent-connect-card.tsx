@@ -15,6 +15,7 @@ type Way = {
   commands?: string[];
   /** A link that opens the agent's app, which asks to add the server. */
   install?: { label: string; href: string };
+  open?: { label: string; href: string };
   then: string;
 };
 
@@ -48,11 +49,13 @@ function waysFor(url: string): Way[] {
     },
     {
       id: "claude", name: "Claude", how: "In Claude, open Customize → Connectors, select + and then Add custom connector, and paste this address:",
-      then: `Select Add, then Connect. ${allow}`,
+      open: { label: "Open Claude connectors", href: "https://claude.ai/settings/connectors" },
+      then: `Name it PacedMind, select Add, then Connect. ${allow} On a team, an owner may need to add the connector first.`,
     },
     {
-      id: "chatgpt", name: "ChatGPT", how: "In ChatGPT, turn on Developer mode in Settings → Apps → Advanced settings, then create an app with this address and OAuth:",
-      then: `When ChatGPT connects it, ${allow}`,
+      id: "chatgpt", name: "ChatGPT", how: "In ChatGPT, turn on Developer mode in Settings → Security and login. Open Plugins, select +, name it PacedMind and add this address with OAuth:",
+      open: { label: "Open ChatGPT plugins", href: "https://chatgpt.com/plugins" },
+      then: `${allow} Add PacedMind from the tools menu in a new chat. Developer mode depends on your account and workspace settings.`,
     },
     {
       id: "other", name: "Other", how: "In any MCP client that signs in with OAuth, add this address as a streamable HTTP server:",
@@ -121,6 +124,8 @@ export function AgentConnectCard({ url }: { url: string }) {
       </div>
       <div role="tabpanel" aria-label={way.name} className="flex flex-col gap-2">
         <p className="text-[12.5px] leading-relaxed text-fg3">{way.how}</p>
+        {way.open && <a href={way.open.href} target="_blank" rel="noreferrer"
+          className="self-start text-[12.5px] text-fg2 underline underline-offset-4">{way.open.label}</a>}
         {way.install ? (
           <a href={way.install.href}
             className="inline-flex h-7 items-center self-start rounded-md border border-ctl px-2.5 text-[12.5px] text-fg2 hover:bg-hover">
@@ -133,6 +138,7 @@ export function AgentConnectCard({ url }: { url: string }) {
           </div>
         )}
         <p className="text-[12px] leading-relaxed text-mut2">{way.then}</p>
+        <p className="text-[12px] leading-relaxed text-mut2">Try: “What should I work on today?” Planning works before you set up two-factor sign-in; controlling computers requires it.</p>
       </div>
       <div className="flex items-center justify-between gap-2">
         <Link href="/settings/mcp" className="text-[12px] text-mut hover:text-fg2">Settings → MCP server</Link>

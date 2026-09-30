@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { MODE, authState } from "@/server/supabase";
-import { googleSignIn, nextStep, safeNext, withNext } from "@/server/auth-flow";
+import { googleSignIn, nextStep, safeNext, takeNext, withNext } from "@/server/auth-flow";
 import { Button } from "@/components/ui";
 import { continueWithoutAccountAction } from "../auth/actions";
 import { AuthShell } from "./shell";
@@ -22,10 +22,10 @@ export default async function LoginPage(props: PageProps<"/login">) {
   const next = MODE === "web" && typeof sp.next === "string" && safeNext(sp.next) !== "/today" ? safeNext(sp.next) : null;
   if (state) {
     const step = nextStep(state);
-    redirect(step ? withNext(step, next) : next ?? "/today");
+    redirect(step ? withNext(step, next) : MODE === "desktop" ? takeNext() : next ?? "/today");
   }
   return (
-    <AuthShell note={next ? "Sign in to PacedMind to connect your agent."
+    <AuthShell note={next?.startsWith("/oauth/consent") ? "Sign in to PacedMind to connect your agent."
       : MODE === "desktop"
         ? "Sign in to PacedMind Cloud to use your tasks on all your computers, or use PacedMind on this computer without an account."
         : "Sign in to plan your week and follow your agent sessions."}>

@@ -24,6 +24,8 @@ const eslintConfig = defineConfig([
     "docs/**",
     // The billing Edge Functions run on Deno in Supabase (deno check in CI).
     "supabase/functions/**",
+    // The native companion has its own dependency graph and generated native projects.
+    "mobile/node_modules/**", "mobile/.expo/**", "mobile/dist/**", "mobile/android/**", "mobile/ios/**",
   ]),
 ]);
 

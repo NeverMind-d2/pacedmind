@@ -14,6 +14,7 @@ import { conversationFolder } from "./other-sessions";
 import { AGENT_ALLOWED_TOOLS } from "./mcp/agent-tools";
 import * as repo from "./repo";
 import { MODE } from "./supabase";
+import { computerAccessProblem } from "./computer-access";
 import { activeDevice } from "./scope";
 import { dataDir, deviceConfig, issueSessionToken, projectServers } from "./device";
 import { noteStart } from "./diff";
@@ -633,6 +634,8 @@ export function startSession(
 ): Promise<LaunchResult> {
   return exclusive(async () => {
     if (MODE !== "desktop") return { ok: false, error: "Sessions start in the PacedMind desktop app." };
+    const access = await computerAccessProblem();
+    if (access) return { ok: false, error: access };
     const device = await activeDevice();
     const task = await repo.getTask(taskId);
     if (!task) return { ok: false, error: "Task not found" };
@@ -775,6 +778,8 @@ function resumeFolder(session: Session, task: Task): { folder?: string; error?: 
 export function resumeSession(sessionId: string, to?: Surface, reopen = false): Promise<LaunchResult> {
   return exclusive(async () => {
     if (MODE !== "desktop") return { ok: false, error: "Resume it from the PacedMind desktop app, which opens terminals on your computer." };
+    const access = await computerAccessProblem();
+    if (access) return { ok: false, error: access };
     if (!SESSION_ID.test(sessionId)) return { ok: false, error: "Session not found" };
     const device = await activeDevice();
     const session = await repo.getSession(sessionId);
@@ -858,6 +863,8 @@ export function reopenProblem(session: Session): string | null {
  */
 export function reopenForChanges(sessionId: string): Promise<LaunchResult> {
   return exclusive(async () => {
+    const access = await computerAccessProblem();
+    if (access) return { ok: false, error: access };
     if (!SESSION_ID.test(sessionId)) return { ok: false, error: "Session not found" };
     const device = await activeDevice();
     const session = await repo.getSession(sessionId);

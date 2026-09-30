@@ -284,7 +284,7 @@ export function registerAgentTools(server: McpServer) {
       from: taskRef.describe("The task that comes first"),
       to: taskRef.describe("The task that waits for it"),
     }),
-    kind: "write",
+    kind: "create",
   }, async (args) => {
     const from = await findTask(args.from);
     const to = await findTask(args.to);
@@ -476,7 +476,7 @@ export function registerAgentTools(server: McpServer) {
       path: z.string().max(1000).describe("Path of the image file on this computer. Relative paths are read from the task's folder"),
       caption: z.string().max(500).optional().describe("What the image shows, in a few words"),
     }),
-    kind: "write",
+    kind: "create",
   }, async ({ task, session, path, caption }) => {
     const t = await findTask(task);
     const s = (await ownSession(t, session)) ?? (callerSession() ? null : (await activeSession(t.id, session)) ?? (await repo.latestSession(t.id)));
@@ -507,7 +507,7 @@ export function registerAgentTools(server: McpServer) {
         done: z.boolean().optional().describe("Whether it's done"),
       })).max(15).optional().describe("Your whole plan, in order. Send it again when a step is done or the plan changes"),
     }),
-    kind: "write",
+    kind: "create",
   }, async ({ task, session, message, kind, plan }) => {
     const t = await findTask(task);
     const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session));
@@ -546,7 +546,7 @@ export function registerAgentTools(server: McpServer) {
       question: z.string().max(4000).optional().describe("Your question, with the options when there are some"),
       ask: z.string().max(60).optional().describe("The ask a previous call returned, to keep waiting for its answer"),
     }),
-    kind: "write",
+    kind: "create",
   }, async ({ task, session, question, ask: askId }) => {
     const t = await findTask(task);
     const s = (await ownSession(t, session)) ?? (callerSession() ? null : await activeSession(t.id, session));

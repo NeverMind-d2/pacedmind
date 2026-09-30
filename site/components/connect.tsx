@@ -67,6 +67,8 @@ export function Connect({ className = "" }: { className?: string }) {
 
       <div role="tabpanel" id="connect-panel" aria-labelledby={`connect-tab-${agent.id}`} className="mt-8 sm:mt-10">
         <p className="max-w-[760px] text-[16px] leading-[1.6] text-text sm:text-[18px]">{agent.how}</p>
+        {agent.open && <a href={agent.open.href} target="_blank" rel="noreferrer"
+          className="mt-4 inline-block text-[16px] text-text underline underline-offset-4">{agent.open.label}</a>}
         {agent.commands && <Copyable agent={agent.id} lines={agent.commands} commands />}
         {agent.address && <Copyable agent={agent.id} lines={[SITE.mcp]} />}
         {agent.install && (

@@ -145,8 +145,8 @@ export function LoginForm({ initialError, confirmed, create, next, google }: {
       )}
       {mode === "signup" && (
         <p className="text-[12px] leading-relaxed text-mut2">
-          After confirming your email you&apos;ll set up an authenticator app. Every sign-in asks for its code, because PacedMind can start
-          agents on your computer. The same goes for an account made with Google.
+          Confirm your email to start planning and connect MCP. Two-factor sign-in can be set up later in Settings;
+          it is needed before starting sessions on your computers.
         </p>
       )}
       <Message note={note} />
@@ -262,6 +262,7 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
           If you lose this phone you lose access to your account, so add a second authenticator now: another phone, a tablet or a password
           manager that makes codes. You can also do it later in Settings.
         </p>
+        {first && <p className="text-[12.5px] leading-relaxed text-fg3">To activate computer access, sign out and sign in again with your code. Reconnect any MCP connection you want to use for computer access.</p>}
         <div className="flex gap-2">
           <Button type="button" onClick={() => router.push("/login/setup?add=1")} className="h-9 flex-1 justify-center">Add a second one</Button>
           <Button type="button" variant="primary" onClick={() => router.push(next ?? "/today")} className="h-9 flex-1 justify-center">Continue</Button>
@@ -321,7 +322,8 @@ export function SetupForm({ first, email, next }: { first: boolean; email: strin
       <Message note={note} />
       <Button type="submit" variant="primary" disabled={pending || !enrollment} className="h-9 justify-center text-[13px]">Turn on</Button>
       {first && (
-        <div className="flex justify-center border-t border-line pt-4">
+        <div className="flex justify-between border-t border-line pt-4">
+          <button type="button" disabled={pending} onClick={() => router.push(next ?? "/today")} className="text-[12.5px] text-fg2 hover:text-strong">Set up later</button>
           <button type="button" onClick={() => run(() => signOutAction().then(() => undefined))} className="text-[12.5px] text-mut hover:text-fg2">Sign out</button>
         </div>
       )}

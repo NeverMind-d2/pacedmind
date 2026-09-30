@@ -3,18 +3,16 @@ import { supabaseConfig } from "./supabase-config";
 import type { AuthState } from "./supabase";
 
 /*
- * Where someone who is signing in goes next. Every account uses two-factor authentication: after the
- * password comes a code from an authenticator app, and an account without one sets it up first. The
- * database enforces the same (it answers only two-factor sessions), so these steps are about getting there,
- * not about protecting data.
+ * Sign-in asks for MFA only after enrollment. Unenrolled accounts go straight to the planner;
+ * computer control has a separate established-MFA check. RLS independently enforces both rules.
  */
 
 export type AuthStep = "/login" | "/login/setup" | "/login/verify";
 
 export function nextStep(state: AuthState | null): AuthStep | null {
   if (!state) return "/login";
-  if (!state.factors.some((f) => f.factor_type === "totp")) return "/login/setup";
-  if (state.aal !== "aal2") return "/login/verify";
+  if (state.clientId) return "/login";
+  if (state.mfaEnabled && state.aal !== "aal2") return "/login/verify";
   return null;
 }
 
@@ -22,7 +20,7 @@ export function nextStep(state: AuthState | null): AuthStep | null {
  * Pages sign-in may continue to: where an email link pointed, or the page approving an agent's sign-in (the hosted
  * app), which sends you to sign in first. Anything else goes to Today.
  */
-const CONTINUE_TO = new Set(["/today", "/login/new-password"]);
+const CONTINUE_TO = new Set(["/today", "/login/new-password", "/settings/security", "/settings/account"]);
 const CONSENT = /^\/oauth\/consent\?authorization_id=[A-Za-z0-9_-]{1,200}$/;
 
 export const safeNext = (next: string | null | undefined): string => (next && (CONTINUE_TO.has(next) || CONSENT.test(next)) ? next : "/today");

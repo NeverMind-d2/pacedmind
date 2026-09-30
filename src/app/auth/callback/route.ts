@@ -19,9 +19,22 @@ const go = (path: string) => new NextResponse(null, { status: 307, headers: { Lo
 export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const next = safeNext(url.searchParams.get("next"));
+  // The system browser has no WebView PKCE verifier. Hand only the authorization code back to the app;
+  // its WebView returns here without native=1 and exchanges it using its own HttpOnly verifier cookie.
+  if (MODE === "web" && url.searchParams.get("native") === "1") {
+    const handoff = new URLSearchParams();
+    for (const key of ["code", "via", "error", "error_code"]) {
+      const value = url.searchParams.get(key);
+      if (value) handoff.set(key, value.slice(0, 2048));
+    }
+    handoff.set("next", next);
+    return new NextResponse(null, { status: 303, headers: {
+      Location: `/auth/native?${handoff}`, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
+    } });
+  }
   const google = url.searchParams.get("via") === "google";
   // Sign-up links continue to Today; password resets to choosing a new password.
-  const reset = next === "/login/new-password";
+  const reset = next === "/login/new-password" || next === "/settings/account";
   const page = MODE === "desktop" ? "/auth/done" : "/login";
   const failed = (message: string) => go(`${page}?error=${encodeURIComponent(message)}`);
 

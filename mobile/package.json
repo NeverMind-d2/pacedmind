@@ -1,0 +1,27 @@
+{
+  "name": "pacedmind-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "prebuild": "expo prebuild",
+    "check": "node --test tests/*.test.cjs",
+    "bundle": "expo export --platform all --output-dir dist",
+    "store:check": "node ../scripts/check-store-readiness.mjs --platform mobile --strict"
+  },
+  "dependencies": {
+    "expo": "57.0.26",
+    "expo-build-properties": "~57.0.22",
+    "expo-constants": "~57.0.20",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.4",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-webview": "13.16.1"
+  }
+}

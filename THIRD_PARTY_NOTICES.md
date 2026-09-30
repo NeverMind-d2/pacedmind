@@ -98,4 +98,6 @@ The app, the website and the documentation use Geist and Geist Mono (by Vercel) 
 
 ## npm packages
 
-Everything else PacedMind uses comes from npm, as listed in `package.json` and `package-lock.json` in the repository's root, `site/` and `docs/`. Each package keeps its own license, which it ships with. They're MIT, Apache-2.0, ISC, BSD or similar permissive licenses, apart from the optional prebuilt libvips binaries of `sharp` (LGPL-3.0-or-later) and `lightningcss` (MPL-2.0, used only when building).
+Everything else PacedMind uses comes from npm, as listed in `package.json` and `package-lock.json` in the repository's root, `site/`, `docs/` and `mobile/`. Each package keeps its own license, which it ships with. They're MIT, Apache-2.0, ISC, BSD or similar permissive licenses, apart from the optional prebuilt libvips binaries of `sharp` (LGPL-3.0-or-later) and `lightningcss` (MPL-2.0, used only when building).
+
+The mobile companion uses Expo (MIT, copyright 650 Industries, Inc.), React Native (MIT, copyright Meta Platforms, Inc. and affiliates) and React Native WebView (MIT, copyright Facebook, Inc.). Preserve their packaged license notices in distributed native builds. The isolated SQL test runner uses PGlite (`@electric-sql/pglite`, Apache-2.0); it is a development dependency, not an account database shipped in the mobile app.

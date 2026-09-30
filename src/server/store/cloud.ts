@@ -3,6 +3,7 @@ import { checkedModelSelection, modelSelectionOf, modelCatalogOf } from "@/lib/a
 import crypto from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { MODE, NotSignedIn, authState, supabase } from "../supabase";
+import { canUsePlanner } from "@/lib/auth-access";
 import { removeImageFiles, type StoredImage } from "../attachments";
 import { removeDiffFiles } from "../diff";
 import { repoIdentity } from "../git-remote";
@@ -41,15 +42,15 @@ import { cleanNeeds } from "@/lib/needs";
 type Row = Record<string, unknown>;
 
 /**
- * The client for the account's data. In the desktop app, only once the account signed in with its second
- * factor: the database would refuse anyway (it answers no one else), but this says so plainly, e.g. to a
+ * The client for the account's data. In the desktop app, only after required sign-in steps (MFA if enrolled):
+ * the database checks too, but this says so plainly, e.g. to a
  * page that renders alongside a layout that is already sending you to sign in. (The web app's proxy stops
  * signed-out browsers before any page runs.)
  */
 async function accountDb() {
   if (MODE === "desktop") {
     const state = await authState();
-    if (!state || state.aal !== "aal2") throw new NotSignedIn();
+    if (!canUsePlanner(state)) throw new NotSignedIn();
   }
   return supabase();
 }

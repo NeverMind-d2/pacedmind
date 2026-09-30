@@ -18,6 +18,8 @@ export function GET() {
     bearer_methods_supported: ["header"],
     resource_name: "PacedMind",
     resource_documentation: "https://pacedmind.com/docs/mcp",
+    resource_policy_uri: "https://pacedmind.com/privacy",
+    resource_tos_uri: "https://pacedmind.com/terms",
   }, { headers: { ...CORS, "Cache-Control": "public, max-age=3600" } });
 }
 

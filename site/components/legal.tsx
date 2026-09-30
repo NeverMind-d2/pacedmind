@@ -18,6 +18,7 @@ export function LegalPage({ title, children }: { title: string; children: ReactN
           <Link href="/terms" className="hover:text-ink">Terms</Link>
           <Link href="/privacy" className="hover:text-ink">Privacy</Link>
           <Link href="/refunds" className="hover:text-ink">Refunds</Link>
+          <Link href="/delete-account" className="hover:text-ink">Delete account</Link>
           <Link href="/" className="hover:text-ink">Home</Link>
         </nav>
       </main>

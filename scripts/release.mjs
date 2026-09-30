@@ -4,14 +4,15 @@
 //   npm run release -- pacedmind               build, package and upload (an ssh alias, deploy/README.md)
 //   npm run release -- ubuntu@<server>         the same, with the server's address
 //   npm run release -- --no-upload             build and package only, into dist/release
+//   npm run release -- --store                 signed Windows Store EXE and immutable filename; never uploads
 //
 // An upload replaces the download everyone gets, so it refuses a checkout that doesn't contain master or has
 // uncommitted changes (landed.mjs); --allow-unlanded skips that, for a test.
 //
 // Windows: PacedMind-Windows.exe, an installer that electron-builder makes from the app that
 // scripts/build-desktop.mjs packages. It installs for the current user into %LOCALAPPDATA%\Programs\Organizer,
-// like `npm run desktop`, closes a running PacedMind first and never touches the data. It isn't signed,
-// so Windows SmartScreen asks once before running it.
+// like `npm run desktop`, closes a running PacedMind first and never touches the data. Ordinary downloads
+// remain unsigned; --store requires a trusted certificate and signs before preparing a Store artifact.
 // macOS: PacedMind-macOS.dmg, one app for Apple silicon and Intel, signed with your Developer ID and
 // notarized, and the disk image too. The one-time keychain setup is in deploy/README.md.
 //
@@ -25,11 +26,13 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { assertLanded } from "./landed.mjs";
+import { signWindowsFiles, stageWindowsStoreInstaller, windowsExecutables, windowsSigningConfig } from "./windows-store.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, "dist", "release");
 const args = process.argv.slice(2);
-const upload = !args.includes("--no-upload");
+const store = args.includes("--store");
+const upload = !store && !args.includes("--no-upload");
 const server = args.find((a) => !a.startsWith("--"));
 const defaultKey = path.join(os.homedir(), ".ssh", "pacedmind_vps");
 // Without that key, ssh's own config (an alias's IdentityFile) picks one.
@@ -44,12 +47,14 @@ const step = (text) => console.log(`\n> ${text}`);
 const run = (cmd, argv, opts = {}) => execFileSync(cmd, argv, { stdio: "inherit", ...opts });
 
 if (!["win32", "darwin"].includes(process.platform)) throw new Error("Releases are built on Windows or macOS.");
+if (store && process.platform !== "win32") throw new Error("--store prepares the Windows EXE submission. macOS uses Developer ID distribution; see stores/README.md.");
+const windowsSigner = store ? windowsSigningConfig() : null;
 if (upload && !server) {
   console.error("Usage: npm run release -- pacedmind (an ssh alias) or user@server, or npm run release -- --no-upload");
   process.exit(1);
 }
 if (upload && key && !fs.existsSync(key)) throw new Error(`There's no SSH key at ${key}. Set PACEDMIND_KEY to its path.`);
-if (upload && !args.includes("--allow-unlanded")) assertLanded(root, { committed: true, skip: "--allow-unlanded" });
+if ((upload || store) && !args.includes("--allow-unlanded")) assertLanded(root, { committed: true, skip: "--allow-unlanded" });
 
 /** The Developer ID Application certificate to sign with: PACEDMIND_SIGN_IDENTITY, or the keychain's only one. */
 function signingIdentity() {
@@ -93,7 +98,14 @@ async function windowsInstaller() {
       extraMetadata: { author: { name: "PacedMind" }, description: "Tasks, time blocks and agent sessions" },
       directories: { output: out },
       // build-desktop.mjs already gave the exe its icon and details.
-      win: { icon: path.join(root, "desktop", "icon.ico"), signAndEditExecutable: false },
+      win: {
+        icon: path.join(root, "desktop", "icon.ico"), signAndEditExecutable: false,
+        // NSIS creates an uninstaller during packaging; sign it too, before it is embedded in the installer.
+        ...(windowsSigner && { signtoolOptions: {
+          signingHashAlgorithms: ["sha256"],
+          sign: async ({ path: file }) => signWindowsFiles([file], windowsSigner),
+        } }),
+      },
       nsis: {
         oneClick: true,
         perMachine: false,
@@ -182,7 +194,17 @@ run(process.execPath, [path.join(root, "scripts", "build-desktop.mjs"), "--no-in
 });
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
+if (windowsSigner) {
+  step("Signing every Windows executable, library and native module");
+  signWindowsFiles(windowsExecutables(path.join(root, "dist", "package", "Organizer-win32-x64")), windowsSigner);
+}
 const file = mac ? macDiskImage(identity) : await windowsInstaller();
+if (windowsSigner) {
+  step("Signing the installer and preparing its immutable Store artifact");
+  signWindowsFiles([file], windowsSigner);
+  const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  console.log(`  ${stageWindowsStoreInstaller(file, version)}`);
+}
 console.log(`\n  ${file} (${(fs.statSync(file).size / 1e6).toFixed(0)} MB)`);
 
 if (upload) uploadToServer(file);

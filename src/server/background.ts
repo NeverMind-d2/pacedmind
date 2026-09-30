@@ -10,6 +10,8 @@ import { syncDevice } from "./requests";
 import { usesCloud } from "./scope";
 import { MODE, NotSignedIn, authState } from "./supabase";
 import { checkSessionHealth } from "./session-health";
+import { canUsePlanner } from "@/lib/auth-access";
+import { computerAccessProblem } from "./computer-access";
 
 const CHECK_EVERY = 30 * 60_000;
 
@@ -39,14 +41,15 @@ export function startBackground() {
    * someone is still signing in), or without an account this computer's own. Work that `writes` waits while the
    * account's PacedMind Cloud has ended: the database would refuse it (read-only), and nothing should start.
    */
-  const every = (ms: number, name: string, work: () => Promise<unknown>, { writes = false } = {}) => {
+  const every = (ms: number, name: string, work: () => Promise<unknown>, { writes = false, planner = false } = {}) => {
     let busy = false;
     return setInterval(async () => {
       if (busy) return;
       busy = true;
       try {
         const state = await authState();
-        if ((!state || state.aal === "aal2") && (!writes || (await cloudWritable()))) await work();
+        const allowed = !state || (planner ? canUsePlanner(state) : !(await computerAccessProblem()));
+        if (allowed && (!writes || (await cloudWritable()))) await work();
       } catch (e) {
         // Signed out halfway (e.g. from another device): the next round simply waits for a sign-in.
         if (!(e instanceof NotSignedIn)) console.error(`[organizer] ${name} failed`, e);
@@ -78,5 +81,5 @@ export function startBackground() {
   // it, also for an agent that signed in (codex mcp login) without calling the server yet. Nothing without an account.
   g.__organizerAgents = every(60_000, "agent sign-ins", async () => {
     if (await usesCloud()) await repo.listConnectedAgents();
-  });
+  }, { planner: true });
 }

@@ -5,9 +5,11 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
 import * as repo from "../repo";
 import { noteAgentActivity } from "../signals";
+import { computerAccessProblem } from "../computer-access";
 import { MODE } from "../supabase";
 import { SESSION_TOOLS } from "./agent-tools";
 import { caller } from "./principal";
+import { rememberHostedTool, toolMetadata, type ToolKind } from "./metadata";
 import { findAreaIcons, isAreaIcon, type AreaIcon } from "@/lib/area-icons";
 import { CloudReadOnly } from "@/lib/billing";
 import { PALETTE } from "@/lib/colors";
@@ -27,8 +29,6 @@ export function fail(message: string): never {
   throw new ToolError(message);
 }
 
-type Kind = "read" | "write" | "delete" | "launch";
-
 /**
  * Tools PacedMind Cloud's MCP server (the hosted app) doesn't have: it can't read files from an agent's computer, and
  * a question that waits for your answer comes from the computer the session runs on (session_asks).
@@ -42,30 +42,31 @@ const NOT_HOSTED: ReadonlySet<string> = new Set(["attach_image", "ask_user"]);
 export function tool<S extends z.ZodObject>(
   server: McpServer,
   name: string,
-  spec: { title: string; description: string; input: S; kind: Kind },
+  spec: { title: string; description: string; input: S; kind: ToolKind; openWorld?: boolean },
   run: (args: z.infer<S>) => string | Promise<string>,
 ) {
   const ownerOnly = !SESSION_TOOLS.has(name);
   if (ownerOnly && caller().kind === "session") return;
   if (MODE === "web" && NOT_HOSTED.has(name)) return;
+  const metadata = toolMetadata(spec.title, spec.kind, MODE === "web", spec.openWorld);
+  if (MODE === "web") rememberHostedTool(server, { name, title: spec.title, description: spec.description, ...metadata });
   server.registerTool(
     name,
     {
       title: spec.title,
       description: spec.description,
       inputSchema: spec.input,
-      annotations: {
-        title: spec.title,
-        readOnlyHint: spec.kind === "read",
-        destructiveHint: spec.kind === "delete",
-        openWorldHint: spec.kind === "launch",
-      },
+      ...metadata,
     },
     (async (args: z.infer<S>) => {
       try {
         const who = caller();
         if (ownerOnly && who.kind === "session") {
           fail(`Sessions that PacedMind started can't use ${name}. Ask the user to do it in PacedMind.`);
+        }
+        if (spec.kind === "launch" || name === "set_folder") {
+          const problem = await computerAccessProblem();
+          if (problem) fail(problem);
         }
         // A session's agent calling PacedMind is at work, whatever it waited for before; except while it waits for your
         // answer to what it asked (ask_user, which it calls again to keep waiting).

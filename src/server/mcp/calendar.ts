@@ -87,7 +87,7 @@ export function registerCalendarTools(server: McpServer) {
       area: areaRef.optional(),
       weekly: z.boolean().optional(),
     }),
-    kind: "write",
+    kind: "create",
   }, async (args) => {
     if (!args.title.trim()) fail("An event needs a title.");
     const start = when(args.start, "required");

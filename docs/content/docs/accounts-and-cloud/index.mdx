@@ -9,7 +9,7 @@ PacedMind works with or without an account. The plan decides where the data live
 
 | | One device | Cloud |
 | --- | --- | --- |
-| Account | None | A PacedMind account, with two-factor sign-in |
+| Account | None | A PacedMind account; two-factor setup can wait |
 | Where the data lives | On this computer, in PacedMind's data folder | In the account |
 | Where it can be used | The desktop app on this computer | The desktop app on all your computers, and the web app in the browser |
 | Agent sessions | Started on this computer | Started on this computer, or on one of your other computers by asking it |
@@ -25,7 +25,11 @@ The desktop app keeps everything on the computer it runs on, and needs no accoun
 
 With PacedMind Cloud, the tasks, plans, calendar and sessions are stored in your account, not on the computer. Every computer signed in to the account and the web app show the same data. Images that agents attach to their reports stay on the computer they were saved on.
 
-You sign in with your email and a password, or with **Continue with Google**. Every account uses two-factor sign-in either way: each sign-in asks for a code from an authenticator app, because PacedMind can start agents on your computers. **Add authenticator** in **Settings → Two-factor sign-in** adds a second one as a backup.
+Sign in with your email and password, or with **Continue with Google**. After confirming your email, planning and MCP connections are available without setting up two-factor sign-in.
+
+Select **Set up 2FA** in **Settings → Security** when you want to start sessions or control your computers. **Set up later** returns to the app without enabling it. After enabling it, sign out and sign in again with your code to activate computer access. Reconnect an MCP connection made without two-factor sign-in if it needs to request sessions or folders on computers.
+
+Once two-factor sign-in is enabled, each sign-in requires a code. **Add authenticator** in **Settings → Security** adds a second authenticator as a backup.
 
 Signed in to the desktop app on a computer that kept data without an account, **Settings → Data** offers **Move to account** in the **This computer** row. It works on an account without projects or tasks, replaces the account's areas with the ones from this computer, adds this computer's [preferences](/concepts/preferences) to the account's, except those it has already, and leaves a copy on this computer.
 

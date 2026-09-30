@@ -8,7 +8,13 @@ import { MODE, authState } from "@/server/supabase";
  */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const state = MODE === "desktop" ? await authState().catch(() => null) : null;
+  // A failed identity lookup must not be mistaken for the unrestricted local-data mode.
+  let state;
+  try {
+    state = MODE === "desktop" ? await authState() : null;
+  } catch {
+    return new Response("Couldn't verify sign-in", { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
   const text = MODE === "desktop" && (!state || state.aal === "aal2") ? readPatch(id) : null;
   if (text === null) return new Response("Not on this computer", { status: 404, headers: { "Cache-Control": "no-store" } });
   return new Response(text, {

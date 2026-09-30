@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { MODE, authState } from "@/server/supabase";
+import { authState } from "@/server/supabase";
 import { nextStep, safeNext, withNext } from "@/server/auth-flow";
 import { AuthShell } from "../shell";
 import { SetupForm } from "../forms";
@@ -16,14 +16,14 @@ export default async function SetupPage(props: PageProps<"/login/setup">) {
   const sp = await props.searchParams;
   const adding = sp.add === "1";
   // The hosted app: where sign-in continues once the authenticator is set up (approving an agent's sign-in).
-  const next = MODE === "web" && typeof sp.next === "string" && safeNext(sp.next) !== "/today" ? safeNext(sp.next) : null;
+  const next = typeof sp.next === "string" && safeNext(sp.next) !== "/today" ? safeNext(sp.next) : null;
   if (!state) redirect(withNext("/login", next));
   if (step === "/login/verify") redirect(withNext("/login/verify", next));
-  if (step === null && !adding) redirect(next ?? "/today");
-  const first = step === "/login/setup";
+  const first = !state.mfaEnabled;
+  if (!first && !adding) redirect(next ?? "/settings/security");
   return (
     <AuthShell note={first
-      ? <>Signed in as {state.user.email}. One more step: PacedMind asks for a code from an authenticator app at every sign-in.</>
+      ? <>Protect {state.user.email} and unlock sessions on your computers. You can keep using the planner and MCP and set this up later.</>
       : "A second authenticator keeps you in if you lose the first one."}>
       <SetupForm key={first ? "first" : "another"} first={first} email={state.user.email ?? ""} next={next} />
     </AuthShell>

@@ -9,12 +9,13 @@ import { dataDir, deviceConfig, revokeAllSessionTokens, updateDevice } from "./d
 import { clearApprovals } from "./approval-store";
 import { readSecureJson, removeFile, writeSecureJson } from "./secure-file";
 import { COOKIE_OPTIONS, supabaseConfig } from "./supabase-config";
+import { canUsePlanner } from "@/lib/auth-access";
 
 /*
  * PacedMind keeps its data in Supabase. The server talks to it as the signed-in account, with the public
  * publishable key and the account's own session, so row level security decides what it can see. There is
- * no database password or secret key anywhere in the app. The database also refuses every read and write
- * from a session that hasn't passed two-factor authentication (supabase/migrations).
+ * no database password or secret key anywhere in the app. RLS permits basic planning before MFA enrollment,
+ * requires MFA once enrolled, and separately restricts computer control (supabase/migrations).
  *
  * Two ways to run:
  * - "desktop" (the desktop app, and `npm run dev`): one account per server. Its session lives in an
@@ -23,7 +24,7 @@ import { COOKIE_OPTIONS, supabaseConfig } from "./supabase-config";
  * - "web" (the hosted app, ORGANIZER_MODE=web): every browser has its own session, in HttpOnly cookies. It
  *   never starts agents: sessions it asks for go to a desktop app as requests (launch_requests). Agents reach
  *   its MCP server with an OAuth token of their own (runAsAgent), which the database answers only once you
- *   approved that sign-in from a two-factor session (supabase/migrations/*_agent_logins.sql).
+ *   explicitly approved that sign-in from an eligible human session (supabase/migrations/*_agent_logins.sql).
  */
 export const MODE: "desktop" | "web" = process.env.ORGANIZER_MODE === "web" ? "web" : "desktop";
 
@@ -135,6 +136,8 @@ export interface AuthState {
   factors: Factor[];
   /** Whether backup codes exist for this account. */
   hasRecoveryCodes: boolean;
+  /** Any verified factor, including factors this UI cannot enroll, enforces MFA on sign-in. */
+  mfaEnabled: boolean;
   /** How this session signed in and when (the JWT's amr claim, newest first). */
   amr: { method: string; timestamp: number }[];
   /** The OAuth client of an agent's sign-in (the hosted MCP server), null for a person's session. */
@@ -152,9 +155,22 @@ export async function readAuthState(): Promise<AuthState | null> {
   let claims: Record<string, unknown> | null = null;
   if (MODE === "desktop") {
     // getSession refreshes an expired token first.
-    const { data } = await client.auth.getSession();
-    user = data.session?.user ?? null;
-    if (data.session) claims = decodeClaims(data.session.access_token);
+    const { data, error } = await client.auth.getSession();
+    // null means the local, no-account store throughout the server. A failed refresh or a
+    // temporarily unreachable Auth server must never switch a Cloud account into that mode.
+    if (error) throw new NotSignedIn("Couldn't verify your PacedMind sign-in. Try again in a moment, or sign out.");
+    if (!data.session) return null;
+    claims = decodeClaims(data.session.access_token);
+    if (!claims || typeof claims.sub !== "string" || typeof claims.session_id !== "string" || !claims.session_id) {
+      throw new NotSignedIn("Your PacedMind sign-in could not be read. Sign out and sign in again.");
+    }
+    // Fetch the live factors for this exact token, rather than its persisted user snapshot
+    // or a different session that might have replaced it while Auth was being contacted.
+    const verified = await client.auth.getUser(data.session.access_token);
+    if (verified.error || !verified.data.user || verified.data.user.id !== claims.sub) {
+      throw new NotSignedIn("Couldn't verify your PacedMind sign-in. Try again in a moment, or sign out.");
+    }
+    user = verified.data.user;
   } else {
     const token = agentContext.getStore()?.token;
     const { data } = await client.auth.getClaims(token);
@@ -171,6 +187,7 @@ export async function readAuthState(): Promise<AuthState | null> {
     sessionId: typeof claims.session_id === "string" ? claims.session_id : null,
     factors: all.filter((f) => f.status === "verified" && (f.factor_type === "totp" || f.factor_type === "webauthn")),
     hasRecoveryCodes: all.some((f) => f.status === "verified" && (f.factor_type as string) === "recovery_code"),
+    mfaEnabled: all.some((f) => f.status === "verified"),
     amr: Array.isArray(claims.amr) ? (claims.amr as { method: string; timestamp: number }[]) : [],
     clientId: typeof claims.client_id === "string" && claims.client_id ? claims.client_id : null,
   };
@@ -198,10 +215,17 @@ export class NotSignedIn extends Error {
   }
 }
 
+/** Basic account access. Enrolled accounts still have to finish their second factor. */
+export async function requirePlannerAccess(): Promise<AuthState> {
+  const state = await authState();
+  if (!canUsePlanner(state)) throw new NotSignedIn(state ? "Finish signing in with your two-factor code first." : undefined);
+  return state!;
+}
+
 /** The signed-in account after two-factor authentication; throws NotSignedIn otherwise. */
 export async function requireAal2(): Promise<AuthState> {
   const state = await authState();
   if (!state) throw new NotSignedIn();
-  if (state.aal !== "aal2") throw new NotSignedIn("Finish signing in with your two-factor code first.");
+  if (state.clientId || state.aal !== "aal2") throw new NotSignedIn("Finish signing in with your two-factor code first.");
   return state;
 }

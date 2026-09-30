@@ -6,6 +6,7 @@ import { registerComputerTools } from "./computers";
 import { registerPlanningTools } from "./planning";
 import { registerPreferenceTools } from "./preferences";
 import { MODE } from "../supabase";
+import { registerHostedToolList } from "./metadata";
 
 /** Every tool of the PacedMind MCP server, registered in the order clients list them. */
 export function registerTools(server: McpServer) {
@@ -14,6 +15,7 @@ export function registerTools(server: McpServer) {
   registerCalendarTools(server);
   registerComputerTools(server);
   registerAgentTools(server);
+  if (MODE === "web") registerHostedToolList(server);
 }
 
 /**

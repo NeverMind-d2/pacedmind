@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Sidebar } from "@/components/sidebar";
@@ -29,16 +30,18 @@ import { readPlan } from "@/server/billing";
 import { usage } from "@/server/views";
 import { dateOnly, todayStr } from "@/lib/dates";
 import { CONNECT_CARD_COOKIE, type FoundFolder } from "@/lib/types";
+import { isNativeCompanion } from "@/lib/native-client";
 
 export const dynamic = "force-dynamic";
 
 /**
- * The app's frame. Signed in to PacedMind Cloud, every page needs the account's second factor (the database
- * insists on it too); the web app needs an account. Without one, the desktop app shows this computer's own
+ * The app's frame. Signed in to PacedMind Cloud, enrolled accounts verify their second factor; other accounts
+ * can plan and connect MCP while deferring enrollment. Without an account, the desktop app shows its own
  * data once "Continue without an account" was chosen on the sign-in screen, and until then the screen itself.
  */
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   await connection();
+  const nativeCompanion = MODE === "web" && isNativeCompanion((await headers()).get("user-agent"));
   const state = await authState();
   const step = state || MODE === "web" ? nextStep(state) : deviceConfig().withoutAccount ? null : "/login";
   if (step) redirect(step);
@@ -65,7 +68,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   };
   const approvals = MODE === "desktop" ? approvalItems(tasks) : [];
   // Signed in on the desktop, after the import's first offer: the agents here not yet on PacedMind Cloud's MCP server.
-  const offer = MODE === "desktop" && state?.aal === "aal2" && deviceConfig().importOffered && !deviceConfig().cloudConnectOffered;
+  const offer = MODE === "desktop" && state && deviceConfig().importOffered && !deviceConfig().cloudConnectOffered;
   const found = offer ? localTools() : null;
   const links = offer ? mcpLinks(mcpUrl(), true) : null;
   const cloudOffer = found && links ? (["claude", "codex"] as const).filter((a) => found[a].cli && links[a] !== "cloud") : [];
@@ -86,7 +89,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <ExecutionProvider devices={executionDevices} hereId={here?.id ?? null} desktop={MODE === "desktop"} folders={folders}>
     <div className="flex h-full flex-col">
       <AppHeader email={user?.email ?? null} />
-      {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} />}
+      {state && !state.mfaEnabled && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-panel px-4 py-2 text-[12px] text-fg3">
+        <span>Your planner and MCP are ready. Set up two-factor sign-in when you want to start sessions on your computers.</span>
+        <Link href="/login/setup?next=%2Fsettings%2Fsecurity" className="shrink-0 text-fg2 underline underline-offset-2">Set up 2FA</Link>
+      </div>}
+      {plan?.enforced && <BillingBanner plan={plan} desktop={MODE === "desktop"} nativeCompanion={nativeCompanion} />}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar areas={areas} projects={projects} counts={counts} usage={usage(areas, projects, tasks)} desktop={MODE === "desktop"} />
         {/* On a phone the sidebar is a panel over the page, and the page takes the whole width. */}

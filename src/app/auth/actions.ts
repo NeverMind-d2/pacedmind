@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { refresh } from "next/cache";
-import { MODE, readAuthState, requireAal2, supabase } from "@/server/supabase";
+import { headers } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
+import { isNativeCompanion } from "@/lib/native-client";
+import { MODE, readAuthState, requireAal2, requirePlannerAccess, supabase } from "@/server/supabase";
 import { supabaseConfig } from "@/server/supabase-config";
 import { nextStep, safeNext, takeNext, withNext } from "@/server/auth-flow";
 import { STEP_UP_REFUSED, refusedStepUp, verifyCode } from "@/server/step-up";
@@ -12,10 +15,9 @@ import { cutOffAgents } from "@/server/requests";
 import * as repo from "@/server/repo";
 
 /*
- * Signing in, two-factor authentication and the account's security settings. Every account needs an
- * authenticator app: sign-in is a password and then a code. Anything that weakens the account or reaches
- * a computer from afar (a new password, removing an authenticator, deleting the account, starting a session
- * from the web) asks for a fresh code first, and the database checks that the code was entered minutes ago.
+ * Signing in, optional MFA enrollment and security settings. Once enrolled, sign-in requires a code.
+ * Computer control independently requires established MFA. Sensitive actions use MFA when enrolled;
+ * an unenrolled account can delete itself after fresh password/recovery authentication.
  */
 
 type AuthResult = { ok: boolean; error?: string; message?: string };
@@ -49,12 +51,13 @@ function explain(message: string): string {
  * Where email links and Google land: this server's own address (desktop), or the hosted app's (web). `via` tells
  * the callback it's Google coming back, not an email link.
  */
-function callbackUrl(next: string, via?: "google"): string {
+async function callbackUrl(next: string, via?: "google"): Promise<string> {
   const base = MODE === "desktop"
     ? `http://127.0.0.1:${Number(process.env.PORT) || 4319}`
     : (process.env.ORGANIZER_PUBLIC_ORIGIN ?? "").replace(/\/+$/, "");
   if (!base) throw new Error("Set ORGANIZER_PUBLIC_ORIGIN for the hosted app (see .env.example).");
-  return `${base}/auth/callback?next=${encodeURIComponent(next)}${via ? `&via=${via}` : ""}`;
+  const native = MODE === "web" && isNativeCompanion((await headers()).get("user-agent"));
+  return `${base}/auth/callback?next=${encodeURIComponent(next)}${via ? `&via=${via}` : ""}${native ? "&native=1" : ""}`;
 }
 
 /** The desktop app's sign-in pages live in its window only. */
@@ -85,7 +88,7 @@ export async function signInWithGoogleAction(next?: string | null): Promise<Auth
   const { data, error } = await db.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: callbackUrl(MODE === "desktop" ? "/today" : safeNext(next), "google"),
+      redirectTo: await callbackUrl(MODE === "desktop" ? "/today" : safeNext(next), "google"),
       skipBrowserRedirect: true,
       // Pick the Google account each time, rather than the browser's current one without asking.
       queryParams: { prompt: "select_account" },
@@ -123,18 +126,18 @@ export async function signUpAction(email: string, password: string, next?: strin
   if (problem) return { ok: false, error: problem };
   const db = await supabase();
   const after = MODE === "desktop" ? "/today" : safeNext(next);
-  const { data, error } = await db.auth.signUp({ email: clean(email), password, options: { emailRedirectTo: callbackUrl(after) } });
+  const { data, error } = await db.auth.signUp({ email: clean(email), password, options: { emailRedirectTo: await callbackUrl(after) } });
   if (error) return { ok: false, error: explain(error.message) };
   // Only when the project doesn't ask to confirm emails (it should).
   if (data.session) return goNext(next);
-  return { ok: true, message: `If ${clean(email)} can get an account, we sent it a link. Open it to confirm your email, then set up two-factor sign-in.` };
+  return { ok: true, message: `If ${clean(email)} can get an account, we sent it a link. Open it to confirm your email and start planning. You can set up two-factor sign-in later in Settings.` };
 }
 
 export async function sendResetAction(email: string): Promise<AuthResult> {
   await guard();
   if (!looksLikeEmail(clean(email))) return { ok: false, error: "Enter your email address." };
   const db = await supabase();
-  const { error } = await db.auth.resetPasswordForEmail(clean(email), { redirectTo: callbackUrl("/login/new-password") });
+  const { error } = await db.auth.resetPasswordForEmail(clean(email), { redirectTo: await callbackUrl("/login/new-password") });
   if (error && /rate limit|too many/i.test(error.message)) return { ok: false, error: explain(error.message) };
   return { ok: true, message: `If an account uses ${clean(email)}, we sent it a link to choose a new password.` };
 }
@@ -225,7 +228,7 @@ export async function confirmEnrollAction(factorId: string, code: string): Promi
 /** A new password after a reset link, and only then: the link's session knows it came from your email. */
 export async function setNewPasswordAction(password: string): Promise<AuthResult> {
   await guard();
-  const state = await requireAal2();
+  const state = await requirePlannerAccess();
   const fromLink = state.amr.some((a) => a.method === "recovery" && Date.now() / 1000 - a.timestamp < 60 * 60);
   if (!fromLink) return { ok: false, error: "Change your password in Settings, or ask for a new reset link." };
   const problem = passwordProblem(password);
@@ -243,13 +246,15 @@ export async function setNewPasswordAction(password: string): Promise<AuthResult
  */
 export async function changePasswordAction(current: string, password: string, code: string): Promise<AuthResult> {
   await guard();
-  await requireAal2();
+  const state = await requirePlannerAccess();
   if (!current) return { ok: false, error: "Enter your current password." };
   const problem = passwordProblem(password);
   if (problem) return { ok: false, error: problem };
   const db = await supabase();
-  const wrong = await verifyCode(db, code);
-  if (wrong) return { ok: false, error: wrong };
+  if (state.mfaEnabled) {
+    const wrong = await verifyCode(db, code);
+    if (wrong) return { ok: false, error: wrong };
+  }
   const { error } = await db.auth.updateUser({ password, current_password: current });
   if (error) return { ok: false, error: explain(error.message) };
   refresh();
@@ -261,7 +266,7 @@ export async function removeFactorAction(factorId: string, code: string): Promis
   const state = await requireAal2();
   const totp = state.factors.filter((f) => f.factor_type === "totp");
   if (!totp.some((f) => f.id === factorId)) return { ok: false, error: "That authenticator isn't on your account." };
-  if (totp.length < 2) return { ok: false, error: "Two-factor sign-in is required, so the last authenticator stays. Add another one first." };
+  if (totp.length < 2) return { ok: false, error: "Keep one authenticator to protect your account and computer access. Add a replacement before removing this one." };
   const db = await supabase();
   // The code has to come from an authenticator that stays.
   const wrong = await verifyCode(db, code, totp.find((f) => f.id !== factorId)!.id);
@@ -311,15 +316,47 @@ export async function revokeDeviceAction(deviceId: string): Promise<AuthResult> 
   return { ok: true, message: "Signed out that computer." };
 }
 
-export async function deleteAccountAction(code: string, confirmEmail: string): Promise<AuthResult> {
+/** An email confirmation path for accounts without a password (for example Google sign-in). */
+export async function sendDeletionLinkAction(): Promise<AuthResult> {
   await guard();
-  const state = await requireAal2();
+  const state = await requirePlannerAccess();
+  if (state.mfaEnabled) return { ok: false, error: "Use your authenticator code to confirm account deletion." };
+  if (!state.user.email) return { ok: false, error: "Your account has no email address." };
+  const { error } = await (await supabase()).auth.resetPasswordForEmail(state.user.email, {
+    redirectTo: await callbackUrl("/settings/account"),
+  });
+  if (error) return { ok: false, error: explain(error.message) };
+  return { ok: true, message: "Open the confirmation link in your email, then return to Delete account within five minutes. You don't need to change your password." };
+}
+
+export async function deleteAccountAction(proof: string, confirmEmail: string): Promise<AuthResult> {
+  await guard();
+  const state = await requirePlannerAccess();
   if (clean(confirmEmail) !== clean(state.user.email ?? "")) return { ok: false, error: "Type your account's email to confirm." };
   const db = await supabase();
-  const wrong = await verifyCode(db, code);
-  if (wrong) return { ok: false, error: wrong };
-  const { error } = await db.rpc("delete_account");
-  if (error) return { ok: false, error: refusedStepUp(error.message) ? STEP_UP_REFUSED : explain(error.message) };
+  let deletionClient = db;
+  if (state.mfaEnabled) {
+    const wrong = await verifyCode(db, proof);
+    if (wrong) return { ok: false, error: wrong };
+  } else if (proof) {
+    // Reauthenticate without replacing this window's session or its PKCE verifier.
+    const { url, key } = supabaseConfig();
+    deletionClient = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+    const { data, error } = await deletionClient.auth.signInWithPassword({ email: state.user.email!, password: proof });
+    if (error || data.user?.id !== state.user.id) {
+      await deletionClient.auth.signOut({ scope: "local" });
+      return { ok: false, error: "That password didn't work. You can confirm by email instead." };
+    }
+  }
+  try {
+    const { error } = await deletionClient.rpc("delete_account");
+    if (error) return { ok: false, error: refusedStepUp(error.message) || /fresh|recent|authentication/i.test(error.message)
+      ? state.mfaEnabled ? STEP_UP_REFUSED : "Confirm with your current password or a new email confirmation link, then try again within five minutes."
+      : explain(error.message) };
+  } finally {
+    if (deletionClient !== db) await deletionClient.auth.signOut({ scope: "local" });
+  }
+  if (MODE === "desktop") cutOffAgents();
   await db.auth.signOut({ scope: "local" });
   refresh();
   redirect("/login");

@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { addDays, addMinutes } from "date-fns";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { requireAal2, supabase } from "./supabase";
+import { requirePlannerAccess, supabase } from "./supabase";
 import { attachmentPath, removeImageFiles } from "./attachments";
 import {
   areaFolder, commandProblem, deviceConfig, forgetAll, projectFolder, projectServers, setAreaFolder, setProjectFolder, setProjectServers, setTaskFolder,
@@ -44,7 +44,7 @@ export const DEFAULT_AREAS = [
 
 /** Deletes the account's areas, projects, tasks (with their sessions, reports and connections) and events. Settings stay. */
 async function clearAccount(db: SupabaseClient) {
-  const { id } = (await requireAal2()).user;
+  const { id } = (await requirePlannerAccess()).user;
   // The images this computer keeps for the account's tasks go with them, and so do its folders.
   const device = deviceConfig().deviceId;
   const files = device ? (check(await db.from("attachments").select("file").eq("device_id", device)) as Row[]).map((r) => String(r.file)) : [];
@@ -210,7 +210,7 @@ export async function legacySummary(): Promise<{ file: string; areas: number; pr
  */
 export async function importLegacy(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
-  const { id: userId } = (await requireAal2()).user;
+  const { id: userId } = (await requirePlannerAccess()).user;
   const busy = check(await db.from("tasks").select("id").limit(1)) as Row[];
   const projectsNow = check(await db.from("projects").select("id").limit(1)) as Row[];
   if (busy.length || projectsNow.length) throw new Error("Your account already has projects or tasks. Importing works on an empty account.");
@@ -512,7 +512,7 @@ async function everyRow(db: SupabaseClient, table: string, order: string): Promi
  */
 export async function moveToThisComputer(): Promise<{ areas: number; projects: number; tasks: number }> {
   const db = await supabase();
-  await requireAal2();
+  await requirePlannerAccess();
   const [areas, projects, tasks, subtasks, events, sessions, sessionEvents, edges, reports, attachments, settings, preferences] = await Promise.all([
     everyRow(db, "areas", "sort"), everyRow(db, "projects", "sort"), everyRow(db, "tasks", "id"), everyRow(db, "subtasks", "id"),
     everyRow(db, "events", "id"), everyRow(db, "sessions", "started_at"), everyRow(db, "session_events", "id"), everyRow(db, "edges", "id"),

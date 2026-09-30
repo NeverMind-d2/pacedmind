@@ -244,7 +244,7 @@ export function registerPlanningTools(server: McpServer) {
       color: z.string().optional().describe("Palette name or hex; defaults to an unused palette color"),
       icon: z.string().optional().describe("One of the icons; without one the area shows a dot"),
     }),
-    kind: "write",
+    kind: "create",
   }, async ({ name, color, icon }) => {
     if (!name.trim()) fail("An area needs a name.");
     const a = await repo.createArea({
@@ -339,7 +339,7 @@ export function registerPlanningTools(server: McpServer) {
       agent: agentSchema.optional().describe("Default agent for the project's tasks"),
       starts_after: projectRef.optional().describe("Another project that must be finished first"),
     }),
-    kind: "write",
+    kind: "create",
   }, async (args) => {
     if (!args.name.trim()) fail("A project needs a name.");
     const a = await findArea(args.area);
@@ -481,7 +481,7 @@ export function registerPlanningTools(server: McpServer) {
       area: areaRef.optional().describe("Used when there's no project"),
       ...newTaskFields,
     }),
-    kind: "write",
+    kind: "create",
   }, async (args) => {
     sessionMayCreate(args.status);
     const t = await createOne(args, await placeFor(args.project, args.area));
@@ -498,7 +498,7 @@ export function registerPlanningTools(server: McpServer) {
       area: areaRef.optional(),
       tasks: z.array(z.object({ title: z.string(), ...newTaskFields })).min(1).max(50),
     }),
-    kind: "write",
+    kind: "create",
   }, async (args) => {
     const place = await placeFor(args.project, args.area);
     // Check every title and date first, so a bad one doesn't leave half the tasks created.

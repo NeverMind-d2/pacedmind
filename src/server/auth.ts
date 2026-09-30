@@ -3,6 +3,7 @@ import * as repo from "./repo";
 import { deviceFor, principalFor, revokeSessionTokens, type Principal } from "./device";
 import { MODE, authState, readAuthState, runAsAgent, supabase } from "./supabase";
 import { cloudOrigin } from "./supabase-config";
+import { canUsePlanner } from "@/lib/auth-access";
 
 /*
  * Who may use MCP.
@@ -76,7 +77,7 @@ export async function authorizeMcp(req: Request): Promise<McpCaller | Response> 
   if (req.headers.get("origin")) return new Response("Forbidden", { status: 403 });
   if (MODE === "web") return authorizeAgent(bearer(req));
   const state = await authState();
-  if (state && state.aal !== "aal2") {
+  if (state && !canUsePlanner(state)) {
     return new Response("PacedMind is signing in. Enter your two-factor code in the desktop app first.", { status: 503 });
   }
   if (state) deviceFor(state.user.id);

@@ -84,12 +84,21 @@ VS Code (`mcp.json` in your user settings, or `.vscode/mcp.json` in a workspace)
 
 When the editor starts the server, it asks you to sign in, and the browser opens PacedMind's page (see [Allow the agent](#allow-the-agent)).
 
-### Claude and ChatGPT
+### Claude
 
-* **Claude**: under Customize → Connectors, select + and Add custom connector, enter `https://app.pacedmind.com/api/mcp`, then connect it.
-* **ChatGPT**: turn on developer mode under Settings → Apps → Advanced settings, then create an app with `https://app.pacedmind.com/api/mcp` and OAuth.
+Open [Claude connectors](https://claude.ai/settings/connectors), then **Customize → Connectors → + → Add custom connector**. Name it **PacedMind** and use `https://app.pacedmind.com/api/mcp`. Select **Add**, then **Connect**, sign in to PacedMind and select **Allow**. On Team and Enterprise, an owner first adds the connector for the organization.
 
-Both then open PacedMind's page, where you allow them.
+Enable PacedMind in the conversation's connectors menu. The remote connection uses your Cloud account and works without the PacedMind desktop app running.
+
+### ChatGPT
+
+In ChatGPT, turn on **Developer mode** under **Settings → Security and login**, then open [Plugins](https://chatgpt.com/plugins), select **+**, name it **PacedMind** and enter `https://app.pacedmind.com/api/mcp` with **OAuth**. Let ChatGPT register its OAuth client; no token or client secret needs copying from PacedMind. Sign in on PacedMind's page and select **Allow**.
+
+Start a new chat and add PacedMind from the tools menu. Developer mode availability depends on your account and workspace policy. These are the custom-connection steps while PacedMind's public directory listing is being prepared; they do not mean the listing has been approved.
+
+Try: “What should I work on today?”, “Add a task to prepare the launch checklist tomorrow”, or “Move tomorrow's unfinished tasks to Friday.” Check the dates and proposed changes before approving them.
+
+If connecting fails, confirm that the address is the public Cloud endpoint above, reconnect from the agent's settings, and sign in to the same PacedMind account. With two-factor sign-in enabled, finish its code step. [OpenAI's connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt) and [Claude's connector guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp) cover account and administrator restrictions.
 
 ### Other MCP clients
 
@@ -99,7 +108,7 @@ Any MCP client that supports OAuth sign-in: add `https://app.pacedmind.com/api/m
 
 ## Allow the agent
 
-The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn't signed in to PacedMind, it asks for your email, password and two-factor code first, then comes back to the page. Without an account, **Create an account** there makes one: once you open the link in the confirmation email in the same browser and set up your authenticator app, it comes back to the page too.
+The sign-in opens `https://app.pacedmind.com/oauth/consent`. If the browser isn't signed in to PacedMind, it asks you to sign in first, then comes back to the page. An account with two-factor sign-in enabled must also enter its code. Without an account, **Create an account** there makes one: once you confirm your email in the same browser, it comes back to the page too. You can set up your authenticator later in **Settings → Account**. Planning and connecting MCP work before that; controlling computers requires two-factor sign-in and a new agent approval after setup.
 
 The page asks *Allow Claude Code to use PacedMind?*, with the agent's name as the agent gives it. It shows the server the agent connects to, `app.pacedmind.com` (PacedMind Cloud), and where the sign-in is handed back to the agent: for Claude Code and Codex, an address such as `127.0.0.1:61154` or `localhost:53963` on this computer, where the agent waits only while it signs in. That address isn't the MCP server. An agent you allowed before asks *Allow this agent to use PacedMind again?*
 
@@ -129,7 +138,7 @@ Other clients: add `https://app.pacedmind.com/api/mcp` as a streamable HTTP MCP 
 
 An agent you allowed acts as you: it reads and changes areas, projects, tasks, the calendar and your [preferences](/concepts/preferences), sees your computers (`list_computers`), and reports on agent sessions with `start_task`, `report_progress` and `finish_task`.
 
-Two things it can only ask one of your computers for:
+Once you set up two-factor sign-in and reconnect the agent with it, two things it can only ask one of your computers for:
 
 * **A new session**, with `start_session`: it goes to the computer the agent names, else the task's, else the default one. An agent never counts as having a two-factor code, so only a computer whose **Two-factor code** is off takes the request, and then that computer's **From elsewhere** setting decides: **Refuse**, **Ask me** (it waits for you there) or **Start** (at once). Where the code is on, the agent gives you a link to the task instead, where you start it with **Start** and your two-factor code, or you start it in the desktop app. See [start_session](/mcp/tools/sessions#start_session).
 * **A folder** for a project, an area or a task, with `set_folder`: the request waits up to a day for you to allow it in PacedMind on that computer, which checks the folder first. See [set_folder](/mcp/tools/computers#set_folder).
@@ -151,7 +160,7 @@ Signing out everywhere (**Settings → Account → Sign out all**) also ends eve
 
 ## Security
 
-* An agent's sign-in counts only once you allowed it on PacedMind's page from a browser signed in with your two-factor code. A password alone can't allow an agent, and each approval works for the one sign-in that comes of the request you allowed.
+* An agent's sign-in counts only once you allowed it on PacedMind's page. Without an authenticator, that approval permits planning; it cannot control computers. When two-factor sign-in is enabled, finish it before allowing an agent. Each approval works for the one sign-in that comes of the request you allowed.
 * If another sign-in of the same agent starts in the same few minutes, as when someone who has your password tries to slip in, neither counts: both are signed out, and connecting the agent again asks you again. If that happens without a reason you know of, change your password.
 * The database itself checks every request against that approval, so a sign-in you didn't allow reads nothing, and one you disconnected stops working at once, not when its token expires.
 * An agent's sign-in never counts as a two-factor session, even if it verified a code itself, so it can't do what needs a fresh code: resuming sessions, answering for you, or starting a session on a computer that asks for a code.

@@ -9,7 +9,7 @@ import {
   linkFoundFolderAction, markFoldersAction, updateDeviceSettingsAction, savePreferencesAction, setProjectServersAction, updateProjectAction, updateSettingsAction,
 } from "@/app/actions";
 import {
-  changePasswordAction, deleteAccountAction, removeFactorAction, signOutAction, signOutEverywhereAction,
+  changePasswordAction, deleteAccountAction, removeFactorAction, sendDeletionLinkAction, signOutAction, signOutEverywhereAction,
 } from "@/app/auth/actions";
 import {
   FALLBACK_MARKET, MARKETS, YEARLY_MONTHS, daysLeft, marketOf, planPrice, type BillingPeriod, type Plan,
@@ -233,6 +233,7 @@ export function SettingsContent({ title, hint, children }: { title: string; hint
 
 export interface AccountView {
   email: string | null;
+  mfaEnabled: boolean;
   factors: { id: string; name: string; added: string }[];
   backupCodes: boolean;
 }
@@ -292,15 +293,19 @@ export function AccountSettings({ account, devices, thisDeviceId }: {
       <Row label="Your email">
         <input className={input} value={deleting.email} onChange={(e) => setDeleting((d) => ({ ...d, email: e.target.value }))} placeholder={account.email ?? ""} aria-label="Type your email to confirm" />
       </Row>
-      <Row label="Code">
-        <input className={codeInput} value={deleting.code} onChange={(e) => setDeleting((d) => ({ ...d, code: digits(e.target.value) }))}
-          placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Two-factor code" />
+      {!account.mfaEnabled && <p className="text-[12.5px] text-fg3">Confirm with your current password, or open an email confirmation link and leave the password blank. Confirmation lasts five minutes.</p>}
+      <Row label={account.mfaEnabled ? "Code" : "Password"}>
+        <input className={account.mfaEnabled ? codeInput : input} value={deleting.code} onChange={(e) => setDeleting((d) => ({ ...d, code: account.mfaEnabled ? digits(e.target.value) : e.target.value }))}
+          type={account.mfaEnabled ? "text" : "password"} placeholder={account.mfaEnabled ? "000000" : "Current password"}
+          inputMode={account.mfaEnabled ? "numeric" : undefined} autoComplete={account.mfaEnabled ? "one-time-code" : "current-password"}
+          aria-label={account.mfaEnabled ? "Two-factor code" : "Current password for account deletion"} />
         <span className="flex-1" />
-        <Button disabled={pending || deleting.code.length !== 6 || !deleting.email}
+        <Button disabled={pending || (account.mfaEnabled && deleting.code.length !== 6) || !deleting.email}
           onClick={() => confirm("Delete your PacedMind account and all its data for good?") && run(() => deleteAccountAction(deleting.code, deleting.email))}>
           Delete account
         </Button>
       </Row>
+      {!account.mfaEnabled && <Button size="sm" disabled={pending} onClick={() => run(() => sendDeletionLinkAction())}>Confirm by email instead</Button>}
     </Section>
   </>;
 }
@@ -314,7 +319,7 @@ const guessedMarket = () => {
 const day = (iso: string | null) => (iso ? toDateStr(new Date(iso)) : "");
 
 /** Settings → Plan: the trial or subscription, subscribing at a country's price, and Stripe's page for the rest. */
-export function PlanSettings({ plan }: { plan: Plan }) {
+export function PlanSettings({ plan, nativeCompanion = false }: { plan: Plan; nativeCompanion?: boolean }) {
   const { open, pending } = useOpenBilling();
   const guessed = useSyncExternalStore(noSubscribe, guessedMarket, () => FALLBACK_MARKET);
   const [picked, setPicked] = useState<string | null>(null);
@@ -331,6 +336,15 @@ export function PlanSettings({ plan }: { plan: Plan }) {
     lapsed: "Read-only: subscribe to keep working in Cloud",
     comped: "Cloud, included with your account",
   };
+  if (nativeCompanion) return (
+    <Section note="PacedMind on your phone uses the Cloud access included with your account.">
+      <Row label="Plan">
+        <span className="flex-1 text-[12.5px] text-fg2" suppressHydrationWarning>
+          {plan.state === "lapsed" ? "Read-only access" : status[plan.state]}
+        </span>
+      </Row>
+    </Section>
+  );
   return (
     <Section
       note={`Cloud stores your tasks, plans and sessions in your PacedMind account, so you have them on every computer and in the web app. A year costs ${YEARLY_MONTHS} months' worth. Payments go through Stripe: PacedMind never sees your card.`}>
@@ -375,7 +389,7 @@ export function SecuritySettings({ account }: { account: AccountView }) {
   const [removing, setRemoving] = useState<{ id: string; code: string } | null>(null);
   return <>
     <Section title="Two-factor sign-in"
-      note="Every sign-in asks for a code from an authenticator app, because PacedMind can start agents on your computers. Keep a second authenticator in case you lose your phone.">
+      note={account.mfaEnabled ? "Two-factor sign-in is on. Every sign-in asks for a code. Keep a second authenticator in case you lose your phone." : "Optional for planning and MCP. Turn it on to start sessions and control your computers, then sign out and in once to activate computer access."}>
       {account.factors.map((f) => (
         <Row key={f.id} label={f.name}>
           <span className="flex-1 text-[12.5px] text-fg3">Added {f.added}</span>
@@ -393,15 +407,15 @@ export function SecuritySettings({ account }: { account: AccountView }) {
         </Row>
       ))}
       <Row label="Add">
-        <span className="flex-1 text-[12.5px] text-fg3">{account.factors.length < 2 ? "Add a second authenticator as a backup." : "Another phone or password manager."}</span>
-        <Button size="sm" onClick={() => router.push("/login/setup?add=1")}>Add authenticator</Button>
+        <span className="flex-1 text-[12.5px] text-fg3">{!account.mfaEnabled ? "You can set this up whenever you're ready." : account.factors.length < 2 ? "Add a second authenticator as a backup." : "Another phone or password manager."}</span>
+        <Button size="sm" onClick={() => router.push(account.mfaEnabled ? "/login/setup?add=1" : "/login/setup?next=%2Fsettings%2Fsecurity")}>{account.mfaEnabled ? "Add authenticator" : "Set up 2FA"}</Button>
       </Row>
       {account.backupCodes && (
         <Row label="Backup codes"><span className="text-[12.5px] text-fg3">Set up</span></Row>
       )}
     </Section>
 
-    <Section title="Password" note="Changing it needs your current password and a current two-factor code, and signs out your other devices.">
+    <Section title="Password" note={account.mfaEnabled ? "Changing it needs your current password and a current two-factor code, and signs out your other devices." : "Changing it needs your current password and signs out your other devices."}>
       <Row label="Current">
         <input type="password" className={input} value={password.current} onChange={(e) => setPassword((p) => ({ ...p, current: e.target.value }))}
           autoComplete="current-password" maxLength={72} aria-label="Current password" />
@@ -414,11 +428,11 @@ export function SecuritySettings({ account }: { account: AccountView }) {
         <input type="password" className={input} value={password.again} onChange={(e) => setPassword((p) => ({ ...p, again: e.target.value }))}
           autoComplete="new-password" maxLength={72} aria-label="New password again" />
       </Row>
-      <Row label="Code">
-        <input className={codeInput} value={password.code} onChange={(e) => setPassword((p) => ({ ...p, code: digits(e.target.value) }))}
-          placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Two-factor code" />
+      <Row label={account.mfaEnabled ? "Code" : "Save"}>
+        {account.mfaEnabled && <input className={codeInput} value={password.code} onChange={(e) => setPassword((p) => ({ ...p, code: digits(e.target.value) }))}
+          placeholder="000000" inputMode="numeric" autoComplete="one-time-code" aria-label="Two-factor code" />}
         <span className="flex-1" />
-        <Button disabled={pending || !password.current || !password.next || password.code.length !== 6} onClick={() => {
+        <Button disabled={pending || !password.current || !password.next || (account.mfaEnabled && password.code.length !== 6)} onClick={() => {
           if (password.next !== password.again) return toast("The two passwords don't match", "error");
           run(() => changePasswordAction(password.current, password.next, password.code)
             .then((r) => { if (r.ok) setPassword({ current: "", next: "", again: "", code: "" }); return r; }));
